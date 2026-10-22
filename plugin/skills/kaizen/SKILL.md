@@ -57,7 +57,7 @@ both embed it as `…/<uuid>/…` — or list candidates with
   usual cause is a 1M-window model (`"model": "opus[1m]"` or similar) putting auto-compaction out of reach, so the session paid the quadratic curve to
   the end. Say the window is **inferred** from peak context — the transcript carries no window field. Compaction itself is read from the
   `compact_boundary` records `compactions` below counts, so `true` already implies `compactions.count === 0` — and
-  suggest the fix: a 200k-window default, `/compact` or `/clear` between tasks. `false` does not mean cheap: a session that compacted can still be
+  suggest the fix: an `autoCompactWindow` setting (`200000` keeps the 1M model but compacts it like a 200k window), or `/compact` / `/clear` between tasks. `false` does not mean cheap: a session that compacted can still be
   bloated, so keep reading the bloated-turn bullet below.
 - **Whole-session total = `totals.combined` + `subagentTotals.tokens`.** Subagent tokens are summed from each subagent's
   own transcript and tracked separately (they don't appear in `totals`); `subagentTotals.usage` splits them by class, so lead
@@ -102,7 +102,7 @@ of whether the session met its stated goal, stalled, or thrashed. Give a short, 
 
 ## 5. Concrete improvements
 
-Tie each suggestion to evidence above. Examples: `perTurn.neverCompacted` → check the model default for a 1M window and suggest a 200k one, or
+Tie each suggestion to evidence above. Examples: `perTurn.neverCompacted` → suggest an `autoCompactWindow` setting for the 1M-window model, or
 `/compact` / `/clear` between tasks; high `cacheRead` + a bloated turn → suggest `/clear` between tasks or smaller reads; many `retries` on one tool → the specific fix;
 repeated manual work a skill would cover → name the skill to **use, add, or install**
 (check installed skills first). Keep it to a few high-signal actions, not a checklist.

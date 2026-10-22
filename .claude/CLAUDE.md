@@ -67,22 +67,19 @@ config; a public tunnel's hostname needs `ALLOWED_HOSTS` (the DNS-rebinding guar
   static-serves `client/dist` and auto-opens the browser.
 - **Adding an API field:** `shared/types.ts` first, then the server producer (`scan.ts` etc),
   then the client consumer.
-- **Keep CSS class names stable.** `client/src/styles.css` is a verbatim port of the original
-  inline `renderPage()`. React auto-escapes — no `esc()`.
+- **Keep CSS class names stable.** The visual suite (`test/visual/*.spec.ts`) and the subsystem docs address elements by them.
+  React auto-escapes — no `esc()`.
 - **Never hardcode a color or shadow in `styles.css`** below the theme-token block. The 5
   themes are pure `[data-theme]` token overrides; one literal breaks the light one.
 - **`styles.css` only maps ui-kit's `--uk-*` tokens; it never restyles a `.uk-*` class.** The chip and drawer look the same in every app that ships them,
   and `test/ui-kit-guard.test.ts` (ui-kit's `checkHostCss`) fails on any other rule. The chip's place is the `.rel-chip` wrapper, nothing more.
-- **Keep new deps out of `server/`.** It reads disk and makes exactly two kinds of outbound
-  call — the ntfy push in `lib/notify.ts` and the usage read in `lib/usage.ts`. A third needs
-  a reason. `lib/token-refresh.ts` and `lib/spawn.ts` launch the `claude` CLI, which makes its
-  own network calls — the server does not, so they are not a third kind. `lib/git-fetch.ts` launches `git fetch`, which makes its own network call —
-  not a third kind either. `lib/git-quick.ts` launches `git fetch`, `git merge --ff-only` and `git push`
-  for the Sync menu's Pull and Push, which make their own network calls — a git launch, not a third kind. `lib/codegraph.ts` launches the `codegraph` CLI with `CODEGRAPH_NO_UPDATE_CHECK=1` and `CODEGRAPH_NO_DOWNLOAD=1` set, which switches off its
-  update check and its bundle download — a local launch like `git`, not a third kind. `lib/schedule-reconcile.ts` launches `launchctl`, `crontab` and `pgrep`
-  to install scheduled jobs, `lib/schedule-store.ts` launches `ps` and `sysctl` to judge lock and owner holders, `lib/open-folder.ts` launches `open` (and `open -R` for
-  the Schedules menu's Reveal), and `lib/schedule-run.ts` spawns the plugin's `run-schedule.mjs` wrapper through `spawn.ts`'s `spawnProcess` for Run now — local
-  launches, not a third kind. `test/outbound.test.ts` pins the list.
+- **Keep new deps out of `server/`.** It reads disk and makes exactly two kinds of outbound call itself — the ntfy push in `lib/notify.ts` and the usage
+  read in `lib/usage.ts`. A third needs a reason. Launching a local program is not a third kind, even when that program makes network calls of its own:
+  `lib/token-refresh.ts` and `lib/spawn.ts` launch `claude`; `lib/git-fetch.ts` launches `git fetch`; `lib/git-quick.ts` launches `git fetch`,
+  `git merge --ff-only` and `git push` for the Sync menu; `lib/codegraph.ts` launches `codegraph` with `CODEGRAPH_NO_UPDATE_CHECK=1` and
+  `CODEGRAPH_NO_DOWNLOAD=1` set, which switch off its update check and bundle download; `lib/schedule-reconcile.ts` launches `launchctl`, `crontab` and
+  `pgrep`; `lib/schedule-store.ts` launches `ps` and `sysctl`; `lib/open-folder.ts` launches `open` and `open -R`; `lib/schedule-run.ts` spawns the
+  plugin's `run-schedule.mjs` through `spawn.ts`'s `spawnProcess`. `test/outbound.test.ts` pins the list.
   Two npm packages are allowed, by name, each with zero runtime deps of its own and pinned to a git tag: `lookout-widgets`, the Lookout contract producer
   behind `/api/hub/widgets`, and `release-kit`, whose reader is the one reader of the tag-message contract its release workflow writes (spec
   `docs/superpowers/specs/2026-10-15-release-pipeline-design.md` D7) and, as `createReleasesReader`, backs `/api/releases`; it uses Node built-ins only and launches `git`, so it is no
@@ -94,7 +91,7 @@ config; a public tunnel's hostname needs `ALLOWED_HOSTS` (the DNS-rebinding guar
 ## Subagent rules
 
 - **Subagents return terse findings, not prose.** Instruct every Explore/Plan/Task subagent
-  to answer with compact `file:line` tables + short conclusions, capped at **~15 lines, no
+  to answer with compact `file:line` tables + short conclusions, only as long as the findings need, with **no
   closing recap/summary section** — the table *is* the answer, and a restated summary doubles
   what replays through parent context every turn. For pure locate-code work prefer
   `caveman:cavecrew-investigator` (~60% smaller output than vanilla `Explore`).
@@ -122,7 +119,7 @@ Three rules are load-bearing:
 - **State what you did NOT verify.** Every merged PR here carries a "not verified, needs a
   human" line or an explicit *Unproven* row.
 - **Never claim green without the command output.**
-- **The PR title must pass `ci / pr-title`** (it becomes the squash commit once squash-only merges are applied): `feat|fix|perf` (`!` allowed) or
+- **The PR title must pass `ci / pr-title`** (it becomes the squash commit): `feat|fix|perf` (`!` allowed) or
   `docs|chore|test|refactor|ci|build`, optional lowercase `(scope)`, `: `, a description. `feat`/`fix`/`perf` cut a release (`docs/workflows/ci.md` §Releases).
 - **`main` is PR-only** (ruleset `main-pr-only`, `docs/workflows/ci.md`): every change reaches it through a PR, docs included. Specs, plans and notes go
   through a `docs:` PR, which passes CI and cuts no release. Never bypass the ruleset.

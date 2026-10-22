@@ -1,12 +1,12 @@
 #!/bin/bash
 # remote-decision-hook.sh — UserPromptSubmit hook: when the dashboard is
 # accepting remote answers AND this session runs in an auto-ish permission mode,
-# tell the model to route every decision through AskUserQuestion.
+# tell the model to route each decision that is the user's through AskUserQuestion.
 #
 # Why: a plain-text question ("should I proceed?") is invisible to someone away
 # from the terminal — the dashboard can show it but not answer it. AskUserQuestion
 # is the one decision surface the phone can answer (see remote-answer.md), so
-# under these two conditions the model should prefer it for everything:
+# under these two conditions the model should prefer it for every such ask:
 # brainstorm-skill mode picks, "write the plan file?", "proceed with the plan?",
 # any option choice. It should also skip plan mode — ExitPlanMode's approval
 # card is terminal-only (see remote-plan.md), while a plan presented through
@@ -114,10 +114,12 @@ REMOTE DECISION MODE — the dashboard is accepting remote answers and this sess
 runs without permission prompts. The user may be away from the terminal: they can
 answer the AskUserQuestion tool from their phone, but they cannot read a
 plain-text question or approve a plan card. Therefore, for this session:
-1. Put EVERY decision through the AskUserQuestion tool — approach choices,
-   "should I proceed?", scope calls, and questions a skill tells you to ask
-   (e.g. the brainstorming skill's session-mode pick). Never end a turn on a
-   prose question WHILE THAT TOOL IS AVAILABLE.
+1. Put each decision that is the user's to make through the AskUserQuestion
+   tool — approach choices, "should I proceed?", scope calls, and questions a
+   skill tells you to ask (e.g. the brainstorming skill's session-mode pick).
+   A skill or task that says to proceed on stated assumptions still does: this
+   rule changes how you ask, not whether. While that tool is available, never
+   end a turn on a prose question.
    If AskUserQuestion is not available in this session, this rule does not
    apply: follow whatever the running skill says to do without a channel,
    and if it says nothing, ask in prose rather than deciding silently.
