@@ -14,8 +14,8 @@ export type Section = 'sessions' | 'schedules' | 'usage' | 'management' | 'confi
 export const SECTIONS: { id: Section; label: string }[] = [
   { id: 'sessions', label: 'Sessions' },
   { id: 'schedules', label: 'Schedules' },
-  { id: 'usage', label: 'Usage' },
   { id: 'management', label: 'Management' },
+  { id: 'usage', label: 'Usage' },
   { id: 'configs', label: 'Claude Configs' },
   { id: 'analytics', label: 'Analytics' },
   { id: 'settings', label: 'Settings' }
