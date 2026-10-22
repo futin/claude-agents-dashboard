@@ -134,7 +134,7 @@ const sq = (s: string): string => `'${s.replace(/'/g, `'\\''`)}'`;
 
 /**
  * The env file every crontab line sources: one `export KEY='value'` per baked key. It is a file, not inline assignments, because a WSL `PATH` alone runs past
- * cron's command cap; the seven keys are server-wide, so all jobs share it.
+ * cron's command cap; the baked keys are server-wide, so all jobs share it.
  */
 export function renderCronEnv(env: Record<string, string>): string {
   return Object.entries(env).map(([k, v]) => `export ${k}=${sq(v)}\n`).join('');
