@@ -533,7 +533,7 @@ not a session launch: it spawns the plugin's `run-schedule.mjs` wrapper under `p
 is what launches `claude -p` for each step. It goes through `spawn.ts`'s exported `spawnProcess`, so `setSpawner` — the seam this file's tests use — is also the
 one seam for it, and nothing about `launch`'s own contract changes. Three differences from a session launch matter here:
 
-- **The environment is `scheduleEnv(config)` and nothing else** — `PATH`, `HOME`, `CLAUDE_BIN`, `SPAWN_MAX_PERMISSION`, `SYNC_PERMISSION_MODE`, `SCHEDULE_MACHINE`,
+- **The environment is `scheduleEnv(config)` and nothing else** — `PATH`, `HOME`, `USER`, `LOGNAME`, `CLAUDE_BIN`, `SPAWN_MAX_PERMISSION`, `SYNC_PERMISSION_MODE`, `SCHEDULE_MACHINE`,
   `SCHEDULES_DIR` — the same list an installed launchd/cron job bakes, so a manual run and a 22:00 run see one environment. The server's own env, which carries
   `CLAUDE_CODE_ENTRYPOINT` and the markers `launch` strips, never reaches the child.
 - **The permission ceiling is the wrapper's, from the baked `SPAWN_MAX_PERMISSION`**, applied with the same clamp as `clampPermission` — except `bypassPermissions`

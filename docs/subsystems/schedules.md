@@ -139,10 +139,11 @@ and the environment is not on the line: `<state>/cron.env` (0600, written to a t
 character (`\n`, `\r`, `\0` or any other C0 character except tab) in a baked value is refused as `bad value in <KEY>` and also fails the state. A change in
 the env file's content counts as an `update`.
 
-**The baked environment.** `scheduleEnv(config)` builds one list for both an installed job and a `/run` spawn: `PATH` and `HOME` as the server sees them,
+**The baked environment.** `scheduleEnv(config)` builds one list for both an installed job and a `/run` spawn: `PATH`, `HOME`, `USER` and `LOGNAME` as the server sees them,
 `CLAUDE_BIN`, `SPAWN_MAX_PERMISSION`, `SYNC_PERMISSION_MODE`, `SCHEDULE_MACHINE` and `SCHEDULES_DIR`. `.env` values live in `Config`, never in
 `process.env`, so nothing reaches a child unless it is baked; without this `git`, `gh`, `pnpm` and the CLI's own plugin launches exit 127 under launchd
-and cron, which hand a job no shell rc. `RUN_SCHEDULE_GRACE_MS` is a wrapper test seam and is not baked.
+and cron, which hand a job no shell rc. `USER` (with `LOGNAME`, falling back to the OS account name when the server has neither) is what the `claude`
+CLI looks its claude.ai login up by in the macOS Keychain; without it every claude step fails `Not logged in · Please run /login`. `RUN_SCHEDULE_GRACE_MS` is a wrapper test seam and is not baked.
 
 **Triggers.** Reconciles never overlap: one runs at a time and a trigger during one schedules a single trailing re-run. They run on server start, on a
 change in the schedules folder, on a change to `installed_plugins.json` (a `pnpm plugin:sync` moves the wrapper's versioned directory), on `runs/` writes

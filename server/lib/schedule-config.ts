@@ -15,6 +15,8 @@ export interface ScheduleHost {
   readProcVersion: () => string | null;
   env: Record<string, string | undefined>;
   homedir: () => string;
+  /** The login name, for when `USER`/`LOGNAME` are unset (a server started by launchd or a bare `env -i`). */
+  username: () => string;
 }
 
 function readProcVersion(): string | null {
@@ -25,11 +27,24 @@ function readProcVersion(): string | null {
   }
 }
 
-const realHost = (): ScheduleHost => ({ platform: process.platform, readProcVersion, env: process.env, homedir: os.homedir });
+function username(): string {
+  try {
+    return os.userInfo().username;
+  } catch {
+    return '';
+  }
+}
+
+const realHost = (): ScheduleHost => ({ platform: process.platform, readProcVersion, env: process.env, homedir: os.homedir, username });
 
 /** `$HOME` as the wrapper sees it (`process.env.HOME || os.homedir()` in `plugin/lib/run-schedule.mjs`), so both sides pick the same folders. */
 function homeOf(host: ScheduleHost): string {
   return host.env.HOME || host.homedir();
+}
+
+/** The login name for `USER` and `LOGNAME`: the server's own `USER`, then `LOGNAME`, then the OS account. */
+function userOf(host: ScheduleHost): string {
+  return host.env.USER || host.env.LOGNAME || host.username();
 }
 
 function expandHome(p: string, home: string): string {
@@ -69,13 +84,17 @@ export function scheduleDirs(config: Config, host: Partial<ScheduleHost> = {}): 
 
 /**
  * The environment baked into a plist, a crontab line and a `/run` spawn: `.env` values live in `Config`, never in `process.env`, and launchd and cron
- * give a job no shell rc. Exactly these keys — the wrapper's `PATH`/`HOME` are the server's own, everything else comes from `Config`.
+ * give a job no shell rc. Exactly these keys — the wrapper's `PATH`/`HOME`/`USER`/`LOGNAME` are the server's own, everything else comes from `Config`.
+ * `USER` is load-bearing on macOS: the `claude` CLI finds its claude.ai login in the Keychain by that account name, and without it reports
+ * "Not logged in · Please run /login".
  */
 export function scheduleEnv(config: Config, host: Partial<ScheduleHost> = {}): Record<string, string> {
   const h = { ...realHost(), ...host };
   return {
     PATH: h.env.PATH ?? '',
     HOME: homeOf(h),
+    USER: userOf(h),
+    LOGNAME: userOf(h),
     CLAUDE_BIN: config.claudeBin,
     SPAWN_MAX_PERMISSION: config.spawnMaxPermission,
     SYNC_PERMISSION_MODE: config.syncPermissionMode,

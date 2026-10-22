@@ -61,16 +61,16 @@ export function run(): number {
     assert.deepStrictEqual(machineName(cfg(''), linuxHost(null)), { name: 'wsl', error: null });
   });
 
-  t('scheduleEnv has exactly the seven keys', () => {
+  t('scheduleEnv has exactly the nine keys', () => {
     const env = scheduleEnv(cfg(''), { ...macHost, ...homed });
     assert.deepStrictEqual(Object.keys(env).sort(),
-      ['CLAUDE_BIN', 'HOME', 'PATH', 'SCHEDULES_DIR', 'SCHEDULE_MACHINE', 'SPAWN_MAX_PERMISSION', 'SYNC_PERMISSION_MODE']);
+      ['CLAUDE_BIN', 'HOME', 'LOGNAME', 'PATH', 'SCHEDULES_DIR', 'SCHEDULE_MACHINE', 'SPAWN_MAX_PERMISSION', 'SYNC_PERMISSION_MODE', 'USER']);
   });
-  t('scheduleEnv takes only PATH and HOME from the process env, the rest from Config', () => {
+  t('scheduleEnv takes only PATH, HOME and USER from the process env, the rest from Config', () => {
     const c = cfg('CLAUDE_BIN=/opt/claude\nSPAWN_MAX_PERMISSION=acceptEdits\nSYNC_PERMISSION_MODE=plan\nSCHEDULE_MACHINE=wsl\nSCHEDULES_DIR=/srv/jobs\n');
-    const env = scheduleEnv(c, { ...macHost, homedir: () => '/ignored', env: { PATH: '/usr/bin:/bin', HOME, CLAUDE_BIN: 'from-process', SECRET: 'x', SCHEDULES_DIR: '/nope' } });
+    const env = scheduleEnv(c, { ...macHost, homedir: () => '/ignored', username: () => 'ignored', env: { PATH: '/usr/bin:/bin', HOME, USER: 'ada', CLAUDE_BIN: 'from-process', SECRET: 'x', SCHEDULES_DIR: '/nope' } });
     assert.deepStrictEqual(env, {
-      PATH: '/usr/bin:/bin', HOME, CLAUDE_BIN: '/opt/claude', SPAWN_MAX_PERMISSION: 'acceptEdits', SYNC_PERMISSION_MODE: 'plan',
+      PATH: '/usr/bin:/bin', HOME, USER: 'ada', LOGNAME: 'ada', CLAUDE_BIN: '/opt/claude', SPAWN_MAX_PERMISSION: 'acceptEdits', SYNC_PERMISSION_MODE: 'plan',
       SCHEDULE_MACHINE: 'wsl', SCHEDULES_DIR: '/srv/jobs'
     });
   });
@@ -84,6 +84,13 @@ export function run(): number {
   });
   t('scheduleEnv falls back to os.homedir when HOME is unset', () => {
     assert.strictEqual(scheduleEnv(cfg(''), { ...macHost, homedir: () => '/h', env: { PATH: '/bin' } }).HOME, '/h');
+  });
+  // The claude CLI reads its claude.ai login from the macOS Keychain by $USER; a job without it fails "Not logged in · Please run /login".
+  t('scheduleEnv falls back to LOGNAME, then the OS account, when USER is unset', () => {
+    const fromLogname = scheduleEnv(cfg(''), { ...macHost, ...homed, username: () => 'os', env: { HOME, PATH: '/bin', LOGNAME: 'lg' } });
+    assert.deepStrictEqual([fromLogname.USER, fromLogname.LOGNAME], ['lg', 'lg']);
+    const fromOs = scheduleEnv(cfg(''), { ...macHost, ...homed, username: () => 'os', env: { HOME, PATH: '/bin' } });
+    assert.deepStrictEqual([fromOs.USER, fromOs.LOGNAME], ['os', 'os']);
   });
 
   t('SCHEDULES_DIR default expands ~; an absolute one is kept; ~/x expands', () => {
