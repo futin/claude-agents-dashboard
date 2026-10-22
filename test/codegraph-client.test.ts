@@ -435,7 +435,7 @@ export function run(): number {
   // ── settings ──────────────────────────────────────────────────────────────
   if (test("clampSettings keeps managementTab 'codegraph'; an unknown tab still falls back", () => {
     assert.strictEqual(clampSettings({ managementTab: 'codegraph' }).managementTab, 'codegraph');
-    assert.strictEqual(clampSettings({ managementTab: 'nope' }).managementTab, 'projects');
+    assert.strictEqual(clampSettings({ managementTab: 'nope' }).managementTab, 'git');
   })) p++; else f++;
 
   if (test('OWNED_KEYS contains management.codegraphLayout, so Reset clears the choice', () => {

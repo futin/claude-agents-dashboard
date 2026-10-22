@@ -155,7 +155,7 @@ export const DEFAULT_SETTINGS: Settings = {
   notifyBrowser: false,
   usageTab: 'forecast',
   settingsTab: 'local',
-  managementTab: 'projects',
+  managementTab: 'git',
   schedulesTab: 'jobs',
   scheduleWindow: 30,
   defaultLayout: 'last',

@@ -78,7 +78,7 @@ const ICONS: Record<Section, JSX.Element> = {
 
 /**
  * The sections whose sub-views are a *fixed* list, and the per-device setting
- * each tree writes: Usage (Forecast / Token value / History), Schedules (Jobs / Runs), Management (Projects / Git)
+ * each tree writes: Usage (Forecast / Token value / History), Schedules (Jobs / Runs), Management (Git / Projects / CodeGraph)
  * and Settings (Local / Shared), drawn from one table so a third gets the same tree for one line.
  * Claude Configs' tree is the third destination but not a fixed list — its rows
  * are the scanned projects — so it has its own component below.
@@ -87,7 +87,7 @@ type SubKey = 'usageTab' | 'managementTab' | 'schedulesTab' | 'settingsTab';
 interface SubNav<K extends SubKey> { key: K; items: { value: Settings[K]; label: string }[] }
 const SUBNAV: Partial<Record<Section, SubNav<'usageTab'> | SubNav<'managementTab'> | SubNav<'schedulesTab'> | SubNav<'settingsTab'>>> = {
   usage: { key: 'usageTab', items: [{ value: 'forecast', label: 'Forecast' }, { value: 'rates', label: 'Token value' }, { value: 'history', label: 'History' }] },
-  management: { key: 'managementTab', items: [{ value: 'projects', label: 'Projects' }, { value: 'git', label: 'Git' }, { value: 'codegraph', label: 'CodeGraph' }] },
+  management: { key: 'managementTab', items: [{ value: 'git', label: 'Git' }, { value: 'projects', label: 'Projects' }, { value: 'codegraph', label: 'CodeGraph' }] },
   schedules: { key: 'schedulesTab', items: [{ value: 'jobs', label: 'Jobs' }, { value: 'runs', label: 'Runs' }] },
   settings: { key: 'settingsTab', items: [{ value: 'local', label: 'Local' }, { value: 'shared', label: 'Shared' }] }
 };
