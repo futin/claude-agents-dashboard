@@ -56,8 +56,8 @@ export function run(): number {
     assert.deepStrictEqual(SECTIONS.find(s => s.id === 'configs'), { id: 'configs', label: 'Claude Configs' });
   })) p++; else f++;
 
-  if (test('SECTIONS ids are exactly sessions, schedules, management, usage, configs, analytics, settings, in that order', () => {
-    assert.deepStrictEqual(SECTIONS.map(s => s.id), ['sessions', 'schedules', 'management', 'usage', 'configs', 'analytics', 'settings']);
+  if (test('SECTIONS ids are exactly sessions, routines, management, usage, configs, analytics, settings, in that order', () => {
+    assert.deepStrictEqual(SECTIONS.map(s => s.id), ['sessions', 'routines', 'management', 'usage', 'configs', 'analytics', 'settings']);
     assert.deepStrictEqual(SECTIONS.find(s => s.id === 'management'), { id: 'management', label: 'Management' });
   })) p++; else f++;
 

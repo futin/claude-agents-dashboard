@@ -18,9 +18,9 @@ export function run(): number {
   let p = 0, f = 0;
   console.log('\n=== notifyRows.ts ===\n');
 
-  if (test('the two usage rows follow Scheduled job failed, copy verbatim', () => {
+  if (test('the two usage rows follow Routine failed, copy verbatim', () => {
     const keys = NOTIFY_EVENT_ROWS.map(r => r.key);
-    assert.deepStrictEqual(keys.slice(keys.indexOf('schedule-failed')), ['schedule-failed', 'usage-limit', 'usage-reset']);
+    assert.deepStrictEqual(keys.slice(keys.indexOf('routine-failed')), ['routine-failed', 'usage-limit', 'usage-reset']);
     const [limit, reset] = NOTIFY_EVENT_ROWS.slice(-2);
     assert.deepStrictEqual({ name: limit.name, hint: limit.hint }, {
       name: 'Usage limit reached',
@@ -35,7 +35,7 @@ export function run(): number {
   if (test('a session row is disabled only by a missing topic, never by usage', () => {
     assert.deepStrictEqual(notifyRowState('question', ON), { disabled: false, note: null });
     assert.deepStrictEqual(notifyRowState('question', { ...ON, notifyAvailable: false }), { disabled: true, note: null });
-    assert.deepStrictEqual(notifyRowState('schedule-failed', { notifyAvailable: true, usageAvailable: false, recordUsageHistory: false }),
+    assert.deepStrictEqual(notifyRowState('routine-failed', { notifyAvailable: true, usageAvailable: false, recordUsageHistory: false }),
       { disabled: false, note: null });
   })) p++; else f++;
 

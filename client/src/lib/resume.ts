@@ -18,7 +18,7 @@ import type { Session } from '../../../shared/types';
  *    lingers (measured 90s+) reading `incomplete` the whole time, so status
  *    alone never meant the process was gone (`bug-19`).
  *  - no `processLive`: the server's `ps` scan found a live `claude` carrying this id that it holds no handle for (a restarted dashboard, an
- *    orchestrator or scheduled run, a pending background Monitor). The drawer shows a "still running" note in the composer's place instead.
+ *    orchestrator or routine run, a pending background Monitor). The drawer shows a "still running" note in the composer's place instead.
  *  - the turn is over (`idle`), or was cut short (`incomplete`) — never
  *    `working` (resuming would double-run it) or `question` (alive, waiting).
  *

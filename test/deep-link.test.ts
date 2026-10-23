@@ -45,13 +45,18 @@ export function run(): number {
     assert.strictEqual(readViewParam('?session=abc12345&view=git'), 'git');
   })) p++; else f++;
 
+  if (test('reads view=schedules — a push sent before the rename — as routines', () => {
+    assert.strictEqual(readViewParam('?view=schedules'), 'routines');
+    assert.strictEqual(readViewParam('?view=routines&run=r1'), 'routines');
+  })) p++; else f++;
+
   if (test('reads view=usage — a usage-limit push', () => {
     assert.strictEqual(readViewParam('?view=usage'), 'usage');
   })) p++; else f++;
 
   if (test('each view lands on its section', () => {
     assert.strictEqual(sectionForView('git'), 'management');
-    assert.strictEqual(sectionForView('schedules'), 'schedules');
+    assert.strictEqual(sectionForView('routines'), 'routines');
     assert.strictEqual(sectionForView('usage'), 'usage');
   })) p++; else f++;
 
@@ -97,16 +102,16 @@ export function run(): number {
     assert.strictEqual(link.takeTab(), null);
   })) p++; else f++;
 
-  if (test('reads view=schedules beside git; other casings and views stay null', () => {
-    assert.strictEqual(readViewParam('?view=schedules'), 'schedules');
-    assert.strictEqual(readViewParam('?view=schedules&run=abc'), 'schedules');
-    assert.strictEqual(readViewParam('?view=Schedules'), null);
-    assert.strictEqual(readViewParam('?view=schedule'), null);
+  if (test('reads view=routines beside git; other casings and views stay null', () => {
+    assert.strictEqual(readViewParam('?view=routines'), 'routines');
+    assert.strictEqual(readViewParam('?view=routines&run=abc'), 'routines');
+    assert.strictEqual(readViewParam('?view=Routines'), null);
+    assert.strictEqual(readViewParam('?view=routine'), null);
   })) p++; else f++;
 
   if (test('reads a run id of either shape and refuses anything else', () => {
     assert.strictEqual(readRunParam('?run=abc'), 'abc');
-    assert.strictEqual(readRunParam(`?view=schedules&run=${UUID}`), UUID);
+    assert.strictEqual(readRunParam(`?view=routines&run=${UUID}`), UUID);
     assert.strictEqual(readRunParam('?run=refused-mac-pull-pins-1760000000000'), 'refused-mac-pull-pins-1760000000000');
     assert.strictEqual(readRunParam(''), null);
     assert.strictEqual(readRunParam('?run='), null);
@@ -116,19 +121,19 @@ export function run(): number {
     assert.strictEqual(readRunParam('?%'), null);
   })) p++; else f++;
 
-  if (test('view=schedules&run=<id> answers both, and both still answer after the URL was stripped', () => {
-    const { link, strips } = fake('?view=schedules&run=abc');
-    assert.strictEqual(link.view(), 'schedules');
+  if (test('view=routines&run=<id> answers both, and both still answer after the URL was stripped', () => {
+    const { link, strips } = fake('?view=routines&run=abc');
+    assert.strictEqual(link.view(), 'routines');
     assert.strictEqual(link.run(), 'abc');
     assert.deepStrictEqual(strips, ['/app'], 'stripped once, in the same pass that read both');
     assert.strictEqual(link.run(), 'abc', 'a later call is the memo, not the (now clean) URL');
-    assert.strictEqual(link.view(), 'schedules');
+    assert.strictEqual(link.view(), 'routines');
   })) p++; else f++;
 
   if (test('run() answers first too: asking for it before view() cannot lose the view', () => {
-    const { link } = fake('?view=schedules&run=abc');
+    const { link } = fake('?view=routines&run=abc');
     assert.strictEqual(link.run(), 'abc');
-    assert.strictEqual(link.view(), 'schedules');
+    assert.strictEqual(link.view(), 'routines');
   })) p++; else f++;
 
   if (test('view=git has no run; a link with no run param answers null', () => {
@@ -136,12 +141,12 @@ export function run(): number {
     assert.strictEqual(fake('?other=1').link.run(), null);
   })) p++; else f++;
 
-  if (test('view=schedules hands out the schedules tab once; a session param outranks it', () => {
-    const { link } = fake('?view=schedules&run=abc');
-    assert.strictEqual(link.takeTab(), 'schedules');
+  if (test('view=routines hands out the routines tab once; a session param outranks it', () => {
+    const { link } = fake('?view=routines&run=abc');
+    assert.strictEqual(link.takeTab(), 'routines');
     assert.strictEqual(link.takeTab(), null);
     assert.strictEqual(link.run(), 'abc', 'taking the tab does not spend the run');
-    assert.strictEqual(fake(`?session=${UUID}&view=schedules`).link.takeTab(), null);
+    assert.strictEqual(fake(`?session=${UUID}&view=routines`).link.takeTab(), null);
   })) p++; else f++;
 
   console.log(`\n  ${p} passed, ${f} failed`);

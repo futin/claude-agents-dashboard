@@ -22,7 +22,7 @@ the only place that reader sees how full the session is.
 `sessions/SessionStopControl.tsx` the expanded row renders, so arm, confirm, cancel, `stopping…` + `Force stop`, the token hint and the server's error line
 behave identically in both places. It renders only for a session carrying `Session.stopState` and leaves no gap otherwise. It is in the sidecar and not the
 head on purpose: on a phone the thumb goes to ✕, and a stop beside it gets hit by accident even behind the confirm step (#211). Below `md` it is one line in
-the band. A drawer opened from Schedules never shows it: that drawer's session comes from `GET /api/sessions/:id/row`, and `serveSessionRow` builds the row
+the band. A drawer opened from Routines never shows it: that drawer's session comes from `GET /api/sessions/:id/row`, and `serveSessionRow` builds the row
 without `stopStates`, so it carries no `stopState`.
 
 **A Tasks card sits between the Context card and the facts**, for a session that is executing a plan or has built a task list (the plan's tasks first, else

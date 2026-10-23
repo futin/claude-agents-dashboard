@@ -1,5 +1,5 @@
 /**
- * deepLink.ts — the `?session=<id>`, `?view=git|schedules|usage` and `&run=<id>` entry points.
+ * deepLink.ts — the `?session=<id>`, `?view=git|routines|usage` and `&run=<id>` entry points.
  *
  * A push notification's whole value is landing you on the thing that needs a
  * decision, not on the dashboard's front page. `server/lib/notify.ts` puts this
@@ -13,8 +13,8 @@
  * `?view=git` is Lookout's "Git pending" tile (`server/lib/hub-widgets.ts`): it lands on Management › Git. It is consumed and stripped the same way, in the
  * same read, so whichever of the two callers runs first cannot strip the other's param.
  *
- * `?view=schedules&run=<id>` is a failed scheduled run's push (`server/lib/notify.ts`): Schedules › Runs with that run's fold open. `run` is read in the
- * same pass as the other two, so the strip that follows cannot lose it before the Schedules page asks.
+ * `?view=routines&run=<id>` is a failed routine run's push (`server/lib/notify.ts`): Routines › Runs with that run's fold open. `run` is read in the
+ * same pass as the other two, so the strip that follows cannot lose it before the Routines page asks.
  *
  * `?view=usage` is a usage-limit push (`server/lib/notify.ts` `usageClickUrl`): it lands on the Usage section, with no sub-view to set.
  */
@@ -32,13 +32,14 @@ export function readSessionParam(search: string): string | null {
 }
 
 /** The sub-views a link may name. */
-export type DeepLinkView = 'git' | 'schedules' | 'usage';
+export type DeepLinkView = 'git' | 'routines' | 'usage';
 
 /** The one sub-view a link may name; anything else is ignored. Pure — tested. */
 export function readViewParam(search: string): DeepLinkView | null {
   try {
     const view = new URLSearchParams(search).get('view');
-    return view === 'git' || view === 'schedules' || view === 'usage' ? view : null;
+    if (view === 'schedules') return 'routines'; // a push sent before Schedules became Routines
+    return view === 'git' || view === 'routines' || view === 'usage' ? view : null;
   } catch {
     return null; // malformed query string
   }
@@ -64,9 +65,9 @@ type Where = { location: Pick<Location, 'search' | 'pathname'>; history: Pick<Hi
 export interface DeepLink {
   /** The id this page was opened with, or null. */
   session(): string | null;
-  /** The sub-view this page was opened with (`?view=git`, `?view=schedules`, `?view=usage`), or null. */
+  /** The sub-view this page was opened with (`?view=git`, `?view=routines`, `?view=usage`), or null. */
   view(): DeepLinkView | null;
-  /** The scheduled run this page was opened with (`&run=<id>`), or null. */
+  /** The routine run this page was opened with (`&run=<id>`), or null. */
   run(): string | null;
   /**
    * The sub-view the link asks for, at most once: null when a `?session=` outranks the view (that link lands on Sessions, so it must not rewrite the
@@ -122,17 +123,17 @@ export function deepLinkSession(): string | null {
   return page().session();
 }
 
-/** The sub-view this page was opened with (`?view=git`, `?view=schedules`, `?view=usage`), or null. Memoised with {@link deepLinkSession}. */
+/** The sub-view this page was opened with (`?view=git`, `?view=routines`, `?view=usage`), or null. Memoised with {@link deepLinkSession}. */
 export function deepLinkView(): DeepLinkView | null {
   return page().view();
 }
 
-/** The scheduled run this page was opened with (`&run=<id>`), or null. Memoised with {@link deepLinkSession}, so it still answers after the URL was stripped. */
+/** The routine run this page was opened with (`&run=<id>`), or null. Memoised with {@link deepLinkSession}, so it still answers after the URL was stripped. */
 export function deepLinkRun(): string | null {
   return page().run();
 }
 
-/** {@link DeepLink.takeTab} for this page: `AppShell` applies it to the `managementTab` or `schedulesTab` setting once; `usage` has no tab to set. */
+/** {@link DeepLink.takeTab} for this page: `AppShell` applies it to the `managementTab` or `routinesTab` setting once; `usage` has no tab to set. */
 export function takeDeepLinkTab(): DeepLinkView | null {
   return page().takeTab();
 }

@@ -141,8 +141,8 @@ the sweep at all: an orchestrator-owned session (`BM_ORCH_RUN`) is turned away h
 before the hold opens, so what the exemption covers is only headless holds that exist.
 A one-shot launch (`CLAUDE_DASHBOARD_ONESHOT`, [spawn](spawn.md#close-when-done-oneshot)) is turned away the same way, and so is the dashboard's own
 token-renewal turn (`CLAUDE_DASHBOARD_REFRESH`, [usage-limits](usage-limits.md)), which skips the push too.
-A scheduled step (`CLAUDE_DASHBOARD_SCHEDULE=<job>`, set by the [schedule wrapper](schedules.md#the-wrapper)) is turned away before the hold opens as well, and
-skips the push: the Stop hook exits on the marker, so a step is never held for `answerSecs` and never reports "finished" (`test/hooks-schedule-marker.test.ts`).
+A routine step (`CLAUDE_DASHBOARD_ROUTINE=<job>`, set by the [routine wrapper](routines.md#the-wrapper)) is turned away before the hold opens as well, and
+skips the push: the Stop hook exits on the marker, so a step is never held for `answerSecs` and never reports "finished" (`test/hooks-routine-marker.test.ts`).
 
 ⚠️ **A missing TTY is not the same thing as a missing place to type,** and the TTY test
 alone got that wrong for a whole front-end. The desktop app runs the CLI with no pty

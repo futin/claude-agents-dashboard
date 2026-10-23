@@ -121,14 +121,14 @@ export interface Config {
    * single-label names and `.localhost`/`.local`/`.ts.net` are always allowed — this is for public tunnels. See `lib/request-guard.ts`.
    */
   allowedHosts: string[];
-  /** Scheduled-workflows job files (`SCHEDULES_DIR`), as written — `~` is expanded by `scheduleDirs`, not here. */
-  schedulesDir: string;
-  /** Machine name override (`SCHEDULE_MACHINE`: `mac` or `wsl`). Empty = detect; any other value is reported by `machineName`, not coerced. */
-  scheduleMachine: string;
-  /** Opt this server in to owning the OS jobs, `pins.json` and the lock sweep (`SCHEDULES_OWNER=true`). Off by default: only one server per machine may. */
-  schedulesOwner: boolean;
-  /** Test and verification seam (`SCHEDULES_STATE_ROOT`) moving the whole machine-local state folder; empty = `~/.claude/schedules`. Undocumented on purpose. */
-  schedulesStateRoot: string;
+  /** Routine job files (`ROUTINES_DIR`), as written — `~` is expanded by `routineDirs`, not here. */
+  routinesDir: string;
+  /** Machine name override (`ROUTINE_MACHINE`: `mac` or `wsl`). Empty = detect; any other value is reported by `machineName`, not coerced. */
+  routineMachine: string;
+  /** Opt this server in to owning the OS jobs, `pins.json` and the lock sweep (`ROUTINES_OWNER=true`). Off by default: only one server per machine may. */
+  routinesOwner: boolean;
+  /** Test and verification seam (`ROUTINES_STATE_ROOT`) moving the whole machine-local state folder; empty = `~/.claude/routines`. Undocumented on purpose. */
+  routinesStateRoot: string;
 }
 
 export const DEFAULTS = {
@@ -157,10 +157,10 @@ export const DEFAULTS = {
   SPAWN_MAX_PERMISSION: 'auto',
   SYNC_PERMISSION_MODE: 'auto',
   ALLOWED_HOSTS: '',
-  SCHEDULES_DIR: '~/claude-global/schedules',
-  SCHEDULE_MACHINE: '',
-  SCHEDULES_OWNER: false,
-  SCHEDULES_STATE_ROOT: ''
+  ROUTINES_DIR: '~/claude-global/routines',
+  ROUTINE_MACHINE: '',
+  ROUTINES_OWNER: false,
+  ROUTINES_STATE_ROOT: ''
 } as const;
 
 /** Parse a .env file body into a flat key/value object. Tolerant, minimal. */
@@ -344,9 +344,10 @@ export function loadConfig(options: { envPath?: string } = {}): Config {
     spawnMaxPermission: toPermissionMode(src('SPAWN_MAX_PERMISSION'), DEFAULTS.SPAWN_MAX_PERMISSION),
     syncPermissionMode: toPermissionMode(src('SYNC_PERMISSION_MODE'), DEFAULTS.SYNC_PERMISSION_MODE, 'SYNC_PERMISSION_MODE'),
     allowedHosts: (src('ALLOWED_HOSTS') || DEFAULTS.ALLOWED_HOSTS).split(',').map(h => h.trim()).filter(Boolean),
-    schedulesDir: (src('SCHEDULES_DIR') || DEFAULTS.SCHEDULES_DIR).trim(),
-    scheduleMachine: (src('SCHEDULE_MACHINE') || DEFAULTS.SCHEDULE_MACHINE).trim(),
-    schedulesOwner: toBool(src('SCHEDULES_OWNER'), DEFAULTS.SCHEDULES_OWNER),
-    schedulesStateRoot: (src('SCHEDULES_STATE_ROOT') || DEFAULTS.SCHEDULES_STATE_ROOT).trim()
+    // Each also reads its name from before Schedules became Routines (`SCHEDULES_DIR`, …), so an `.env` written then keeps working.
+    routinesDir: (src('ROUTINES_DIR') || src('SCHEDULES_DIR') || DEFAULTS.ROUTINES_DIR).trim(),
+    routineMachine: (src('ROUTINE_MACHINE') || src('SCHEDULE_MACHINE') || DEFAULTS.ROUTINE_MACHINE).trim(),
+    routinesOwner: toBool(src('ROUTINES_OWNER') || src('SCHEDULES_OWNER'), DEFAULTS.ROUTINES_OWNER),
+    routinesStateRoot: (src('ROUTINES_STATE_ROOT') || src('SCHEDULES_STATE_ROOT') || DEFAULTS.ROUTINES_STATE_ROOT).trim()
   };
 }

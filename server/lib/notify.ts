@@ -38,7 +38,7 @@ import { scanSessions } from './scan.js';
 import { getSettings } from './settings.js';
 import { staleEnvKeys } from './config.js';
 import type { Config } from './config.js';
-import type { NotifyEvent, NotifyPolicy, ScheduleRun } from '../../shared/types.js';
+import type { NotifyEvent, NotifyPolicy, RoutineRun } from '../../shared/types.js';
 import type { UsageAlertKind } from './usage-alerts.js';
 
 /**
@@ -136,7 +136,7 @@ const PHRASE: Record<NotifyEvent, string> = {
   plan: 'plan waiting for review',
   permission: 'permission dialog open',
   stop: 'task finished',
-  'schedule-failed': 'scheduled job failed',
+  'routine-failed': 'routine failed',
   'usage-limit': '5-hour limit reached',
   'usage-reset': '5-hour limit reset'
 };
@@ -146,7 +146,7 @@ const TAGS: Record<NotifyEvent, string> = {
   plan: 'clipboard',
   permission: 'lock',
   stop: 'white_check_mark',
-  'schedule-failed': 'warning',
+  'routine-failed': 'warning',
   'usage-limit': 'no_entry',
   'usage-reset': 'arrows_counterclockwise'
 };
@@ -258,10 +258,10 @@ export function clickUrl(config: Config, sessionId: string): string {
   return `${config.publicUrl}/?session=${encodeURIComponent(sessionId)}`;
 }
 
-/** Where a schedule push lands: the Schedules view with that run's fold open. Empty without a public URL, like {@link clickUrl}. */
-export function scheduleClickUrl(config: Config, runId: string): string {
+/** Where a routine push lands: the Routines view with that run's fold open. Empty without a public URL, like {@link clickUrl}. */
+export function routineClickUrl(config: Config, runId: string): string {
   if (!config.publicUrl) return '';
-  return `${config.publicUrl}/?view=schedules&run=${encodeURIComponent(runId)}`;
+  return `${config.publicUrl}/?view=routines&run=${encodeURIComponent(runId)}`;
 }
 
 /** A usage alert's phone tap-through: the Usage view. `''` without a public URL. */
@@ -309,7 +309,7 @@ export function routePush(
   return routeTo(config, clickUrl(config, sessionId), thresholdSecs, readIdle);
 }
 
-/** `routePush` with the phone's tap-through already chosen, so a push that has no session id (a schedule run) shares the desk decision. */
+/** `routePush` with the phone's tap-through already chosen, so a push that has no session id (a routine run) shares the desk decision. */
 function routeTo(
   config: Config,
   phoneClick: string,
@@ -423,20 +423,20 @@ export function maybeSend(
 }
 
 /**
- * The schedule sibling of {@link maybeSend}: a failed run instead of a session. Same master switch, per-event checkbox, desk/phone routing and transport,
+ * The routine sibling of {@link maybeSend}: a failed run instead of a session. Same master switch, per-event checkbox, desk/phone routing and transport,
  * but exempt from `requireAfk`, `requireRemoteAnswer` and `requireAutoMode` — those gate interactive sessions and a 22:00 job has none. `title` and `body`
  * come from `pushableEvents`; this only delivers. Returns whether a push was handed to the transport, and never throws.
  */
-export function sendScheduleEvent(event: { run: ScheduleRun; title: string; body: string }, config: Config): boolean {
+export function sendRoutineEvent(event: { run: RoutineRun; title: string; body: string }, config: Config): boolean {
   try {
     if (!config.ntfyTopic) return false;
     const settings = getSettings();
     const open = { ...settings.notify, requireRemoteAnswer: false, requireAfk: false, requireAutoMode: false };
     const idle = (): number | null => (idleSource ?? readIdleSecs)();
-    if (!shouldNotify('schedule-failed', open, { remoteAnswer: false, thresholdSecs: settings.idleSecs, readIdle: idle })) return false;
+    if (!shouldNotify('routine-failed', open, { remoteAnswer: false, thresholdSecs: settings.idleSecs, readIdle: idle })) return false;
 
-    const route = routeTo(config, scheduleClickUrl(config, event.run.id), settings.idleSecs, idle);
-    const result = deliver({ title: event.title, body: event.body, tags: TAGS['schedule-failed'], click: route.click, topic: route.topic }, config);
+    const route = routeTo(config, routineClickUrl(config, event.run.id), settings.idleSecs, idle);
+    const result = deliver({ title: event.title, body: event.body, tags: TAGS['routine-failed'], click: route.click, topic: route.topic }, config);
     void Promise.resolve(result).catch(() => { /* fire-and-forget stays that way */ });
     return true;
   } catch {
@@ -446,7 +446,7 @@ export function sendScheduleEvent(event: { run: ScheduleRun; title: string; body
 
 const USAGE_EVENT: Record<UsageAlertKind, 'usage-limit' | 'usage-reset'> = { reached: 'usage-limit', reset: 'usage-reset' };
 
-/** The usage alerts' gate: topic, master switch and the event's checkbox — the session-only `require*` clauses do not apply, as for schedules. */
+/** The usage alerts' gate: topic, master switch and the event's checkbox — the session-only `require*` clauses do not apply, as for routines. */
 function usageOpen(event: 'usage-limit' | 'usage-reset', config: Config): { idleSecs: number; idle: () => number | null } | null {
   if (!config.ntfyTopic) return null;
   const settings = getSettings();
@@ -466,7 +466,7 @@ export function usageCanSend(kind: UsageAlertKind, config: Config): boolean {
 }
 
 /**
- * The usage sibling of {@link sendScheduleEvent}: same gate and desk/phone routing, the phone tapping through to the Usage view. Returns whether a push was
+ * The usage sibling of {@link sendRoutineEvent}: same gate and desk/phone routing, the phone tapping through to the Usage view. Returns whether a push was
  * handed to the transport, and never throws.
  */
 export function sendUsageEvent(event: { kind: 'usage-limit' | 'usage-reset'; title: string; body: string }, config: Config): boolean {

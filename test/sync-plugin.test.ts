@@ -243,7 +243,7 @@ export async function run(): Promise<number> {
     assert.strictEqual(readInstall(file)?.installPath, '/u');
   })) p++; else f++;
 
-  if (await testAsync('postReconcile: one POST of { apply: true } to /api/schedules/reconcile on 127.0.0.1, resolves true', async () => {
+  if (await testAsync('postReconcile: one POST of { apply: true } to /api/routines/reconcile on 127.0.0.1, resolves true', async () => {
     const seen: Array<{ method?: string; url?: string; type?: string; body: string }> = [];
     const server = http.createServer((req, res) => {
       let body = '';
@@ -258,7 +258,7 @@ export async function run(): Promise<number> {
     }
     assert.strictEqual(seen.length, 1);
     assert.strictEqual(seen[0].method, 'POST');
-    assert.strictEqual(seen[0].url, '/api/schedules/reconcile');
+    assert.strictEqual(seen[0].url, '/api/routines/reconcile');
     assert.match(seen[0].type!, /application\/json/);
     assert.deepStrictEqual(JSON.parse(seen[0].body), { apply: true });
   })) p++; else f++;

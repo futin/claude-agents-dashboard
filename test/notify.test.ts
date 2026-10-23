@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 
 import {
-  atDesk, AUTO_MODES, maybeSend, resetNotify, resolveLabel, scheduleClickUrl, sendScheduleEvent, sendTest, sendUsageEvent,
+  atDesk, AUTO_MODES, maybeSend, resetNotify, resolveLabel, routineClickUrl, sendRoutineEvent, sendTest, sendUsageEvent,
   setIdleSource, setLabelResolver, setSender, shouldNotify, usageCanSend, usageClickUrl
 } from '../server/lib/notify.js';
 import { DEFAULT_NOTIFY, NOTIFY_EVENTS, resetSettings, setSettings } from '../server/lib/settings.js';
@@ -12,7 +12,7 @@ import { resetState } from '../server/lib/remoteState.js';
 import type { NotifyPayload, PredicateContext } from '../server/lib/notify.js';
 import { resetEnvBaseline } from '../server/lib/config.js';
 import type { Config } from '../server/lib/config.js';
-import type { NotifyPolicy, ScheduleRun } from '../shared/types.js';
+import type { NotifyPolicy, RoutineRun } from '../shared/types.js';
 
 function test(name: string, fn: () => void): boolean {
   try { fn(); console.log('  ✓ ' + name); return true; }
@@ -88,7 +88,7 @@ async function inTmpCwd(fn: (sent: NotifyPayload[]) => void | Promise<void>): Pr
   }
 }
 
-function schedRun(over: Partial<ScheduleRun> = {}): ScheduleRun {
+function schedRun(over: Partial<RoutineRun> = {}): RoutineRun {
   return {
     id: 'run-1', job: 'nightly', machine: 'mac', trigger: 'schedule', startedAt: '2026-10-19T20:00:00.000Z', endedAt: '2026-10-19T20:01:00.000Z', ms: 60000,
     late: false, state: 'failed', ok: 1, failed: 2, skipped: 0, total: 3, stopped: false, error: null, why: null, steps: [], ...over
@@ -454,39 +454,39 @@ export async function run(): Promise<number> {
       assert.match(outcome, /no NTFY_TOPIC set/);
     }))) p++; else f++;
 
-  if (test('schedule-failed is the fifth event, and only it passes a policy that selects only it', () => {
-    assert.strictEqual(NOTIFY_EVENTS[4], 'schedule-failed');
-    const pol = policy({ events: { ...DEFAULT_NOTIFY.events, 'schedule-failed': true } });
-    assert.strictEqual(shouldNotify('schedule-failed', pol, ctx()), true);
+  if (test('routine-failed is the fifth event, and only it passes a policy that selects only it', () => {
+    assert.strictEqual(NOTIFY_EVENTS[4], 'routine-failed');
+    const pol = policy({ events: { ...DEFAULT_NOTIFY.events, 'routine-failed': true } });
+    assert.strictEqual(shouldNotify('routine-failed', pol, ctx()), true);
     assert.strictEqual(shouldNotify('question', pol, ctx()), false);
   })) p++; else f++;
 
-  if (await testAsync('sendScheduleEvent: master off sends nothing, even with the event ticked', () => inTmpCwd(sent => {
-    setSettings({ notify: { enabled: false, events: { 'schedule-failed': true } } });
-    assert.strictEqual(sendScheduleEvent(SCHED, conf()), false);
+  if (await testAsync('sendRoutineEvent: master off sends nothing, even with the event ticked', () => inTmpCwd(sent => {
+    setSettings({ notify: { enabled: false, events: { 'routine-failed': true } } });
+    assert.strictEqual(sendRoutineEvent(SCHED, conf()), false);
     assert.strictEqual(sent.length, 0);
   }))) p++; else f++;
 
-  if (await testAsync('sendScheduleEvent: an unticked schedule-failed sends nothing while the other four are on', () => inTmpCwd(sent => {
+  if (await testAsync('sendRoutineEvent: an unticked routine-failed sends nothing while the other four are on', () => inTmpCwd(sent => {
     setSettings({ notify: { enabled: true, events: { question: true, stop: true, permission: true, plan: true } } });
-    assert.strictEqual(sendScheduleEvent(SCHED, conf()), false);
+    assert.strictEqual(sendRoutineEvent(SCHED, conf()), false);
     assert.strictEqual(sent.length, 0);
   }))) p++; else f++;
 
-  if (await testAsync('sendScheduleEvent: no NTFY_TOPIC sends nothing', () => inTmpCwd(sent => {
-    setSettings({ notify: { enabled: true, events: { 'schedule-failed': true } } });
-    assert.strictEqual(sendScheduleEvent(SCHED, conf({ ntfyTopic: '' })), false);
+  if (await testAsync('sendRoutineEvent: no NTFY_TOPIC sends nothing', () => inTmpCwd(sent => {
+    setSettings({ notify: { enabled: true, events: { 'routine-failed': true } } });
+    assert.strictEqual(sendRoutineEvent(SCHED, conf({ ntfyTopic: '' })), false);
     assert.strictEqual(sent.length, 0);
   }))) p++; else f++;
 
-  // Delete the three `false` overrides in sendScheduleEvent and this sends nothing: no remote-answer toggle, no auto mode, and a user at the keyboard.
-  if (await testAsync('sendScheduleEvent is exempt from requireAfk, requireRemoteAnswer and requireAutoMode', () => inTmpCwd(sent => {
+  // Delete the three `false` overrides in sendRoutineEvent and this sends nothing: no remote-answer toggle, no auto mode, and a user at the keyboard.
+  if (await testAsync('sendRoutineEvent is exempt from requireAfk, requireRemoteAnswer and requireAutoMode', () => inTmpCwd(sent => {
     setSettings({
       idleSecs: 60,
-      notify: { enabled: true, events: { 'schedule-failed': true }, requireAfk: true, requireRemoteAnswer: true, requireAutoMode: true }
+      notify: { enabled: true, events: { 'routine-failed': true }, requireAfk: true, requireRemoteAnswer: true, requireAutoMode: true }
     });
     setIdleSource(() => 1);
-    assert.strictEqual(sendScheduleEvent(SCHED, conf({ remoteAnswer: false })), true);
+    assert.strictEqual(sendRoutineEvent(SCHED, conf({ remoteAnswer: false })), true);
     assert.strictEqual(sent.length, 1);
     assert.deepStrictEqual(
       { title: sent[0].title, body: sent[0].body, topic: sent[0].topic, tags: sent[0].tags },
@@ -494,13 +494,13 @@ export async function run(): Promise<number> {
     );
   }))) p++; else f++;
 
-  if (await testAsync('sendScheduleEvent: the click is publicUrl + /?view=schedules&run=<id>, and empty without a publicUrl', () => inTmpCwd(sent => {
-    setSettings({ notify: { enabled: true, events: { 'schedule-failed': true } } });
-    sendScheduleEvent(SCHED, conf());
-    sendScheduleEvent(SCHED, conf({ publicUrl: '' } as Partial<Config>));
-    assert.strictEqual(sent[0].click, 'https://dash.example/?view=schedules&run=run-1');
+  if (await testAsync('sendRoutineEvent: the click is publicUrl + /?view=routines&run=<id>, and empty without a publicUrl', () => inTmpCwd(sent => {
+    setSettings({ notify: { enabled: true, events: { 'routine-failed': true } } });
+    sendRoutineEvent(SCHED, conf());
+    sendRoutineEvent(SCHED, conf({ publicUrl: '' } as Partial<Config>));
+    assert.strictEqual(sent[0].click, 'https://dash.example/?view=routines&run=run-1');
     assert.strictEqual(sent[1].click, '');
-    assert.strictEqual(scheduleClickUrl(conf(), 'refused-mac-a b-1'), 'https://dash.example/?view=schedules&run=refused-mac-a%20b-1');
+    assert.strictEqual(routineClickUrl(conf(), 'refused-mac-a b-1'), 'https://dash.example/?view=routines&run=refused-mac-a%20b-1');
   }))) p++; else f++;
 
   const USAGE = { kind: 'usage-limit' as const, title: '5-hour limit reached', body: 'Resets at 14:30.' };
@@ -541,22 +541,22 @@ export async function run(): Promise<number> {
     assert.strictEqual(usageClickUrl(conf({ publicUrl: '' } as Partial<Config>)), '');
   })) p++; else f++;
 
-  if (await testAsync('sendScheduleEvent honours desk routing like a session push', () => inTmpCwd(sent => {
-    setSettings({ idleSecs: 60, notify: { enabled: true, events: { 'schedule-failed': true } } });
+  if (await testAsync('sendRoutineEvent honours desk routing like a session push', () => inTmpCwd(sent => {
+    setSettings({ idleSecs: 60, notify: { enabled: true, events: { 'routine-failed': true } } });
     setIdleSource(() => 10);
-    sendScheduleEvent(SCHED, twoTopic());
+    sendRoutineEvent(SCHED, twoTopic());
     setIdleSource(() => 300);
-    sendScheduleEvent(SCHED, twoTopic());
+    sendRoutineEvent(SCHED, twoTopic());
     assert.strictEqual(sent[0].topic, 'desk-topic');
     assert.strictEqual(sent[0].click, 'http://localhost:4173/api/dismiss');
     assert.strictEqual(sent[1].topic, 'test-topic');
-    assert.strictEqual(sent[1].click, 'https://dash.example/?view=schedules&run=run-1');
+    assert.strictEqual(sent[1].click, 'https://dash.example/?view=routines&run=run-1');
   }))) p++; else f++;
 
-  if (await testAsync('sendScheduleEvent never throws when the transport does', () => inTmpCwd(() => {
-    setSettings({ notify: { enabled: true, events: { 'schedule-failed': true } } });
+  if (await testAsync('sendRoutineEvent never throws when the transport does', () => inTmpCwd(() => {
+    setSettings({ notify: { enabled: true, events: { 'routine-failed': true } } });
     setSender(() => { throw new Error('socket'); });
-    assert.strictEqual(sendScheduleEvent(SCHED, conf()), false);
+    assert.strictEqual(sendRoutineEvent(SCHED, conf()), false);
   }))) p++; else f++;
 
   console.log(`\n  ${p} passed, ${f} failed`);

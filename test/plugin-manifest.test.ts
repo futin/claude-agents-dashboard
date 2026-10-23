@@ -24,8 +24,8 @@ function test(name: string, fn: () => void): boolean {
 /** Every skill the plugin ships. A new one is added here deliberately, beside its directory. */
 const SKILLS = ['git-sync', 'kaizen'];
 
-/** The shared modules the schedule wrapper runs, generated into plugin/lib by `pnpm plugin:gen` (scripts/gen-plugin-lib.ts). */
-const LIB_MODULES = ['cron', 'frontmatter', 'schedule-file'];
+/** The shared modules the routine wrapper runs, generated into plugin/lib by `pnpm plugin:gen` (scripts/gen-plugin-lib.ts). */
+const LIB_MODULES = ['cron', 'frontmatter', 'routine-file'];
 
 const readJson = (p: string): any => JSON.parse(fs.readFileSync(p, 'utf8'));
 
@@ -62,8 +62,8 @@ export function run(): number {
     assert.deepStrictEqual(entries, ['.claude-plugin', 'lib', 'skills']);
   })) p++; else f++;
 
-  if (test('plugin/lib/ holds exactly the three generated .mjs modules plus the hand-written run-schedule.mjs wrapper', () => {
-    assert.deepStrictEqual(fs.readdirSync(path.join(root, 'plugin', 'lib')).sort(), [...LIB_MODULES, 'run-schedule'].map((m) => `${m}.mjs`).sort());
+  if (test('plugin/lib/ holds exactly the three generated .mjs modules plus the hand-written run-routine.mjs wrapper', () => {
+    assert.deepStrictEqual(fs.readdirSync(path.join(root, 'plugin', 'lib')).sort(), [...LIB_MODULES, 'run-routine'].map((m) => `${m}.mjs`).sort());
   })) p++; else f++;
 
   for (const name of LIB_MODULES) {
@@ -76,7 +76,7 @@ export function run(): number {
   }
 
   if (test('the generated modules load under plain node with no package.json, and parseJob works — a broken specifier fails here', () => {
-    const entry = pathToFileURL(path.join(root, 'plugin', 'lib', 'schedule-file.mjs')).href;
+    const entry = pathToFileURL(path.join(root, 'plugin', 'lib', 'routine-file.mjs')).href;
     const file = ['---', 'cron: "0 9 * * *"', 'machines: [mac]', 'run: claude', '---', '/git-sync', ''].join('\n');
     const script = `const m = await import(${JSON.stringify(entry)}); const r = m.parseJob('tiny', ${JSON.stringify(file)}); `
       + 'process.stdout.write(JSON.stringify({ errors: r.errors, cron: r.job && r.job.cron }));';

@@ -57,14 +57,14 @@ pins the split against `server/api.ts`):
   spawn composers.
 - **Gate-only write** — the write gate and nothing else: `POST /api/settings`, `POST /api/remote-answer`, the three [push](push-notify.md) routes
   (`permissions/notify`, `notify/event`, `notify/test`), `POST /api/pins`, `POST /api/pins/order`, `POST /api/open-folder`, `POST /api/git-fetch`,
-  `POST /api/git-quick`, `POST /api/codegraph/run`, and the scheduled-workflow writes: `POST /api/schedules`, `PUT`, `PATCH` and `DELETE /api/schedules/:name`,
-  `POST /api/schedules/reconcile`, `POST /api/schedules/:name/run`, `…/:name/stop` and `POST /api/schedules/reveal`. Those also answer `409 not-owner` on a
-  server that does not own the machine's schedules; `POST /api/schedules/validate` is read-only and sits outside the gate.
+  `POST /api/git-quick`, `POST /api/codegraph/run`, and the routine writes: `POST /api/routines`, `PUT`, `PATCH` and `DELETE /api/routines/:name`,
+  `POST /api/routines/reconcile`, `POST /api/routines/:name/run`, `…/:name/stop` and `POST /api/routines/reveal`. Those also answer `409 not-owner` on a
+  server that does not own the machine's routines; `POST /api/routines/validate` is read-only and sits outside the gate.
 
 Gate-only is the intended posture for that second set, not an oversight. The switch is a runtime kill switch for *acting on sessions remotely*, not an auth
 boundary — the gate above is the boundary. `POST /api/settings` and `POST /api/remote-answer` cannot sit behind it, or turning the switch off would lock out
 turning it back on. The push routes must keep working with remote answering off, because push notification is independent of it. Pins, pin order, open folder,
-git fetch, quick pull and push, codegraph runs and schedules touch no session — a Run now starts a new headless one, never acts on one.
+git fetch, quick pull and push, codegraph runs and routines touch no session — a Run now starts a new headless one, never acts on one.
 
 **Resolving the peer.** `resolvePeer(remoteAddress, headers)` (`server/lib/origin.ts`) classifies the socket address. A non-loopback socket is the answer
 outright: nothing such a client sends is consulted. A loopback socket means a process on this machine, possibly a proxy, so `X-Forwarded-For` is walked **from

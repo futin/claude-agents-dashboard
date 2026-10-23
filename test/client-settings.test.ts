@@ -138,26 +138,33 @@ export function run(): number {
     assert.strictEqual(clampSettings({ managementTab: 'git' }).managementTab, 'git');
   })) p++; else f++;
 
-  // Schedules was a Management sub-view before it became its own section: a device that stored it lands on the default, Git.
-  if (test('a stored managementTab schedules falls back to git', () => {
-    assert.strictEqual(clampSettings({ managementTab: 'schedules' }).managementTab, 'git');
+  // Routines was a Management sub-view before it became its own section: a device that stored it lands on the default, Git.
+  if (test('a stored managementTab routines falls back to git', () => {
+    assert.strictEqual(clampSettings({ managementTab: 'routines' }).managementTab, 'git');
   })) p++; else f++;
 
-  if (test('the Schedules sub-tab defaults to jobs, accepts jobs and runs, and round-trips', () => {
-    assert.strictEqual(DEFAULT_SETTINGS.schedulesTab, 'jobs');
-    assert.strictEqual(clampSettings({}).schedulesTab, 'jobs');
-    assert.strictEqual(clampSettings({ schedulesTab: 'nonsense' }).schedulesTab, 'jobs');
-    assert.strictEqual(clampSettings({ schedulesTab: 'jobs' }).schedulesTab, 'jobs');
-    assert.strictEqual(clampSettings({ schedulesTab: 'runs' }).schedulesTab, 'runs');
-    assert.strictEqual(clampSettings(clampSettings({ schedulesTab: 'runs' })).schedulesTab, 'runs');
+  if (test('the Routines sub-tab defaults to jobs, accepts jobs and runs, and round-trips', () => {
+    assert.strictEqual(DEFAULT_SETTINGS.routinesTab, 'jobs');
+    assert.strictEqual(clampSettings({}).routinesTab, 'jobs');
+    assert.strictEqual(clampSettings({ routinesTab: 'nonsense' }).routinesTab, 'jobs');
+    assert.strictEqual(clampSettings({ routinesTab: 'jobs' }).routinesTab, 'jobs');
+    assert.strictEqual(clampSettings({ routinesTab: 'runs' }).routinesTab, 'runs');
+    assert.strictEqual(clampSettings(clampSettings({ routinesTab: 'runs' })).routinesTab, 'runs');
   })) p++; else f++;
 
-  if (test('the Schedules window defaults to 30 and accepts only 7, 30 and 90', () => {
-    assert.strictEqual(DEFAULT_SETTINGS.scheduleWindow, 30);
-    assert.strictEqual(clampSettings({}).scheduleWindow, 30);
-    for (const w of [7, 30, 90]) assert.strictEqual(clampSettings({ scheduleWindow: w }).scheduleWindow, w);
+  if (test('settings saved before the rename keep their place: schedulesTab, scheduleWindow, landing schedules', () => {
+    const s = clampSettings({ schedulesTab: 'runs', scheduleWindow: 90, landing: 'schedules' });
+    assert.deepStrictEqual([s.routinesTab, s.routineWindow, s.landing], ['runs', 90, 'routines']);
+    const both = clampSettings({ schedulesTab: 'runs', routinesTab: 'jobs', scheduleWindow: 90, routineWindow: 7 });
+    assert.deepStrictEqual([both.routinesTab, both.routineWindow], ['jobs', 7], 'the new keys win');
+  })) p++; else f++;
+
+  if (test('the Routines window defaults to 30 and accepts only 7, 30 and 90', () => {
+    assert.strictEqual(DEFAULT_SETTINGS.routineWindow, 30);
+    assert.strictEqual(clampSettings({}).routineWindow, 30);
+    for (const w of [7, 30, 90]) assert.strictEqual(clampSettings({ routineWindow: w }).routineWindow, w);
     for (const bad of [14, 0, -7, 7.5, '7', '90', null, undefined, NaN, {}]) {
-      assert.strictEqual(clampSettings({ scheduleWindow: bad }).scheduleWindow, 30, `${String(bad)} reads as the default`);
+      assert.strictEqual(clampSettings({ routineWindow: bad }).routineWindow, 30, `${String(bad)} reads as the default`);
     }
   })) p++; else f++;
 
@@ -310,7 +317,7 @@ export function run(): number {
   if (test('the picker offers exactly the eight intended choices', () => {
     assert.deepStrictEqual(
       LANDING_OPTIONS.map(o => o.value),
-      ['last', 'sessions', 'schedules', 'management', 'usage', 'configs', 'analytics', 'settings']
+      ['last', 'sessions', 'routines', 'management', 'usage', 'configs', 'analytics', 'settings']
     );
     assert.strictEqual(LANDING_OPTIONS.length, 8);
   })) p++; else f++;

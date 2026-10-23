@@ -3,7 +3,7 @@
 A **monolith split into three domains**: a Node backend (`server/`), a Vite + React +
 TypeScript frontend (`client/`), and the shared API contract (`shared/`). One repo, one
 deploy. The **only** data crossing the frontend/backend boundary is the typed JSON
-payloads defined in `shared/types.ts` (the only code both sides run is `shared/frontmatter.ts`, `shared/gitUpstream.ts`, `shared/cron.ts` and `shared/schedule-file.ts`) — when adding an API field, edit that file first,
+payloads defined in `shared/types.ts` (the only code both sides run is `shared/frontmatter.ts`, `shared/gitUpstream.ts`, `shared/cron.ts` and `shared/routine-file.ts`) — when adding an API field, edit that file first,
 then the server producer, then the client consumer.
 
 Everything the dashboard shows is read straight off disk from
@@ -111,16 +111,16 @@ remote-answer switch on, a **gate-only write** needs the gate alone ([who may wr
 | `GET /api/usage/profile` | the duty-cycle profile behind the weekly projection — cells + the forward walk, never raw samples or file paths |
 | `GET /api/usage/rates` | tokens per 1% of the 5h window per model: the pooled rate + drift verdict, the two-term split, the jointly-fitted rate and its gap against the pooled one, one cell per UTC day of the horizon, plus the coverage disclosure and the off-peak boost verdict (`lib/usage-boost.ts`) |
 | `GET /api/usage/history?days=N` | recorded 5h and weekly utilization over the last N days (default 7, clamped 1–365): windows by observed `resetsAt`, gap-split step segments downsampled to ~1440 points, and the recording gaps; served with recording off too (`lib/usage-history-series.ts`) |
-| `GET /api/schedules` | scheduled workflows: machine, schedules folder, who owns it (`owner`), the reconcile state and every job with its last run ([schedules](subsystems/schedules.md)) |
-| `GET /api/schedules/runs` | folded runs of the run log, newest first, with stats for `days` (7/30/90) and the window before it; `?job=&outcome=&runner=` filter, 400 `bad outcome` |
-| `GET /api/schedules/:name` | one job's raw file text and parsed shape, for the editor |
-| `POST /api/schedules`, `PUT`, `PATCH`, `DELETE /api/schedules/:name` | create / replace / toggle `enabled` / delete a job file, then reconcile; 422 with `errors`, 409 `exists`; all gate-only writes, 409 `not-owner` off the owning server |
-| `POST /api/schedules/validate` | `{text, name?}` → `{errors, summary}`; read-only, outside the write gate |
-| `POST /api/schedules/reconcile` | `{apply?}`: the plan of installs, updates and removes against launchd / crontab, applied when `apply` (gate-only write) |
-| `POST /api/schedules/reveal` | open the schedules folder, or one job's file, in Finder with `open` / `open -R`; 501 off macOS (gate-only write) |
-| `POST /api/schedules/:name/run` | start the wrapper now (`{only?: [pins]}`), 202 with the run id read back from the log; 409 `already-running` (gate-only write) |
-| `POST /api/schedules/:name/stop` | SIGTERM the running wrapper by its lock's pid; 204, or 409 `not-running` (gate-only write) |
-| `GET /api/sessions/:id/row` | one session row for any id a transcript resolves, with no lookback — the Schedules page's `session →` link opens it in the ChatDrawer |
+| `GET /api/routines` | routines: machine, routines folder, who owns it (`owner`), the reconcile state and every job with its last run ([routines](subsystems/routines.md)) |
+| `GET /api/routines/runs` | folded runs of the run log, newest first, with stats for `days` (7/30/90) and the window before it; `?job=&outcome=&runner=` filter, 400 `bad outcome` |
+| `GET /api/routines/:name` | one job's raw file text and parsed shape, for the editor |
+| `POST /api/routines`, `PUT`, `PATCH`, `DELETE /api/routines/:name` | create / replace / toggle `enabled` / delete a job file, then reconcile; 422 with `errors`, 409 `exists`; all gate-only writes, 409 `not-owner` off the owning server |
+| `POST /api/routines/validate` | `{text, name?}` → `{errors, summary}`; read-only, outside the write gate |
+| `POST /api/routines/reconcile` | `{apply?}`: the plan of installs, updates and removes against launchd / crontab, applied when `apply` (gate-only write) |
+| `POST /api/routines/reveal` | open the routines folder, or one job's file, in Finder with `open` / `open -R`; 501 off macOS (gate-only write) |
+| `POST /api/routines/:name/run` | start the wrapper now (`{only?: [pins]}`), 202 with the run id read back from the log; 409 `already-running` (gate-only write) |
+| `POST /api/routines/:name/stop` | SIGTERM the running wrapper by its lock's pid; 204, or 409 `not-running` (gate-only write) |
+| `GET /api/sessions/:id/row` | one session row for any id a transcript resolves, with no lookback — the Routines page's `session →` link opens it in the ChatDrawer |
 | anything else | static files from `client/dist` (production only) |
 
 ⚠️ The static catch-all resolves through `resolveStaticPath` in `index.ts`, which confines
@@ -172,8 +172,8 @@ shared/gitUpstream.ts  zero-dep upstream rule (`gitUpstreamShown`) — shared so
                   rule and the hub's Git pending tile cannot disagree about the same repo
 shared/cron.ts    zero-dep five-field cron parser: `parseCron`, next and last fire time, the launchd `StartCalendarInterval` expansion, a plain-words
                   description — shared so the server, the client and the wrapper agree; `plugin/lib/cron.mjs` is its generated copy
-shared/schedule-file.ts  zero-dep job-file `parseJob` (with its validation errors), `checkPins` and the `enabled:` writer `serializeEnabled` — the one
-                  validator the server, the client and the wrapper all run; `plugin/lib/schedule-file.mjs` is its generated copy
+shared/routine-file.ts  zero-dep job-file `parseJob` (with its validation errors), `checkPins` and the `enabled:` writer `serializeEnabled` — the one
+                  validator the server, the client and the wrapper all run; `plugin/lib/routine-file.mjs` is its generated copy
 server/
   index.ts        HTTP entry + routing; static-serves client/dist in prod
   api.ts          all /api handlers (+ error fallbacks)
@@ -232,14 +232,14 @@ server/
   lib/git-fetch.ts    the Git fetch: detached `git fetch origin` per common dir, error classifier, watched-only timer + clock
   lib/git-quick.ts    the Sync menu's Pull and Push: fast-forward-only pull and push of one pinned repo, never forced, hooks run
   lib/git-locks.ts    one lock per git common dir, shared by git-quick and the fetch-all wait
-  lib/open-folder.ts  `open <path>` through `execFile`, behind POST /api/open-folder (the pin-membership gate is in api.ts); `revealFile` is `open -R <file>` for the Schedules menu's Reveal in Finder
-  lib/schedule-config.ts  machine name (`mac`/`wsl`), the schedules and state-root folders, and `scheduleEnv` — the environment baked into every installed job and `/run` spawn
-  lib/schedule-store.ts   job files (read, atomic write, delete), the owner claim, `pins.json`, lock sweep and the pid-liveness `Probe`
-  lib/schedule-reconcile.ts  the pure plan of installs, updates and removes against launchd / crontab, its apply, the serialised trigger and the watchers
-  lib/schedule-run.ts     `POST /run` and `/stop`: spawn the wrapper through `spawn.ts`'s `spawnProcess`, read the run id back from the log
-  lib/schedule-log.ts     the incremental run-log reader, the lost rule, 20 MB rotation and the window stats
-  lib/schedule-notify.ts  the `schedule-failed` fold over runs: one push per run, `notified.json`, the first-start seed
-  lib/schedule-boot.ts    what the owning server does on listen and on exit, and the shared log reader
+  lib/open-folder.ts  `open <path>` through `execFile`, behind POST /api/open-folder (the pin-membership gate is in api.ts); `revealFile` is `open -R <file>` for the Routines menu's Reveal in Finder
+  lib/routine-config.ts  machine name (`mac`/`wsl`), the routines and state-root folders, and `routineEnv` — the environment baked into every installed job and `/run` spawn
+  lib/routine-store.ts   job files (read, atomic write, delete), the owner claim, `pins.json`, lock sweep and the pid-liveness `Probe`
+  lib/routine-reconcile.ts  the pure plan of installs, updates and removes against launchd / crontab, its apply, the serialised trigger and the watchers
+  lib/routine-run.ts     `POST /run` and `/stop`: spawn the wrapper through `spawn.ts`'s `spawnProcess`, read the run id back from the log
+  lib/routine-log.ts     the incremental run-log reader, the lost rule, 20 MB rotation and the window stats
+  lib/routine-notify.ts  the `routine-failed` fold over runs: one push per run, `notified.json`, the first-start seed
+  lib/routine-boot.ts    what the owning server does on listen and on exit, and the shared log reader
   lib/hub-widgets.ts  the Lookout hub tiles (usage gauge, sessions list, Git pending list), declared through lookout-widgets
   lib/account.ts      `~/.claude.json` → `oauthAccount` as display strings, behind GET /api/account; fail-open to null
   lib/releases.ts     GET /api/releases: release-kit's memoised tag reader, pointed at the checkout, plus two test seams
@@ -273,7 +273,7 @@ server/
                   also owns stopping one (graceful SIGTERM, grace window, escalation)
                   (see docs/subsystems/spawn.md)
 client/src/
-  App.tsx         shell: side rail (Sessions | Schedules | Usage | Management | Claude Configs |
+  App.tsx         shell: side rail (Sessions | Routines | Usage | Management | Claude Configs |
                   Analytics | Settings) + lazy views
   components/     SideRail (section switcher — the rail on desktop, and below `sm`
                   (640px) the same markup as a menu dropped out of a top bar, every tree
@@ -305,9 +305,9 @@ client/src/
                   strip / sheet / definitions
                   chrome the tabs draw, and
                   ReadingAids — the ⓘ button they both render), settings/
-  components/schedules/  the Schedules section (Jobs | Runs, picked in the rail), its own lazy chunk: SchedulesView (owns the poll, the write helper, the
+  components/routines/  the Routines section (Jobs | Runs, picked in the rail), its own lazy chunk: RoutinesView (owns the poll, the write helper, the
                   drawer and the ChatDrawer), StatsBand, JobLedger / JobFold / JobMenu, JobDrawer (the editor), RunNowPopover, RunsList, SessionLink,
-                  and `ctl.ts`, the one object of state and callbacks every part reads (see subsystems/schedules.md)
+                  and `ctl.ts`, the one object of state and callbacks every part reads (see subsystems/routines.md)
   hooks/          useSessions (the main poll), useSessionDetail, useSessionChat,
                   useConfigs, useConfigsScope (the scope + the one index
                   fetch, shared by the rail's tree and the page), useAnalytics,
@@ -316,7 +316,7 @@ client/src/
                   key),
                   useAccount (the header chip's 30s poll, owned by App), useGitFetch (Git's Fetch all key), useGitQuick (the Sync menu's Pull and Push),
                   useCodegraph (the CodeGraph sub-view's 30s visible-only poll, 3s while a run is live), useCodegraphRun (its Sync / Reindex keys),
-                  useSchedules / useScheduleRuns (the Schedules sub-view's 3s polls, one `createPollSeq` each) and useScheduleWrite (its one write helper),
+                  useRoutines / useRoutineRuns (the Routines sub-view's 3s polls, one `createPollSeq` each) and useRoutineWrite (its one write helper),
                   useGitStats (the Git sub-view's 30s visible-only poll), useGitSync (its
                   Sync button: runs per device, a sessions poll only while one is live),
                   usePersistedState, useAnswerToken (the page's one Answer token copy), useSettings, useServerSettings, useDictation, useFloatingTip
@@ -325,7 +325,7 @@ client/src/
                   sessions), useBackClose, useHideOnScroll (the phone top bar's
                   auto-hide), useNarrow (the one JS read of the `md` breakpoint),
                   useStuckStrip (when the phone's aside strip pins)
-  lib/            schedules (the Schedules page's pure helpers: pills, run folding, the Repos helper, write-failure text), filterSort, analyticsFilterSort, chatFilter, heldBody (which timeline body a pinned panel folds), markdown, configsEntries,
+  lib/            routines (the Routines page's pure helpers: pills, run folding, the Repos helper, write-failure text), filterSort, analyticsFilterSort, chatFilter, heldBody (which timeline body a pinned panel folds), markdown, configsEntries,
                   format, settings,
                   sections, deepLink, dictation, spawnOptions, pins, resume, pace, usageProfile,
                   usageRatesFormat, usageHistory (the History tab's step path, ticks and figures), panelCollapse, surface, walkChart (the headroom
@@ -368,9 +368,9 @@ scripts/          install-hooks.sh (`pnpm hooks:install`), ask-remote-hook.sh,
                   a clean main that is behind *before* comparing, then reinstalls the
                   plugin from GitHub's main when plugin/ differs from the installed copy;
                   refuses a tree that is off main, dirty, unpushed or can't fast-forward;
-                  after a reinstall POSTs `/api/schedules/reconcile` to a running server,
+                  after a reinstall POSTs `/api/routines/reconcile` to a running server,
                   gen-plugin-lib.ts (`pnpm plugin:gen`) — transpiles shared/{cron,frontmatter,
-                  schedule-file}.ts into plugin/lib/*.mjs; test/plugin-manifest.test.ts
+                  routine-file}.ts into plugin/lib/*.mjs; test/plugin-manifest.test.ts
                   regenerates and compares,
                   session-analytics.ts (`pnpm session-analytics`) — prints one
                   session's SessionAnalysis as JSON without the server running,
@@ -390,7 +390,7 @@ scripts/          install-hooks.sh (`pnpm hooks:install`), ask-remote-hook.sh,
 plugin/           the installable Claude Code plugin (`/plugin install`, README §Install the skills);
                   plain JS skills, never imported by server/ or client/ at runtime
   .claude-plugin/plugin.json  name + version
-  lib/            generated `.mjs` copies of the shared schedule modules, for plain-`node` use
+  lib/            generated `.mjs` copies of the shared routine modules, for plain-`node` use
                   (never `bin/`: Claude Code puts that on every session's PATH)
   skills/git-sync/  repo chores across machines; engine tools/git-sync.mjs, own `node --test`
                   suite run by `pnpm test:skills` (~4 min, 2026-10-01)
@@ -426,7 +426,7 @@ that area:
 - [push-notify](subsystems/push-notify.md) — server-sent ntfy pushes: the layered policy, and the one narrow browser layer that came back for headless sessions
 - [breakpoints](subsystems/breakpoints.md) — the seven-tier mobile-first ladder in `styles.css`, the rail+measure lock, and the capped/full content-width matrix
 - [codegraph](subsystems/codegraph.md) — `GET /api/codegraph`, `POST /api/codegraph/run`: the `codegraph` CLI's index state per pinned project — a status cache, Sync and Reindex runs, the lock-loss rule, and the levels the Management › CodeGraph layouts draw
-- [schedules](subsystems/schedules.md) — the Schedules section: job files in a git-synced folder, installed as launchd / cron jobs by reconcile, run by `plugin/lib/run-schedule.mjs`, the run log, the owning server and `schedule-failed` pushes
+- [routines](subsystems/routines.md) — the Routines section: job files in a git-synced folder, installed as launchd / cron jobs by reconcile, run by `plugin/lib/run-routine.mjs`, the run log, the owning server and `routine-failed` pushes
 - [visual-tests](subsystems/visual-tests.md) — `pnpm test:visual`: Playwright screenshots of every view against fixture data, overflow and daylight contrast, macOS only
 - [configuration](workflows/configuration.md) — the `.env` / hook-side variable reference
 - [ci](workflows/ci.md) — the PR gate: `ci / checks`, `ci / pr-title`, `ci / skills` from release-kit's reusable workflow, and the `main-pr-only` ruleset
