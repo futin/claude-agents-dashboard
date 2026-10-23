@@ -111,6 +111,8 @@ const firstLine = (s) => lines(s)[0] ?? '';
 // A CLI's error is its last stderr line; anything above it is usually a banner or a stack.
 const lastLine = (s) => lines(s).pop() ?? '';
 const short = (s) => (s.length > WHY_MAX_CHARS ? s.slice(0, WHY_MAX_CHARS - 1) + '…' : s);
+/** Local `HH:MM` of a run's start, for the session name. */
+const hhmm = (ms) => { const d = new Date(ms); return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; };
 
 function tailOf(text) {
   const lines = text.replace(/\n+$/, '').split('\n').slice(-TAIL_LINES).join('\n');
@@ -278,7 +280,7 @@ class Wrapper {
       const session = job.run === 'claude' && !step.skip ? randomUUID() : undefined;
       const s0 = Date.now();
       this.append({ kind: 'step-start', run: runId, step: i, repo: step.repo, cwd: step.cwd, at: new Date(s0).toISOString(), ...(session ? { session } : {}) });
-      const result = step.skip ? { exit: null, outcome: 'skipped', why: step.skip } : await this.launch(job, step.cwd, session);
+      const result = step.skip ? { exit: null, outcome: 'skipped', why: step.skip } : await this.launch(job, step.cwd, session, `${this.job} · ${hhmm(t0)}`);
       const at = Date.now();
       this.append({ kind: 'step-end', run: runId, step: i, at: new Date(at).toISOString(), ms: at - s0, ...result });
       if (result.outcome === 'ok') counts.ok++;
@@ -290,7 +292,7 @@ class Wrapper {
     return counts.failed > 0 ? 1 : 0;
   }
 
-  async launch(job, cwd, session) {
+  async launch(job, cwd, session, name) {
     if (!fs.existsSync(cwd)) return { exit: null, outcome: 'failed', why: short(`no such cwd ${cwd}`) };
     const env = { ...process.env, CLAUDE_DASHBOARD_ROUTINE: this.job };
     if (job.run === 'shell') {
@@ -307,7 +309,8 @@ class Wrapper {
         fs.rmSync(tmp, { recursive: true, force: true });
       }
     }
-    const args = ['-p', '--output-format', 'json', '--session-id', session];
+    // `--name` writes the custom-title record the Sessions board leads with, so five runs in one project read as their jobs, not as five project names.
+    const args = ['-p', '--output-format', 'json', '--session-id', session, '--name', name];
     if (job.model) args.push('--model', job.model);
     if (job.effort) args.push('--effort', job.effort);
     args.push('--permission-mode', clampPermission(job.permissionMode ?? process.env.SYNC_PERMISSION_MODE, process.env.SPAWN_MAX_PERMISSION));

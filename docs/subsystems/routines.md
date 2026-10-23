@@ -192,9 +192,10 @@ only process that runs a job. In order:
 A step is `ok` when the shell exits 0 or the claude result has `is_error: false`; `skipped` when its pin is missing or unlisted; otherwise `failed`, which
 includes `timeout` and `stopped`. `end.failed` counts every non-ok, non-skipped step, and a run is failed when `failed > 0` or `error` is set.
 
-The claude step is `claude -p --output-format json --session-id <uuid>` plus the model, effort, permission mode, allowed tools and max turns from the
+The claude step is `claude -p --output-format json --session-id <uuid> --name '<job> · HH:MM'` plus the model, effort, permission mode, allowed tools and max turns from the
 file, the prompt on stdin. The mode is clamped to `SPAWN_MAX_PERMISSION` the way `spawn.ts` does. With `CLAUDE_BIN` unset the run ends with `end.error`
-`claude cli not configured`. See [spawn](spawn.md#routine-runs-the-other-detached-launch) for how Run now launches it.
+`claude cli not configured`. `--name` (the run's local start time) writes a `custom-title` record, so the Sessions board leads with the job and shows the
+project as a pill; every step of one run shares the name. See [spawn](spawn.md#routine-runs-the-other-detached-launch) for how Run now launches it.
 
 **The hook marker.** The child gets `CLAUDE_DASHBOARD_ROUTINE=<job>` and `--disallowed-tools AskUserQuestion`. The five user-global hooks
 (`ask-remote`, `plan-remote`, `permission-notify`, `stop-notify`, `remote-decision`) exit at once on the marker, so a step is never held for the answer
