@@ -109,7 +109,9 @@ The atoms in `sessions/atoms.tsx`, in every view that has room for them:
   only for a session carrying `Session.stopState`, i.e. one this server still holds a
   child handle for; `lib/stopControl.ts` decides every branch. Absent for every other
   row, deliberately — see
-  [spawn](spawn.md#stopstate-and-why-it-is-absent-rather-than-false).
+  [spawn](spawn.md#stopstate-and-why-it-is-absent-rather-than-false). A live process this
+  server holds no handle for (a restart, another launcher) carries `Session.processLive`
+  instead and gets no Stop control — see [spawn](spawn.md#processlive-the-live-process-this-server-cannot-signal).
 
 ### The task list, and why it folds the whole file
 

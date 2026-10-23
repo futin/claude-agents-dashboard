@@ -55,7 +55,10 @@ one of the three ever renders. A fourth pinned panel is not a hold at all: an en
 `dashboard`-surface session gets the resume composer (`ResumePanel`, see
 [spawn](spawn.md#resuming-an-ended-session-resume)), which renders precisely when none of
 the three do — nothing pending and the turn over — so it can appear under `MessagePanel`'s
-"gone" note as the hand-off.
+"gone" note as the hand-off. When the process is still alive but this server holds no handle
+for it (`Session.processLive`; a restart, an orchestrator run, a pending background Monitor),
+the composer is replaced by a `still running` note on the same `qpanel` classes — see
+[spawn](spawn.md#processlive-the-live-process-this-server-cannot-signal).
 
 **A pinned panel floats over the transcript; it does not push it.** The transcript body and a
 single `.chat-pinned` layer are siblings in `.chat-stack`, a relative box that fills the
