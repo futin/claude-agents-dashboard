@@ -24,7 +24,6 @@
   --red:#e0533f;              /* danger thresholds */
   --magenta:#cf6f9e;          /* Task subagent / kaizen */
   --on-accent:#0c1220;        /* ink ON a filled accent (the amber Send button) */
-  --on-amber:var(--on-accent); /* ink ON a filled --amber-solid (Routines' New job); daylight splits it from --on-accent */
   --scrim:rgba(4,8,16,.66);   /* drawer backdrop */
   --shadow:rgba(0,0,0,.4);    /* card lift — lighter themes need far less */
   --shadow2:rgba(0,0,0,.5);   /* deeper lift: popovers, the cocked strip */
@@ -137,7 +136,6 @@
   --amber-tint:color-mix(in srgb,#c4761f 11%,transparent);--amber-ink:#945917;
   --mustard-tint:color-mix(in srgb,#9a8712 13%,transparent);--mustard-ink:#74660e;
   --on-accent:#ffffff;--scrim:rgba(19,19,19,.28);
-  --on-amber:var(--ink);  /* white on the bright amber fill is 3.5:1; the ink, like --amber-text, clears 4.5:1 */
   --shadow:rgba(0,0,0,.06);--shadow2:rgba(0,0,0,.1);
 }
 /* Density + text scale. Compact only retunes spacing — never a color, never a
@@ -3259,7 +3257,8 @@ button.chip[aria-pressed="true"]{color:var(--ink);background:var(--strip-hi)}
 .rtn-btn{font-family:var(--font);font-size:13px;font-weight:500;color:var(--ink);background:var(--strip);border:1px solid var(--hairline2);border-radius:999px;padding:6px 14px;cursor:pointer;white-space:nowrap}
 .rtn-btn:hover:not(:disabled){background:var(--strip-hi)}
 .rtn-btn:disabled{opacity:.5;cursor:default}
-.rtn-btn.rtn-primary{background:var(--amber-solid);border-color:transparent;color:var(--on-amber)}
+.rtn-btn.rtn-primary{background:var(--ink);border-color:transparent;color:var(--strip);transition:opacity .15s}
+.rtn-btn.rtn-primary:hover:not(:disabled){background:var(--ink);opacity:.88}
 .rtn-btn.rtn-sm{font-size:12px;padding:4px 11px}
 .rtn-btn.rtn-icon{display:inline-grid;place-items:center;padding:5px 9px}
 .rtn-btn.rtn-icon.on{background:var(--strip-hi)}
