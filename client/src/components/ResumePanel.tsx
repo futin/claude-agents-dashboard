@@ -4,6 +4,7 @@ import { SuggestionChip, composerKeyDown } from './ComposerSuggestion';
 import MicButton from './MicButton';
 import { appendTranscript } from '../lib/dictation';
 import { useSpawn } from '../hooks/useSpawn';
+import { resumeErrorText } from '../lib/resume';
 import type { Session } from '../../../shared/types';
 
 /**
@@ -82,7 +83,7 @@ export default function ResumePanel({ session, suggestion }: {
         </div>
       )}
 
-      {error && <div className="qp-note">{error}</div>}
+      {error && <div className="qp-note">{resumeErrorText(error)}</div>}
 
       <textarea
         ref={boxRef}

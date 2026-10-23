@@ -132,6 +132,14 @@ export interface Session {
    * that could not work would be worse than offering none.
    */
   stopState?: StopState;
+  /**
+   * `true` when a live `claude` process carries this session's id (`--session-id`/`--resume` in its argv, read from `ps`) that this server holds no handle
+   * for: a `dashboard` row with no {@link Session.stopState}. It exists because the transcript cannot say the process outlived its turn (a pending
+   * background Monitor keeps a headless run alive) and the launch store forgets its children on a restart, so without it the drawer offers a resume that
+   * `POST /api/spawn` then refuses with 409. **Absent, never `false`**, the encoding `stopState` uses, and absent whenever the `ps` probe was skipped or
+   * failed. Display only: this server cannot signal that process, so it offers no Stop for it.
+   */
+  processLive?: true;
   activity: Activity | null;
   lastTimestamp: string | null;
   updatedMs: number;

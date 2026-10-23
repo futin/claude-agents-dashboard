@@ -198,9 +198,9 @@ same permission ladder and ceiling, prompt still stdin-only — with these diffe
      badge colour. Neither check can see a session whose argv carries no id at all.
 
   The client-side gate (`resumeEligible`, `client/src/lib/resume.ts`) hides the composer
-  while anything is held, while `working`, and whenever `Session.stopState` is present
-  (i.e. this server holds a live child) — but the server checks are the boundary, the gate
-  is UX. `incomplete` stays eligible on purpose: it is the ordinary "your turn" state and
+  while anything is held, while `working`, whenever `Session.stopState` is present
+  (i.e. this server holds a live child), and whenever `Session.processLive` is (below) —
+  but the server checks are the boundary, the gate is UX. `incomplete` stays eligible on purpose: it is the ordinary "your turn" state and
   the reason the feature exists.
 - **`name` and `--remote-control` are forced off** on a resume: renaming or
   account-registering a *resumed* session are unverified CLI combos, so they are never
@@ -473,6 +473,19 @@ regression, not a fix. Persisting pids instead was refused: pids are reused, a s
 is indistinguishable from a live one, and the failure mode is signalling an innocent process.
 After a restart the row simply carries no `stopState` and shows no button; ending that
 process is a terminal job (`kill <pid>`).
+
+### `processLive`, the live process this server cannot signal
+
+`stopState` covers exactly the children this process still holds a handle for. Any other live headless `claude -p` — an orchestrator or scheduled run, a second dashboard,
+or **anything spawned before the last restart** (`tsx watch` restarts the dev API on every server-side edit) — carries no `stopState`, reads `idle`/`incomplete` once its
+turn ends, and used to get the resume composer, whose POST then met the `ps` scan's 409. A pending background `Monitor` is the usual reason the process outlives its turn.
+
+`scanSessions` therefore probes `liveSessionIds()` once per poll (the same cost class as its two other `ps` calls; `skipProcScan` skips it, an injected
+`ScanOptions.liveSessionIds` replaces it) and `sessionFromRef` sets `Session.processLive` to `true` for a `dashboard` row with no `stopState` whose id is in it. Absent,
+never `false`, like `stopState`, and absent on a `null` probe: that fails open, so the server-side 409 stays the safety net. `resumeEligible` returns `false` for it, and
+`ChatDrawer` shows a `still running` note in the composer's place (`stillRunningNote`); the composer returns by itself on the first poll after the process exits. The
+409 itself reaches the user as the same plain sentence (`resumeErrorText`), for the up-to-3s gap between a poll and a click. There is no Stop control for these rows:
+signalling a pid read off `ps` is a new security surface (pid reuse, killing by pattern).
 
 ### The two routes
 

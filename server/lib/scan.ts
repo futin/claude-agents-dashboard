@@ -35,6 +35,11 @@ interface ScanOptions {
   skipProcScan?: boolean;
   /** Override the live-cwd set (tests). null disables gating; undefined probes. */
   liveCwds?: Set<string> | null;
+  /**
+   * Override the set of session ids named by a live `claude` argv (tests). null = unknown, no row is flagged `processLive`; undefined probes
+   * (`liveSessionIds()`), unless `skipProcScan` is set.
+   */
+  liveSessionIds?: Set<string> | null;
   /** Override kaizen lessons (tests). null skips tagging; undefined reads the log. */
   lessons?: SessionAnalyticsLesson[] | null;
   /**
@@ -516,6 +521,8 @@ export interface RowOptions extends Pick<ScanOptions, 'homeDir' | 'pendingIds' |
   activeWindowMin: number;
   /** The live-cwd set; null fails open, as `skipProcScan` does. */
   liveCwds: Set<string> | null;
+  /** Session ids named by a live `claude` argv; null or omitted fails open, as `skipProcScan` does: no row is flagged `processLive`. */
+  liveSessionIds?: Set<string> | null;
   lessons: SessionAnalyticsLesson[] | null;
   /**
    * Apply the list's skips (no conversational message, slash-command only, the token-refresh cwd) by answering null. The row-by-id route leaves them
@@ -609,6 +616,9 @@ export function sessionFromRef(ref: TranscriptRef, opts: RowOptions): Session | 
   // Only present when this server holds a live handle for the id — the field
   // is deliberately absent, not false, for every other row (see `stopState`).
   const stopState = opts.stopStates?.get(ref.id);
+  const surface = sessionSurface(parsed.entrypoint);
+  // A process this server cannot signal but the process table shows (see `processLive`): the same absent-not-false encoding.
+  const processLive = surface === 'dashboard' && !stopState && !!opts.liveSessionIds?.has(ref.id);
   const taskState = readSessionTasks(ref.file, projectPath);
   return {
     id: ref.id,
@@ -623,12 +633,13 @@ export function sessionFromRef(ref: TranscriptRef, opts: RowOptions): Session | 
     contextWindowLabel: parsed.contextWindowLabel,
     contextPct: parsed.contextPct,
     status,
-    surface: sessionSurface(parsed.entrypoint),
+    surface,
     remoteQuestion,
     remotePlan,
     remoteReply,
     permissionWait,
     ...(stopState ? { stopState } : {}),
+    ...(processLive ? { processLive: true as const } : {}),
     activity: parsed.activity,
     lastTimestamp: parsed.lastTimestamp,
     updatedMs: ref.mtimeMs,
@@ -694,6 +705,11 @@ export function scanSessions(config: Partial<Config>, options: ScanOptions = {})
   const live = options.liveCwds !== undefined
     ? options.liveCwds
     : options.skipProcScan ? null : liveCwds();
+  // Session ids in a live `claude` argv: one more `ps` per poll, the same cost class as the two above. A null probe fails open (no row flagged), leaving
+  // the server-side 409 on POST as the safety net.
+  const liveIds = options.liveSessionIds !== undefined
+    ? options.liveSessionIds
+    : options.skipProcScan ? null : liveSessionIds();
 
   // `/kaizen` lessons keyed to each session by UUID-prefix match. Read once per
   // scan (tiny, fail-open file). Skipped when analytics is disabled or injected
@@ -703,7 +719,7 @@ export function scanSessions(config: Partial<Config>, options: ScanOptions = {})
     : cfg.showAnalytics === false ? null : readSessionAnalyticsLog();
 
   const rowOptions: RowOptions = {
-    homeDir: options.homeDir, now, activeWindowMin, liveCwds: live, lessons, scanSkips: true,
+    homeDir: options.homeDir, now, activeWindowMin, liveCwds: live, liveSessionIds: liveIds, lessons, scanSkips: true,
     pendingIds: options.pendingIds, planIds: options.planIds, messageIds: options.messageIds,
     permissionWaits: options.permissionWaits, stopStates: options.stopStates
   };

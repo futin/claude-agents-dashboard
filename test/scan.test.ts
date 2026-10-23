@@ -982,6 +982,57 @@ export function run(): number {
   })) p++; else f++;
 
 
+  /* ------------------------------------------------------------ processLive */
+
+  {
+    const PL_NOW = 1_700_000_000_000;
+    const plRoot = () => makeRoot([
+      { dirName: '-a-headless', id: 'headless', mtimeMs: PL_NOW - 60 * 1000, records: [metaRec('/a/headless', 'main'), entryRec('sdk-cli')] },
+      { dirName: '-a-term', id: 'term', mtimeMs: PL_NOW - 90 * 1000, records: [metaRec('/a/term', 'main'), entryRec('cli')] }
+    ]);
+    const plScan = (extra: Record<string, unknown>) =>
+      scan.scanSessions({ maxSessions: 5, activeWindowMin: 5, lookbackHours: 24 }, { root: plRoot(), now: PL_NOW, ...extra } as any);
+    const plRow = (out: ReturnType<typeof plScan>, id: string) => out.sessions.find(s => s.id === id)!;
+
+    if (test('processLive: a dashboard row whose id is in a live argv and holds no stopState carries true', () => {
+      const out = plScan({ liveCwds: null, liveSessionIds: new Set(['headless']) });
+      assert.strictEqual(plRow(out, 'headless').processLive, true);
+    })) p++; else f++;
+
+    if (test('processLive: absent when the launch store holds the child (stopState wins) or the id is not in the set', () => {
+      const held = plScan({ liveCwds: null, liveSessionIds: new Set(['headless']), stopStates: new Map([['headless', 'ready' as const]]) });
+      assert.strictEqual('processLive' in plRow(held, 'headless'), false);
+      assert.strictEqual(plRow(held, 'headless').stopState, 'ready');
+      const other = plScan({ liveCwds: null, liveSessionIds: new Set(['someone-else']) });
+      assert.strictEqual('processLive' in plRow(other, 'headless'), false);
+    })) p++; else f++;
+
+    if (test('processLive: absent for a terminal-surface row even when its id is in the set', () => {
+      const out = plScan({ liveCwds: null, liveSessionIds: new Set(['term', 'headless']) });
+      assert.strictEqual(plRow(out, 'term').surface, 'local');
+      assert.strictEqual('processLive' in plRow(out, 'term'), false);
+    })) p++; else f++;
+
+    if (test('processLive: a null probe fails open — no row is flagged', () => {
+      const out = plScan({ liveCwds: null, liveSessionIds: null });
+      assert.strictEqual('processLive' in plRow(out, 'headless'), false);
+    })) p++; else f++;
+
+    if (test('processLive: skipProcScan without an injected set never runs ps and flags nothing', () => {
+      let calls = 0;
+      scan.setPsRunner(() => { calls++; return '  1 claude -p --resume headless\n'; });
+      try {
+        const out = plScan({ skipProcScan: true });
+        assert.strictEqual(calls, 0, 'ps ran');
+        assert.strictEqual('processLive' in plRow(out, 'headless'), false);
+        // mirror: without skipProcScan the same argv flags the row
+        const probed = plScan({ liveCwds: null });
+        assert.strictEqual(calls, 1);
+        assert.strictEqual(plRow(probed, 'headless').processLive, true);
+      } finally { scan.setPsRunner(null); }
+    })) p++; else f++;
+  }
+
   /* --------------------------------------------------------- lastMessageMs */
 
   if (test('lastMessageMs reports the newest conversational timestamp in ms', () => {
