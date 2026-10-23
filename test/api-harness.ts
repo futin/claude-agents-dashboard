@@ -39,6 +39,7 @@ import { resetStore as resetMessages } from '../server/lib/messages.js';
 import { resetStore as resetPending } from '../server/lib/pending.js';
 import { resetStore as resetPlans } from '../server/lib/plans.js';
 import { resetState } from '../server/lib/remoteState.js';
+import { resetSettings } from '../server/lib/settings.js';
 import type { Config } from '../server/lib/config.js';
 
 /** One `it`-style case. Async throughout: every request below is a promise. */
@@ -107,6 +108,7 @@ function resetStores(): void {
   resetPending();
   resetPlans();
   resetMessages();
+  resetSettings();
 }
 
 /**
