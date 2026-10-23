@@ -370,6 +370,10 @@ async function readGitFacts(base: { dirName: string; name: string; path: string 
     });
   }
 
+  // Both sides through realpath: `toplevel` keeps the pin's spelling (a symlinked tmpdir on macOS) while `%(worktreepath)` is git's own.
+  const trunkWt = localTrunk?.worktreePath ?? null;
+  const trunkCheckedOutElsewhere = trunkWt !== null && (await realpathOr(trunkWt)) !== (await realpathOr(toplevel));
+
   return {
     ...base,
     state: 'ok',
@@ -383,6 +387,7 @@ async function readGitFacts(base: { dirName: string; name: string; path: string 
     originUrl,
     trunkVsOrigin,
     trunkRefs: trunk === null ? null : { local: localTrunk !== undefined, origin: originTrunk !== null },
+    trunkCheckedOutElsewhere,
     currentVsUpstream,
     fetchedAtMs: await newestFetchHead(commonDir),
     lastFetch: lastFetchFor(toplevel),

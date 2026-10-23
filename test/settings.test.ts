@@ -5,11 +5,11 @@ import path from 'node:path';
 
 import {
   DEFAULT_ANSWER_SECS, DEFAULT_GIT_FETCH_SECS, DEFAULT_IDLE_SECS, DEFAULT_NOTIFY, DEFAULT_TRUST_TAILNET, GIT_FETCH_SECS, MAX_ANSWER_SECS, MAX_IDLE_SECS,
-  MAX_PINNED_PROJECTS, MIN_ANSWER_SECS, SETTINGS_FILE,
+  MAX_PINNED_PROJECTS, MIN_ANSWER_SECS, NOTIFY_EVENTS, SETTINGS_FILE,
   clampAnswerSecs, clampIdleSecs, clampPinned, detectAnswerOverride, detectIdleOverride,
   getGitFetchSecs, getPinnedProjects, getSettings, parseGitFetchSecs, resetSettings, setPinned, setPinOrder, setSettings
 } from '../server/lib/settings.js';
-import { scanOverrides } from '../server/api.js';
+import { projectParams, scanOverrides } from '../server/api.js';
 import type { Config } from '../server/lib/config.js';
 
 function test(name: string, fn: () => void): boolean {
@@ -209,6 +209,13 @@ export function run(): number {
 
   console.log('\n=== scanOverrides (api.ts) ===\n');
 
+  if (test('projectParams: repeated project params become one set; none, or only empty ones, is no filter', () => {
+    assert.deepStrictEqual(projectParams(new URLSearchParams('limit=5&project=a&project=b%20c&project=a')), new Set(['a', 'b c']));
+    assert.strictEqual(projectParams(new URLSearchParams('limit=5')), null);
+    assert.strictEqual(projectParams(new URLSearchParams('project=')), null);
+    assert.strictEqual(projectParams(undefined), null);
+  })) p++; else f++;
+
   if (test('no params leaves the configured values alone', () => {
     assert.deepStrictEqual(scanOverrides(cfg(), undefined), cfg());
     const same = scanOverrides(cfg(), new URLSearchParams(''));
@@ -286,6 +293,72 @@ export function run(): number {
     inTmpCwd(() => {
       assert.strictEqual(setSettings({ notify: { events: { question: 1 } } }), null);
       assert.strictEqual(setSettings({ notify: { events: { nope: true } } }), null);
+    });
+  })) p++; else f++;
+
+  if (test('a file saved before the rename keeps its policy: schedule-failed reads as routine-failed, every other switch intact', () => {
+    inTmpCwd(dir => {
+      const events = { question: true, stop: true, permission: false, plan: true, 'schedule-failed': true, 'usage-limit': false, 'usage-reset': false };
+      fs.writeFileSync(path.join(dir, SETTINGS_FILE), JSON.stringify({ notify: { enabled: true, events, requireAfk: true } }));
+      resetSettings();
+      const n = getSettings().notify;
+      assert.strictEqual(n.enabled, true, 'one old key must not drop the whole policy to the defaults');
+      assert.strictEqual(n.requireAfk, true);
+      assert.deepStrictEqual([n.events['routine-failed'], n.events.question, n.events.permission], [true, true, false]);
+      assert.strictEqual('schedule-failed' in n.events, false);
+    });
+  })) p++; else f++;
+
+  if (test('mirror: a stored routine-failed is read as it is, and an unrelated unknown event still voids the policy', () => {
+    inTmpCwd(dir => {
+      fs.writeFileSync(path.join(dir, SETTINGS_FILE), JSON.stringify({ notify: { enabled: true, events: { 'routine-failed': true } } }));
+      resetSettings();
+      assert.strictEqual(getSettings().notify.events['routine-failed'], true);
+      fs.writeFileSync(path.join(dir, SETTINGS_FILE), JSON.stringify({ notify: { enabled: true, events: { 'bogus-event': true } } }));
+      resetSettings();
+      assert.strictEqual(getSettings().notify.enabled, false);
+    });
+  })) p++; else f++;
+
+  if (test('routine-failed is the fifth notify event: listed, off by default, and settable on its own', () => {
+    assert.deepStrictEqual(NOTIFY_EVENTS.slice(0, 5), ['question', 'stop', 'permission', 'plan', 'routine-failed']);
+    assert.deepStrictEqual(Object.keys(DEFAULT_NOTIFY.events).sort(), [...NOTIFY_EVENTS].sort());
+    inTmpCwd(() => {
+      assert.strictEqual(getSettings().notify.events['routine-failed'], false);
+      assert.notStrictEqual(setSettings({ notify: { events: { 'routine-failed': true } } }), null);
+      resetSettings();
+      const events = getSettings().notify.events;
+      assert.strictEqual(events['routine-failed'], true, 'survives a restart');
+      assert.strictEqual(events.question, false, 'the other four stay off');
+    });
+  })) p++; else f++;
+
+  if (test('NOTIFY_EVENTS includes both usage events, off by default', () => {
+    assert.ok(NOTIFY_EVENTS.includes('usage-limit'));
+    assert.ok(NOTIFY_EVENTS.includes('usage-reset'));
+    assert.strictEqual(DEFAULT_NOTIFY.events['usage-limit'], false);
+    assert.strictEqual(DEFAULT_NOTIFY.events['usage-reset'], false);
+  })) p++; else f++;
+
+  if (test('a stored policy without the usage keys loads them as false', () => {
+    inTmpCwd(dir => {
+      const events = { question: true, stop: false, permission: false, plan: false, 'routine-failed': true };
+      fs.writeFileSync(path.join(dir, SETTINGS_FILE), JSON.stringify({ notify: { enabled: true, events } }), 'utf8');
+      resetSettings();
+      const loaded = getSettings().notify.events;
+      assert.strictEqual(loaded.question, true);
+      assert.strictEqual(loaded['usage-limit'], false);
+      assert.strictEqual(loaded['usage-reset'], false);
+    });
+  })) p++; else f++;
+
+  if (test('a notify patch accepts usage-limit and usage-reset', () => {
+    inTmpCwd(() => {
+      assert.notStrictEqual(setSettings({ notify: { events: { 'usage-limit': true, 'usage-reset': true } } }), null);
+      resetSettings();
+      const events = getSettings().notify.events;
+      assert.strictEqual(events['usage-limit'], true);
+      assert.strictEqual(events['usage-reset'], true);
     });
   })) p++; else f++;
 
@@ -520,3 +593,5 @@ export function run(): number {
   console.log(`\n  ${p} passed, ${f} failed`);
   return f;
 }
+
+if (import.meta.url === `file://${process.argv[1]}`) process.exit(run() > 0 ? 1 : 0);

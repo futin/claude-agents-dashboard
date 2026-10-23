@@ -199,6 +199,34 @@ export function run(): number {
     assert.strictEqual(a.durationMs, 872048);
   })) p++; else f++;
 
+  if (test('compaction replay: byte-split appends across the replayed half still match the oracle', () => {
+    _resetAgentsCache();
+    const file = tmpFile();
+    const sm = { timestamp: '2026-07-01T10:03:00Z', message: { role: 'assistant', content: [{ type: 'tool_use', id: 'smR', name: 'SendMessage', input: { to: 'syncR', summary: 'again' } }] } };
+    const prefix = [
+      taskRec('r1', 'Explore', 'sync', '2026-07-01T10:00:00Z'),
+      resultRec('r1', '2026-07-01T10:00:30Z', { status: 'completed', agentId: 'syncR', totalTokens: 1200 }),
+      taskRec('r2', 'Plan', 'background', '2026-07-01T10:01:00Z'),
+      ackRec('r2', 'bgR', '2026-07-01T10:01:01Z'),
+      notifyRec('bgR', '2026-07-01T10:02:00Z', { tokens: 500, toolUses: 4, durationMs: 59000 }),
+      sm,
+      resultRec('smR', '2026-07-01T10:03:01Z', { success: true, resumedAgentId: 'syncR' }),
+      notifyRec('syncR', '2026-07-01T10:04:00Z')
+    ];
+    const boundary = { type: 'system', subtype: 'compact_boundary', timestamp: '2026-07-01T11:00:00Z', compactMetadata: { trigger: 'auto', preTokens: 999 } };
+    const summary = { type: 'user', isCompactSummary: true, timestamp: '2026-07-01T11:00:01Z', message: { role: 'user', content: 'Summary.' } };
+    fs.writeFileSync(file, [...prefix, boundary, summary].map(r => JSON.stringify(r)).join('\n') + '\n');
+    assertMatchesOracle(file);
+    // The replayed half arrives in odd-sized chunks, so replayed records straddle reads.
+    const tail = prefix.map(r => JSON.stringify(r)).join('\n') + '\n';
+    for (let i = 0; i < tail.length; i += 37) {
+      fs.appendFileSync(file, tail.slice(i, i + 37));
+      assertMatchesOracle(file);
+    }
+    const jobs = readAgentsCached(file)!;
+    assert.deepStrictEqual(jobs.map(j => [j.id, j.status, !!j.resumed]), [['smR', 'done', true], ['r2', 'done', false], ['r1', 'done', false]]);
+  })) p++; else f++;
+
   if (test('truncation resets state and matches oracle of new content', () => {
     _resetAgentsCache();
     const file = tmpFile();

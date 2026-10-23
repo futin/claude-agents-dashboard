@@ -45,12 +45,15 @@ cannot drift apart), chat truncation, refresh rate, row count, lookback, active 
 notifications, the launch panel's default model and default effort (`''` = send no flag and let
 the `claude` CLI choose; either way a launch can still override it), the Git Sync button's own
 model and effort (`syncModel` / `syncEffort`, default `''` each; the button never asks, so these are its whole say — its permission mode is the host's
-`SYNC_PERMISSION_MODE` and its remote control follows Remote answers, both shown read-only in the same card), which Usage sub-tab
+`SYNC_PERMISSION_MODE` and its remote control follows Remote answers, both shown read-only in the same card), the Routines page's day window
+(`routineWindow`: `7` | `30` | `90`, default `30` — the stats band and the Runs list read it; a hand-edited value outside the three reads back as `30`, and
+the server's `ROUTINE_WINDOWS` is the same list; see [routines](routines.md#the-routines-page)), which Usage sub-tab
 opens (`forecast` | `rates` | `history`), which Management sub-view is showing (`managementTab`: `git` |
-`projects`, default `projects`, which is also where a main-row click on Management lands: `items[0]` of its tree), and which Settings page is showing (`settingsTab`: `local` |
+`projects` | `codegraph`, default `projects`, which is also where a main-row click on Management lands: `items[0]` of its tree), which Routines sub-view
+is showing (`routinesTab`: `jobs` | `runs`, default `jobs`, the same way), and which Settings page is showing (`settingsTab`: `local` |
 `shared`). A `settingsTab: 'pinned'` stored by an older release fails the validator and falls back to
 `local`. A `managementTab: 'pinned'` is the other case: that sub-view was renamed, not removed, so `clampSettings` reads it as `projects` and the device keeps its
-place. The answer token is per browser too (`dashboard.answerToken`, its own key), which
+place. A `managementTab: 'schedules'` from before Routines became its own section is simply unknown now, and falls back to `projects`. The answer token is per browser too (`dashboard.answerToken`, its own key), which
 is why it sits under **Local › Connection** and not beside the remote-answer switch it
 unlocks — a Shared page carrying it would break the promise the two pages make. A phone propped on the desk
 wants five rows in the light theme and a slow poll; the laptop wants twenty, the dark theme and
@@ -295,8 +298,8 @@ notification. A narrowed version of it is back directly above — see **Notify t
 below — for the one case that argument never covered. The reasoning, and what that trade
 costs, is in [push-notify](push-notify.md).
 
-Nine rows — a master switch, one per event (question / permission dialog / plan / task
-finished), three optional AND-layers (only-while-accepting-remote-answers, only-when-away,
+Ten rows — a master switch, one per event (question / permission dialog / plan / task
+finished / routine failed), three optional AND-layers (only-while-accepting-remote-answers, only-when-away,
 only-in-auto-modes), and a test button. The server sends them, so nothing here depends on a
 tab being open. Full mechanism, fail directions and the topic's secrecy rules:
 [push-notify](push-notify.md).
@@ -311,6 +314,12 @@ Worth knowing from this page's side:
   two events enabled), and **Away after** says so in its hint — because the threshold gates
   those pushes whether or not the push-side switch is on. Full layering:
   [push-notify](push-notify.md).
+- **The routine checkbox ignores the three AND-layers.** `routine-failed` is exempt from only-while-accepting-remote-answers, only-when-away and
+  only-in-auto-modes, since those gate interactive sessions and a routine has none; the page's hint on that row says so. It rides the master switch and the
+  routing only. See [push-notify](push-notify.md#the-fifth-event-routine-failed).
+- **The two 5-hour limit rows ride the same exemption** and add two gates of their own: they are disabled, with a note saying which, while `SHOW_USAGE`
+  is off (`usageAvailable: false`) or **Record usage history** is off. The rows live in `client/src/lib/notifyRows.ts` (`notifyRowState`). See
+  [push-notify](push-notify.md#the-usage-events-usage-limit-and-usage-reset).
 - **`notify` patches merge.** The UI sends the one checkbox that changed, not the whole
   policy. A key that is present but unusable rejects the *entire* patch (400) rather than
   half-applying — the one outcome the page could not report honestly.
@@ -326,13 +335,13 @@ Worth knowing from this page's side:
 | Route | Purpose |
 |---|---|
 | `GET /api/settings` | the non-per-device settings + any detected override, plus `notifyAvailable` and `staleEnvKeys` (names only — never the topic or token itself) |
-| `POST /api/settings` | change them (`{idleSecs?, answerSecs?, notify?, recordUsageHistory?, gitFetchSecs?}` — any subset); token-guarded like the other writes; replies with the same body as GET (`settingsBody`), `staleEnvKeys` included, since the client replaces its whole state with it |
+| `POST /api/settings` | change them (`{idleSecs?, answerSecs?, notify?, recordUsageHistory?, gitFetchSecs?}` — any subset); a gate-only write, like the other settings writes; replies with the same body as GET (`settingsBody`), `staleEnvKeys` included, since the client replaces its whole state with it |
 | `GET /api/pins` | `{pinned: PinRow[], recent: ProjectRef[], older: ProjectRef[], home}` — the stored pins (a dead one `listed: false`) and the projects on offer to pin: `recent` is the listed ones not yet pinned, `older` the 30-day tail past the lookback, both minus Claude's own dirs (scratchpads, scratch workspaces, `~/.claude`) |
-| `POST /api/pins` | `{dirName, pinned}` — token-guarded; a pin must name a recent or older project (404 otherwise), 409 past 50; an unpin takes any stored dir; answers with the fresh `GET` payload |
-| `POST /api/pins/order` | `{order: string[]}` — token-guarded; the whole pin list in its new order, 409 unless it is an exact permutation of the stored pins (no membership check: a permutation cannot add a dir); answers with the fresh `GET /api/pins` payload |
+| `POST /api/pins` | `{dirName, pinned}` — gate-only write; a pin must name a recent or older project (404 otherwise), 409 past 50; an unpin takes any stored dir; answers with the fresh `GET` payload |
+| `POST /api/pins/order` | `{order: string[]}` — gate-only write; the whole pin list in its new order, 409 unless it is an exact permutation of the stored pins (no membership check: a permutation cannot add a dir); answers with the fresh `GET /api/pins` payload |
 | `POST /api/notify/test` | fire one push regardless of policy and report the outcome |
 | `GET /api/health` | now also carries `idleSecs` and `answerSecs`, for the hooks |
-| `GET /api/sessions?limit=&lookback=&active=` | per-request scan overrides |
+| `GET /api/sessions?limit=&lookback=&active=&project=` | per-request scan overrides; `project` (repeatable) is the Sessions toolbar's project facet, applied before `limit` |
 
 `scanOverrides` (in `server/api.ts`) clamps to `limit ≤ 50`, `lookback ≤ 168`, `active ≤ 120`.
 The `limit` cap is the one that matters: unclamped, one typo'd query string would make the

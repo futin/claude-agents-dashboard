@@ -4,6 +4,7 @@ import { VersionChip } from 'ui-kit';
 import { SECTIONS, type Section } from '../lib/sections';
 import { useBackClose } from '../hooks/useBackClose';
 import { useHideOnScroll } from '../hooks/useHideOnScroll';
+import { useNarrow } from '../hooks/useNarrow';
 import { useConfigsScope } from '../hooks/useConfigsScope';
 import { useSettings } from '../hooks/useSettings';
 import { formatInterval, type Settings } from '../lib/settings';
@@ -67,6 +68,7 @@ interface Props {
 /** One glyph per section id, so a new section fails to compile without one. */
 const ICONS: Record<Section, JSX.Element> = {
   sessions: <><rect x="2.5" y="3" width="15" height="5.5" rx="1.8" /><rect x="2.5" y="11.5" width="15" height="5.5" rx="1.8" /></>,
+  routines: <><circle cx="10" cy="10" r="7.5" /><path d="M10 5.5V10l3 2" /></>,
   usage: <path d="M3.5 16.5v-5M8.5 16.5v-13M13 16.5v-7.5M17 16.5v-10" />,
   management: <><circle cx="6" cy="4.5" r="1.8" /><circle cx="6" cy="15.5" r="1.8" /><circle cx="14" cy="8" r="1.8" /><path d="M6 6.3v7.4M14 9.8c0 2.7-3 3.2-8 3.9" /></>,
   configs: <><rect x="3" y="3.5" width="14" height="13" rx="1.8" /><path d="M3 8h14M8 8v8.5" /></>,
@@ -76,16 +78,17 @@ const ICONS: Record<Section, JSX.Element> = {
 
 /**
  * The sections whose sub-views are a *fixed* list, and the per-device setting
- * each tree writes: Usage (Forecast / Token value / History), Management (Projects / Git)
+ * each tree writes: Usage (Forecast / Token value / History), Routines (Jobs / Runs), Management (Git / Projects / CodeGraph)
  * and Settings (Local / Shared), drawn from one table so a third gets the same tree for one line.
  * Claude Configs' tree is the third destination but not a fixed list — its rows
  * are the scanned projects — so it has its own component below.
  */
-type SubKey = 'usageTab' | 'managementTab' | 'settingsTab';
+type SubKey = 'usageTab' | 'managementTab' | 'routinesTab' | 'settingsTab';
 interface SubNav<K extends SubKey> { key: K; items: { value: Settings[K]; label: string }[] }
-const SUBNAV: Partial<Record<Section, SubNav<'usageTab'> | SubNav<'managementTab'> | SubNav<'settingsTab'>>> = {
+const SUBNAV: Partial<Record<Section, SubNav<'usageTab'> | SubNav<'managementTab'> | SubNav<'routinesTab'> | SubNav<'settingsTab'>>> = {
   usage: { key: 'usageTab', items: [{ value: 'forecast', label: 'Forecast' }, { value: 'rates', label: 'Token value' }, { value: 'history', label: 'History' }] },
-  management: { key: 'managementTab', items: [{ value: 'projects', label: 'Projects' }, { value: 'git', label: 'Git' }] },
+  management: { key: 'managementTab', items: [{ value: 'git', label: 'Git' }, { value: 'projects', label: 'Projects' }, { value: 'codegraph', label: 'CodeGraph' }] },
+  routines: { key: 'routinesTab', items: [{ value: 'jobs', label: 'Jobs' }, { value: 'runs', label: 'Runs' }] },
   settings: { key: 'settingsTab', items: [{ value: 'local', label: 'Local' }, { value: 'shared', label: 'Shared' }] }
 };
 
@@ -228,6 +231,8 @@ export function SideRail({ section, onChange, accountSlot, live, version }: Prop
   // The bar gets out of the way going down the page and comes back on the way
   // up. Pinned open while the menu is down: the panel hangs off the bar.
   const barOff = useHideOnScroll(open);
+  // ui-kit's chip takes the phone shape (a 44px tap target around the 28px pill) at the same measure as its drawer's full-screen shape, so the two agree.
+  const narrow = useNarrow();
 
   // Picking anything is a destination, so the menu closes behind it. The rail
   // above `sm` (640px) is never open, so this is a no-op there.
@@ -325,7 +330,11 @@ export function SideRail({ section, onChange, accountSlot, live, version }: Prop
               : 'disconnected — server stopped?'}
           </div>
         )}
-        {version && <VersionChip label={version.label} dot={version.dot} onClick={pick(version.onOpen)} className="rel-chip" />}
+        {version && (
+          <div className="rel-chip">
+            <VersionChip label={version.label} dot={version.dot} onClick={pick(version.onOpen)} narrow={narrow} />
+          </div>
+        )}
       </nav>
     </div>
   );

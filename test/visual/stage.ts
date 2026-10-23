@@ -6,7 +6,7 @@ import type { Page } from '@playwright/test';
 
 import type { Section } from '../../client/src/lib/sections.js';
 import type { Layout } from '../../client/src/lib/filterSort.js';
-import type { ManagementTab, Settings, ThemeId } from '../../client/src/lib/settings.js';
+import type { ManagementTab, RoutinesTab, Settings, ThemeId } from '../../client/src/lib/settings.js';
 
 import { EPOCH } from './fixtures/epoch.js';
 import { fixtures } from './fixtures/index.js';
@@ -24,6 +24,8 @@ export interface StageOpts {
   layout?: Layout;
   /** Management's sub-view; `git` when omitted. */
   managementTab?: ManagementTab;
+  /** The Routines sub-view; `jobs` when omitted. */
+  routinesTab?: RoutinesTab;
   /** Extra localStorage keys, each JSON-encoded the way usePersistedState reads them back. */
   storage?: Record<string, unknown>;
   /** Endpoints to answer differently from the shared fixtures, by pathname. */
@@ -55,6 +57,8 @@ function seededSettings(opts: StageOpts): Settings {
     usageTab: 'forecast',
     settingsTab: 'local',
     managementTab: opts.managementTab ?? 'git',
+    routinesTab: opts.routinesTab ?? 'jobs',
+    routineWindow: 30,
     // Not the default 'last', which defers to `dashboard.layout` (SessionsView.tsx).
     defaultLayout: opts.layout ?? 'board',
     contentWidth: opts.contentWidth

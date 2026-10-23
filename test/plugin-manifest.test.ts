@@ -6,9 +6,12 @@
  * that installed it, which is the reason the plugin lives in a subfolder at all. Adding either on purpose means editing this file.
  */
 import assert from 'node:assert';
+import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+
+import ts from 'typescript';
 
 import { parseFrontmatter } from '../shared/frontmatter.js';
 import { findRepoRoot } from './docs-links.test.js';
@@ -20,6 +23,9 @@ function test(name: string, fn: () => void): boolean {
 
 /** Every skill the plugin ships. A new one is added here deliberately, beside its directory. */
 const SKILLS = ['git-sync', 'kaizen'];
+
+/** The shared modules the routine wrapper runs, generated into plugin/lib by `pnpm plugin:gen` (scripts/gen-plugin-lib.ts). */
+const LIB_MODULES = ['cron', 'frontmatter', 'routine-file'];
 
 const readJson = (p: string): any => JSON.parse(fs.readFileSync(p, 'utf8'));
 
@@ -51,9 +57,39 @@ export function run(): number {
     assert.match(String(version), /^\d+\.\d+\.\d+$/);
   })) p++; else f++;
 
-  if (test('plugin/ holds only .claude-plugin and skills — nothing else loads in every project', () => {
+  if (test('plugin/ holds only .claude-plugin, lib and skills — nothing else loads in every project, and never bin/', () => {
     const entries = fs.readdirSync(path.join(root, 'plugin')).sort();
-    assert.deepStrictEqual(entries, ['.claude-plugin', 'skills']);
+    assert.deepStrictEqual(entries, ['.claude-plugin', 'lib', 'skills']);
+  })) p++; else f++;
+
+  if (test('plugin/lib/ holds exactly the three generated .mjs modules plus the hand-written run-routine.mjs wrapper', () => {
+    assert.deepStrictEqual(fs.readdirSync(path.join(root, 'plugin', 'lib')).sort(), [...LIB_MODULES, 'run-routine'].map((m) => `${m}.mjs`).sort());
+  })) p++; else f++;
+
+  for (const name of LIB_MODULES) {
+    if (test(`plugin/lib/${name}.mjs is shared/${name}.ts transpiled — a TS edit without \`pnpm plugin:gen\` fails here`, () => {
+      const source = fs.readFileSync(path.join(root, 'shared', `${name}.ts`), 'utf8');
+      const { outputText } = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 } });
+      const expected = outputText.replace(/(from\s+['"]\.\/[\w-]+)\.js(['"])/g, '$1.mjs$2');
+      assert.strictEqual(fs.readFileSync(path.join(root, 'plugin', 'lib', `${name}.mjs`), 'utf8'), expected);
+    })) p++; else f++;
+  }
+
+  if (test('the generated modules load under plain node with no package.json, and parseJob works — a broken specifier fails here', () => {
+    const entry = pathToFileURL(path.join(root, 'plugin', 'lib', 'routine-file.mjs')).href;
+    const file = ['---', 'cron: "0 9 * * *"', 'machines: [mac]', 'run: claude', '---', '/git-sync', ''].join('\n');
+    const script = `const m = await import(${JSON.stringify(entry)}); const r = m.parseJob('tiny', ${JSON.stringify(file)}); `
+      + 'process.stdout.write(JSON.stringify({ errors: r.errors, cron: r.job && r.job.cron }));';
+    const out = execFileSync(process.execPath, ['--input-type=module', '-e', script], { encoding: 'utf8', cwd: path.join(root, 'plugin') });
+    assert.deepStrictEqual(JSON.parse(out), { errors: [], cron: '0 9 * * *' });
+  })) p++; else f++;
+
+  if (test('no generated module keeps an import of types.js or a .js specifier — types are erased, siblings are .mjs', () => {
+    for (const name of LIB_MODULES) {
+      const text = fs.readFileSync(path.join(root, 'plugin', 'lib', `${name}.mjs`), 'utf8');
+      assert.ok(!/types\.js/.test(text), `${name}.mjs mentions types.js`);
+      assert.ok(!/from\s+['"]\.\/[\w-]+\.js['"]/.test(text), `${name}.mjs imports a .js sibling`);
+    }
   })) p++; else f++;
 
   if (test('plugin/skills/ holds exactly the shipped skills, each SKILL.md named after its directory', () => {
@@ -68,3 +104,5 @@ export function run(): number {
   console.log(`\n  ${p} passed, ${f} failed`);
   return f;
 }
+
+if (import.meta.url === `file://${process.argv[1]}`) process.exit(run() > 0 ? 1 : 0);

@@ -191,6 +191,89 @@ export function run(): number {
     assert.strictEqual(out.maxSessions, 2);
   })) p++; else f++;
 
+  // Two newest in `busy`, the oldest in `quiet`: a cap of 2 leaves `quiet` out of the unfiltered rows, which is the bug the filter exists for.
+  function projectRoot(now: number): string {
+    return makeRoot([
+      { dirName: '-a-busy', id: 'b1', mtimeMs: now - 60 * 1000, records: [metaRec('/a/busy', 'main'), usageRec(1000)] },
+      { dirName: '-a-busy', id: 'b2', mtimeMs: now - 2 * 60 * 1000, records: [metaRec('/a/busy', 'main'), usageRec(1000)] },
+      { dirName: '-a-quiet', id: 'q1', mtimeMs: now - 60 * 60 * 1000, records: [metaRec('/a/quiet', 'main'), usageRec(1000)] },
+      // No cwd anywhere: the head read cannot name it, so the parsed row (dirName fallback) has to.
+      { dirName: '-x-nocwd', id: 'n1', mtimeMs: now - 2 * 60 * 60 * 1000, records: [usageRec(1000)] }
+    ]);
+  }
+  const projCfg = { maxSessions: 2, activeWindowMin: 5, lookbackHours: 24 };
+
+  if (test('scanSessions project filter is applied before the cap, not after', () => {
+    const now = 1_700_000_000_000;
+    const root = projectRoot(now);
+    const all = scan.scanSessions(projCfg, { root, now, skipProcScan: true });
+    assert.deepStrictEqual(all.sessions.map(s => s.id), ['b1', 'b2'], 'precondition: quiet is past the cap unfiltered');
+    const quiet = scan.scanSessions(projCfg, { root, now, skipProcScan: true, projects: new Set(['quiet']) });
+    assert.deepStrictEqual(quiet.sessions.map(s => s.id), ['q1']);
+    const both = scan.scanSessions(projCfg, { root, now, skipProcScan: true, projects: new Set(['quiet', 'nocwd']) });
+    assert.deepStrictEqual(both.sessions.map(s => s.id), ['q1', 'n1']);
+  })) p++; else f++;
+
+  if (test('scanSessions project filter: an empty set filters nothing', () => {
+    const now = 1_700_000_000_000;
+    const out = scan.scanSessions(projCfg, { root: projectRoot(now), now, skipProcScan: true, projects: new Set() });
+    assert.deepStrictEqual(out.sessions.map(s => s.id), ['b1', 'b2']);
+  })) p++; else f++;
+
+  if (test('scanSessions project filter: a head with no cwd is settled by the parsed row, both ways', () => {
+    const now = 1_700_000_000_000;
+    const root = projectRoot(now);
+    const busy = scan.scanSessions({ ...projCfg, maxSessions: 5 }, { root, now, skipProcScan: true, projects: new Set(['busy']) });
+    assert.deepStrictEqual(busy.sessions.map(s => s.id), ['b1', 'b2'], 'the unknown-head candidate is parsed, then dropped as nocwd');
+    const nocwd = scan.scanSessions({ ...projCfg, maxSessions: 5 }, { root, now, skipProcScan: true, projects: new Set(['nocwd']) });
+    assert.deepStrictEqual(nocwd.sessions.map(s => s.id), ['n1']);
+  })) p++; else f++;
+
+  if (test('scanSessions projects lists every project in the lookback, filtered or not, past the cap', () => {
+    const now = 1_700_000_000_000;
+    const root = projectRoot(now);
+    // nocwd is named only by its parsed row, so it is listed only while it is a row: the head read has nothing to offer.
+    assert.deepStrictEqual(scan.scanSessions(projCfg, { root, now, skipProcScan: true }).projects, ['busy', 'quiet']);
+    assert.deepStrictEqual(scan.scanSessions(projCfg, { root, now, skipProcScan: true, projects: new Set(['quiet']) }).projects, ['busy', 'quiet']);
+    assert.deepStrictEqual(scan.scanSessions(projCfg, { root, now, skipProcScan: true, projects: new Set(['nocwd']) }).projects, ['busy', 'nocwd', 'quiet']);
+  })) p++; else f++;
+
+  if (test('scanSessions projects: a transcript that writes its first cwd later is listed once it has', () => {
+    const now = 1_700_000_000_000;
+    const root = makeRoot([{ dirName: '-a-late', id: 'l1', mtimeMs: now - 60 * 1000, records: [{ type: 'queue-operation' }] }]);
+    assert.deepStrictEqual(scan.scanSessions(projCfg, { root, now, skipProcScan: true }).projects, []);
+    const file = path.join(root, '-a-late', 'l1.jsonl');
+    fs.appendFileSync(file, '\n' + JSON.stringify(metaRec('/a/late', 'main')));
+    const t = (now - 30 * 1000) / 1000;
+    fs.utimesSync(file, t, t);
+    assert.deepStrictEqual(scan.scanSessions(projCfg, { root, now, skipProcScan: true }).projects, ['late'], 'a null head was not cached');
+  })) p++; else f++;
+
+  if (test('scanSessions projects leaves out the token-refresh cwd', () => {
+    const now = 1_700_000_000_000;
+    const home = fs.mkdtempSync(path.join(os.tmpdir(), 'cad-home-'));
+    const root = makeRoot([
+      { dirName: '-refresh', id: 'r1', mtimeMs: now - 60 * 1000, records: [metaRec(refreshCwd(home), 'main'), usageRec(1000)] },
+      { dirName: '-a-real', id: 'x1', mtimeMs: now - 2 * 60 * 1000, records: [metaRec('/a/real', 'main'), usageRec(1000)] }
+    ]);
+    assert.deepStrictEqual(scan.scanSessions(projCfg, { root, now, homeDir: home, skipProcScan: true }).projects, ['real']);
+  })) p++; else f++;
+
+  if (test('sessionFromRef builds the same row scanSessions lists for the same transcript', () => {
+    const now = 1_700_000_000_000;
+    const root = makeRoot([
+      { dirName: '-a-row', id: 'row', mtimeMs: now - 60 * 1000, records: [metaRec('/a/row', 'main'), toolRec('Bash', { description: 'go' }), usageRec(3000)] },
+      { dirName: '-a-done', id: 'done', mtimeMs: now - 120 * 1000, records: [metaRec('/a/done', 'dev'), assistantDone()] }
+    ]);
+    const out = scan.scanSessions({ maxSessions: 5, activeWindowMin: 5, lookbackHours: 24 }, { root, now, skipProcScan: true, lessons: null });
+    assert.strictEqual(out.sessions.length, 2);
+    for (const listed of out.sessions) {
+      const ref = scan.findTranscript(root, listed.id);
+      assert.ok(ref, listed.id);
+      assert.deepStrictEqual(scan.sessionFromRef(ref, { now, activeWindowMin: 5, liveCwds: null, lessons: null, scanSkips: true }), listed);
+    }
+  })) p++; else f++;
+
   if (test('scanSessions: Session.tasks folds a transcript\'s task calls; no task records → null', () => {
     const now = 1_700_000_000_000;
     const taskCall = (id: string, name: string, input: unknown) =>
@@ -474,6 +557,22 @@ export function run(): number {
     const parentOnly = scan.scanSessions({ maxSessions: 5, activeWindowMin: 5, lookbackHours: 24 },
       { root: makeRoot(specs), now, liveCwds: new Set(['/a/repo']) });
     assert.strictEqual(parentOnly.sessions[0].status, 'idle');
+  })) p++; else f++;
+
+  if (test('repo: a worktree row names its main checkout and keeps the worktree as project', () => {
+    const now = 1_700_000_000_000;
+    const ts = new Date(now - 10 * 1000).toISOString();
+    const specs = [
+      { dirName: '-a-repo--worktrees-bug-4', id: 'wt', mtimeMs: now - 10 * 1000, records: [metaRec('/a/repo/.worktrees/bug-4', 'backlog/bug-4'), at(assistantPending(), ts)] },
+      { dirName: '-a-repo', id: 'main', mtimeMs: now - 20 * 1000, records: [metaRec('/a/repo', 'main'), at(assistantPending(), ts)] }
+    ];
+    const res = scan.scanSessions({ maxSessions: 5, activeWindowMin: 5, lookbackHours: 24 }, { root: makeRoot(specs), now });
+    const wt = res.sessions.find(s => s.id === 'wt')!;
+    const main = res.sessions.find(s => s.id === 'main')!;
+    assert.strictEqual(wt.project, 'bug-4');
+    assert.strictEqual(wt.repo, 'repo');
+    assert.strictEqual(main.project, 'repo');
+    assert.strictEqual(main.repo, null);
   })) p++; else f++;
 
   if (test('pendingIds: a held remote wait flags the row and turns it blue', () => {
@@ -882,6 +981,57 @@ export function run(): number {
     assert.strictEqual(out.sessions[0].surface, 'local');
   })) p++; else f++;
 
+
+  /* ------------------------------------------------------------ processLive */
+
+  {
+    const PL_NOW = 1_700_000_000_000;
+    const plRoot = () => makeRoot([
+      { dirName: '-a-headless', id: 'headless', mtimeMs: PL_NOW - 60 * 1000, records: [metaRec('/a/headless', 'main'), entryRec('sdk-cli')] },
+      { dirName: '-a-term', id: 'term', mtimeMs: PL_NOW - 90 * 1000, records: [metaRec('/a/term', 'main'), entryRec('cli')] }
+    ]);
+    const plScan = (extra: Record<string, unknown>) =>
+      scan.scanSessions({ maxSessions: 5, activeWindowMin: 5, lookbackHours: 24 }, { root: plRoot(), now: PL_NOW, ...extra } as any);
+    const plRow = (out: ReturnType<typeof plScan>, id: string) => out.sessions.find(s => s.id === id)!;
+
+    if (test('processLive: a dashboard row whose id is in a live argv and holds no stopState carries true', () => {
+      const out = plScan({ liveCwds: null, liveSessionIds: new Set(['headless']) });
+      assert.strictEqual(plRow(out, 'headless').processLive, true);
+    })) p++; else f++;
+
+    if (test('processLive: absent when the launch store holds the child (stopState wins) or the id is not in the set', () => {
+      const held = plScan({ liveCwds: null, liveSessionIds: new Set(['headless']), stopStates: new Map([['headless', 'ready' as const]]) });
+      assert.strictEqual('processLive' in plRow(held, 'headless'), false);
+      assert.strictEqual(plRow(held, 'headless').stopState, 'ready');
+      const other = plScan({ liveCwds: null, liveSessionIds: new Set(['someone-else']) });
+      assert.strictEqual('processLive' in plRow(other, 'headless'), false);
+    })) p++; else f++;
+
+    if (test('processLive: absent for a terminal-surface row even when its id is in the set', () => {
+      const out = plScan({ liveCwds: null, liveSessionIds: new Set(['term', 'headless']) });
+      assert.strictEqual(plRow(out, 'term').surface, 'local');
+      assert.strictEqual('processLive' in plRow(out, 'term'), false);
+    })) p++; else f++;
+
+    if (test('processLive: a null probe fails open — no row is flagged', () => {
+      const out = plScan({ liveCwds: null, liveSessionIds: null });
+      assert.strictEqual('processLive' in plRow(out, 'headless'), false);
+    })) p++; else f++;
+
+    if (test('processLive: skipProcScan without an injected set never runs ps and flags nothing', () => {
+      let calls = 0;
+      scan.setPsRunner(() => { calls++; return '  1 claude -p --resume headless\n'; });
+      try {
+        const out = plScan({ skipProcScan: true });
+        assert.strictEqual(calls, 0, 'ps ran');
+        assert.strictEqual('processLive' in plRow(out, 'headless'), false);
+        // mirror: without skipProcScan the same argv flags the row
+        const probed = plScan({ liveCwds: null });
+        assert.strictEqual(calls, 1);
+        assert.strictEqual(plRow(probed, 'headless').processLive, true);
+      } finally { scan.setPsRunner(null); }
+    })) p++; else f++;
+  }
 
   /* --------------------------------------------------------- lastMessageMs */
 

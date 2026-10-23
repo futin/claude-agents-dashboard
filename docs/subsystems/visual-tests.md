@@ -10,26 +10,33 @@ of `pnpm test`. Design and plan: [2026-10-01-visual-regression-design.md](../sup
 
 | Spec | Cases | What |
 |---|---|---|
-| `views.spec.ts` | 86 counted shots + 3 Trace shots + 1 count check + 1 phone no-Trace check | each of the 6 `SECTIONS` views at 12 states, plus Sessions with the chat drawer open (`?session=`) at 375 and 1280 and in the Triage layout at 375 and 1280, Git's Matrix (1280), Inspector and Branches (375 and 1280), and Projects' Tiles, Columns (1280) and Lists (375) with a gone pin, the What's new drawer opened from the version chip at 375 and 1280, and the drawer's Trace mode with a step picked (1280: a picked row, a `why?` followed from Chat, a closed subagent fold), plus a 375 check that the drawer offers no Trace |
-| `layout.spec.ts` | 48 overflow + 6 contrast | overflow: 6 views × 8 daylight tiers; contrast: 6 views, daylight, 1280, axe `color-contrast` |
-| `stage.spec.ts` | 16 | the staging itself: seeded theme beats the default, clock, UTC, DPR 1, font loaded, deep link, every section reachable |
+| `views.spec.ts` | 104 counted shots + 3 Trace shots + 1 count check + 1 phone no-Trace check | each of the 7 `SECTIONS` views at 12 states, plus Sessions with the chat drawer open (`?session=`) at 375 and 1280 and in the Triage layout at 375 and 1280, Git's Matrix (1280), Inspector and Branches (375 and 1280), CodeGraph's Inbox, Matrix and Inspector (1280) and Inbox at 375 with a stored Matrix (the phone draws Inbox), and Projects' Tiles, Columns (1280) and Lists (375) with a gone pin, Routines' Runs page at 375 and 1280, the What's new drawer opened from the version chip at 375 and 1280, and the drawer's Trace mode with a step picked (1280: a picked row, a `why?` followed from Chat, a closed subagent fold), plus a 375 check that the drawer offers no Trace |
+| `layout.spec.ts` | 56 overflow + 7 contrast | overflow: 7 views × 8 daylight tiers; contrast: 7 views, daylight, 1280, axe `color-contrast` |
+| `stage.spec.ts` | 17 | the staging itself: seeded theme beats the default, clock, UTC, DPR 1, font loaded, deep link, every section reachable |
 | `scroll-hit.spec.ts` | 9 + 1 mirror | Management › Projects with 60 offered projects, Tiles / Columns / Lists at 1280, 1536 and 1921 (`full`): scrolled to the bottom, every on-screen Pin must take the hit and `.wrap` must hold the whole view (#194); the mirror checks Analytics stays pinned to the viewport |
 | `mock-api.spec.ts` | 5 | the mock: 404 for no fixture, 405 for writes, query ignored, exact path beats `:param`, off-origin refused |
 
 The 12 states per view are daylight at the six `fixed` tiers (375, 640, 768, 1024, 1280, 1536 — each tier's `min-width` from [breakpoints](breakpoints.md),
-375 for the phone base) and the two `full` tiers (1537, 1921), plus midnight, amber, graphite and nightshift at 1280. 12 × 6 + 2 + 2 + 5 + 3 + 2 = 86;
-`views.spec.ts` asserts that number, so a new `SECTIONS` entry fails until the matrix and its baselines are reconsidered. The three Trace shots (86 + 3 = 89 in all) sit outside that count: each needs a click first. Comparison is zero-tolerance:
+375 for the phone base) and the two `full` tiers (1537, 1921), plus midnight, amber, graphite and nightshift at 1280. 12 × 7 + 2 + 2 + 5 + 4 + 3 + 2 + 2 = 104;
+`views.spec.ts` asserts that number, so a new `SECTIONS` entry fails until the matrix and its baselines are reconsidered. The three Trace shots (104 + 3 = 107 in all) sit outside that count: each needs a click first. Comparison is zero-tolerance:
 `maxDiffPixels: 0`, `threshold: 0`, animations disabled, caret hidden, full page — except the two What's new shots,
 which are the viewport, since the drawer is `position: fixed`. The one exception to zero tolerance is the two 1280 projects shots (tiles, columns): they set
 `threshold: 0.01`, because Chromium anti-aliases the filter input's rounded corner one of two ways at random (#235). `maxDiffPixels` stays `0` for them.
+Every Routines shot takes the same `0.01`, for the same noise on the stats band's rounded corners, and the 375 Runs shot also masks the native job
+`<select>` (`ShotCase.mask`), whose label Chromium draws a whole pixel lower in about half the runs — a shift no colour tolerance absorbs; the 1280 Runs shot
+still pins it.
 
 The Sessions fixture's working session runs a 13-task plan (7 done, Task 8 running) under a basename long enough to ellipsise, and the idle one holds a
 finished `TaskCreate` list, so the shots carry both task-pill states, the drawer card's `Plan · …` head and its phone fold. `StageOpts.layout` seeds the
 Sessions layout (`board` when omitted); the two Triage shots use it, because Triage's Working and Idle rows render the pill outside `Tags`.
-`StageOpts.managementTab` picks Management's sub-view (`git` when omitted), `storage` seeds further localStorage keys as JSON, and `fixtures` overrides
+`StageOpts.managementTab` picks Management's sub-view (`git` when omitted), `StageOpts.routinesTab` Routines' (`jobs` when omitted), `storage` seeds further localStorage keys as JSON, and `fixtures` overrides
 entries of the fixture map for one test — `scroll-hit.spec.ts` uses all three to stage a long Projects list without touching the shared fixtures. The Git-only
 `gitSessions` override (`fixtures/git-sessions.ts`, the sessions payload plus an idle session on `lumen-cli`, so the session join draws all three agent chips)
 and `pinsWithGone` (`fixtures/pins.ts`, a pin whose folder is gone, for the `Folder gone` chip) ride in the same way, on the Git and Projects shots only.
+The CodeGraph shots pass `managementTab: 'codegraph'` and need no override: `fixtures/codegraph.ts` is the shared `/api/codegraph` answer, seven pins in seven states (two that need you, one worth a look, two all good of which one is mid-rebuild, and two not indexed).
+`fixtures/routines.ts` answers `/api/routines` and `/api/routines/runs`: six job files, one per state the ledger tells apart (a file that does not parse, a
+`claude` fan-out over the pins, a failed single-repo job, a paused `shell` job, one running now, one for the other machine only), and one run in each run
+state, so both pages draw every chip without a per-test override.
 
 ## How it runs
 

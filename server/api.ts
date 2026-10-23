@@ -4,14 +4,16 @@
  * fall back to a safe empty payload if the scan throws.
  */
 
+import fs from 'node:fs';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import nodePath from 'node:path';
 
 import type { HubHandler } from 'lookout-widgets';
 
 import {
-  scanSessions, lastMessageMs, listTranscripts, findTranscript, liveSessionIds, projectsRoot, sessionSurface
+  scanSessions, lastMessageMs, listTranscripts, findTranscript, liveSessionIds, projectsRoot, sessionFromRef, sessionSurface
 } from './lib/scan.js';
+import { readSessionAnalyticsLog } from './lib/sessionAnalyticsLog.js';
 import { archivedSessionIds } from './lib/archived.js';
 import { readTranscript } from './lib/transcript.js';
 import { readTrace } from './lib/trace.js';
@@ -58,8 +60,10 @@ import { maybeSend, sendTest } from './lib/notify.js';
 import { getState, setEnabled } from './lib/remoteState.js';
 import { getPinnedProjects, getSettings, setPinOrder, setPinned, setSettings } from './lib/settings.js';
 import { fetchAll, markGitWatched } from './lib/git-fetch.js';
-import { openFolder, openFolderPlatform } from './lib/open-folder.js';
+import { openFolder, openFolderPlatform, revealFile } from './lib/open-folder.js';
+import { runQuickOp } from './lib/git-quick.js';
 import { readGitStats } from './lib/git-stats.js';
+import { readCodegraph, startCodegraphRun } from './lib/codegraph-store.js';
 import { classifyOrigin, resolvePeer } from './lib/origin.js';
 import { releasesPayload } from './lib/releases.js';
 import { extForMime, isTranscribing, probeTranscribe, transcribe } from './lib/transcribe.js';
@@ -68,11 +72,21 @@ import {
   probeSpawn, stopSession, stopStates
 } from './lib/spawn.js';
 import { staleEnvKeys, toPosInt, type Config } from './lib/config.js';
+import { describeCron, nextAfter, parseCron } from '../shared/cron.js';
+import { checkPins, parseJob, serializeEnabled } from '../shared/routine-file.js';
+import type { JobError, PinSnapshot } from '../shared/routine-file.js';
+import { foldForPush, ownerStatus, runsReader } from './lib/routine-boot.js';
+import { machineName, routineDirs } from './lib/routine-config.js';
+import { computeStats } from './lib/routine-log.js';
+import { applyReconcile, lastReconcile, planReconcile } from './lib/routine-reconcile.js';
+import { runJob, stopJob } from './lib/routine-run.js';
+import { RoutineStoreError, deleteJob, isOwner, readJobs, writeJob, writePinsSnapshot } from './lib/routine-store.js';
 import type {
-  AnalyticsResponse, ManagementIndex, MessageWaitResult, OpenFolderResponse, PinsResponse, PlanWaitResult, ScopeConfig,
+  AnalyticsResponse, GitQuickRequest, ManagementIndex, MessageWaitResult, OpenFolderResponse, PinsResponse, PlanWaitResult, ScopeConfig,
   SessionMessage, SessionPlan, SessionQuestion, SessionsResponse, SessionChat, SessionDetail, SessionTrace, SpawnRequest,
   ModelRateRow, RateLimit, ServerSettings, SpawnResponse, UsageCoverage, UsageProfileCell,
-  UsageHistoryResponse, UsageProfileResponse, UsageRatesResponse, WaitResult, ConnectionOrigin, WriteAccess
+  UsageHistoryResponse, UsageProfileResponse, UsageRatesResponse, WaitResult, ConnectionOrigin, WriteAccess,
+  ReconcileReport, RoutineFile, RoutineJob, RoutineJobRow, RoutineRunsResponse, RoutinesResponse, RoutineValidateResponse, Session
 } from '../shared/types.js';
 
 /** Session ids are transcript filenames (UUIDs) — restrict to safe chars. */
@@ -131,7 +145,7 @@ function sweepTerminalDecisions(): void {
 }
 
 /** One scan of the session rows with every RAM-store injection applied — what `/api/sessions` serves before launches and usage are attached. */
-export function scanSnapshot(config: Config): SessionsResponse {
+export function scanSnapshot(config: Config, projects?: ReadonlySet<string> | null): SessionsResponse {
   // Before the scan, not after: a wait the terminal already decided must not
   // colour this tick's row blue either.
   sweepTerminalDecisions();
@@ -157,15 +171,22 @@ export function scanSnapshot(config: Config): SessionsResponse {
     // stopStates is the same injection again, and the only one that is not a
     // hint about a wait: it says which rows this server can actually signal,
     // so the Stop control is offered only where it would work.
-    stopStates: stopStates()
+    stopStates: stopStates(),
+    projects
   });
+}
+
+/** The Sessions toolbar's project filter, as repeated `?project=` params; empty values dropped. null = no filter. */
+export function projectParams(params?: URLSearchParams): Set<string> | null {
+  const names = (params?.getAll('project') ?? []).filter(Boolean);
+  return names.length ? new Set(names) : null;
 }
 
 export function serveSessions(baseConfig: Config, res: ServerResponse, params?: URLSearchParams): void {
   const config = scanOverrides(baseConfig, params);
   let data: SessionsResponse;
   try {
-    data = scanSnapshot(config);
+    data = scanSnapshot(config, projectParams(params));
   } catch (e) {
     console.error('[dashboard] scan failed:', (e as Error).message);
     data = {
@@ -424,7 +445,8 @@ function send413(res: ServerResponse, body: unknown): void {
 /**
  * `POST /api/transcribe` — a recorded clip in, one line of text out.
  *
- * Gated like the other write paths even though it writes no session state: it
+ * Gated like the session write paths (remote-answer switch, then the write gate)
+ * even though it writes no session state, so it is not counted as one: it
  * spawns processes and writes files on this machine, which is firmly the write
  * side of the line this codebase draws. The write gate comes before the engine probe so
  * an unauthenticated caller gets no further than 403 on a path that spawns
@@ -639,8 +661,8 @@ setTimeout(function () {
  * whole state with either reply, so a field only one of them filled would vanish
  * on the first save.
  *
- * `notifyAvailable` and `staleEnvKeys` are filled here rather than in the store:
- * both derive from `Config` or the `.env` baseline, and `lib/settings.ts`
+ * `notifyAvailable`, `usageAvailable` and `staleEnvKeys` are filled here rather than in the store:
+ * all three derive from `Config` or the `.env` baseline, and `lib/settings.ts`
  * deliberately never reads config. The topic itself is never returned — it is
  * both the address and the credential.
  */
@@ -648,6 +670,7 @@ function settingsBody(config: Config, settings: ServerSettings): ServerSettings 
   return {
     ...settings,
     notifyAvailable: config.ntfyTopic !== '',
+    usageAvailable: config.showUsage,
     // Read per request, not cached: the whole point is to notice a file that
     // changed after this process read it. One `readFileSync` of a small file.
     staleEnvKeys: staleEnvKeys()
@@ -1076,8 +1099,8 @@ export function serveUsageHistory(res: ServerResponse, query: URLSearchParams, d
 }
 
 /**
- * `POST /api/settings` — change them from the Settings page. Token-guarded like
- * the other write endpoints; 400 rather than a silent no-op when the body
+ * `POST /api/settings` — change them from the Settings page. A gate-only write,
+ * like the other config writes; 400 rather than a silent no-op when the body
  * carries nothing usable, so the UI never shows a value the server refused.
  */
 export async function serveSettingsWrite(
@@ -1347,7 +1370,7 @@ export async function serveSessionMessageAnswer(
  * `{sessionId, message?}`; the store keeps only the id and the arrival time.
  *
  * Write-shaped but not a control path: the flag decorates a row, and nothing
- * can answer the dialog remotely. Still token-gated like the other POSTs, since
+ * can answer the dialog remotely. Still behind the write gate like the other POSTs, since
  * it can otherwise be used to light up rows from anywhere on the LAN. The hook
  * ignores the response entirely — every failure here is invisible to the CLI.
  */
@@ -1435,7 +1458,7 @@ export async function serveNotifyTest(
  * Gated on the remote-answer toggle exactly like `serveTranscribe` above, and
  * for the stronger version of its reason: spawn writes a whole new session on
  * this machine. The pill is the app's only *runtime* kill switch (`CLAUDE_BIN`
- * is restart-scoped), so a switch that silently excluded the widest write path
+ * is restart-scoped), so a switch that silently excluded the widest session write path
  * would be worse than none — the user infers coverage. It is not an auth
  * boundary: `REMOTE_ANSWER` defaults to true and whoever can flip the pill off
  * can flip it back on. `HealthResponse.spawnAvailable` stays a pure capability
@@ -1788,8 +1811,85 @@ export async function serveGitFetch(config: Config, req: IncomingMessage, res: S
 }
 
 /**
+ * `POST /api/git-quick` — a fast-forward Pull or a Push of one pinned repo, no Claude session (quick pull/push spec §API). The body names a pin and an op,
+ * never a path: the repo is the pin's own folder, read from the stored pin list exactly as `/api/git-stats` reads it. `fetch-running` and `busy` are 409,
+ * since retrying in a moment is the answer to both; every other refusal is a 200 the client words.
+ */
+export async function serveGitQuick(config: Config, req: IncomingMessage, res: ServerResponse): Promise<void> {
+  if (refuseWrite(config, req, res)) return;
+  const body = await readJsonBody(req) as { dirName?: unknown; op?: unknown } | null;
+  if (!body || typeof body !== 'object' || typeof body.dirName !== 'string' || (body.op !== 'pull' && body.op !== 'push')) {
+    return sendBadBody(res, { error: "expected {dirName: string, op: 'pull' | 'push'}" });
+  }
+  const { dirName, op } = body as GitQuickRequest;
+  const rows = listPinRows(config, getPinnedProjects(), { archivedIds: archivedSessionIds(), ...pinOptions() });
+  // Not `listed`: git-stats draws every pin with a path, a linked worktree's included, so the menu it feeds must reach git for the same set.
+  const pin = rows.find(r => r.dirName === dirName && r.path !== null);
+  if (!pin || pin.path === null) return sendJson(res, 404, { error: 'not a pinned project' });
+  try {
+    const answer = await runQuickOp({ name: pin.name, toplevel: pin.path }, op);
+    sendJson(res, answer.refusal === 'fetch-running' || answer.refusal === 'busy' ? 409 : 200, answer);
+  } catch (e) {
+    console.error('[dashboard] git quick failed:', (e as Error).message);
+    sendJson(res, 500, { error: 'git quick failed' });
+  }
+}
+
+/**
+ * `GET /api/codegraph` — the codegraph state of every pinned project, in pin order (codegraph-view spec §API). No method check, like `serveGitStats`: the
+ * repo paths come from the stored pins, never from the request. The one parameter, `fresh=1` (Re-read status), skips the status cache; any other value is a
+ * plain read. A repo that fails reads as its own `error` row; only an unreadable pin list is a 500.
+ */
+export async function serveCodegraph(config: Config, res: ServerResponse, fresh = false): Promise<void> {
+  try {
+    sendJson(res, 200, await readCodegraph(config, { fresh }));
+  } catch (e) {
+    console.error('[dashboard] codegraph read failed:', (e as Error).message);
+    sendJson(res, 500, { error: 'codegraph read failed' });
+  }
+}
+
+/** What the store's refusal means to the caller; the order they are checked in lives in `startCodegraphRun`. */
+const CODEGRAPH_RUN_REFUSALS = {
+  'not-pinned': [403, 'not a pinned project'],
+  'not-indexed': [404, 'not indexed'],
+  busy: [409, 'already running'],
+} as const;
+
+/**
+ * `POST /api/codegraph/run` `{dirName, kind}` — start a Sync or Reindex on one pinned repo and answer at once (codegraph-view spec §API). The method check
+ * is the router's. Refusals in order: the write gate, the body shape (checked here so a bad `kind` can never reach the CLI), then the store's own: not
+ * pinned, not indexed, already running.
+ */
+export async function serveCodegraphRun(config: Config, req: IncomingMessage, res: ServerResponse): Promise<void> {
+  if (refuseWrite(config, req, res)) return;
+  const body = await readJsonBody(req) as { dirName?: unknown; kind?: unknown } | null;
+  if (!body || typeof body !== 'object' || typeof body.dirName !== 'string' || body.dirName === '' || (body.kind !== 'sync' && body.kind !== 'reindex')) {
+    return sendBadBody(res, { error: "expected {dirName: string, kind: 'sync' | 'reindex'}" });
+  }
+  try {
+    const result = await startCodegraphRun(config, body.dirName, body.kind);
+    if (result === 'started') return sendJson(res, 200, { ok: true });
+    const [status, error] = CODEGRAPH_RUN_REFUSALS[result];
+    sendJson(res, status, { error });
+  } catch (e) {
+    console.error('[dashboard] codegraph run failed:', (e as Error).message);
+    sendJson(res, 500, { error: 'codegraph run failed' });
+  }
+}
+
+/**
+ * The owner keeps `pins.json` current for the routine wrapper, which never calls the dashboard (spec §The job file, Pins on disk). Called here rather
+ * than from `settings.ts`, which `management.ts` imports. The pin change already stands, so a failed snapshot is logged, not answered.
+ */
+function snapshotPins(config: Config): void {
+  if (!isOwner()) return;
+  try { writePinsSnapshot(config); } catch (e) { console.error('[dashboard] pins snapshot failed:', (e as Error).message); }
+}
+
+/**
  * `POST /api/pins` `{dirName, pinned}` — pin or unpin one project (#161).
- * Token-guarded like `POST /api/settings`. A pin must name a dir the server
+ * A gate-only write, like `POST /api/settings`. A pin must name a dir the server
  * itself enumerated (older ∪ recent), compared as a string and never joined into
  * a path — a pinned dir becomes spawnable and its config servable, so this is
  * the gate. An unpin accepts any stored dir, so a dead pin can be removed.
@@ -1809,6 +1909,7 @@ export async function servePinsWrite(config: Config, req: IncomingMessage, res: 
     if (!known) return sendJson(res, 404, { error: 'no such project' });
   }
   if (setPinned(dirName, pinned) === null) return sendJson(res, 409, { error: 'pin limit reached' });
+  snapshotPins(config);
   sendJson(res, 200, pinsPayload(config));
 }
 
@@ -1824,6 +1925,7 @@ export async function servePinsOrder(config: Config, req: IncomingMessage, res: 
     return sendBadBody(res, { error: 'expected {order: string[]}' });
   }
   if (setPinOrder(body.order) === null) return sendJson(res, 409, { error: 'pins changed — reload' });
+  snapshotPins(config);
   sendJson(res, 200, pinsPayload(config));
 }
 
@@ -1852,6 +1954,324 @@ export async function serveOpenFolder(config: Config, req: IncomingMessage, res:
     return sendJson(res, 500, { error: 'open failed' });
   }
   sendJson(res, 200, { ok: true } satisfies OpenFolderResponse);
+}
+
+/* -------------------------------------------------- routines (docs/superpowers/specs/2026-10-19-scheduled-workflows-design.md §HTTP) */
+
+/** A job name from a URL or a body, checked before it reaches any path; the reserved names pass here and are the validator's to refuse. */
+const JOB_NAME_RE = /^[a-z0-9-]+$/;
+/** The wrapper takes `--only` as argv; a list longer than any pin set is refused rather than handed to a spawn. */
+const ONLY_MAX = 200;
+const ROUTINE_WINDOWS = [7, 30, 90] as const;
+const RUN_OUTCOMES: ReadonlySet<string> = new Set(['running', 'ok', 'failed', 'lost', 'refused']);
+
+/**
+ * The checks every job-scoped routine write makes after the write gate: the name (400, nothing touched) and ownership (409 — only the owning server
+ * writes job files, installs or runs, spec §Owning server). True when it has answered and the caller must return.
+ */
+function refuseRoutineWrite(res: ServerResponse, name?: string): boolean {
+  if (name !== undefined && !JOB_NAME_RE.test(name)) { sendJson(res, 400, { error: 'bad name' }); return true; }
+  if (!isOwner()) { sendJson(res, 409, { error: 'not-owner' }); return true; }
+  return false;
+}
+
+/** The pins as the wrapper will see them in `pins.json`, for `checkPins`: the same rows `GET /api/pins` lists. */
+function pinSnapshot(config: Config): PinSnapshot[] {
+  return listPinRows(config, getPinnedProjects(), { archivedIds: archivedSessionIds(), ...pinOptions() })
+    .map(r => ({ dirName: r.dirName, name: r.name, path: r.path, listed: r.listed }));
+}
+
+/** `parseJob` plus the ambiguous-pin check against the pins of this machine now — what PUT, POST and `/validate` all run. */
+function validateRoutineText(config: Config, name: string, text: string): { job: RoutineJob | null; errors: JobError[] } {
+  const parsed = parseJob(name, text);
+  if (!parsed.job) return parsed;
+  const pinErrors = checkPins(parsed.job, pinSnapshot(config));
+  return pinErrors.length > 0 ? { job: null, errors: pinErrors } : parsed;
+}
+
+/** The drawer's one-line reading of a valid job: when, how, where. */
+function routineSummary(job: RoutineJob): string {
+  const cron = parseCron(job.cron);
+  const when = cron.ok ? describeCron(cron.cron) : job.cron;
+  const where = job.foreach === 'pinned' ? 'every pinned repo'
+    : Array.isArray(job.foreach) ? `${job.foreach.length} repo${job.foreach.length === 1 ? '' : 's'}`
+      : job.cwd ?? 'the routines folder\'s parent';
+  return [when, job.run, where, job.machines.join(' + '), job.enabled ? null : 'paused'].filter(Boolean).join(' · ');
+}
+
+/** Whether the OS holds a job for `name`, read off a planned report. A bare report (not owner, no plugin, bad machine) knows nothing: false. */
+export function installedFrom(report: ReconcileReport, name: string, desired: boolean): boolean {
+  const planned = report.state !== 'not-owner' && report.state !== 'no-plugin' && report.state !== 'bad-machine'
+    && !(report.state === 'failed' && report.changes.length === 0 && report.unchanged === 0);
+  if (!planned) return false;
+  const change = report.changes.find(c => c.name === name);
+  if (!change) return desired;
+  if (change.action === 'install') return false;
+  if (change.action === 'pending') return change.why === 'running';
+  return true;
+}
+
+function nextFire(job: RoutineJob, now: Date): string | null {
+  const cron = parseCron(job.cron);
+  return cron.ok ? nextAfter(cron.cron, now)?.toISOString() ?? null : null;
+}
+
+/** `GET /api/routines` — the ledger. Read-only and open to every peer; plans reconcile against the OS (no writes), and folds the log for pushes. */
+export async function serveRoutines(config: Config, res: ServerResponse): Promise<void> {
+  try {
+    const machine = machineName(config).name;
+    const dir = routineDirs(config).routines;
+    const stored = readJobs(dir);
+    const runs = runsReader(config).read();
+    foldForPush(config, runs);
+    const plan = await planReconcile(config);
+    // The plan re-reads the OS on every poll; a failed apply's message would otherwise vanish behind the drift it left.
+    const last = lastReconcile();
+    const reconcile = plan.state === 'drift' && plan.error === null && last?.state === 'failed' ? { ...plan, error: last.error } : plan;
+    const now = new Date();
+    const jobs: RoutineJobRow[] = stored.map(s => {
+      const onThisMachine = s.job?.machines.includes(machine) ?? false;
+      const desired = s.job !== null && s.job.enabled && onThisMachine;
+      return {
+        ...s,
+        onThisMachine,
+        installed: installedFrom(reconcile, s.name, desired),
+        nextAt: desired && s.job ? nextFire(s.job, now) : null,
+        last: runs.find(r => r.job === s.name && r.state !== 'running') ?? null,
+        running: runs.find(r => r.job === s.name && r.state === 'running') ?? null
+      };
+    });
+    sendJson(res, 200, { machine, dir, owner: ownerStatus(), reconcile, jobs } satisfies RoutinesResponse);
+  } catch (e) {
+    console.error('[dashboard] routines read failed:', (e as Error).message);
+    sendJson(res, 500, { error: 'routines read failed' });
+  }
+}
+
+/**
+ * `GET /api/routines/runs?days=30&job=&outcome=&runner=` — the folded runs of the window, newest first, and the stats. `days` outside 7 | 30 | 90 reads
+ * as 30. `runner` is looked up in the job's file (a run carries none), so a run of a job whose file is gone is excluded once that filter is set.
+ */
+export function serveRoutineRuns(config: Config, params: URLSearchParams, res: ServerResponse): void {
+  try {
+    const rawDays = Number(params.get('days'));
+    const days = ROUTINE_WINDOWS.find(d => d === rawDays) ?? 30;
+    const job = params.get('job') || null;
+    const outcome = params.get('outcome') || null;
+    if (outcome !== null && !RUN_OUTCOMES.has(outcome)) return sendJson(res, 400, { error: 'bad outcome' });
+    const runner = params.get('runner') || null;
+    const all = runsReader(config).read();
+    foldForPush(config, all);
+    const runnerOf = new Map(readJobs(routineDirs(config).routines).map(s => [s.name, s.job?.run ?? null]));
+    const scoped = all.filter(r => (job === null || r.job === job) && (runner === null || runnerOf.get(r.job) === runner));
+    const now = new Date();
+    const from = new Date(now.getFullYear(), now.getMonth(), now.getDate() - (days - 1)).getTime();
+    const runs = scoped.filter(r => {
+      const t = Date.parse(r.startedAt);
+      return Number.isFinite(t) && t >= from && (outcome === null || r.state === outcome);
+    });
+    sendJson(res, 200, { runs, stats: computeStats(scoped, days, now) } satisfies RoutineRunsResponse);
+  } catch (e) {
+    console.error('[dashboard] routine runs read failed:', (e as Error).message);
+    sendJson(res, 500, { error: 'routine runs read failed' });
+  }
+}
+
+/** `GET /api/routines/:name` — the raw file and its parse, for the editor. */
+export function serveRoutineRead(config: Config, name: string, res: ServerResponse): void {
+  if (!JOB_NAME_RE.test(name)) return sendJson(res, 400, { error: 'bad name' });
+  const stored = readJobs(routineDirs(config).routines).find(s => s.name === name);
+  if (!stored) return sendJson(res, 404, { error: 'no such job' });
+  sendJson(res, 200, stored satisfies RoutineFile);
+}
+
+/** `PUT /api/routines/:name` `{text}` — replace an existing job's file. Validated first; `422 {errors}` writes nothing. */
+export async function serveRoutineWrite(config: Config, name: string, req: IncomingMessage, res: ServerResponse): Promise<void> {
+  if (refuseWrite(config, req, res)) return;
+  if (refuseRoutineWrite(res, name)) return;
+  const body = await readJsonBody(req) as { text?: unknown } | null;
+  if (!body || typeof body !== 'object' || typeof body.text !== 'string') return sendBadBody(res, { error: 'expected {text: string}' });
+  const dir = routineDirs(config).routines;
+  if (!readJobs(dir).some(s => s.name === name)) return sendJson(res, 404, { error: 'no such job' });
+  const { job, errors } = validateRoutineText(config, name, body.text);
+  if (!job) return sendJson(res, 422, { errors });
+  try {
+    writeJob(dir, name, body.text, 'replace');
+  } catch (e) {
+    console.error('[dashboard] routine write failed:', (e as Error).message);
+    return sendJson(res, 500, { error: 'write failed' });
+  }
+  sendJson(res, 200, { job, reconcile: await applyReconcile(config) });
+}
+
+/** `POST /api/routines` `{name, text}` — a new job: `409` when the file exists, else validated and written like PUT. */
+export async function serveRoutineCreate(config: Config, req: IncomingMessage, res: ServerResponse): Promise<void> {
+  if (refuseWrite(config, req, res)) return;
+  const body = await readJsonBody(req) as { name?: unknown; text?: unknown } | null;
+  if (!body || typeof body !== 'object' || typeof body.name !== 'string' || typeof body.text !== 'string') {
+    return sendBadBody(res, { error: 'expected {name: string, text: string}' });
+  }
+  const { name, text } = body;
+  if (refuseRoutineWrite(res, name)) return;
+  const dir = routineDirs(config).routines;
+  if (readJobs(dir).some(s => s.name === name)) return sendJson(res, 409, { error: 'exists' });
+  const { job, errors } = validateRoutineText(config, name, text);
+  if (!job) return sendJson(res, 422, { errors });
+  try {
+    writeJob(dir, name, text, 'create');
+  } catch (e) {
+    if (e instanceof RoutineStoreError && e.code === 'exists') return sendJson(res, 409, { error: 'exists' });
+    console.error('[dashboard] routine create failed:', (e as Error).message);
+    return sendJson(res, 500, { error: 'write failed' });
+  }
+  sendJson(res, 200, { job, reconcile: await applyReconcile(config) });
+}
+
+/** `DELETE /api/routines/:name` — remove the file and reconcile; the run log keeps the job's rows. */
+export async function serveRoutineDelete(config: Config, name: string, req: IncomingMessage, res: ServerResponse): Promise<void> {
+  if (refuseWrite(config, req, res)) return;
+  if (refuseRoutineWrite(res, name)) return;
+  let removed: boolean;
+  try {
+    removed = deleteJob(routineDirs(config).routines, name);
+  } catch (e) {
+    console.error('[dashboard] routine delete failed:', (e as Error).message);
+    return sendJson(res, 500, { error: 'delete failed' });
+  }
+  if (!removed) return sendJson(res, 404, { error: 'no such job' });
+  sendJson(res, 200, { reconcile: await applyReconcile(config) });
+}
+
+/** `PATCH /api/routines/:name` `{enabled}` — rewrite the `enabled:` line only (every other byte kept), then reconcile. */
+export async function serveRoutinePatch(config: Config, name: string, req: IncomingMessage, res: ServerResponse): Promise<void> {
+  if (refuseWrite(config, req, res)) return;
+  if (refuseRoutineWrite(res, name)) return;
+  const body = await readJsonBody(req) as { enabled?: unknown } | null;
+  if (!body || typeof body !== 'object' || typeof body.enabled !== 'boolean') return sendBadBody(res, { error: 'expected {enabled: boolean}' });
+  const dir = routineDirs(config).routines;
+  const stored = readJobs(dir).find(s => s.name === name);
+  if (!stored) return sendJson(res, 404, { error: 'no such job' });
+  // An unparseable file has no trustworthy `enabled:` line to rewrite; the drawer fixes it through PUT.
+  if (!stored.job) return sendJson(res, 422, { errors: stored.errors });
+  const text = serializeEnabled(stored.text, body.enabled);
+  try {
+    writeJob(dir, name, text, 'replace');
+  } catch (e) {
+    console.error('[dashboard] routine toggle failed:', (e as Error).message);
+    return sendJson(res, 500, { error: 'write failed' });
+  }
+  sendJson(res, 200, { job: parseJob(name, text).job, reconcile: await applyReconcile(config) });
+}
+
+/** `POST /api/routines/reconcile` `{apply?}` — the diff, applied when `apply` is true. The plugin sync script posts `{apply: true}`. */
+export async function serveRoutineReconcile(config: Config, req: IncomingMessage, res: ServerResponse): Promise<void> {
+  if (refuseWrite(config, req, res)) return;
+  if (refuseRoutineWrite(res)) return;
+  const body = await readJsonBody(req) as { apply?: unknown } | null;
+  try {
+    sendJson(res, 200, body && typeof body === 'object' && body.apply === true ? await applyReconcile(config) : await planReconcile(config));
+  } catch (e) {
+    console.error('[dashboard] routine reconcile failed:', (e as Error).message);
+    sendJson(res, 500, { error: 'reconcile failed' });
+  }
+}
+
+/** `POST /api/routines/:name/run` `{only?: string[]}` — Run now (`routine-run.ts`); its answers map 1:1 onto HTTP. */
+export async function serveRoutineRun(config: Config, name: string, req: IncomingMessage, res: ServerResponse): Promise<void> {
+  if (refuseWrite(config, req, res)) return;
+  if (refuseRoutineWrite(res, name)) return;
+  // Fail closed: a body that did not arrive whole, or did not parse, is refused rather than read as "no `only`", which would run every pin.
+  const raw = await readBody(req, BODY_CAP);
+  if (!raw.ok) return sendBadBody(res, { error: 'bad body' });
+  let only: unknown;
+  if (raw.bytes.length > 0) {
+    let body: unknown;
+    try { body = JSON.parse(raw.bytes.toString('utf8')); } catch { return sendBadBody(res, { error: 'bad body' }); }
+    if (!body || typeof body !== 'object' || Array.isArray(body)) return sendBadBody(res, { error: 'bad body' });
+    // No `only` key is a whole run; anything under the key, null included, is `runJob`'s to judge.
+    only = 'only' in body ? (body as { only?: unknown }).only : undefined;
+  }
+  // `runJob` reads `[]` as every pin; over HTTP an empty selection is a caller bug, not a request for a whole run.
+  if (Array.isArray(only) && (only.length === 0 || only.length > ONLY_MAX)) return sendJson(res, 400, { error: 'bad-only' });
+  try {
+    const result = await runJob(config, name, only);
+    if (result.status === 202) return sendJson(res, 202, { run: result.run });
+    if (result.status === 404) return sendJson(res, 404, { error: 'no such job' });
+    sendJson(res, result.status, { error: result.error });
+  } catch (e) {
+    console.error('[dashboard] routine run failed:', (e as Error).message);
+    sendJson(res, 500, { error: 'spawn-failed' });
+  }
+}
+
+/** `POST /api/routines/:name/stop` — SIGTERM the job's live wrapper: `204`, or `409 not-running`. */
+export async function serveRoutineStop(config: Config, name: string, req: IncomingMessage, res: ServerResponse): Promise<void> {
+  if (refuseWrite(config, req, res)) return;
+  if (refuseRoutineWrite(res, name)) return;
+  const result = stopJob(config, name);
+  if (result.status === 204) {
+    res.writeHead(204, { 'Cache-Control': 'no-store' });
+    return void res.end();
+  }
+  sendJson(res, 409, { error: result.error });
+}
+
+/**
+ * `POST /api/routines/reveal` `{name?}` — open the routines folder in Finder (macOS only, `501` elsewhere), with `<name>.md` selected when a name is sent.
+ * The folder comes from config, never the request; a name must match the job-name rule before it is joined onto it, so it cannot climb out.
+ */
+export async function serveRoutineReveal(config: Config, req: IncomingMessage, res: ServerResponse): Promise<void> {
+  if (refuseWrite(config, req, res)) return;
+  const body = await readJsonBody(req) as { name?: unknown } | null;
+  const name = body && typeof body === 'object' ? body.name : undefined;
+  if (name !== undefined && typeof name !== 'string') return sendBadBody(res, { error: 'expected {name?: string}' });
+  if (refuseRoutineWrite(res, name)) return;
+  if (openFolderPlatform() !== 'darwin') return sendJson(res, 501, { error: 'reveal needs macOS' });
+  const dir = routineDirs(config).routines;
+  if (!fs.existsSync(dir)) return sendJson(res, 404, { error: 'no routines folder' });
+  const file = name === undefined ? null : nodePath.join(dir, `${name}.md`);
+  if (file !== null && !fs.existsSync(file)) return sendJson(res, 404, { error: 'no such job' });
+  try {
+    await (file === null ? openFolder(dir) : revealFile(file));
+  } catch (e) {
+    console.error(`[dashboard] routines reveal failed: ${(e as Error).message}`);
+    return sendJson(res, 500, { error: 'open failed' });
+  }
+  sendJson(res, 200, { ok: true });
+}
+
+/**
+ * `POST /api/routines/validate` `{text, name?}` — what the drawer calls as the user types. Read-only, so outside the write gate: it parses and checks pins,
+ * and touches no file. Without a `name` the file is judged under a neutral one, so the name rules stay the Name field's.
+ */
+export async function serveRoutineValidate(config: Config, req: IncomingMessage, res: ServerResponse): Promise<void> {
+  const body = await readJsonBody(req) as { text?: unknown; name?: unknown } | null;
+  if (!body || typeof body !== 'object' || typeof body.text !== 'string') return sendBadBody(res, { error: 'expected {text: string}' });
+  const name = typeof body.name === 'string' ? body.name : 'untitled';
+  const { job, errors } = validateRoutineText(config, name, body.text);
+  sendJson(res, 200, { errors, summary: job ? routineSummary(job) : null } satisfies RoutineValidateResponse);
+}
+
+/**
+ * `GET /api/sessions/:id/row` — one `Session` row for any transcript `findTranscript` resolves, whatever its age: a routine run's `session →` opens
+ * the chat drawer with it. No lookback, the liveness set null (fail open), no wait sets, and none of the list's skips, so a run the list would hide
+ * still opens. `404` only when no transcript exists.
+ */
+export function serveSessionRow(config: Config, id: string, res: ServerResponse): void {
+  if (!ID_RE.test(id)) return sendJson(res, 400, { error: 'bad id' });
+  try {
+    const ref = findTranscript(projectsRoot(), id);
+    if (!ref) return sendJson(res, 404, { error: 'no such session' });
+    const row = sessionFromRef(ref, {
+      now: Date.now(), activeWindowMin: config.activeWindowMin, liveCwds: null,
+      lessons: config.showAnalytics === false ? null : readSessionAnalyticsLog()
+    });
+    if (!row) return sendJson(res, 500, { error: 'transcript unreadable' });
+    sendJson(res, 200, row satisfies Session);
+  } catch (e) {
+    console.error('[dashboard] session row failed:', (e as Error).message);
+    sendJson(res, 500, { error: 'session row failed' });
+  }
 }
 
 /* -------------------------------------------------- analytics endpoint */

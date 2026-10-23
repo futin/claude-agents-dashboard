@@ -16,14 +16,37 @@ import { EFFORTS, MODELS } from '../client/src/lib/spawnOptions.js';
 
 const CLIENT_SRC = resolve(dirname(fileURLToPath(import.meta.url)), '..', 'client', 'src');
 
-/** Every `usePersistedState` key the client actually writes, read off the source. */
-function persistedKeys(dir: string, found = new Set<string>()): Set<string> {
+/** Every `.ts`/`.tsx` file under `dir`, with its source. */
+function sources(dir: string, found: [string, string][] = []): [string, string][] {
   for (const e of readdirSync(dir, { withFileTypes: true })) {
     const path = join(dir, e.name);
-    if (e.isDirectory()) { persistedKeys(path, found); continue; }
-    if (!/\.tsx?$/.test(e.name)) continue;
-    const src = readFileSync(path, 'utf8');
+    if (e.isDirectory()) { sources(path, found); continue; }
+    if (/\.tsx?$/.test(e.name)) found.push([path, readFileSync(path, 'utf8')]);
+  }
+  return found;
+}
+
+/**
+ * Every localStorage key the client actually writes, read off the source: each `usePersistedState('<key>'`, plus each key written around it — the
+ * first argument of a raw `localStorage.setItem(`, and the `storageKey:` handed to a ui-kit hook such as `useWhatsNew`, which writes that key itself.
+ * Those two take a literal or a constant; a constant resolves against a `const <IDENT> = '<key>'` in the same file, else an `export const` in any.
+ * One that resolves nowhere is skipped: that is `usePersistedState.ts`'s own `setItem(key, …)`, the generic writer, not a key.
+ */
+function persistedKeys(dir: string): Set<string> {
+  const files = sources(dir);
+  const CONST = /\bconst\s+([A-Za-z_$][\w$]*)\s*=\s*'([^']+)'/g;
+  const exported = new Map<string, string>();
+  for (const [, src] of files) {
+    for (const m of src.matchAll(/\bexport\s+const\s+([A-Za-z_$][\w$]*)\s*=\s*'([^']+)'/g)) exported.set(m[1], m[2]);
+  }
+  const found = new Set<string>();
+  for (const [, src] of files) {
     for (const m of src.matchAll(/usePersistedState\s*(?:<[^>]*>)?\s*\(\s*'([^']+)'/g)) found.add(m[1]);
+    const local = new Map([...src.matchAll(CONST)].map(m => [m[1], m[2]] as [string, string]));
+    for (const m of src.matchAll(/(?:localStorage\.setItem\s*\(|\bstorageKey\s*:)\s*(?:'([^']+)'|([A-Za-z_$][\w$]*))/g)) {
+      const key = m[1] ?? local.get(m[2]) ?? exported.get(m[2]);
+      if (key) found.add(key);
+    }
   }
   return found;
 }
@@ -105,14 +128,44 @@ export function run(): number {
     assert.strictEqual(clampSettings({ settingsTab: 7 }).settingsTab, 'local');
   })) p++; else f++;
 
-  // The Management section's sub-view (Projects | Git), picked like the other two.
-  if (test('the Management sub-tab defaults to projects, accepts projects and git, and maps a stored pinned to projects', () => {
-    assert.strictEqual(DEFAULT_SETTINGS.managementTab, 'projects');
-    assert.strictEqual(clampSettings({}).managementTab, 'projects');
-    assert.strictEqual(clampSettings({ managementTab: 'nonsense' }).managementTab, 'projects');
+  // The Management section's sub-view (Git | Projects | CodeGraph), picked like the other two.
+  if (test('the Management sub-tab defaults to git, accepts projects and git, and maps a stored pinned to projects', () => {
+    assert.strictEqual(DEFAULT_SETTINGS.managementTab, 'git');
+    assert.strictEqual(clampSettings({}).managementTab, 'git');
+    assert.strictEqual(clampSettings({ managementTab: 'nonsense' }).managementTab, 'git');
     assert.strictEqual(clampSettings({ managementTab: 'projects' }).managementTab, 'projects');
     assert.strictEqual(clampSettings({ managementTab: 'pinned' }).managementTab, 'projects', 'a stored \'pinned\' is the renamed sub-view');
     assert.strictEqual(clampSettings({ managementTab: 'git' }).managementTab, 'git');
+  })) p++; else f++;
+
+  // Routines was a Management sub-view before it became its own section: a device that stored it lands on the default, Git.
+  if (test('a stored managementTab routines falls back to git', () => {
+    assert.strictEqual(clampSettings({ managementTab: 'routines' }).managementTab, 'git');
+  })) p++; else f++;
+
+  if (test('the Routines sub-tab defaults to jobs, accepts jobs and runs, and round-trips', () => {
+    assert.strictEqual(DEFAULT_SETTINGS.routinesTab, 'jobs');
+    assert.strictEqual(clampSettings({}).routinesTab, 'jobs');
+    assert.strictEqual(clampSettings({ routinesTab: 'nonsense' }).routinesTab, 'jobs');
+    assert.strictEqual(clampSettings({ routinesTab: 'jobs' }).routinesTab, 'jobs');
+    assert.strictEqual(clampSettings({ routinesTab: 'runs' }).routinesTab, 'runs');
+    assert.strictEqual(clampSettings(clampSettings({ routinesTab: 'runs' })).routinesTab, 'runs');
+  })) p++; else f++;
+
+  if (test('settings saved before the rename keep their place: schedulesTab, scheduleWindow, landing schedules', () => {
+    const s = clampSettings({ schedulesTab: 'runs', scheduleWindow: 90, landing: 'schedules' });
+    assert.deepStrictEqual([s.routinesTab, s.routineWindow, s.landing], ['runs', 90, 'routines']);
+    const both = clampSettings({ schedulesTab: 'runs', routinesTab: 'jobs', scheduleWindow: 90, routineWindow: 7 });
+    assert.deepStrictEqual([both.routinesTab, both.routineWindow], ['jobs', 7], 'the new keys win');
+  })) p++; else f++;
+
+  if (test('the Routines window defaults to 30 and accepts only 7, 30 and 90', () => {
+    assert.strictEqual(DEFAULT_SETTINGS.routineWindow, 30);
+    assert.strictEqual(clampSettings({}).routineWindow, 30);
+    for (const w of [7, 30, 90]) assert.strictEqual(clampSettings({ routineWindow: w }).routineWindow, w);
+    for (const bad of [14, 0, -7, 7.5, '7', '90', null, undefined, NaN, {}]) {
+      assert.strictEqual(clampSettings({ routineWindow: bad }).routineWindow, 30, `${String(bad)} reads as the default`);
+    }
   })) p++; else f++;
 
   // The shape the sessions list opens in. It used to live in the persisted
@@ -261,12 +314,12 @@ export function run(): number {
   // Spelled out literally, not derived from SECTIONS: a test that reads the
   // same array as the code under test passes whatever either one says. This
   // fails if a section joins the rail without a decision about landing on it.
-  if (test('the picker offers exactly the seven intended choices', () => {
+  if (test('the picker offers exactly the eight intended choices', () => {
     assert.deepStrictEqual(
       LANDING_OPTIONS.map(o => o.value),
-      ['last', 'sessions', 'usage', 'management', 'configs', 'analytics', 'settings']
+      ['last', 'sessions', 'routines', 'management', 'usage', 'configs', 'analytics', 'settings']
     );
-    assert.strictEqual(LANDING_OPTIONS.length, 7);
+    assert.strictEqual(LANDING_OPTIONS.length, 8);
   })) p++; else f++;
 
   if (test('each landing option carries the rail\'s own label', () => {
@@ -295,6 +348,12 @@ export function run(): number {
       scanQuery(clampSettings({ maxSessions: 3, lookbackHours: 48, activeWindowMin: 15 })),
       '?limit=3&lookback=48&active=15'
     );
+  })) p++; else f++;
+
+  if (test('scanQuery appends one encoded project param per picked project, after the knobs', () => {
+    assert.strictEqual(scanQuery(DEFAULT_SETTINGS, undefined, []), '?limit=5&lookback=48&active=5');
+    assert.strictEqual(scanQuery(DEFAULT_SETTINGS, undefined, ['a', 'b c&d']), '?limit=5&lookback=48&active=5&project=a&project=b%20c%26d');
+    assert.deepStrictEqual(new URLSearchParams(scanQuery(DEFAULT_SETTINGS, undefined, ['b c&d'])).getAll('project'), ['b c&d']);
   })) p++; else f++;
 
   if (test('full chat text is off by default and coerces to a boolean', () => {
@@ -378,7 +437,7 @@ export function run(): number {
     // component fails this test instead of quietly surviving Reset — which is
     // how `dashboard.layout` and then `management.type` each got missed.
     const keys = persistedKeys(CLIENT_SRC);
-    assert.ok(keys.has('dashboard.layout') && keys.has('configs.type'), 'the scan found the keys');
+    assert.ok(keys.has('dashboard.layout') && keys.has('configs.type') && keys.has('dashboard.releases.lastSeen'), 'the scan found the keys');
     // The settings blob is reset by writing the defaults, not by removal; the
     // answer token is a credential and Reset is not a sign-out. The Git Sync runs are live state, not a
     // preference: forgetting one would let a second sync start on a repo still syncing, and an ended run prunes itself.
@@ -393,3 +452,5 @@ export function run(): number {
   console.log(`\n  ${p} passed, ${f} failed`);
   return f;
 }
+
+if (import.meta.url === `file://${process.argv[1]}`) process.exit(run() > 0 ? 1 : 0);

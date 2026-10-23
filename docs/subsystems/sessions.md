@@ -34,7 +34,13 @@ board, and reading them should not mean being on Sessions. See
     · *Quiet*, from `lib/triage.ts`'s `triageGroups`: a hold (or a terminal question)
     outranks the status, so a working session with a permission dialog open sits under
     *Needs you*. A card per session; the open one shows the expanded body inline.
-  - **List** — one table; the open row expands underneath itself across every column.
+  - **List** — one table; the open row expands underneath itself across every column. Columns: Session (title and pills) · **Project** (`repo ??
+    project`, branch under it) · **Model** (`modelLabel`: `claude-opus-5-5` → `Opus 5.5`, date stamp and `[1m]` dropped, an unparsed id shown as is) ·
+    Context · State · Activity · Last · Chat. Widths key on the table, not the viewport (container queries on `.s-card.ledger` — the aside and the Width
+    setting decide the table's width). Under 950px the Project column collapses to 0px (not `display:none` — an open row's
+    `colSpan={9}` would revive it as an unsized phantom) and the Session cell's `.repo-sub` line carries repo and branch, since
+    the fixed columns alone sum to ~750px. From 1200px the text columns take percentage widths and
+    Session, the one unsized column, takes what is left; before that it took every spare pixel and a wide table drew the rest as a clump on the right.
   - **Split** — a compact list and one inspector (title, meta, Context and Now tiles, then
     the expanded body). The first row is inspected until one is clicked.
   - **Tiles** — every session a metric card with its context percentage as the figure; the
@@ -57,8 +63,12 @@ The atoms in `sessions/atoms.tsx`, in every view that has room for them:
 - **Name + git branch** — a named session leads with its custom title and demotes the
   project to a pill; an unnamed one leads with the project itself (basename of the
   transcript's *first* `cwd` — where the session was launched, not where its shell has
-  since wandered). Either way the row also carries its `gitBranch`.
-- **Model + CLI version** — what the session is running.
+  since wandered). Either way the row also carries its `gitBranch`. A session launched in a linked git worktree also carries `repo`, the main
+  checkout's name (`server/lib/worktree-repo.ts`: the worktree's `.git` file, else the `.claude/worktrees/<n>` / `.worktrees/<n>` path shape once the
+  worktree is deleted). `project` stays the worktree folder — the filter, pins and chat drawer key on it — and only the List view's Project column reads
+  `repo` today.
+- **Model + CLI version** — what the session is running. Every view shows the model through `lib/modelLabel.ts` (`Opus 5.5`); only the chat drawer's
+  facts panel keeps the full id, the one place with room for it.
 - **Surface pill** — where the session lives, when that isn't the obvious answer. A headless
   spawn appears in no other list, which is worth saying on the row rather than leaving to be
   rediscovered. `scan.ts`'s `sessionSurface` reads the transcript's own `entrypoint`: only
@@ -94,11 +104,14 @@ The atoms in `sessions/atoms.tsx`, in every view that has room for them:
   drawer never also toggles the row.
 - **Stop control** — a `stopping…` badge beside the activity line, plus a two-stage
   `Stop session` → `Really stop?` pair (and `Force stop` once stopping) in the expanded
-  body (`sessions/Expanded.tsx`, shared by every view that opens a session). It renders
+  body (`sessions/Expanded.tsx`, shared by every view that opens a session) and in the
+  [chat drawer](chat.md)'s sidecar — both render `sessions/SessionStopControl.tsx`. It renders
   only for a session carrying `Session.stopState`, i.e. one this server still holds a
   child handle for; `lib/stopControl.ts` decides every branch. Absent for every other
   row, deliberately — see
-  [spawn](spawn.md#stopstate-and-why-it-is-absent-rather-than-false).
+  [spawn](spawn.md#stopstate-and-why-it-is-absent-rather-than-false). A live process this
+  server holds no handle for (a restart, another launcher) carries `Session.processLive`
+  instead and gets no Stop control — see [spawn](spawn.md#processlive-the-live-process-this-server-cannot-signal).
 
 ### The task list, and why it folds the whole file
 
@@ -466,6 +479,13 @@ loop breaks at `maxSessions`. Without that, a dropped transcript cost a display 
 loop still breaks at the cap, so the common case parses exactly as many transcripts as before.
 Archived ids are dropped before the sort, so a deleted session doesn't eat a pool slot either.
 
+**Project filter before the cap.** `?project=` (repeatable; `projectParams` in `api.ts` → `ScanOptions.projects`) narrows the pool *before* the slice, so a
+project with no session among the newest `maxSessions` overall still fills its rows; without it the toolbar's Project facet could only hide rows the
+payload already had. The pre-filter cannot afford `readTranscript`'s 256 KB tail on every transcript in the lookback (226 at 7 days, 2026-10-21), so it
+names each one's project from `launchCwd` — the 16 KB head read, cached per file in `originCache` alongside `resolveOriginCwd`. A transcript whose head
+holds no cwd yet stays a candidate, and every parsed row is checked against the set again, so the cheap name only decides what gets parsed, never what is
+shown. The same pass builds `SessionsResponse.projects` — every project in the lookback, plus the rows' own — which is what the picker offers.
+
 **One row per session id, not per file.** An id does not name a file: records are filed under
 the project dir derived from the cwd at write time, so a session that `cd`s into a git worktree
 keeps its id and starts a *second* `.jsonl` in a second project dir. `scan.ts` `newestPerId`
@@ -516,13 +536,13 @@ start timestamp still gets a row, just no bar.
 
 ## Filter + sort toolbar
 
-Client-side controls above the list. The filter and sort halves write the one persisted
+Controls above the list. All client-side but the Project facet, which also rides the poll as `?project=` (see *Project filter before the cap*). The filter and sort halves write the one persisted
 `View` (`dashboard.view` — see [view-persistence](view-persistence.md)); the switcher does
 not, and is the one control here that survives nothing:
 
 - **View switcher** — Board · List · Split · Tiles · Triage. Owned by `SessionsView` as
   ephemeral state (`layout` / `onLayout` props), seeded from the `defaultLayout` setting.
-- **Filter popover** — *Project* (pills; "All projects" clears), *Status* (multi-pick
+- **Filter popover** — *Project* (pills from `availableProjects`, the server's lookback-wide `projects`; "All projects" clears), *Status* (multi-pick
   pills with the status dot; none picked = all), *Active in the last* (the
   `ACTIVITY_WINDOWS` pill switch), and **Clear all**, disabled when nothing is set.
   `filterCount` counts a facet once however many values it holds, and is the badge on

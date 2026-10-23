@@ -1,12 +1,12 @@
 #!/bin/bash
 # remote-decision-hook.sh — UserPromptSubmit hook: when the dashboard is
 # accepting remote answers AND this session runs in an auto-ish permission mode,
-# tell the model to route every decision through AskUserQuestion.
+# tell the model to route each decision that is the user's through AskUserQuestion.
 #
 # Why: a plain-text question ("should I proceed?") is invisible to someone away
 # from the terminal — the dashboard can show it but not answer it. AskUserQuestion
 # is the one decision surface the phone can answer (see remote-answer.md), so
-# under these two conditions the model should prefer it for everything:
+# under these two conditions the model should prefer it for every such ask:
 # brainstorm-skill mode picks, "write the plan file?", "proceed with the plan?",
 # any option choice. It should also skip plan mode — ExitPlanMode's approval
 # card is terminal-only (see remote-plan.md), while a plan presented through
@@ -39,6 +39,12 @@
 # outcome for a session with a human behind it and an acceptable one for a
 # session without.
 #
+# Rule 5 exists because the model's own reach-the-user tool points at the wrong channel. PushNotification shows a desktop banner and, only when Claude's
+# Remote Control is connected, sends a phone push. This dashboard exists for setups where Remote Control is not available (some company plans disallow it),
+# so that tool answers "Mobile push not sent (Remote Control inactive)" and the user hears nothing. Ending the turn is the path that works: the Stop hook
+# (stop-notify-hook.sh) opens the reply window and the server pushes "finished — reply window open" with a deep link to the session. Observed 2026-10-21:
+# a session asked to test the deep link called PushNotification three times before anyone traced the silence here.
+#
 # Install:
 #   ln -s "$PWD/scripts/remote-decision-hook.sh" ~/.claude/hooks/remote-decision.sh
 # then APPEND to the UserPromptSubmit hooks array in ~/.claude/settings.json:
@@ -55,6 +61,9 @@ INPUT=$(cat)
 
 # Only inside Claude Code (mirrors the other hooks in ~/.claude/settings.json).
 [ "$CLAUDECODE" = "1" ] || exit 0
+# A routine run (plugin/lib/run-routine.mjs) stamps this on its child: unattended, so no hold, no push, no advice.
+# `CLAUDE_DASHBOARD_SCHEDULE` is the same marker as stamped by a wrapper installed before Schedules became Routines.
+[ -n "$CLAUDE_DASHBOARD_ROUTINE$CLAUDE_DASHBOARD_SCHEDULE" ] && exit 0
 
 DASH="${CLAUDE_DASHBOARD_URL:-http://127.0.0.1:4173}"
 MODES="${CLAUDE_DASHBOARD_DECISION_MODES:-auto bypassPermissions dontAsk}"
@@ -106,10 +115,12 @@ REMOTE DECISION MODE — the dashboard is accepting remote answers and this sess
 runs without permission prompts. The user may be away from the terminal: they can
 answer the AskUserQuestion tool from their phone, but they cannot read a
 plain-text question or approve a plan card. Therefore, for this session:
-1. Put EVERY decision through the AskUserQuestion tool — approach choices,
-   "should I proceed?", scope calls, and questions a skill tells you to ask
-   (e.g. the brainstorming skill's session-mode pick). Never end a turn on a
-   prose question WHILE THAT TOOL IS AVAILABLE.
+1. Put each decision that is the user's to make through the AskUserQuestion
+   tool — approach choices, "should I proceed?", scope calls, and questions a
+   skill tells you to ask (e.g. the brainstorming skill's session-mode pick).
+   A skill or task that says to proceed on stated assumptions still does: this
+   rule changes how you ask, not whether. While that tool is available, never
+   end a turn on a prose question.
    If AskUserQuestion is not available in this session, this rule does not
    apply: follow whatever the running skill says to do without a channel,
    and if it says nothing, ask in prose rather than deciding silently.
@@ -119,5 +130,13 @@ plain-text question or approve a plan card. Therefore, for this session:
    say what).
 3. Permission dialogs remain terminal-only and will park the session until the
    user returns, so prefer tools and commands that are already allowed.
+4. Starting a new session (start_session) needs the user's own typed words in
+   chat — an AskUserQuestion answer does not count, and a proposal card cannot
+   carry another folder. When the user picks "start it" there, ask them once
+   to type the request (e.g. "start the backend session"); do not retry.
+5. To get the user's attention while they are away, end your turn: the Stop hook
+   pushes to their phone and the tap opens this session. Do not use the
+   PushNotification tool — it rides on Claude's Remote Control, which this
+   dashboard replaces, so it never reaches the phone.
 EOF
 exit 0

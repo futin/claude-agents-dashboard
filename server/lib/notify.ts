@@ -38,7 +38,8 @@ import { scanSessions } from './scan.js';
 import { getSettings } from './settings.js';
 import { staleEnvKeys } from './config.js';
 import type { Config } from './config.js';
-import type { NotifyEvent, NotifyPolicy } from '../../shared/types.js';
+import type { NotifyEvent, NotifyPolicy, RoutineRun } from '../../shared/types.js';
+import type { UsageAlertKind } from './usage-alerts.js';
 
 /**
  * Permission modes that count as "running unattended".
@@ -134,14 +135,20 @@ const PHRASE: Record<NotifyEvent, string> = {
   question: 'question waiting',
   plan: 'plan waiting for review',
   permission: 'permission dialog open',
-  stop: 'task finished'
+  stop: 'task finished',
+  'routine-failed': 'routine failed',
+  'usage-limit': '5-hour limit reached',
+  'usage-reset': '5-hour limit reset'
 };
 
 const TAGS: Record<NotifyEvent, string> = {
   question: 'question',
   plan: 'clipboard',
   permission: 'lock',
-  stop: 'white_check_mark'
+  stop: 'white_check_mark',
+  'routine-failed': 'warning',
+  'usage-limit': 'no_entry',
+  'usage-reset': 'arrows_counterclockwise'
 };
 
 let sender: Sender | null = null;
@@ -251,6 +258,18 @@ export function clickUrl(config: Config, sessionId: string): string {
   return `${config.publicUrl}/?session=${encodeURIComponent(sessionId)}`;
 }
 
+/** Where a routine push lands: the Routines view with that run's fold open. Empty without a public URL, like {@link clickUrl}. */
+export function routineClickUrl(config: Config, runId: string): string {
+  if (!config.publicUrl) return '';
+  return `${config.publicUrl}/?view=routines&run=${encodeURIComponent(runId)}`;
+}
+
+/** A usage alert's phone tap-through: the Usage view. `''` without a public URL. */
+export function usageClickUrl(config: Config): string {
+  if (!config.publicUrl) return '';
+  return `${config.publicUrl}/?view=usage`;
+}
+
 /**
  * The desk push's tap-through: a page that closes the tab it opened in.
  *
@@ -287,10 +306,20 @@ export function routePush(
   thresholdSecs: number,
   readIdle: () => number | null
 ): { topic: string; click: string; desk: boolean } {
+  return routeTo(config, clickUrl(config, sessionId), thresholdSecs, readIdle);
+}
+
+/** `routePush` with the phone's tap-through already chosen, so a push that has no session id (a routine run) shares the desk decision. */
+function routeTo(
+  config: Config,
+  phoneClick: string,
+  thresholdSecs: number,
+  readIdle: () => number | null
+): { topic: string; click: string; desk: boolean } {
   if (config.ntfyTopicDesk && atDesk(readIdle(), thresholdSecs)) {
     return { topic: config.ntfyTopicDesk, click: deskClickUrl(config), desk: true };
   }
-  return { topic: config.ntfyTopic, click: clickUrl(config, sessionId), desk: false };
+  return { topic: config.ntfyTopic, click: phoneClick, desk: false };
 }
 
 /**
@@ -390,6 +419,66 @@ export function maybeSend(
     void Promise.resolve(result).catch(() => { /* fire-and-forget stays that way */ });
   } catch {
     /* a notification must never break the request that triggered it */
+  }
+}
+
+/**
+ * The routine sibling of {@link maybeSend}: a failed run instead of a session. Same master switch, per-event checkbox, desk/phone routing and transport,
+ * but exempt from `requireAfk`, `requireRemoteAnswer` and `requireAutoMode` — those gate interactive sessions and a 22:00 job has none. `title` and `body`
+ * come from `pushableEvents`; this only delivers. Returns whether a push was handed to the transport, and never throws.
+ */
+export function sendRoutineEvent(event: { run: RoutineRun; title: string; body: string }, config: Config): boolean {
+  try {
+    if (!config.ntfyTopic) return false;
+    const settings = getSettings();
+    const open = { ...settings.notify, requireRemoteAnswer: false, requireAfk: false, requireAutoMode: false };
+    const idle = (): number | null => (idleSource ?? readIdleSecs)();
+    if (!shouldNotify('routine-failed', open, { remoteAnswer: false, thresholdSecs: settings.idleSecs, readIdle: idle })) return false;
+
+    const route = routeTo(config, routineClickUrl(config, event.run.id), settings.idleSecs, idle);
+    const result = deliver({ title: event.title, body: event.body, tags: TAGS['routine-failed'], click: route.click, topic: route.topic }, config);
+    void Promise.resolve(result).catch(() => { /* fire-and-forget stays that way */ });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+const USAGE_EVENT: Record<UsageAlertKind, 'usage-limit' | 'usage-reset'> = { reached: 'usage-limit', reset: 'usage-reset' };
+
+/** The usage alerts' gate: topic, master switch and the event's checkbox — the session-only `require*` clauses do not apply, as for routines. */
+function usageOpen(event: 'usage-limit' | 'usage-reset', config: Config): { idleSecs: number; idle: () => number | null } | null {
+  if (!config.ntfyTopic) return null;
+  const settings = getSettings();
+  const open = { ...settings.notify, requireRemoteAnswer: false, requireAfk: false, requireAutoMode: false };
+  const idle = (): number | null => (idleSource ?? readIdleSecs)();
+  if (!shouldNotify(event, open, { remoteAnswer: false, thresholdSecs: settings.idleSecs, readIdle: idle })) return null;
+  return { idleSecs: settings.idleSecs, idle };
+}
+
+/** Would a usage alert of this kind go out now? The detector records the answer, so a hit seen with the checkbox off never earns a reset. */
+export function usageCanSend(kind: UsageAlertKind, config: Config): boolean {
+  try {
+    return usageOpen(USAGE_EVENT[kind], config) !== null;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * The usage sibling of {@link sendRoutineEvent}: same gate and desk/phone routing, the phone tapping through to the Usage view. Returns whether a push was
+ * handed to the transport, and never throws.
+ */
+export function sendUsageEvent(event: { kind: 'usage-limit' | 'usage-reset'; title: string; body: string }, config: Config): boolean {
+  try {
+    const gate = usageOpen(event.kind, config);
+    if (!gate) return false;
+    const route = routeTo(config, usageClickUrl(config), gate.idleSecs, gate.idle);
+    const result = deliver({ title: event.title, body: event.body, tags: TAGS[event.kind], click: route.click, topic: route.topic }, config);
+    void Promise.resolve(result).catch(() => { /* fire-and-forget stays that way */ });
+    return true;
+  } catch {
+    return false;
   }
 }
 

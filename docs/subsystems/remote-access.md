@@ -48,6 +48,24 @@ The switch is itself a write (`POST /api/settings`): a tailnet device that turns
 always `local`, can turn it back on. Turn it off and use the token if you **share the tailnet**: tagged devices and users of other tailnets this machine is
 shared with have tailnet addresses, and are trusted while it is on.
 
+**Two kinds of write.** Every route behind the write gate is one of these, and the docs use the two terms in exactly this sense (`test/write-paths.test.ts`
+pins the split against `server/api.ts`):
+
+- **Session write path** — the remote-answer switch (`REMOTE_ANSWER`, or the runtime pill) is checked *before* the gate, and off means 404. There are **four**,
+  counted by feature: [answer](remote-answer.md), [plan](remote-plan.md), [message](remote-message.md) and [spawn](spawn.md) (start and both stops).
+  `POST /api/transcribe` ([dictation](dictation.md)) rides the switch too but acts on no session, so it is not a fifth path: its only consumers are the reply and
+  spawn composers.
+- **Gate-only write** — the write gate and nothing else: `POST /api/settings`, `POST /api/remote-answer`, the three [push](push-notify.md) routes
+  (`permissions/notify`, `notify/event`, `notify/test`), `POST /api/pins`, `POST /api/pins/order`, `POST /api/open-folder`, `POST /api/git-fetch`,
+  `POST /api/git-quick`, `POST /api/codegraph/run`, and the routine writes: `POST /api/routines`, `PUT`, `PATCH` and `DELETE /api/routines/:name`,
+  `POST /api/routines/reconcile`, `POST /api/routines/:name/run`, `…/:name/stop` and `POST /api/routines/reveal`. Those also answer `409 not-owner` on a
+  server that does not own the machine's routines; `POST /api/routines/validate` is read-only and sits outside the gate.
+
+Gate-only is the intended posture for that second set, not an oversight. The switch is a runtime kill switch for *acting on sessions remotely*, not an auth
+boundary — the gate above is the boundary. `POST /api/settings` and `POST /api/remote-answer` cannot sit behind it, or turning the switch off would lock out
+turning it back on. The push routes must keep working with remote answering off, because push notification is independent of it. Pins, pin order, open folder,
+git fetch, quick pull and push, codegraph runs and routines touch no session — a Run now starts a new headless one, never acts on one.
+
 **Resolving the peer.** `resolvePeer(remoteAddress, headers)` (`server/lib/origin.ts`) classifies the socket address. A non-loopback socket is the answer
 outright: nothing such a client sends is consulted. A loopback socket means a process on this machine, possibly a proxy, so `X-Forwarded-For` is walked **from
 the right**: loopback entries (another local hop) are skipped, the first other entry is the peer, and an entry that is not an address is `unknown` (fail

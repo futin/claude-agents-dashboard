@@ -5,7 +5,7 @@ import { HeaderAccount } from './components/HeaderAccount';
 import { ReleasesDrawer } from './components/ReleasesDrawer';
 import { SideRail } from './components/SideRail';
 import { SessionsView } from './components/SessionsView';
-import { deepLinkSession, deepLinkView, takeDeepLinkManagementTab } from './lib/deepLink';
+import { deepLinkRun, deepLinkSession, deepLinkView, sectionForView, takeDeepLinkTab } from './lib/deepLink';
 import { LAST_SEEN_KEY } from './lib/releases';
 import { isSection, wrapClass, type Section } from './lib/sections';
 import { useAccount } from './hooks/useAccount';
@@ -20,6 +20,7 @@ const ConfigsView = lazy(() => import('./components/configs/ConfigsView'));
 const AnalyticsView = lazy(() => import('./components/analytics/AnalyticsView'));
 const UsageView = lazy(() => import('./components/usage/UsageView'));
 const ManagementView = lazy(() => import('./components/management/ManagementView'));
+const RoutinesView = lazy(() => import('./components/routines/RoutinesView'));
 const SettingsView = lazy(() => import('./components/settings/SettingsView'));
 
 export function App() {
@@ -42,22 +43,26 @@ function AppShell() {
   // navigation is normal and the last section is still remembered for next time.
   // A `?session=` deep link — a tapped push notification — beats both: it exists
   // only to put you on that session's chat. `?view=git` — Lookout's Git pending
-  // tile — does the same for Management › Git.
+  // tile — does the same for Management › Git, `?view=routines` — a failed run's push — for Routines, and `?view=usage` — a usage-limit push — for Usage.
   // `isSection` filters a value left over from a release that had a section
   // this one doesn't (the removed Guides tab), which would otherwise render
   // the final `else` branch — Settings — instead of the sessions list.
   const [section, setSection] = useState<Section>(() => {
     if (deepLinkSession()) return 'sessions';
-    if (deepLinkView() === 'git') return 'management';
-    const want = settings.landing === 'last' ? stored : settings.landing;
+    const view = deepLinkView();
+    if (view) return sectionForView(view);
+    const last = (stored as string) === 'schedules' ? 'routines' : stored; // the section's id before Schedules became Routines
+    const want = settings.landing === 'last' ? last : settings.landing;
     return isSection(want) ? want : 'sessions';
   });
 
   // The sub-view is a setting, so it is written after the first render, not in the initializer above. `update` changes with every settings write, so
-  // this effect re-runs; `takeDeepLinkManagementTab` answers only once, or a later pick of Pinned would snap back to Git.
+  // this effect re-runs; `takeDeepLinkTab` answers only once, or a later pick of Pinned would snap back to Git. A routines link with `&run=` opens on
+  // Runs, where that run's fold is.
   useEffect(() => {
-    const tab = takeDeepLinkManagementTab();
-    if (tab) update({ managementTab: tab });
+    const tab = takeDeepLinkTab();
+    if (tab === 'git') update({ managementTab: 'git' });
+    else if (tab === 'routines') update({ routinesTab: deepLinkRun() ? 'runs' : 'jobs' });
   }, [update]);
 
   const change = (s: Section): void => {
@@ -117,6 +122,10 @@ function AppShell() {
             <div className={wrap}>
             {section === 'sessions' ? (
               <SessionsView onLink={setLink} />
+            ) : section === 'routines' ? (
+              <Suspense fallback={<div className="an-empty">loading…</div>}>
+                <RoutinesView />
+              </Suspense>
             ) : section === 'management' ? (
               <Suspense fallback={<div className="an-empty">loading…</div>}>
                 <ManagementView />

@@ -118,6 +118,19 @@ export function run(): number {
     assert.match(rule.slice(0, rule.indexOf('`client/dist/`')), /lib\/git-fetch\.ts/);
   })) p++; else f++;
 
+  if (test('.claude/CLAUDE.md zero-deps rule names lib/git-quick.ts, which launches fetch, merge --ff-only and push', () => {
+    const md = fs.readFileSync(path.join(root, '.claude/CLAUDE.md'), 'utf8').replace(/\s+/g, ' ');
+    const rule = md.slice(md.indexOf('Keep new deps out of'));
+    assert.match(rule.slice(0, rule.indexOf('`client/dist/`')), /lib\/git-quick\.ts/);
+  })) p++; else f++;
+
+  if (test('.claude/CLAUDE.md zero-deps rule names lib/routine-reconcile.ts and lib/routine-store.ts, which launch launchctl, crontab, pgrep, ps, sysctl', () => {
+    const md = fs.readFileSync(path.join(root, '.claude/CLAUDE.md'), 'utf8').replace(/\s+/g, ' ');
+    const rule = md.slice(md.indexOf('Keep new deps out of'));
+    const head = rule.slice(0, rule.indexOf('`client/dist/`'));
+    for (const name of ['lib/routine-reconcile.ts', 'lib/routine-store.ts', '`launchctl`', '`crontab`', '`pgrep`', '`ps`', '`sysctl`']) assert.ok(head.includes(name), name);
+  })) p++; else f++;
+
   if (test('no reference doc claims the server makes a single outbound call', () => {
     const docs = ['README.md', '.claude/CLAUDE.md', 'docs/overview.md'];
     const subsystems = path.join(root, 'docs', 'subsystems');
@@ -129,3 +142,5 @@ export function run(): number {
   console.log(`\n  ${p} passed, ${f} failed`);
   return f;
 }
+
+if (import.meta.url === `file://${process.argv[1]}`) process.exit(run() > 0 ? 1 : 0);

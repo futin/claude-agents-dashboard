@@ -18,12 +18,12 @@ override it (see `dashboard.section` below).
   are *data*, not a fixed enum, so a persisted selection can outlive the sessions it named
   (the project went quiet, or fell out of the `limit`/`lookback` window). Left alone every row
   fails the filter and the list empties with no sign that a filter did it.
-  `pruneProjects(selected, sessions)` in `lib/filterSort.ts` (pure, unit-tested)
-  drops selected names a payload does not contain; an effect in `SessionsView.tsx` applies it
+  `pruneProjects(selected, available)` in `lib/filterSort.ts` (pure, unit-tested)
+  drops selected names `availableProjects(data)` does not contain — the server's lookback-wide `projects`, not the rows, which `?project=` narrowed; an effect in `SessionsView.tsx` applies it
   on every poll, so losing the last surviving name lands back on "All projects". An **empty
-  payload prunes nothing** — no rows is no evidence, and the first poll of a mount arrives
-  before any rows do. The tradeoff is deliberate: a filtered project that momentarily drops
-  out of the top-`limit` ranking clears the filter rather than showing an empty list.
+  list prunes nothing** — no projects is no evidence, and the first poll of a mount arrives
+  before any rows do. Since the project facet moved server-side, only falling out of the `lookback` window clears it; dropping out of the top-`limit`
+  ranking no longer can.
 - **The empty state names its own cause** — `sessions/EmptyState.tsx` has two empty branches, not one.
   `describeEmpty(sessions, view, nowMs)` in `lib/filterSort.ts` runs on the *unfiltered*
   payload and returns `{ payloadEmpty, total, culprits }`, where `culprits` lists which of
@@ -40,7 +40,7 @@ override it (see `dashboard.section` below).
   `dashboard.settings` (theme, density, text scale, refresh rate, scan knobs, landing tab
   — see [settings](settings.md); re-clamped on every read by `clampSettings`, and the
   one key an inline script in `index.html` also reads, pre-paint, to avoid a theme flash);
-  `dashboard.section` (Sessions | Usage | Management | Claude Configs | Analytics | Settings —
+  `dashboard.section` (Sessions | Routines | Usage | Management | Claude Configs | Analytics | Settings —
   the `Section` union in `lib/sections.ts`, switched on in `App.tsx`) — always
   *written* on navigation, but only *read* on open when Settings → landing is `last`; any
   other value pins the opening section, resolved in the `useState` initializer so there's no
@@ -74,7 +74,7 @@ override it (see `dashboard.section` below).
   coerced on a narrow window — see [settings](settings.md));
   `management.syncRuns` (the Git Sync runs this device launched, keyed by repo — see [git-stats](git-stats.md); live state, so Reset leaves it);
   `dashboard.releases.lastSeen` (the newest release this browser has seen, a raw version string, not JSON, that ui-kit's `useWhatsNew` reads and writes
-  under `LAST_SEEN_KEY` from `lib/releases.ts` rather than through `usePersistedState` — see [releases](releases.md); not in `OWNED_KEYS`, so Reset leaves it too).
+  under `LAST_SEEN_KEY` from `lib/releases.ts` rather than through `usePersistedState` — see [releases](releases.md); in `OWNED_KEYS`, so Reset clears it, and the next load reseeds the newest without a dot).
 - **Client-only, zero deps** — no backend, and nothing here is shareable/bookmarkable by
   design. The URL params in the app are the opposite of persistence: `?session=<id>`, the
   deep link a tapped push notification opens (`lib/deepLink.ts`, put in ntfy's `Click` header
@@ -83,7 +83,11 @@ override it (see `dashboard.section` below).
   `SessionsView` opening the drawer), and strips it from the URL via `history.replaceState`,
   precisely so a refresh or a bookmark does *not* replay it. Its sibling `?view=git` is the same kind of one-shot: Lookout's Git pending tile opens it,
   `deepLinkView()` reads it from the same single memoised parse (so neither caller can strip the other's param first), and `App.tsx` forces the
-  `management` section and sets `managementTab` to `git` — once per load (`takeDeepLinkManagementTab`), and not at all when a `?session=` beside it wins.
+  `management` section and sets `managementTab` to `git` — once per load (`takeDeepLinkTab`), and not at all when a `?session=` beside it wins.
+  `?view=routines` is the third: it lands on the Routines section instead, on Jobs, or on Runs when the link carries a run (`routinesTab`). A failed
+  routine run's push adds `&run=<id>` (`server/lib/notify.ts` `routineClickUrl`): `readRunParam` takes it in the same single parse, behind a
+  `[A-Za-z0-9._-]{1,128}` shape check, `deepLinkRun()` keeps answering after the strip, and Routines › Runs opens with that run's fold open.
+  See [routines](routines.md#notifications).
 - **Which of the five shapes draws the list is deliberately NOT in `dashboard.view`.** It
   used to be a `View` field, which made one click in the switcher the shape every future load
   opened in. The shape is not a filter, and it does not belong in the object the filters are
@@ -138,12 +142,12 @@ override it (see `dashboard.section` below).
   `selectedId` / `expanded`) stay ephemeral — session IDs churn, so restored expansions and
   drawers would mostly be stale.
 - **Clearing them all** — Settings → Local › Reset this browser removes every key listed above
-  (`OWNED_KEYS` in `hooks/useSettings.tsx`) **except `dashboard.answerToken`**, `management.syncRuns` and `dashboard.releases.lastSeen`, and restores the
+  (`OWNED_KEYS` in `hooks/useSettings.tsx`) **except `dashboard.answerToken`** and `management.syncRuns`, and restores the
   defaults. The token is kept on purpose: it is a credential
-  rather than view state, and Reset is not a sign-out, so clearing it would silently disarm every write path (see [remote-answer](remote-answer.md)). It
+  rather than view state, and Reset is not a sign-out, so clearing it would silently disarm every route behind the write gate for a browser that needs the token (see [remote-access](remote-access.md#who-may-write)). It
   touches nothing on the server and nothing in `~/.claude`. Add a view-state key here and it belongs in that list too; the test in
-  `test/client-settings.test.ts` fails if it is missing — but it finds keys by scanning for `usePersistedState('<key>'` calls, so a key written
-  through `localStorage` directly (as `dashboard.releases.lastSeen` is) escapes it.
+  `test/client-settings.test.ts` fails if it is missing. It finds keys by scanning for `usePersistedState('<key>'` calls, and also the first argument of every
+  `localStorage.setItem(` and every `storageKey:` handed to a ui-kit hook, a literal or a `const` it resolves — which is how it sees `dashboard.releases.lastSeen`.
 
 <!-- docs-sync:
   sources:

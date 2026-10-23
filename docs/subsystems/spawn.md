@@ -1,4 +1,4 @@
-# Spawning a new session (the fourth write path)
+# Spawning a new session (the fourth session write path)
 
 The Board card's **+ New session** button starts a brand-new Claude Code session from the
 dashboard: pick a recent (or pinned) project, write or dictate a prompt, tap `Launch`. The server
@@ -20,7 +20,7 @@ trip**; the ask (`PreToolUse`/`AskUserQuestion`) and plan hooks having `630` doe
 `Stop` does. This is the design spec's Risk 4. Editing that file is a host-side step, on
 purpose outside this repo.
 
-The three earlier write paths — [remote-answer](remote-answer.md),
+The three earlier session write paths — [remote-answer](remote-answer.md),
 [remote-plan](remote-plan.md), [remote-message](remote-message.md) — are all
 **hook-held**: a session is already running, a hook blocks on something, the browser
 resolves it. The dashboard has never *initiated* anything; it has only ever answered
@@ -198,9 +198,9 @@ same permission ladder and ceiling, prompt still stdin-only — with these diffe
      badge colour. Neither check can see a session whose argv carries no id at all.
 
   The client-side gate (`resumeEligible`, `client/src/lib/resume.ts`) hides the composer
-  while anything is held, while `working`, and whenever `Session.stopState` is present
-  (i.e. this server holds a live child) — but the server checks are the boundary, the gate
-  is UX. `incomplete` stays eligible on purpose: it is the ordinary "your turn" state and
+  while anything is held, while `working`, whenever `Session.stopState` is present
+  (i.e. this server holds a live child), and whenever `Session.processLive` is (below) —
+  but the server checks are the boundary, the gate is UX. `incomplete` stays eligible on purpose: it is the ordinary "your turn" state and
   the reason the feature exists.
 - **`name` and `--remote-control` are forced off** on a resume: renaming or
   account-registering a *resumed* session are unverified CLI combos, so they are never
@@ -355,7 +355,8 @@ single source of truth, the same division that keeps `pending.ts`/`plans.ts`/
 
 **A session this dashboard spawned can be stopped from its row, at any point in its life** —
 not just during the ~3s pre-adoption window the original endpoint reached. Expand the row and
-the control is under the panel: `Stop session`, then `Really stop?`.
+the control is under the panel: `Stop session`, then `Really stop?`. The chat drawer's sidecar carries the same control
+(`sessions/SessionStopControl.tsx`, see [chat](chat.md)).
 
 ### The lifecycle: `launching → running → gone`
 
@@ -473,6 +474,19 @@ is indistinguishable from a live one, and the failure mode is signalling an inno
 After a restart the row simply carries no `stopState` and shows no button; ending that
 process is a terminal job (`kill <pid>`).
 
+### `processLive`, the live process this server cannot signal
+
+`stopState` covers exactly the children this process still holds a handle for. Any other live headless `claude -p` — an orchestrator or routine run, a second dashboard,
+or **anything spawned before the last restart** (`tsx watch` restarts the dev API on every server-side edit) — carries no `stopState`, reads `idle`/`incomplete` once its
+turn ends, and used to get the resume composer, whose POST then met the `ps` scan's 409. A pending background `Monitor` is the usual reason the process outlives its turn.
+
+`scanSessions` therefore probes `liveSessionIds()` once per poll (the same cost class as its two other `ps` calls; `skipProcScan` skips it, an injected
+`ScanOptions.liveSessionIds` replaces it) and `sessionFromRef` sets `Session.processLive` to `true` for a `dashboard` row with no `stopState` whose id is in it. Absent,
+never `false`, like `stopState`, and absent on a `null` probe: that fails open, so the server-side 409 stays the safety net. `resumeEligible` returns `false` for it, and
+`ChatDrawer` shows a `still running` note in the composer's place (`stillRunningNote`); the composer returns by itself on the first poll after the process exits. The
+409 itself reaches the user as the same plain sentence (`resumeErrorText`), for the up-to-3s gap between a poll and a click. There is no Stop control for these rows:
+signalling a pid read off `ps` is a new security surface (pid reuse, killing by pattern).
+
 ### The two routes
 
 `POST /api/sessions/:id/stop` is what the button calls. `POST /api/spawn/:id/stop` keeps its
@@ -525,15 +539,33 @@ permission triplet carries a line under it naming that ceiling
 (`host ceiling · <mode> or below (SPAWN_MAX_PERMISSION)`) instead of hiding the reason in
 a `title` attribute.
 
+## Routine runs: the other detached launch
+
+[Routines](routines.md)' **Run now** (`POST /api/routines/:name/run`, `server/lib/routine-run.ts`) is the second thing the dashboard initiates, and it is
+not a session launch: it spawns the plugin's `run-routine.mjs` wrapper under `process.execPath`, detached with stdio ignored, `--trigger manual`, and the wrapper
+is what launches `claude -p` for each step. It goes through `spawn.ts`'s exported `spawnProcess`, so `setSpawner` — the seam this file's tests use — is also the
+one seam for it, and nothing about `launch`'s own contract changes. Three differences from a session launch matter here:
+
+- **The environment is `routineEnv(config)` and nothing else** — `PATH`, `HOME`, `USER`, `LOGNAME`, `CLAUDE_BIN`, `SPAWN_MAX_PERMISSION`, `SYNC_PERMISSION_MODE`, `ROUTINE_MACHINE`,
+  `ROUTINES_DIR` — the same list an installed launchd/cron job bakes, so a manual run and a 22:00 run see one environment. The server's own env, which carries
+  `CLAUDE_CODE_ENTRYPOINT` and the markers `launch` strips, never reaches the child.
+- **The permission ceiling is the wrapper's, from the baked `SPAWN_MAX_PERMISSION`**, applied with the same clamp as `clampPermission` — except `bypassPermissions`
+  is refused outright for a routine, never clamped down (the validator and the wrapper both say so).
+- **The row is a normal one afterwards.** Each claude step runs with a `--session-id` the run log records, so its transcript opens in the chat drawer like any
+  other; the run is not a `dashboard`-surface spawn and is not in `listLaunching`. The `CLAUDE_DASHBOARD_ROUTINE` marker keeps the [reply window](remote-message.md)
+  and the other hooks off it.
+
 ## The pieces
 
 | Piece | What it does |
 |---|---|
 | `server/lib/spawn.ts` | pure `buildSpawnArgs`/`clampPermission`/`parseSpawnRequest`, plus the impure `probeSpawn`/`launch`/`listLaunching`/`adoptLaunched`/`stopSession`/`forceStopSession`/`escalateStop`/`stopStates`/`hasLiveChild` and the RAM-only store |
+| `spawnProcess` (`server/lib/spawn.ts`) | the `Spawner` seam as a function, exported for `routine-run.ts`'s wrapper launch; see [Routine runs](#routine-runs-the-other-detached-launch) |
 | `POST /api/spawn` | `serveSpawn` — validates, resolves the project, launches, returns `{sessionId}` immediately |
 | `POST /api/spawn/:id/stop` | `serveSpawnStop` — SIGTERM + delete for a `launching` entry; delegates to `stopSession` |
 | `POST /api/sessions/:id/stop` | `serveSessionStop` — the row button's route; graceful by default, `{force:true}` for SIGKILL |
 | `client/src/lib/stopControl.ts` | the pure decision function behind the Stop control: render or not, the label, and which POST it sends |
+| `client/src/components/sessions/SessionStopControl.tsx` | the Stop control itself, rendered by the expanded row and the chat drawer's sidecar |
 | `client/src/hooks/useStopSession.ts` | POSTs the stop, same bearer-token pattern as `useSpawn` |
 | `serveSessions` wiring | calls `adoptLaunched(ids)` then `listLaunching()` before every `/api/sessions` response, so `launching` rides the poll the client already makes |
 | `serveHealth` wiring | publishes `spawnAvailable` (`probeSpawn`) and `spawnMaxPermission` (`config.spawnMaxPermission`) |
@@ -556,8 +588,8 @@ a `title` attribute.
 | `POST` | `/api/spawn/:id/stop` | 200 `{stopped: true}` for a still-`launching` entry, or `{stopping: true}` if that id has since become a running session (it delegates to `stopSession`); 400 bad id shape; 403 bad token; 404 remote answers off *or* no live launch for that id |
 | `POST` | `/api/sessions/:id/stop` | 200 `{stopping: true}` (graceful) or `{stopped: true}` (`{"force": true}`); 400 bad id shape, bad path encoding, *or* a present-but-unparseable body — an absent/empty body is normal; 403 bad token; 404 remote answers off *or* no live session for that id; 405 + `Allow: POST` for any other method |
 
-All three sit behind the same write gate, `refuseWrite` (`api.ts`), the other write paths
-use — this machine and a trusted tailnet pass with no token, anyone else needs
+All three sit behind the same write gate, `refuseWrite` (`api.ts`), that every route behind the write gate
+uses — this machine and a trusted tailnet pass with no token, anyone else needs
 `ANSWER_TOKEN` (read-only when none is set) — and behind the same remote-answer toggle (below).
 
 **The concurrency cap.** `MAX_LAUNCHING` (4, in `server/lib/spawn.ts` beside the other
@@ -648,14 +680,14 @@ This is the widest write surface in the app, in the same plain terms
 on, anyone the write gate trusts — every device on your tailnet while tailnet trust is on
 (the default), or anyone holding a leaked `ANSWER_TOKEN` — can start a real Claude Code session — running real tools, in a real
 project directory — on this machine. That is a materially different thing from the
-other three write paths, which can only ever act on a session that is already running
+other three session write paths, which can only ever act on a session that is already running
 and already asked for something. It is the honest reading of what "spawn" means, not an
 edge case of it.
 
 Four things bound it, and none of them is new machinery — they're the same posture the
 rest of the app already takes, aimed at a bigger target:
 
-- **The remote-answer toggle covers it, like every other write path that acts on a session.**
+- **The remote-answer toggle covers it, like the other three session write paths.**
   `serveSpawn`, `serveSpawnStop` and `serveSessionStop` all answer
   `404 {error: 'remote answers disabled'}` when
   `getState(config).remoteAnswer` is false — flipping the status-plate switch off, or setting
@@ -718,6 +750,7 @@ new reason:
     - client/src/components/ChatDrawer.tsx
     - client/src/components/SessionsView.tsx
     - client/src/components/sessions/atoms.tsx
+    - client/src/components/sessions/SessionStopControl.tsx
     - client/src/hooks/useSpawn.ts
     - client/src/hooks/useStopSession.ts
     - client/src/lib/resume.ts

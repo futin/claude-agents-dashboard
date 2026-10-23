@@ -316,12 +316,14 @@ code,kbd,samp,pre{font-family:inherit}
 .foot i{flex:none;width:7px;height:7px;border-radius:999px;background:var(--green-solid)}
 .foot.off{color:var(--red)}
 .foot.off i{background:var(--red)}
-/* The version chip (docs/subsystems/releases.md): the last thing in the rail, under the live line when there is one. Sinks to the rail's foot by itself
-   on sections with no live line; in the phone menu it is the menu's last row. A pill on the recessed well, the board's own ink — status lives in the
-   dot alone, cyan for a release not opened yet. */
-.rel-chip{position:relative;display:inline-flex;align-items:center;gap:6px;align-self:flex-start;margin:auto 0 0 8px;min-height:28px;font-family:var(--font);font-size:12px;font-weight:500;color:var(--ink2);background:var(--steel);border:1px solid var(--hairline);border-radius:999px;padding:4px 10px;cursor:pointer;transition:color .15s,border-color .15s}
+/* The version chip's place (docs/subsystems/releases.md): the last thing in the rail, under the live line when there is one. Sinks to the rail's foot by
+   itself on sections with no live line; in the phone menu it is the menu's last row. Placement only — the pill is ui-kit's (`.uk-chip`), the same in every
+   app, and it takes no class, hence this wrapper. Below `md` ui-kit's phone shape draws a 44px tap target around the 28px pill with a `::before` that
+   overhangs it by 8px above and below; the wrapper is that tall so the overhang sits inside it, because the phone menu (`.rail`) scrolls and would clip
+   whatever stuck out past its padding. */
+.rel-chip{display:flex;align-items:center;align-self:flex-start;min-height:44px;margin:auto 0 0 8px}
 .foot+.rel-chip{margin-top:12px}
-.rel-chip:hover{color:var(--ink);border-color:var(--hairline2)}
+@media (min-width:768px){.rel-chip{min-height:0}}
 /* A phone widens its layout viewport to fit anything that overflows sideways,
    and `position:fixed` panels are sized against that widened box: the chat
    drawer's close button and its footer land off the visible screen, with no
@@ -952,19 +954,22 @@ code,kbd,samp,pre{font-family:inherit}
    add one. Qualified with `.s-card` on purpose — the `md` tier re-declares
    `.s-card{padding:24px}` further down, and a bare `.ledger` (same specificity,
    earlier in the file) loses to it above 768. Same shape as `.s-card.quiet`. */
-.s-card.ledger{padding:0 0 16px;overflow:hidden}
+.s-card.ledger{padding:0 0 16px;overflow:hidden;container-type:inline-size}
 .ledger table{width:100%;border-collapse:collapse;font-size:13px;table-layout:fixed}
 .ledger th{font-size:12px;font-weight:400;color:var(--ink2);text-align:left;padding:14px 12px;border-bottom:1px solid var(--hairline);white-space:nowrap}
 .ledger td{padding:14px 12px;border-top:1px solid var(--hairline);vertical-align:middle;overflow:hidden}
 .ledger tbody tr:first-child td{border-top:0}
 .ledger th:first-child,.ledger td:first-child{padding-left:20px}
 .ledger th:last-child,.ledger td:last-child{padding-right:20px}
-.ledger .c-dot{width:41px}.ledger .c-model{width:90px}.ledger .c-ctx{width:120px}.ledger .c-state{width:84px}.ledger .c-act{width:150px}.ledger .c-last{width:80px}.ledger .c-do{width:104px}
-/* Model column is a tablet-portrait-and-up luxury: at md the ctx bar gets its
-   full 200px back alongside it. Table is `table-layout:fixed`, so a `col`
-   width and a hidden `th`/`td` must always agree or the columns misalign
-   rather than error. */
-.ledger .c-model,.ledger td.model,.ledger th:nth-child(3){display:none}
+/* No below-md tier: List is a wide-only layout (`WIDE_ONLY_LAYOUTS`), so a window under md never draws this table. Its width still swings with the
+   aside and the Width setting, though, so the Project column waits for a 950px table (container query below); until then the fixed columns alone sum to
+   ~750px and would leave Session nothing, and the Session cell's `.repo-sub` line carries repo and branch instead. Narrow, the column collapses to 0px
+   rather than `display:none`: an open row's `.expand` cell spans 9 columns whatever CSS says, so a hidden `col` comes back as an unsized phantom that
+   halves Session and leaves an empty strip down the right edge. Targeted by class, never `nth-child`, which silently picks the wrong column once one
+   is added. */
+.ledger .c-proj{width:0}
+.ledger th.proj,.ledger td.proj{padding:0;overflow:hidden;visibility:hidden}
+.ledger .c-dot{width:41px}.ledger .c-model{width:88px}.ledger .c-ctx{width:120px}.ledger .c-state{width:84px}.ledger .c-act{width:110px}.ledger .c-last{width:80px}.ledger .c-do{width:104px}
 .ledger tbody tr:not(.launching):not(.expand){cursor:pointer}
 .ledger tbody tr:not(.launching):not(.expand):not(.selected):hover td{background:color-mix(in srgb,var(--strip-hi) 50%,transparent)}
 /* Open row + its body read as one block: same fill through the hover, one
@@ -977,7 +982,8 @@ code,kbd,samp,pre{font-family:inherit}
 .ledger .name{font-size:14px;font-weight:500;letter-spacing:-.01em;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .ledger .name .ag-pill{margin-left:6px;vertical-align:1px}
 .ledger .sub{font-size:12px;color:var(--ink2);margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.ledger td.model{font-size:12px;color:var(--ink2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ledger td.proj .pn{font-size:13px;font-weight:500;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ledger td.model{font-size:13px;font-weight:500;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .ledger .ctx{display:flex;align-items:center;gap:10px}
 .ledger .ctx .bar{flex:1}
 .ledger .ctx .pct{min-width:38px;text-align:right}
@@ -1099,9 +1105,6 @@ code,kbd,samp,pre{font-family:inherit}
   .tiles{grid-template-columns:repeat(2,minmax(0,1fr))}
   .tile.selected{grid-column:span 2}
   .split{grid-template-columns:280px minmax(0,1fr)}
-  .ledger .c-model{display:table-column}
-  .ledger td.model,.ledger th:nth-child(3){display:table-cell}
-  .ledger .c-ctx{width:200px}
   .toolbar{flex-wrap:wrap}
   .toolbar .seg.view>button{padding:7px 12px}
   .toolbar .sortlab{display:inline}
@@ -1132,6 +1135,17 @@ code,kbd,samp,pre{font-family:inherit}
    and narrows the measure again. */
 @media (min-width:1280px){
   .tiles{grid-template-columns:repeat(3,minmax(0,1fr))}
+}
+/* The ledger's text columns grow with the table once it is wide, so spare width spreads across them instead of all landing in Session, which stays
+   the one unsized column and takes what is left (about a third of a 1900px table). A container query, not a viewport tier: the aside and the Width
+   setting decide the table's width, and a 1920px window can still hold a 900px table, where these percentages would leave Session ~165px. */
+@container (min-width:950px){
+  .ledger .c-proj{width:120px}
+  .ledger th.proj,.ledger td.proj{padding:14px 12px;visibility:visible}
+  .ledger .repo-sub{display:none}
+}
+@container (min-width:1200px){
+  .ledger .c-proj{width:13%}.ledger .c-model{width:8%}.ledger .c-ctx{width:15%}.ledger .c-act{width:12%}
 }
 
 /* The lock. 1536px — tier 2xl — is the exact width at which the board stops
@@ -1598,6 +1612,8 @@ code,kbd,samp,pre{font-family:inherit}
 .chat-side .kv{background:var(--strip)}
 /* …which puts the gauge's well back on paper, where --steel is right again. */
 .chat-side .kv .track{background:var(--steel)}
+/* The row's stop control spaces itself with a bottom margin; in the sidecar the column's gap does that. */
+.chat-side .stop-ctl{margin-bottom:0}
 .chat .metric{font-size:24px;font-weight:700;letter-spacing:-.02em;line-height:1.1;color:var(--ink);font-variant-numeric:tabular-nums}
 /* the same 70% threshold the row uses — one context reading, two places */
 .chat .metric.warn{color:var(--amber-text)}
@@ -1793,6 +1809,13 @@ button.qp-min:hover,.qp-minrow:hover .qp-min,.qp-minrow:hover .qp-hint{color:var
 .qp-send:disabled{cursor:default;background:var(--hairline2);color:var(--ink3)}
 .qp-term{height:36px;padding:0 14px;font-family:var(--font);font-size:13px;font-weight:500;color:var(--ink2);background:var(--strip);border:1px solid var(--hairline2);border-radius:12px;cursor:pointer;transition:color .15s,border-color .15s}
 .qp-term:hover:not(:disabled){color:var(--ink);border-color:var(--ink3)}
+/* the wrap_up suggestion under an empty composer: Tab takes it, a tap does too (composer.ts). The key hint is no use without a keyboard. */
+.qp-suggest{align-self:flex-start;display:inline-flex;align-items:center;gap:8px;max-width:100%;min-height:32px;padding:4px 12px;font-family:var(--font);font-size:13px;color:var(--ink2);text-align:left;background:none;border:1px dashed var(--hairline2);border-radius:12px;cursor:pointer;transition:color .15s,border-color .15s}
+.qp-suggest:hover:not(:disabled){color:var(--ink);border-color:var(--ink3)}
+.qp-suggest:disabled{cursor:default;opacity:.6}
+.qp-suggest kbd{flex:none;font-family:var(--font);font-size:11px;color:var(--ink3);padding:1px 6px;border:1px solid var(--hairline2);border-radius:6px}
+.qp-suggest-text{min-width:0;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+@media (pointer:coarse){.qp-suggest kbd{display:none}}
 /* dictation mic — a fixed square in the actions row. Deliberately excluded from
    the phone's flex:1 rule below, so it never stretches to a third of the row. */
 .qp-mic{width:36px;height:36px;flex:none;display:grid;place-items:center;font-family:var(--font);font-size:13px;color:var(--ink2);background:var(--strip);border:1px solid var(--hairline2);border-radius:12px;cursor:pointer;transition:color .15s,border-color .15s,background .15s}
@@ -2228,6 +2251,7 @@ body.pj-dragging,body.pj-dragging *{cursor:grabbing!important;user-select:none}
 .chat-foot .seg>button{flex:1;min-height:32px;text-align:center}
 /* thumb-sized: the option rows are already full-width, the actions are not */
 .qp-send,.qp-term{flex:1;min-height:44px}
+.qp-suggest{min-height:44px}
 .qp-mic{width:44px;height:44px}
 /* the launch modal goes full-screen with the chat one, for the same reason:
    620px with margins does not fit a phone, and the scrim it loses was never
@@ -2299,6 +2323,7 @@ body.pj-dragging,body.pj-dragging *{cursor:grabbing!important;user-select:none}
   .chat-foot .seg{width:auto}
   .chat-foot .seg>button{flex:0 1 auto;min-height:auto;text-align:center}
   .qp-send,.qp-term{flex:0 1 auto;min-height:auto}
+  .qp-suggest{min-height:32px}
   .qp-mic{width:36px;height:36px}
   .spawn-back{padding:40px 24px}
   .spawn{width:620px;max-width:100%;height:auto;max-height:min(820px,100%);border-radius:24px;box-shadow:0 24px 64px var(--shadow2)}
@@ -3086,8 +3111,31 @@ button.chip[aria-pressed="true"]{color:var(--ink);background:var(--strip-hi)}
 .git-sync.on svg{animation:git-spin 1.6s linear infinite}
 .git-sync:disabled{cursor:default;color:var(--ink3)}
 @keyframes git-spin{to{transform:rotate(360deg)}}
-@media (prefers-reduced-motion:reduce){.git-sync.on svg{animation:none}.git-meter[data-tone="live"] .git-meter-fill{animation:none}}
+@media (prefers-reduced-motion:reduce){.git-sync.on svg,.git-split-caret[aria-disabled="true"] svg{animation:none}.git-meter[data-tone="live"] .git-meter-fill{animation:none}}
 .git-sync-note{font-size:12px;color:var(--amber-text);overflow-wrap:anywhere}
+.git-quick-note{font-size:12px;color:var(--ink2);overflow-wrap:anywhere}
+/* The split Sync key (quick pull/push spec §The UI): the plain key on the left, a caret on the right that opens Pull · Push · Sync with Claude. */
+.git-split{flex:none;display:inline-flex;align-items:stretch;gap:1px}
+.git-split>.git-sync{border-top-right-radius:0;border-bottom-right-radius:0}
+.git-split-caret{flex:none;display:inline-flex;align-items:center;justify-content:center;width:22px;height:26px;padding:0;color:var(--ink2);background:var(--sync-paper,var(--strip-hi));border:0;border-radius:0 8px 8px 0;cursor:pointer;transition:color .15s,background .15s}
+.git-split-caret svg{width:11px;height:11px;stroke:currentColor;fill:none;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.git-split-caret:hover:not([aria-disabled="true"]),.git-split-caret[aria-expanded="true"]{color:var(--ink);background:var(--hairline2)}
+.git-split-caret.primary{color:var(--strip);background:var(--ink)}
+.git-split-caret.primary:hover:not([aria-disabled="true"]),.git-split-caret.primary[aria-expanded="true"]{color:var(--strip);background:color-mix(in srgb,var(--ink) 85%,var(--strip))}
+.git-split-caret.on{color:var(--cyan);background:color-mix(in srgb,var(--cyan) 12%,transparent)}
+.git-split-caret.on svg{width:13px;height:13px}
+.git-split-caret[aria-disabled="true"]{cursor:default}
+.git-split-caret[aria-disabled="true"] svg{animation:git-spin 1.6s linear infinite}
+.git-split-caret:focus-visible{outline:2px solid var(--cyan);outline-offset:2px}
+.git-qm{position:fixed;z-index:50;display:flex;flex-direction:column;min-width:240px;max-width:min(320px,calc(100vw - 16px));padding:4px;font-family:var(--font);font-size:12px;background:var(--strip);border:1px solid var(--hairline2);border-radius:10px;box-shadow:0 8px 24px var(--shadow2)}
+.git-qm-item{display:flex;flex-direction:column;align-items:flex-start;gap:2px;width:100%;padding:7px 10px;font:inherit;text-align:left;color:var(--ink);background:transparent;border:0;border-radius:6px;cursor:pointer}
+.git-qm-item:hover:not([aria-disabled="true"]),.git-qm-item:focus{outline:none;background:var(--strip-hi)}
+.git-qm-item:focus-visible{outline:2px solid var(--cyan);outline-offset:-2px}
+.git-qm-item[aria-disabled="true"]{cursor:default;color:var(--ink3)}
+.git-qm-label{font-weight:500}
+.git-qm-sub{font-size:11px;color:var(--ink2);overflow-wrap:anywhere}
+.git-qm-item[aria-disabled="true"] .git-qm-sub{color:var(--ink3)}
+.git-qm-sep{height:1px;margin:4px 6px;background:var(--hairline)}
 /* Inbox | Matrix | Inspector | Branches — the parts they share (management-redesign spec §4.2) */
 .git-panel{background:var(--strip);border-radius:16px;min-width:0}
 .git-gh{font-size:11px;font-weight:500;letter-spacing:.08em;text-transform:uppercase;color:var(--ink3);margin:16px 4px 8px}
@@ -3168,7 +3216,7 @@ button.chip[aria-pressed="true"]{color:var(--ink);background:var(--strip-hi)}
 
 /* Matrix — a row per repo, a column per check, colour only on failure (management-redesign spec §4.4). Wide-only: the table's floor is 760px, and the wrapper
    scrolls it sideways while its own overflow clips the card's corners, as `.s-card.ledger` does. The table is drawn in Sessions › List's language — the
-   `.ledger` values, ported here rather than shared, because `.ledger th:nth-child(3)` hides a column below md: hairline rules, a 41px dot column, name over
+   `.ledger` values, ported here rather than shared, because `.ledger` sizes its columns for a wide-only layout: hairline rules, a 41px dot column, name over
    branch, the open row and its body one --strip-hi block with an --ink bar down the left, pills only where a check fails, `.cbtn`-shaped keys. */
 .git-mx-wrap{padding:0 0 16px;overflow-x:auto}
 .git-mx{width:100%;min-width:760px;border-collapse:collapse;font-size:13px;color:var(--ink)}
@@ -3208,6 +3256,11 @@ button.chip[aria-pressed="true"]{color:var(--ink);background:var(--strip-hi)}
 .git-mx-act .git-key.primary:hover:not(:disabled),.git-mx-act .git-sync.primary:hover:not(:disabled){color:var(--ink)}
 .git-mx-act .git-key.primary:disabled,.git-mx-act .git-sync.primary:disabled{color:var(--amber-ink);opacity:.55}
 .git-mx-act .git-sync.on,.git-mx-act .git-sync.on:hover:not(:disabled){color:var(--cyan);border-color:transparent;background:color-mix(in srgb,var(--cyan) 12%,transparent)}
+.git-mx-act .git-split>.git-sync{border-top-right-radius:0;border-bottom-right-radius:0}
+.git-mx-act .git-split-caret{width:26px;height:30px;border:1px solid var(--hairline2);border-left:0;border-radius:0 12px 12px 0;background:var(--strip);color:var(--ink2)}
+.git-mx-act .git-split-caret:hover:not([aria-disabled="true"]),.git-mx-act .git-split-caret[aria-expanded="true"]{color:var(--ink);border-color:var(--ink3);background:var(--strip)}
+.git-mx-act .git-split-caret.primary,.git-mx-act .git-split-caret.primary:hover:not([aria-disabled="true"]){background:var(--amber-tint);border-color:transparent;color:var(--amber-ink)}
+.git-mx-act .git-split-caret.on{color:var(--cyan);border-color:transparent;background:color-mix(in srgb,var(--cyan) 12%,transparent)}
 /* Cells: a failing check is a pill in `.spill`'s shape (11px, 500, 2px 8px, 12px corners) with the mock's soft colours — the check's own ink on an 11%
    amber (`bad`) or 13% mustard (`meh`) tint — and everything else plain 12px text, `--ink3` (`live` --cyan), with no dot, so the eye goes only where a
    check failed. Scoped to the table and its legend. */
@@ -3280,13 +3333,226 @@ button.chip[aria-pressed="true"]{color:var(--ink);background:var(--strip-hi)}
 
 /* What's new — ui-kit's chip and drawer (docs/subsystems/releases.md), themed by mapping its `--uk-*` properties onto this sheet's tokens. Set on the
    two roots rather than `:root`, so each property resolves against whichever `[data-theme]` the element sits under. Badges are each status token on its
-   own tint; the 14% mixes carry each theme's hue through. Full screen below `md` is ui-kit's `narrow`, passed in from `useNarrow`. */
+   own tint; the 14% mixes carry each theme's hue through. Full screen below `md` is ui-kit's `narrow`, passed in from `useNarrow`. `--uk-ink-muted` is
+   `--ink2`, as in the other two apps: the chip draws its 12px label in it on `--steel`, where `--ink3` measured 3.5-3.9:1 on the four dark themes and
+   `--ink2` 6.7-8.0:1 on all five. Mapping only:
+   `test/ui-kit-guard.test.ts` fails on any other rule on a `.uk-*` class. */
 .uk-chip,.uk-drawer-scrim{
-  --uk-panel-bg:var(--strip);--uk-ink:var(--ink);--uk-ink-muted:var(--ink3);--uk-hairline:var(--hairline);--uk-scrim:var(--scrim);--uk-shadow:var(--shadow2);
+  --uk-panel-bg:var(--strip);--uk-ink:var(--ink);--uk-ink-muted:var(--ink2);--uk-hairline:var(--hairline);--uk-scrim:var(--scrim);--uk-shadow:var(--shadow2);
   --uk-accent:var(--cyan);--uk-hover-bg:var(--steel);--uk-code-bg:var(--steel);--uk-font:var(--font);--uk-font-mono:var(--font);
   --uk-feat-ink:var(--green);--uk-feat-tint:var(--green-tint);--uk-fix-ink:var(--amber-ink);--uk-fix-tint:var(--amber-tint);
   --uk-perf-ink:var(--cyan);--uk-perf-tint:color-mix(in srgb,var(--cyan) 14%,transparent);
   --uk-breaking-ink:var(--red);--uk-breaking-tint:color-mix(in srgb,var(--red) 14%,transparent);
-  --uk-font-size-lg:16px;--uk-z:50;
+  --uk-chip-bg:var(--steel);--uk-z:50;
+  /* The drawer's viewport units are divided by this, because `.shell{zoom}` scales a panel sized in vh/vw too and it would overhang the window. The drawer
+     renders inside `.uk-drawer-scrim`, so it inherits it from there. */
+  --uk-zoom:var(--font-scale,1);
 }
-.uk-releases-notes .md{font-size:13px}
+
+/* ── Management › CodeGraph ───────────────────────────────────────────────
+   Git's shapes and classes throughout (docs/superpowers/specs/2026-10-19-codegraph-view-design.md §Client); these rules are only what Git has no shape for:
+   the cyan run chip, a running key that stays cyan while disabled, the in-page Reindex confirm, the Matrix's number columns, and the Inspector's size tiles,
+   symbols-by-kind strip and facts. Every colour is a theme token or a `color-mix` over one. */
+.git-chip.cg-chip-run{color:var(--cyan);border-color:transparent;background:color-mix(in srgb,var(--cyan) 12%,transparent)}
+/* A running key is disabled (both keys are, while a run is on) but must still read as running: `.git-sync:disabled` would grey it. */
+.git-sync.cg-live:disabled{color:var(--cyan)}
+.cg-confirm{display:flex;flex-direction:column;gap:10px;width:100%;max-width:440px;margin-left:auto;padding:12px 14px;border-radius:12px;background:var(--strip-hi);font-size:13px;line-height:1.45;color:var(--ink);text-align:left;white-space:normal}
+.cg-confirm.start{margin-left:0}
+.cg-confirm-keys{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+.cg-confirm.start .cg-confirm-keys{justify-content:flex-start}
+.git-mx tr.cg-mx-confirm td{border-top:0;padding-top:0}
+.git-mx .cg-num{text-align:right;white-space:nowrap;color:var(--ink2);font-variant-numeric:tabular-nums}
+/* Twelve columns against Git's five: tighter gutters and a narrower name floor keep the keys inside the panel at the 1280 tier. */
+.cg-mx th,.cg-mx td{padding-left:8px;padding-right:8px}
+.cg-mx .git-mx-rn{min-width:100px}
+.cg-pane-why{display:flex;flex-direction:column;gap:4px}
+.cg-tiles{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.cg-tile{background:var(--strip-hi);border-radius:12px;padding:10px 12px;min-width:0}
+.cg-tile b{display:block;font-size:20px;font-weight:600;letter-spacing:-.02em;color:var(--ink);font-variant-numeric:tabular-nums;white-space:nowrap}
+.cg-tile span{font-size:12px;color:var(--ink2)}
+.cg-kinds-wrap{display:flex;flex-direction:column;gap:10px}
+.cg-kinds{display:flex;gap:2px;height:8px;border-radius:999px;overflow:hidden}
+.cg-kinds span{display:block;height:100%;flex-basis:0;min-width:2px}
+.cg-legend{display:flex;flex-wrap:wrap;gap:4px 12px;font-size:12px;color:var(--ink2);font-variant-numeric:tabular-nums}
+.cg-legend i{display:inline-block;width:8px;height:8px;border-radius:2px;margin-right:5px}
+.cg-k-functions{background:var(--cyan)}
+.cg-k-imports{background:var(--ink3)}
+.cg-k-properties{background:var(--magenta)}
+.cg-k-constants{background:var(--mustard)}
+.cg-k-types{background:var(--green-solid)}
+.cg-k-other{background:var(--hairline2)}
+.cg-facts{display:grid;grid-template-columns:max-content minmax(0,1fr);gap:6px 16px;margin:0;font-size:13px}
+.cg-facts dt{color:var(--ink3)}
+.cg-facts dd{margin:0;color:var(--ink);overflow-wrap:anywhere}
+.cg-foot{display:flex;gap:6px;flex-wrap:wrap;padding-top:12px;border-top:1px solid var(--hairline)}
+
+/* ── Routines (spec §UI, the Ledger mock). Phone first: `.rtn-hide` is what only the wide grid has room for and `.rtn-phone` is the stacked
+   stand-in for it; the two swap at lg (1024), where the 7-column ledger first fits beside the 240 rail. At 1024 each kind of `.rtn-hide` element gets its author
+   display back by name: `revert` would drop `.rtn-cell`'s flex to the UA block, and a `max-width` hide would break the min-width-only ladder
+   (test/breakpoints.test.ts). A new `.rtn-hide` on an element whose own rule sets a display needs its pair added to that list. Both are scoped under
+   `.rtn-view` so they outrank the component rules below (`.git-chip`, `.seg`) without a `!important`. Red and cyan have no tint token, so their fills are mixed here as the
+   codegraph chip does. ── */
+.mgmt-title.rtn-title{flex-direction:row;align-items:center;flex-wrap:wrap}
+.rtn-view code{overflow-wrap:anywhere}
+.rtn-tools{margin-left:auto;display:inline-flex;gap:6px}
+.seg.rtn-sm>button{font-size:12px;padding:5px 10px}
+.rtn-select{font-family:var(--font);font-size:12px;color:var(--ink2);background:var(--strip);border:1px solid var(--hairline2);border-radius:999px;padding:4px 10px;min-width:0;max-width:100%}
+.git-chip.rtn-red{color:var(--red);border-color:transparent;background:color-mix(in srgb,var(--red) 12%,transparent)}
+.git-chip.rtn-runner{color:var(--cyan);border-color:transparent;background:color-mix(in srgb,var(--cyan) 12%,transparent)}
+.git-chip.rtn-mach{font-size:11px;padding:0 7px}
+.git-chip.rtn-here{color:var(--ink);border-color:var(--ink3)}
+.rtn-btn{font-family:var(--font);font-size:13px;font-weight:500;color:var(--ink);background:var(--strip);border:1px solid var(--hairline2);border-radius:999px;padding:6px 14px;cursor:pointer;white-space:nowrap}
+.rtn-btn:hover:not(:disabled){background:var(--strip-hi)}
+.rtn-btn:disabled{opacity:.5;cursor:default}
+.rtn-btn.rtn-primary{background:var(--ink);border-color:transparent;color:var(--strip);transition:opacity .15s}
+.rtn-btn.rtn-primary:hover:not(:disabled){background:var(--ink);opacity:.88}
+.rtn-btn.rtn-sm{font-size:12px;padding:4px 11px}
+.rtn-btn.rtn-icon{display:inline-grid;place-items:center;padding:5px 9px}
+.rtn-btn.rtn-icon.on{background:var(--strip-hi)}
+.rtn-btn.rtn-danger{color:var(--red)}
+.rtn-plan{display:flex;flex-direction:column;gap:6px;min-width:0;padding:8px 10px;border:1px solid var(--hairline2);border-radius:8px;background:var(--strip);font-size:12px;color:var(--ink2)}
+.rtn-plan-sum{color:var(--ink);overflow-wrap:anywhere}
+.rtn-plan-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:2px;min-width:0}
+.rtn-plan-row{display:flex;flex-wrap:wrap;gap:2px 8px;min-width:0}
+.rtn-plan-act{font-weight:600;color:var(--ink)}
+.rtn-plan-name,.rtn-plan-why{min-width:0;overflow-wrap:anywhere}
+.rtn-plan-why{color:var(--ink3)}
+.rtn-plan-err{color:var(--amber-text);overflow-wrap:anywhere}
+.rtn-plan-btns{display:flex;flex-wrap:wrap;gap:6px}
+.rtn-tog{display:inline-block;flex:none;width:34px;height:20px;padding:0;border:0;border-radius:999px;background:var(--hairline2);position:relative;vertical-align:middle;cursor:pointer}
+.rtn-tog::after{content:"";position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:var(--strip);box-shadow:0 1px 2px var(--shadow2);transition:left .15s}
+.rtn-tog.on{background:var(--green)}
+.rtn-tog.on::after{left:16px}
+.rtn-tog:disabled{opacity:.5;cursor:default}
+.rtn-dot{display:inline-block;flex:none;width:8px;height:8px;border-radius:50%;background:var(--ink3)}
+.rtn-dot.ok{background:var(--green)}
+.rtn-dot.warn{background:var(--amber-solid)}
+.rtn-dot.bad{background:var(--red)}
+.rtn-dot.lost{background:var(--mustard)}
+.rtn-dot.off{background:var(--hairline2);outline:1px solid var(--ink3)}
+.rtn-dot.live{background:var(--green);box-shadow:0 0 0 3px var(--green-tint)}
+.rtn-card{background:var(--strip);border-radius:16px;min-width:0}
+/* Only the Runs card clips: the ledger's menus and popovers hang out of its card. */
+.rtn-card.rtn-clip{overflow:hidden}
+.rtn-muted{color:var(--ink3)}
+.rtn-strong{color:var(--ink);font-weight:500}
+.rtn-err{display:block;font-size:11px;color:var(--ink3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.rtn-spacer{flex:1}
+.rtn-legend{display:flex;flex-wrap:wrap;gap:10px 14px;align-items:center;font-size:12px;color:var(--ink2);padding:0 6px}
+.rtn-kick{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink3);margin:0 0 6px}
+.rtn-kick.rtn-gap{margin-top:12px}
+.rtn-wide{grid-column:1/-1;justify-self:start}
+
+/* A cell is a stack of lines: a pill always has a line to itself, so prose never pushes it sideways, and prose ellipsizes. */
+.rtn-cell{display:flex;flex-direction:column;gap:3px;min-width:0}
+.rtn-cell>*{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.rtn-cell>.git-chip{align-self:flex-start}
+.rtn-cell>.rtn-sub,.rtn-cell>.rtn-pline{white-space:normal}
+.rtn-pline{display:flex;flex-wrap:wrap;align-items:center;gap:4px 6px}
+.rtn-name{font-family:var(--font);font-size:14px;font-weight:500;color:var(--ink);background:none;border:0;padding:0;text-align:left;cursor:pointer;max-width:100%}
+.rtn-name.rtn-muted{color:var(--ink3)}
+.rtn-sub{display:flex;flex-wrap:wrap;gap:4px 6px;align-items:center;font-size:12px}
+
+.rtn-stats{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--hairline);border:1px solid var(--hairline);border-radius:16px;overflow:hidden}
+.rtn-stat{background:var(--strip);padding:12px 16px;min-width:0}
+.rtn-k{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink3)}
+.rtn-v{font-size:20px;font-weight:500;color:var(--ink);line-height:1.2;margin-top:3px}
+.rtn-v small{font-size:12px;font-weight:400;color:var(--ink2);margin-left:4px}
+.rtn-d{font-size:12px;color:var(--ink2);margin-top:2px;overflow-wrap:anywhere}
+.rtn-d.up{color:var(--red)}
+.rtn-d.dn{color:var(--green)}
+.rtn-bars{display:flex;align-items:flex-end;gap:2px;height:22px;margin-top:6px}
+.rtn-bars i{flex:1;min-height:2px;border-radius:2px 2px 0 0;background:var(--green);opacity:.75}
+.rtn-bars i.bad{background:var(--red)}
+.rtn-bars i.none{background:var(--hairline2)}
+
+.rtn-ledger{display:grid;grid-template-columns:20px minmax(0,1fr) auto;gap:6px 10px;align-items:center;padding:12px 14px;border-top:1px solid var(--hairline);font-size:13px;color:var(--ink2);cursor:pointer}
+.rtn-ledger.rtn-head{display:none;border-top:0;color:var(--ink3);font-size:12px;cursor:default}
+.rtn-ledger.rtn-folded{background:var(--strip-hi)}
+.rtn-card>.rtn-ledger:first-child,.rtn-card>.rtn-head+.rtn-ledger{border-top:0}
+.rtn-act{display:inline-flex;align-items:center;gap:4px;justify-self:end;position:relative;cursor:default}
+.rtn-runs{background:var(--strip-hi);padding:12px 14px 14px;border-top:1px solid var(--hairline);display:flex;flex-direction:column;gap:2px}
+.rtn-fstats{display:flex;flex-wrap:wrap;gap:6px 18px;font-size:12px;color:var(--ink2);margin:0 0 10px}
+.rtn-fstats b{color:var(--ink);font-weight:500}
+.rtn-run{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:4px 10px;align-items:center;padding:6px 0;font-size:12px;color:var(--ink2);border-top:1px solid var(--hairline)}
+.rtn-kick+.rtn-run,.rtn-err+.rtn-run{border-top:0}
+.rtn-links{display:inline-flex;gap:10px;justify-self:end;white-space:nowrap}
+.rtn-links .git-link{text-decoration:none;font-size:12px}
+.rtn-fbtns{display:flex;gap:6px;margin-top:10px}
+
+.rtn-day{padding:10px 14px 4px;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink3);background:var(--strip-hi)}
+.rtn-runrow{display:grid;grid-template-columns:20px minmax(0,1fr) auto;gap:4px 10px;align-items:center;padding:10px 14px;border-top:1px solid var(--hairline);font-size:13px;color:var(--ink2)}
+.rtn-runrow.rtn-head{display:none;border-top:0;color:var(--ink3);font-size:12px}
+.rtn-day+.rtn-runrow{border-top:0}
+.rtn-runrow.rtn-folded{background:var(--strip-hi)}
+.rtn-runrow.rtn-foldable{cursor:pointer}
+.rtn-step{padding-left:14px}
+.rtn-runrow .chev{width:10px;height:10px;vertical-align:middle}
+
+.rtn-menu,.rtn-pop{position:absolute;right:0;top:calc(100% + 6px);z-index:5;background:var(--strip);border:1px solid var(--hairline2);border-radius:12px;box-shadow:0 8px 24px var(--shadow2);text-align:left}
+.rtn-menu{padding:6px;min-width:190px;display:flex;flex-direction:column}
+.rtn-menu>button{font-family:var(--font);font-size:13px;color:var(--ink);background:none;border:0;border-radius:8px;padding:7px 10px;text-align:left;white-space:nowrap;cursor:pointer}
+.rtn-menu>button:hover:not(:disabled){background:var(--strip-hi)}
+.rtn-menu>button:disabled{opacity:.5;cursor:default}
+.rtn-menu>button.rtn-danger{color:var(--red)}
+.rtn-sep{height:1px;margin:4px 6px;background:var(--hairline)}
+.rtn-pop{padding:8px;width:340px;max-width:calc(100vw - 48px)}
+.rtn-pop .rtn-kick{padding:4px 8px 6px;margin:0}
+.rtn-plist{max-height:320px;overflow-y:auto}
+.rtn-prow{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:10px;align-items:center;padding:6px 8px;border-radius:8px;font-size:13px;color:var(--ink)}
+.rtn-prow:hover{background:var(--strip-hi)}
+.rtn-pname{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.rtn-pfoot{display:flex;flex-wrap:wrap;gap:6px;align-items:center;padding:8px 8px 2px;margin-top:4px;border-top:1px solid var(--hairline);font-size:12px}
+.rtn-sheet-back{position:fixed;inset:0;z-index:50;background:var(--scrim);display:flex;align-items:flex-end}
+.rtn-sheet{width:100%;max-height:80vh;display:flex;flex-direction:column;background:var(--strip);border-radius:16px 16px 0 0;padding:14px 12px calc(14px + env(safe-area-inset-bottom,0px));box-shadow:0 -8px 24px var(--shadow2)}
+.rtn-sheet-list{overflow-y:auto;min-height:0}
+.rtn-sheet .rtn-prow{grid-template-columns:auto minmax(0,1fr) auto;cursor:pointer}
+
+.rtn-back{position:fixed;inset:0;z-index:50;background:var(--scrim);display:flex;justify-content:flex-end}
+.rtn-drawer{width:100%;height:100%;overflow-y:auto;background:var(--strip);padding:14px;min-width:0}
+.rtn-dtitle{margin:0;font-size:17px;font-weight:500;color:var(--ink);display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.rtn-dsub{font-size:12px;color:var(--ink2);margin:4px 0 14px}
+.rtn-field{display:block;margin:0 0 12px}
+.rtn-label{display:block;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink3);margin-bottom:5px}
+.rtn-field>.rtn-dsub{margin:6px 0 0}
+.rtn-kinds{display:grid;grid-template-columns:1fr;gap:8px}
+.rtn-kind{font-family:var(--font);text-align:left;border:1px solid var(--hairline2);border-radius:12px;padding:10px 12px;font-size:13px;color:var(--ink2);background:var(--strip);min-width:0;cursor:pointer}
+.rtn-kind b{display:block;color:var(--ink);font-weight:500;margin-bottom:2px}
+.rtn-kind small{display:block;font-size:11px;color:var(--ink3);margin-top:3px}
+.rtn-kind.on{border-color:var(--ink3);box-shadow:0 0 0 1px var(--ink3)}
+.rtn-in{display:flex;align-items:center;gap:8px;height:36px;border:1px solid var(--hairline2);border-radius:12px;padding:0 12px;background:var(--strip);min-width:0}
+.rtn-in input{flex:1;min-width:0;border:0;outline:0;background:none;font-family:var(--font);font-size:13px;color:var(--ink)}
+.rtn-in:focus-within{border-color:var(--ink3)}
+.rtn-picks{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.rtn-pick{font-family:var(--font);font-size:12px;padding:3px 10px;border-radius:999px;border:1px solid var(--hairline2);color:var(--ink2);background:none;white-space:nowrap;cursor:pointer}
+.rtn-pick.on{color:var(--ink);border-color:var(--ink3);background:var(--strip-hi)}
+.rtn-ta{display:block;width:100%;font-family:var(--font);font-size:12px;line-height:1.55;background:var(--steel);border:1px solid var(--hairline2);border-radius:12px;padding:12px 14px;margin:0;color:var(--ink);white-space:pre;overflow:auto;resize:vertical;tab-size:2}
+.rtn-ta:focus{outline:0;border-color:var(--ink3)}
+.rtn-vmsg{display:block;font-size:12px;border-radius:8px;padding:7px 10px;margin-top:8px;overflow-wrap:anywhere}
+.rtn-vmsg.err{color:var(--red);background:color-mix(in srgb,var(--red) 12%,transparent)}
+.rtn-vmsg.ok{color:var(--green);background:var(--green-tint)}
+.rtn-vmsg.warn{color:var(--amber-ink);background:var(--amber-tint)}
+.rtn-dfoot{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:14px}
+.rtn-confirm{margin-top:4px}
+
+.rtn-view .rtn-hide{display:none}
+@media (min-width:640px){
+  .rtn-stats{grid-template-columns:repeat(auto-fit,minmax(150px,1fr))}
+  .rtn-kinds{grid-template-columns:repeat(3,1fr)}
+  .rtn-back{padding:24px}
+  .rtn-drawer{width:640px;max-width:100%;height:auto;max-height:100%;padding:20px;border:1px solid var(--hairline2);border-radius:16px;box-shadow:0 16px 40px var(--shadow2)}
+}
+@media (min-width:1024px){
+  .rtn-view .rtn-hide{display:inline}
+  .rtn-view div.rtn-hide{display:block}
+  .rtn-view .git-chip.rtn-hide{display:inline-block}
+  .rtn-view .rtn-cell.rtn-hide,.rtn-view .rtn-bars.rtn-hide,.rtn-view .rtn-legend.rtn-hide{display:flex}
+  .rtn-view .rtn-phone{display:none}
+  .rtn-ledger{grid-template-columns:20px minmax(120px,1.4fr) 64px 140px 96px 40px 112px;gap:10px 12px;padding:14px 20px}
+  .rtn-ledger.rtn-head{display:grid;padding:12px 20px}
+  .rtn-runs{padding:12px 20px 14px 52px}
+  .rtn-run{grid-template-columns:minmax(120px,1fr) 60px 96px 56px 56px 136px;gap:8px 12px}
+  .rtn-day{padding:10px 20px 4px}
+  .rtn-runrow{grid-template-columns:20px 56px minmax(120px,1.2fr) 120px 64px 56px 64px 136px;gap:8px 12px;padding:11px 20px}
+  .rtn-runrow.rtn-head{display:grid}
+}

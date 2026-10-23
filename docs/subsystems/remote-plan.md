@@ -51,7 +51,7 @@ Getting this wrong fails silently: the hook's output is ignored and the card jus
 | `scripts/plan-remote-hook.sh` | `PermissionRequest[ExitPlanMode]` hook. Same three gates as `ask-remote-hook.sh`, plus its own `tool_name` re-check (a matcher is config; never trust it alone). Its POST body also carries `permissionMode`, unused here and read only by the [push notifier](push-notify.md)'s auto-mode layer |
 | `POST /api/plans/wait` | `servePlanWait` — held open until a verdict, deadline, or supersede |
 | `GET /api/sessions/:id/plan` | `serveSessionPlan` — what the browser polls, at the configured refresh rate (`usePendingPlan` reads `refreshMs` from `useSettings`, exactly as `usePendingQuestion` does) |
-| `POST /api/sessions/:id/plan-answer` | `serveSessionPlanAnswer` — `{verdict: 'reject', feedback}` or `'dismiss'`. Token-gated |
+| `POST /api/sessions/:id/plan-answer` | `serveSessionPlanAnswer` — `{verdict: 'reject', feedback}` or `'dismiss'`. Behind the remote-answer switch and the write gate (a session write path) |
 | `server/lib/plans.ts` | RAM-only store; same state machine as `pending.ts` with an injected `resolve` |
 | `scan.ts` `ScanOptions.planIds` | sets `Session.remotePlan` and forces `status: 'question'` |
 | chat button + `PlanPanel` | the row's chat button labelled `Plan?` and the pinned drawer panel |
@@ -140,11 +140,12 @@ the banner. `tokenRequired` means *this caller* would need the token (`writeAcce
 sends no `tokenRequired`, which reads as `false` and keeps the old behaviour rather than
 warning wrongly.
 
-When all hold it injects an instruction for that turn: put every decision through
+When all hold it injects an instruction for that turn: put each decision that is the user's through
 `AskUserQuestion` (including skill-driven asks like the brainstorming skill's mode pick),
 never end a turn on a prose question, don't enter plan mode — summarize the plan and ask
 proceed/revise instead — and prefer already-allowed tools, since a permission dialog would
-park the session.
+park the session. The rule changes how the session asks, not whether: a skill or task that says to proceed on stated
+assumptions still does, rather than stopping to ask.
 
 That first rule is now explicitly conditional on the tool being available, **and** carries
 a named fallback. Neither gate implies `AskUserQuestion` is in the session's tool list — a

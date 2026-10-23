@@ -1,5 +1,5 @@
 /**
- * deepLink.ts — the `?session=<id>` and `?view=git` entry points.
+ * deepLink.ts — the `?session=<id>`, `?view=git|routines|usage` and `&run=<id>` entry points.
  *
  * A push notification's whole value is landing you on the thing that needs a
  * decision, not on the dashboard's front page. `server/lib/notify.ts` puts this
@@ -12,7 +12,13 @@
  *
  * `?view=git` is Lookout's "Git pending" tile (`server/lib/hub-widgets.ts`): it lands on Management › Git. It is consumed and stripped the same way, in the
  * same read, so whichever of the two callers runs first cannot strip the other's param.
+ *
+ * `?view=routines&run=<id>` is a failed routine run's push (`server/lib/notify.ts`): Routines › Runs with that run's fold open. `run` is read in the
+ * same pass as the other two, so the strip that follows cannot lose it before the Routines page asks.
+ *
+ * `?view=usage` is a usage-limit push (`server/lib/notify.ts` `usageClickUrl`): it lands on the Usage section, with no sub-view to set.
  */
+import type { Section } from './sections';
 
 /** A session id is a UUID; anything else is junk and is ignored. Pure — tested. */
 export function readSessionParam(search: string): string | null {
@@ -25,10 +31,30 @@ export function readSessionParam(search: string): string | null {
   }
 }
 
+/** The sub-views a link may name. */
+export type DeepLinkView = 'git' | 'routines' | 'usage';
+
 /** The one sub-view a link may name; anything else is ignored. Pure — tested. */
-export function readViewParam(search: string): 'git' | null {
+export function readViewParam(search: string): DeepLinkView | null {
   try {
-    return new URLSearchParams(search).get('view') === 'git' ? 'git' : null;
+    const view = new URLSearchParams(search).get('view');
+    if (view === 'schedules') return 'routines'; // a push sent before Schedules became Routines
+    return view === 'git' || view === 'routines' || view === 'usage' ? view : null;
+  } catch {
+    return null; // malformed query string
+  }
+}
+
+/** The section a linked view lands on. Pure — tested. */
+export function sectionForView(view: DeepLinkView): Section {
+  return view === 'git' ? 'management' : view;
+}
+
+/** A run id is the wrapper's uuid or a refusal's `refused-<machine>-<job>-<epoch>`; it only ever reaches a lookup in the polled list, so the shape check keeps junk out of the key. Pure — tested. */
+export function readRunParam(search: string): string | null {
+  try {
+    const id = new URLSearchParams(search).get('run');
+    return id && /^[A-Za-z0-9._-]{1,128}$/.test(id) ? id : null;
   } catch {
     return null; // malformed query string
   }
@@ -39,13 +65,15 @@ type Where = { location: Pick<Location, 'search' | 'pathname'>; history: Pick<Hi
 export interface DeepLink {
   /** The id this page was opened with, or null. */
   session(): string | null;
-  /** The sub-view this page was opened with (`?view=git`), or null. */
-  view(): 'git' | null;
+  /** The sub-view this page was opened with (`?view=git`, `?view=routines`, `?view=usage`), or null. */
+  view(): DeepLinkView | null;
+  /** The routine run this page was opened with (`&run=<id>`), or null. */
+  run(): string | null;
   /**
-   * The Management tab the link asks for, at most once: null when a `?session=` outranks the view (that link lands on Sessions, so it must not rewrite
-   * the stored tab) and on every call after the first, so an effect that re-runs cannot re-apply it.
+   * The sub-view the link asks for, at most once: null when a `?session=` outranks the view (that link lands on Sessions, so it must not rewrite the
+   * stored tab) and on every call after the first, so an effect that re-runs cannot re-apply it.
    */
-  takeManagementTab(): 'git' | null;
+  takeTab(): DeepLinkView | null;
 }
 
 /**
@@ -53,13 +81,13 @@ export interface DeepLink {
  * first. Takes the window so a test can hand it a fake one; the app uses the module-level instance below.
  */
 export function createDeepLink(where: Where): DeepLink {
-  let read: { session: string | null; view: 'git' | null } | null = null;
+  let read: { session: string | null; view: DeepLinkView | null; run: string | null } | null = null;
   let tabTaken = false;
   const consume = () => {
     if (read) return read;
     const search = where.location.search;
-    read = { session: readSessionParam(search), view: readViewParam(search) };
-    if (read.session || read.view) {
+    read = { session: readSessionParam(search), view: readViewParam(search), run: readRunParam(search) };
+    if (read.session || read.view || read.run) {
       try {
         where.history.replaceState(null, '', where.location.pathname);
       } catch {
@@ -71,7 +99,8 @@ export function createDeepLink(where: Where): DeepLink {
   return {
     session: () => consume().session,
     view: () => consume().view,
-    takeManagementTab: () => {
+    run: () => consume().run,
+    takeTab: () => {
       if (tabTaken) return null;
       tabTaken = true;
       const { session, view } = consume();
@@ -94,12 +123,17 @@ export function deepLinkSession(): string | null {
   return page().session();
 }
 
-/** The sub-view this page was opened with (`?view=git`), or null. Memoised with {@link deepLinkSession}. */
-export function deepLinkView(): 'git' | null {
+/** The sub-view this page was opened with (`?view=git`, `?view=routines`, `?view=usage`), or null. Memoised with {@link deepLinkSession}. */
+export function deepLinkView(): DeepLinkView | null {
   return page().view();
 }
 
-/** {@link DeepLink.takeManagementTab} for this page: `AppShell` applies it to the `managementTab` setting once. */
-export function takeDeepLinkManagementTab(): 'git' | null {
-  return page().takeManagementTab();
+/** The routine run this page was opened with (`&run=<id>`), or null. Memoised with {@link deepLinkSession}, so it still answers after the URL was stripped. */
+export function deepLinkRun(): string | null {
+  return page().run();
+}
+
+/** {@link DeepLink.takeTab} for this page: `AppShell` applies it to the `managementTab` or `routinesTab` setting once; `usage` has no tab to set. */
+export function takeDeepLinkTab(): DeepLinkView | null {
+  return page().takeTab();
 }

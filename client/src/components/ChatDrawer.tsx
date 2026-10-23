@@ -10,6 +10,7 @@ import ResumePanel from './ResumePanel';
 import { TasksCard } from './TasksCard';
 import { TraceInspector } from './TraceInspector';
 import { TraceSpine } from './TraceSpine';
+import { SessionStopControl } from './sessions/SessionStopControl';
 import { useBackClose } from '../hooks/useBackClose';
 import { useNarrow } from '../hooks/useNarrow';
 import { useSessionChat } from '../hooks/useSessionChat';
@@ -21,7 +22,9 @@ import { usePersistedState } from '../hooks/usePersistedState';
 import { useSettings } from '../hooks/useSettings';
 import { CHAT_FILTERS, filterMessages, isChatFilter, type ChatFilter } from '../lib/chatFilter';
 import { fmtTok } from '../lib/format';
-import { resumeEligible } from '../lib/resume';
+import { resumeEligible, stillRunningNote, STILL_RUNNING_DETAIL, STILL_RUNNING_HINT } from '../lib/resume';
+import { heldBodyUuid } from '../lib/heldBody';
+import { latestSuggestion } from '../lib/composer';
 import { formatInterval } from '../lib/settings';
 import { surfacePill } from '../lib/surface';
 import { TRACE_FILTERS, type TraceFilter, type TraceFolds } from '../lib/trace';
@@ -70,8 +73,12 @@ function ContextCard({ session }: { session: Session }) {
   );
 }
 
-/** `onWhy` opens a tool line's step in Trace; lines without a tool_use id, and every line on a phone (no `onWhy`), get no link. */
-function Message({ m, onWhy }: { m: ChatMessage; onWhy?(id: string): void }) {
+/**
+ * `onWhy` opens a tool line's step in Trace; lines without a tool_use id, and every line on a phone (no `onWhy`), get no link.
+ * `folded` names the tool whose body a pinned panel is showing right now (`lib/heldBody.ts`): that body renders closed, summary still clickable, and
+ * reopens as history once the hold ends.
+ */
+function Message({ m, onWhy, folded }: { m: ChatMessage; onWhy?(id: string): void; folded?: string }) {
   return (
     <div className={`cmsg ${m.role}`}>
       <div className="cmsg-head">
@@ -86,7 +93,7 @@ function Message({ m, onWhy }: { m: ChatMessage; onWhy?(id: string): void }) {
       )}
       {m.tools.map((t, i) =>
         t.body ? (
-          <details open className="cmsg-plan" key={i}>
+          <details open={t.name !== folded} className="cmsg-plan" key={i}>
             <summary>
               <Chevron className="cmsg-chev" />
               <span className="tool">{t.name}</span>
@@ -162,15 +169,17 @@ export default function ChatDrawer({ session, onClose, spawnAvailable }: {
   const question = usePendingQuestion(session.id);
   const plan = usePendingPlan(session.id);
   const message = usePendingMessage(session.id);
-  const canResume = resumeEligible(
-    session,
-    { question: !!question.pending, plan: !!plan.pending, message: !!message.pending },
-    spawnAvailable
-  );
+  const holds = { question: !!question.pending, plan: !!plan.pending, message: !!message.pending };
+  const canResume = resumeEligible(session, holds, spawnAvailable);
+  const showStillRunning = stillRunningNote(session, holds);
   const [filter, setFilter] = usePersistedState<ChatFilter>('dashboard.chatFilter', 'all');
   const { settings: { refreshMs } } = useSettings();
   const mode = isChatFilter(filter) ? filter : 'all'; // guard a stale stored value
   const shown = useMemo(() => filterMessages(messages, mode), [messages, mode]);
+  const heldAsk = useMemo(() => heldBodyUuid(messages, 'AskUserQuestion', !!question.pending), [messages, question.pending]);
+  const heldPlan = useMemo(() => heldBodyUuid(messages, 'ExitPlanMode', !!plan.pending), [messages, plan.pending]);
+  // Off the unfiltered page: the text filter must not hide the turn the suggestion belongs to.
+  const suggestion = useMemo(() => latestSuggestion(messages), [messages]);
   const surfaceInfo = surfacePill(session.surface);
 
   // Chat | Trace. Not persisted: the modal always opens in Chat. The trace
@@ -326,6 +335,10 @@ export default function ChatDrawer({ session, onClose, spawnAvailable }: {
           <div className="chat-side">
             <ContextCard session={session} />
 
+            {/* In the sidecar, not the head: on a phone the thumb goes to ✕, and a stop beside it gets hit by accident even behind the confirm step.
+                Renders nothing for a session this dashboard did not spawn (no `stopState`). */}
+            <SessionStopControl sessionId={session.id} stopState={session.stopState} showBadge />
+
             {/* Trace keeps Chat's structure about the picked step: its card in
                 the Tasks card's place, its fields as the facts under it. */}
             {view === 'trace' ? (
@@ -406,7 +419,14 @@ export default function ChatDrawer({ session, onClose, spawnAvailable }: {
                       {hasMore ? ' — load older, or switch back to “all”.' : '.'}
                     </div>
                   ) : (
-                    shown.map(m => <Message key={m.uuid} m={m} onWhy={narrow ? undefined : openStep} />)
+                    shown.map(m => (
+                        <Message
+                          key={m.uuid}
+                          m={m}
+                          onWhy={narrow ? undefined : openStep}
+                          folded={m.uuid === heldAsk ? 'AskUserQuestion' : m.uuid === heldPlan ? 'ExitPlanMode' : undefined}
+                        />
+                      ))
                   )}
                 </div>
               )}
@@ -422,8 +442,9 @@ export default function ChatDrawer({ session, onClose, spawnAvailable }: {
                     be live, since a permission prompt blocks the session. */}
                 {session.permissionWait && <PermissionBanner session={session} />}
 
-                {/* An action bar, not a message: the question itself already renders in
-                    the transcript above. Pinned so it stays reachable while scrolling. */}
+                {/* The one full rendering of a held question: its tool_use lands in the
+                    transcript ~1s into the hold, and that copy renders folded until the
+                    hold ends (heldAsk). Pinned so it stays reachable while scrolling. */}
                 <QuestionPanel state={question} />
 
                 {/* Same deal for a proposed plan. The two stores are one-entry-per-
@@ -434,14 +455,26 @@ export default function ChatDrawer({ session, onClose, spawnAvailable }: {
                 {/* And for a turn-end reply window. One-entry-per-session per store and
                     a session parks on one thing at a time, so at most one of the three
                     panels renders. */}
-                <MessagePanel state={message} />
+                <MessagePanel state={message} suggestion={suggestion} />
 
                 {/* The opposite case: a dashboard session whose turn is OVER — window
                     expired, released, or capped out. Sends `resume` through the spawn
                     path; the same transcript (same id) continues, so this drawer
                     live-tails the answer. Can render under MessagePanel's "gone" note,
                     which is the natural hand-off. */}
-                {canResume && <ResumePanel session={session} />}
+                {canResume && <ResumePanel session={session} suggestion={suggestion} />}
+
+                {/* A dashboard session whose process is alive but not this server's to stop (`processLive`): the composer would only meet a 409,
+                    so say why it is missing. The composer returns on the first poll after the process exits. */}
+                {showStillRunning && (
+                  <div className="qpanel resume">
+                    <div className="qp-head">
+                      <span className="qp-badge">still running</span>
+                      <span className="qp-hint">{STILL_RUNNING_HINT}</span>
+                    </div>
+                    <div className="qp-note">{STILL_RUNNING_DETAIL}</div>
+                  </div>
+                )}
               </div>
             </div>
 

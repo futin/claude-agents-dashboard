@@ -57,6 +57,15 @@ export const WAIT_TOOLS = new Set(['AskUserQuestion', 'ExitPlanMode']);
  */
 export const LOCAL_PLUMBING = /^<(command-(name|message|args)|local-command-[a-z]+|bash-(input|stdout|stderr))>/;
 
+/**
+ * False for a record that carries a `message` but is not a turn of the conversation. Claude Code 2.1.302 writes `type: "api-request-blob"` records that
+ * replay each API request's turns — the same role and content as the real `user`/`assistant` records, with no uuid or timestamp — so a reader keyed on
+ * `message.role` alone sees every turn twice. Fixtures and old transcripts without a `type` still count.
+ */
+export function isConversationRecord(rec: any): boolean {
+  return typeof rec?.type !== 'string' || rec.type === 'user' || rec.type === 'assistant';
+}
+
 /** Text of a message record's content, whether stored as a string or as blocks. */
 function contentText(content: unknown): string {
   if (typeof content === 'string') return content;
@@ -251,6 +260,23 @@ function resolveOriginCwd(
   return cwd;
 }
 
+/**
+ * The launch cwd from the head window alone, without the 256 KB tail read `readTranscript` pays — what the scan's project filter and project list run
+ * over every transcript in the lookback. Shares `originCache` with `resolveOriginCwd`: both answer "first cwd in the head window", so an entry either
+ * writes is right for the other. A null is not cached: a fresh transcript may not have written its first cwd record yet, and remembering that would hide
+ * the session from its project for good. `size` is the file size the caller already has from its listing.
+ */
+export function launchCwd(filePath: string, size: number): string | null {
+  const prev = originCache.get(filePath);
+  if (prev && size >= prev.size && prev.cwd !== null) return prev.cwd;
+  const head = readHead(filePath, HEAD_BYTES);
+  if (!head) return null;
+  originHeadReads++;
+  const cwd = firstCwd(head.text.split('\n'), 0);
+  if (cwd !== null) originCache.set(filePath, { cwd, size: head.size });
+  return cwd;
+}
+
 /** Sum the context-contributing token fields from a record's usage block. */
 export function usageTokens(record: any): number {
   const u = record && record.message && record.message.usage;
@@ -421,6 +447,8 @@ export function readTranscript(
         model = (rec.message && typeof rec.message.model === 'string') ? rec.message.model : model;
       }
     }
+
+    if (!isConversationRecord(rec)) continue;
 
     if (!activity) {
       const content = rec.message && rec.message.content;

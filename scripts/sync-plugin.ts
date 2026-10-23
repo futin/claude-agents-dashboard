@@ -15,16 +15,19 @@
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import fs from 'node:fs';
+import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+
+import { loadConfig } from '../server/lib/config.js';
 
 export const MARKETPLACE = 'claude-agents-dashboard-marketplace';
 export const PLUGIN_ID = `claude-agents-dashboard@${MARKETPLACE}`;
 export const MARKETPLACE_SOURCE = 'futin/claude-agents-dashboard';
 
 /** What a session loads from the install. Anything else in the install dir (`.in_use`, `.orphaned_at`) is Claude Code's bookkeeping. */
-export const PUBLISHED_PATHS = ['.claude-plugin', 'hooks', 'skills'];
+export const PUBLISHED_PATHS = ['.claude-plugin', 'hooks', 'lib', 'skills'];
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const PLUGIN_ROOT = path.join(REPO_ROOT, 'plugin');
@@ -143,9 +146,30 @@ export function readInstall(installedPath = INSTALLED): InstallRecord | undefine
   return entries.find((e: InstallRecord) => e.scope === 'user') ?? entries[0];
 }
 
+/**
+ * Tell a running dashboard to reconcile its routines: a reinstall moves the plugin into a new versioned directory, and the wrapper path baked into every
+ * launchd plist / crontab line moves with it. Resolves false on any failure — no server up is the normal case — and never throws.
+ */
+export function postReconcile(port: number, timeoutMs = 2000): Promise<boolean> {
+  return new Promise((resolve) => {
+    const body = JSON.stringify({ apply: true });
+    const req = http.request({
+      host: '127.0.0.1', port, path: '/api/routines/reconcile', method: 'POST', timeout: timeoutMs,
+      headers: { 'content-type': 'application/json', 'content-length': Buffer.byteLength(body) },
+    }, (res) => {
+      res.resume();
+      res.on('end', () => resolve(res.statusCode !== undefined && res.statusCode >= 200 && res.statusCode < 300));
+      res.on('error', () => resolve(false));
+    });
+    req.on('timeout', () => { req.destroy(); resolve(false); });
+    req.on('error', () => resolve(false));
+    req.end(body);
+  });
+}
+
 const short = (sha?: string): string => sha?.slice(0, 7) ?? '?';
 
-function main(): void {
+async function main(): Promise<void> {
   const install = readInstall();
   if (!install) {
     console.error(`${PLUGIN_ID} is not installed. Install it once, then this script keeps it current:`);
@@ -197,13 +221,12 @@ function main(): void {
   }
   console.log(`installed v${after.version} @ ${short(after.gitCommitSha)} → ${after.installPath}`);
   console.log('restart Claude Code for the new skills to load');
+  await postReconcile(loadConfig({ envPath: path.join(REPO_ROOT, '.env') }).port);
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === path.resolve(fileURLToPath(import.meta.url))) {
-  try {
-    main();
-  } catch (error) {
+  main().catch((error: unknown) => {
     console.error((error as Error).message);
     process.exit(1);
-  }
+  });
 }

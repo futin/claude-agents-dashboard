@@ -56,13 +56,17 @@ const ANSWER_ENV = 'CLAUDE_DASHBOARD_ANSWER_TIMEOUT';
 /** Every switch off. Pushes are opt-in — nothing leaves the machine unasked. */
 export const DEFAULT_NOTIFY: NotifyPolicy = {
   enabled: false,
-  events: { question: false, stop: false, permission: false, plan: false },
+  events: {
+    question: false, stop: false, permission: false, plan: false, 'routine-failed': false, 'usage-limit': false, 'usage-reset': false
+  },
   requireRemoteAnswer: false,
   requireAfk: false,
   requireAutoMode: false
 };
 
-const NOTIFY_EVENTS: readonly NotifyEvent[] = ['question', 'stop', 'permission', 'plan'];
+export const NOTIFY_EVENTS: readonly NotifyEvent[] = [
+  'question', 'stop', 'permission', 'plan', 'routine-failed', 'usage-limit', 'usage-reset'
+];
 
 /** Off by default — recording makes the server poll Anthropic unattended. */
 export const DEFAULT_RECORD_USAGE_HISTORY = false;
@@ -168,6 +172,17 @@ export function mergeNotify(current: NotifyPolicy, patch: unknown): NotifyPolicy
 }
 
 /** The stored values, each falling back independently to its default. */
+/**
+ * A file saved before Schedules became Routines stores `schedule-failed`, and `mergeNotify` refuses a whole policy over one unknown key — every switch
+ * would read as off. Carry that one key over to its new name.
+ */
+function renameLegacyEvents(notify: unknown): unknown {
+  const events = (notify as { events?: unknown } | null)?.events;
+  if (!events || typeof events !== 'object' || !('schedule-failed' in events)) return notify;
+  const { 'schedule-failed': old, ...rest } = events as Record<string, unknown>;
+  return { ...(notify as object), events: { 'routine-failed': old, ...rest } };
+}
+
 function readStored(): Stored {
   const fallback: Stored = {
     idleSecs: DEFAULT_IDLE_SECS,
@@ -184,7 +199,7 @@ function readStored(): Stored {
     return {
       idleSecs: clampIdleSecs(raw.idleSecs) ?? fallback.idleSecs,
       answerSecs: clampAnswerSecs(raw.answerSecs) ?? fallback.answerSecs,
-      notify: mergeNotify(DEFAULT_NOTIFY, raw.notify) ?? DEFAULT_NOTIFY,
+      notify: mergeNotify(DEFAULT_NOTIFY, renameLegacyEvents(raw.notify)) ?? DEFAULT_NOTIFY,
       recordUsageHistory:
         typeof raw.recordUsageHistory === 'boolean'
           ? raw.recordUsageHistory
@@ -247,10 +262,11 @@ export function getSettings(homeDir?: string): ServerSettings {
     persisted,
     idleOverride: detectIdleOverride(homeDir),
     answerOverride: detectAnswerOverride(homeDir),
-    // Both overwritten by the API layer (`settingsBody` in api.ts, for GET and
-    // POST alike), which is where Config — and therefore NTFY_TOPIC and the .env
-    // baseline — is available. This module never reads config.
+    // All three overwritten by the API layer (`settingsBody` in api.ts, for GET and
+    // POST alike), which is where Config — and therefore NTFY_TOPIC, SHOW_USAGE and
+    // the .env baseline — is available. This module never reads config.
     notifyAvailable: false,
+    usageAvailable: false,
     staleEnvKeys: []
   };
 }

@@ -15,6 +15,7 @@ import os from 'node:os';
 import path from 'node:path';
 
 import { emptyRates, shapeUsageRates } from '../server/api.js';
+import { getSettings, SETTINGS_FILE } from '../server/lib/settings.js';
 import { readRecentSamples } from '../server/lib/usage-history.js';
 import { LEDGER_FILE, ledgerStartMs, readLedgerSince } from '../server/lib/usage-ledger.js';
 import { BASELINE_MS, fitDeviation } from '../server/lib/usage-rate.js';
@@ -774,6 +775,23 @@ export async function run(): Promise<number> {
     assert.deepStrictEqual(body.boost.hours.map((h) => h.hour), [16]);
   }));
 
+  check(await testAsync('a settings cache primed elsewhere does not leak into the harness server', async () => {
+    // `pnpm test` runs every suite in one process; any earlier read from a cwd holding a settings file fills the module cache.
+    const other = fs.mkdtempSync(path.join(os.tmpdir(), 'cad-rates-leak-'));
+    fs.writeFileSync(path.join(other, SETTINGS_FILE), JSON.stringify({ recordUsageHistory: true }));
+    const prev = process.cwd();
+    process.chdir(other);
+    try {
+      assert.equal(getSettings().recordUsageHistory, true, 'primed');
+    } finally {
+      process.chdir(prev);
+    }
+    await withServer(ENV, async h => {
+      const reply = await h.req('/api/usage/rates');
+      assert.equal(reply.json?.recording, false, 'the harness home has no settings file, so recording is the default');
+    });
+  }));
+
   check(await testAsync('GET /api/usage/rates is routed and answers JSON', async () => {
     await withServer(ENV, async h => {
       const reply = await h.req('/api/usage/rates');
@@ -790,11 +808,15 @@ export async function run(): Promise<number> {
 
   check(await testAsync('a near-miss path is not the rates endpoint', async () => {
     await withServer(ENV, async h => {
-      // Unmatched paths fall through to the SPA shell, so the tell is the body,
+      // Unmatched paths fall through to the static handler, so the tell is the body,
       // not the status: `/api/usage/ratesx` must never answer a rates payload.
+      // That handler answers the SPA shell when client/dist is built and its 404 hint when not.
       const reply = await h.req('/api/usage/ratesx');
       assert.equal(reply.json, null, 'the near miss must not answer JSON');
-      assert.ok(reply.raw.startsWith('<!DOCTYPE html>'), 'it falls through to the static handler');
+      const builtShell = reply.status === 200 && reply.raw.startsWith('<!DOCTYPE html>');
+      const buildHint = reply.status === 404 && reply.raw.startsWith('Not found. Run `pnpm build`');
+      assert.ok(builtShell || buildHint,
+        `it falls through to the static handler: status ${reply.status}, body ${JSON.stringify(reply.raw.slice(0, 80))}`);
     });
   }));
 

@@ -18,6 +18,13 @@ is off the same 3s poll rather than a second read, and it is there because a mod
 straight from a tapped push ([deep link](push-notify.md)) never showed the list, so this is
 the only place that reader sees how full the session is.
 
+**The Stop control sits in the sidecar, directly under the context reading** — the same
+`sessions/SessionStopControl.tsx` the expanded row renders, so arm, confirm, cancel, `stopping…` + `Force stop`, the token hint and the server's error line
+behave identically in both places. It renders only for a session carrying `Session.stopState` and leaves no gap otherwise. It is in the sidecar and not the
+head on purpose: on a phone the thumb goes to ✕, and a stop beside it gets hit by accident even behind the confirm step (#211). Below `md` it is one line in
+the band. A drawer opened from Routines never shows it: that drawer's session comes from `GET /api/sessions/:id/row`, and `serveSessionRow` builds the row
+without `stopStates`, so it carries no `stopState`.
+
 **A Tasks card sits between the Context card and the facts**, for a session that is executing a plan or has built a task list (the plan's tasks first, else
 `TaskCreate` / `TaskUpdate`; the fold is in [sessions](sessions.md#the-task-list-and-why-it-folds-the-whole-file)). `TasksCard` takes `session.tasks` off the
 same 3s poll and renders nothing for `null` or `[]`. On desktop it is a head row (`Tasks`, `done / total`), a 6px track and the checklist, and it takes the
@@ -48,7 +55,10 @@ one of the three ever renders. A fourth pinned panel is not a hold at all: an en
 `dashboard`-surface session gets the resume composer (`ResumePanel`, see
 [spawn](spawn.md#resuming-an-ended-session-resume)), which renders precisely when none of
 the three do — nothing pending and the turn over — so it can appear under `MessagePanel`'s
-"gone" note as the hand-off.
+"gone" note as the hand-off. When the process is still alive but this server holds no handle
+for it (`Session.processLive`; a restart, an orchestrator run, a pending background Monitor),
+the composer is replaced by a `still running` note on the same `qpanel` classes — see
+[spawn](spawn.md#processlive-the-live-process-this-server-cannot-signal).
 
 **A pinned panel floats over the transcript; it does not push it.** The transcript body and a
 single `.chat-pinned` layer are siblings in `.chat-stack`, a relative box that fills the
@@ -101,7 +111,8 @@ in `transcript.ts`). Exception: for `ExitPlanMode` and `AskUserQuestion` the inp
 conversational content, so the full body (the plan markdown / questions+options composed
 as markdown) rides along as `ChatToolCall.body` — capped at `TOOL_BODY_CAP` (20 KB by
 default, `bodyTruncated` flag) — and renders as a collapsible `<details open>` block
-(`.cmsg-plan`) instead of the one-liner; the `text` filter keeps body-bearing messages.
+(`.cmsg-plan`) instead of the one-liner; the `text` filter keeps body-bearing messages. While a question or plan is held, the newest matching body
+renders closed, because the pinned panel already shows it (`lib/heldBody.ts`, [remote-answer](remote-answer.md)).
 
 Dropped: records with no user/assistant `message.role` (`last-prompt`, `custom-title`,
 `queue-operation`, `attachment`, `system`), `isSidechain` records (subagent traffic —
@@ -266,6 +277,17 @@ control since nothing outside that terminal can answer it.
   invalid and unreachable — a click on an anchor is let through). Expanded, the box takes
   **no `max-height` of its own**: the panel grows with it under the float rule, and the
   pinned layer — not the plan — is what scrolls at the cap.
+- **The two composers (`MessagePanel`, `ResumePanel`) take the Desktop app's keys** (`client/src/lib/composer.ts`, wired by `ComposerSuggestion.tsx`).
+  Enter sends, under the same guard the send button has. Shift+Enter (and Alt+Enter) breaks the line. An IME mid-composition swallows nothing.
+  On a coarse pointer (`(pointer: coarse)`, the test styles.css already makes) Enter stays a newline: a phone keyboard has no Shift, so the send
+  button is the only way to send there.
+- **Tab takes the session's own suggestion, never a guessed one.** `parseChatRecord` sets `suggestion` on a `mcp__ccd_turn__wrap_up` tool line. The
+  value is the first button's `message`, or its `label` when the button has no message. The first button only: when it is an app action
+  (`commit`, `create_pr` …) there is no suggestion. The next button is the alternative, typically "Not now", and offering it would invert the
+  recommendation. `latestSuggestion` walks the **unfiltered** page from the end and stops at the first user message, so an answered turn's suggestion
+  goes stale. Only Desktop sessions call wrap_up, so a CLI session never shows one.
+  The empty box shows the suggestion as its placeholder, and a dashed `.qp-suggest` chip under it is the tap target for phones (its `Tab` hint hides
+  on a coarse pointer). Tab with text in the box, or Shift+Tab, moves focus as usual.
 
 ## Invariants
 
@@ -290,6 +312,7 @@ control since nothing outside that terminal can answer it.
     - server/lib/remote-message-prose.ts
     - server/api.ts
     - client/src/components/ChatDrawer.tsx
+    - client/src/components/sessions/SessionStopControl.tsx
     - client/src/components/TasksCard.tsx
     - client/src/components/PanelChrome.tsx
     - client/src/components/QuestionPanel.tsx
@@ -305,6 +328,9 @@ control since nothing outside that terminal can answer it.
     - client/src/hooks/useBackClose.ts
     - client/src/lib/backClose.ts
     - client/src/lib/chatFilter.ts
+    - client/src/lib/heldBody.ts
+    - client/src/lib/composer.ts
+    - client/src/components/ComposerSuggestion.tsx
     - client/src/lib/markdown.ts
   kind: subsystem
   verified: 142439e51a92c5c5faebaf0c867bc5a36fef7c57

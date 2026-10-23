@@ -5,6 +5,8 @@
  * produces it; `useSessions` (client) consumes it. One definition, both sides.
  */
 
+import type { JobError } from './routine-file.js';
+
 /** The session's most-recent tool call. */
 export interface Activity {
   tool: string;
@@ -63,6 +65,11 @@ export interface Session {
    * when no record in the transcript's head window carried one.
    */
   projectPath: string | null;
+  /**
+   * Name of the main checkout when `projectPath` is a linked git worktree (`zen-joliot-19719c` → `backlog-manager`), else null. Display only: `project`
+   * stays the worktree folder, because the project filter, pinned projects and the chat drawer key on it. See `server/lib/worktree-repo.ts`.
+   */
+  repo: string | null;
   /** User-set custom title from Claude Code (custom-title record); null when unnamed. */
   sessionName: string | null;
   gitBranch: string | null;
@@ -125,6 +132,14 @@ export interface Session {
    * that could not work would be worse than offering none.
    */
   stopState?: StopState;
+  /**
+   * `true` when a live `claude` process carries this session's id (`--session-id`/`--resume` in its argv, read from `ps`) that this server holds no handle
+   * for: a `dashboard` row with no {@link Session.stopState}. It exists because the transcript cannot say the process outlived its turn (a pending
+   * background Monitor keeps a headless run alive) and the launch store forgets its children on a restart, so without it the drawer offers a resume that
+   * `POST /api/spawn` then refuses with 409. **Absent, never `false`**, the encoding `stopState` uses, and absent whenever the `ps` probe was skipped or
+   * failed. Display only: this server cannot signal that process, so it offers no Stop for it.
+   */
+  processLive?: true;
   activity: Activity | null;
   lastTimestamp: string | null;
   updatedMs: number;
@@ -892,6 +907,11 @@ export interface ChatToolCall {
    */
   body?: string;
   bodyTruncated?: boolean;
+  /**
+   * The Desktop app's recommended next-step reply, on a `mcp__ccd_turn__wrap_up` line only: its first button's `message` (or `label` when the label is
+   * the whole message). Absent when that first button is an app action — the composer offers it on Tab (`client/src/lib/composer.ts`).
+   */
+  suggestion?: string;
 }
 
 /** One conversational turn in the chat tail. Noise records are dropped upstream. */
@@ -999,7 +1019,7 @@ export interface SessionTrace {
 }
 
 /**
- * Remote answers — the one write path in the dashboard (see
+ * Remote answers — the first of the four session write paths (see
  * `docs/subsystems/remote-answer.md`). A session's `AskUserQuestion` PreToolUse
  * hook offers the question here and blocks; the browser answers it; the hook
  * feeds the choice back to the model. Everything below lives in memory only.
@@ -1031,8 +1051,11 @@ export type ConnectionOrigin = 'local' | 'lan' | 'tailnet' | 'unknown';
  */
 export type WriteAccess = 'open' | 'token' | 'none';
 
-/** The four session events a push notification can announce. */
-export type NotifyEvent = 'question' | 'stop' | 'permission' | 'plan';
+/**
+ * What a push notification can announce: four session events, a failed routine, and the 5-hour usage window reaching its limit
+ * (`usage-limit`) or resetting after one (`usage-reset`). The last three ignore the session-only `require*` conditions.
+ */
+export type NotifyEvent = 'question' | 'stop' | 'permission' | 'plan' | 'routine-failed' | 'usage-limit' | 'usage-reset';
 
 /**
  * When to send a push. Every clause is AND-ed, and every layer is independently
@@ -1131,6 +1154,10 @@ export interface ServerSettings {
    * both read and publish to the channel.
    */
   notifyAvailable: boolean;
+  /**
+   * Whether `SHOW_USAGE` is on. Off, the server never reads usage, so the usage-limit alerts cannot fire and their Settings rows say why.
+   */
+  usageAvailable: boolean;
   /**
    * Names of `.env` settings that have been edited since the server started, and
    * are therefore *not* what it is running on — config is read once, at startup.
@@ -1405,8 +1432,9 @@ export interface PerTurn {
   /** 0-based index (in assistant-turn order) of the `maxCombined` turn, or -1. */
   maxTurnIndex: number;
   /**
-   * Inferred, not read: `maxCombined` topped 250k (out of a 200k window's reach — it compacts near 160k) and no turn ever fell below half the
-   * running peak, the drop compaction leaves. A session with no turns, or one that compacted after its peak, reads false.
+   * `maxCombined` topped 250k (out of a 200k window's reach — it compacts near 160k; the window itself is inferred, never recorded) and the session
+   * never compacted. False when any main-chain `compact_boundary` record is present; for transcripts without one, false when a turn fell below
+   * half the running peak, the drop compaction leaves. A session with no turns, or one that compacted after its peak, reads false.
    */
   neverCompacted: boolean;
 }
@@ -1777,6 +1805,11 @@ export type RepoGitStats =
       /** Which refs of the trunk exist; null exactly when `trunk` is null. Lets the client tell "<trunk> not on origin" from "<trunk> only on origin", which `trunkVsOrigin: null` alone cannot. */
       trunkRefs: { local: boolean; origin: boolean } | null;
       /**
+       * The local trunk is checked out in a worktree other than this pin's `toplevel`, so a quick Pull cannot move it without a checkout. False when there
+       * is no local trunk or it is checked out nowhere else.
+       */
+      trunkCheckedOutElsewhere: boolean;
+      /**
        * The current branch against its configured upstream (`%(upstream)`), counted over local refs only. `upstream` is the short name (`origin/feat/x`);
        * `counts` is null when the upstream is configured but its ref does not resolve (gone, e.g. after `fetch --prune`). The whole field is null when
        * detached, on the trunk, on an unborn branch, or with no upstream configured. `ahead` = commits only on the branch, `behind` = commits only on the
@@ -1818,6 +1851,112 @@ export interface GitStatsResponse {
   repos: RepoGitStats[];
   fetch: FetchClock;
   generatedAt: number;
+}
+
+/** A quick git op from the Sync key's menu: a fast-forward pull or push, run on the server with no Claude session. */
+export type GitQuickOp = 'pull' | 'push';
+
+/** Body of `POST /api/git-quick`. `dirName` names a pin; the server never takes a path from the client. */
+export interface GitQuickRequest {
+  dirName: string;
+  op: GitQuickOp;
+}
+
+/** `ff`: the checked-out branch (trunk or not) fast-forwarded; `move`: the local trunk moved without a checkout; `push`: the current branch pushed. */
+export type GitQuickPartKind = 'ff' | 'move' | 'push';
+
+/**
+ * One ref a quick op moved, or tried to. `target` is the ref on the other side (`origin/main`, `origin/feature/x`). A failed part carries git's first
+ * non-empty stderr line with any `error: ` / `fatal: ` prefix stripped (`''` when git said nothing), or `timedOut` when the call was killed.
+ */
+export type GitQuickPart = { kind: GitQuickPartKind; branch: string; target: string } & (
+  | { ok: true; commits: number }
+  | { ok: false; timedOut: boolean; detail: string }
+);
+
+/** Why a quick op did nothing at all. `fetch-running` and `busy` answer 409; the rest 200. */
+export type GitQuickRefusal = 'not-ok' | 'no-origin' | 'detached' | 'in-progress' | 'fetch-running' | 'busy' | 'nothing' | 'fetch-failed';
+
+/** Answer of `POST /api/git-quick`: either parts (some may have failed) or one refusal. `detail` and `timedOut` describe a `fetch-failed`. */
+export interface GitQuickResponse {
+  op: GitQuickOp;
+  /** The pin's display name, which every result line starts with. */
+  repo: string;
+  parts: GitQuickPart[];
+  refusal: GitQuickRefusal | null;
+  detail: string | null;
+  timedOut: boolean;
+}
+
+/** What a codegraph run does: `sync` applies pending changes, `reindex` rebuilds the whole graph. */
+export type CodegraphRunKind = 'sync' | 'reindex';
+
+/** A run in flight on one repo: ours, or a rebuild started from a terminal. */
+export interface CodegraphRun {
+  kind: CodegraphRunKind;
+  startedAtMs: number;
+}
+
+/** How the last run on a repo ended, so a failed sync stays visible after it is over. */
+export interface CodegraphLastRun {
+  kind: CodegraphRunKind;
+  ok: boolean;
+  endedAtMs: number;
+  message: string;
+}
+
+/** The CLI's `index.state`; a CLI `null` (index older than the marker) is read as `complete`. */
+export type CodegraphIndexState = 'indexing' | 'complete' | 'partial' | 'failed';
+
+/** The fields of `codegraph status --json` the view uses; the client never sees raw CLI output. */
+export interface CodegraphStats {
+  lastIndexedMs: number | null;
+  fileCount: number;
+  nodeCount: number;
+  edgeCount: number;
+  dbSizeBytes: number;
+  nodesByKind: Record<string, number>;
+  languages: string[];
+  pending: { added: number; modified: number; removed: number };
+  worktreeMismatch: { worktreeRoot: string; indexRoot: string } | null;
+  version: string;
+  indexState: CodegraphIndexState;
+  reindexRecommended: boolean;
+  /** Null for an index built before the CLI stamped its version. */
+  builtWithVersion: string | null;
+  builtWithExtractionVersion: number | null;
+  currentExtractionVersion: number | null;
+}
+
+/** One pinned project's codegraph state: `ok` carries stats, `building` is a rebuild with no good stats yet. */
+export type CodegraphRepo = {
+  dirName: string;
+  name: string;
+  path: string | null;
+  watching: boolean;
+  watcherSinceMs: number | null;
+  rebuildLive: boolean;
+  run: CodegraphRun | null;
+  lastRun: CodegraphLastRun | null;
+} & (
+  | { state: 'ok'; root: string; stats: CodegraphStats }
+  | { state: 'building'; root: string }
+  | { state: 'none' }
+  | { state: 'missing' }
+  | { state: 'error'; root: string; message: string }
+);
+
+/** Payload of `GET /api/codegraph`: one entry per pin, in pin order; `cli: 'missing'` is said once for the page. */
+export interface CodegraphResponse {
+  generatedAt: number;
+  cli: 'ok' | 'missing';
+  repos: CodegraphRepo[];
+}
+
+/** Body of `POST /api/codegraph/run`. */
+export interface CodegraphRunRequest {
+  dirName: string;
+  kind: CodegraphRunKind;
 }
 
 /** Payload of `GET /api/configs`. */
@@ -1936,6 +2075,12 @@ export interface SessionsResponse {
   totals: Totals;
   sessions: Session[];
   /**
+   * Every project with a transcript in the lookback window, sorted — what the Sessions toolbar's project picker offers. A superset of the projects in
+   * `sessions`: with `?project=` set, `sessions` holds only the chosen ones, and the picker still has to offer the rest. Absent on the error snapshot,
+   * where the client falls back to the projects of the rows it has.
+   */
+  projects?: string[];
+  /**
    * In-flight `claude -p` launches the RAM-only store in `server/lib/spawn.ts`
    * is still watching (see {@link LaunchingSession}). Served alongside
    * `sessions` deliberately, on the same 3s poll, rather than a second
@@ -1961,4 +2106,146 @@ export interface SessionsResponse {
   usageStatus?: UsageStatus;
   /** Set only when the scan failed and an empty snapshot is returned. */
   error?: boolean;
+}
+
+/** One routine as `shared/routine-file.ts` parses it from `<name>.md` in the routines folder. */
+export interface RoutineJob {
+  /** The filename without `.md`; also the launchd label suffix and the log key. */
+  name: string;
+  /** Five-field cron, local time of the machine that runs it. */
+  cron: string;
+  machines: ('mac' | 'wsl')[];
+  run: 'shell' | 'claude';
+  /** `pinned` = every pinned repo, a list = only those pins (by name or dirName), null = one step in `cwd`. */
+  foreach: 'pinned' | string[] | null;
+  cwd: string | null;
+  enabled: boolean;
+  model: string | null;
+  effort: string | null;
+  permissionMode: 'plan' | 'acceptEdits' | 'auto' | null;
+  allowedTools: string[] | null;
+  maxTurns: number | null;
+  timeoutMs: number;
+  /** Everything after the frontmatter, trimmed: the prompt for `claude`, the whole body for `shell`. */
+  body: string;
+  /** `shell` only: the inner text of the body's first ```bash fence. */
+  script: string | null;
+}
+
+/** One step of a routine run, folded from its `step-start` / `step-end` log records. `outcome` is null while the step is in flight (or its run was lost). */
+export interface RoutineStep {
+  index: number;
+  /** The pin name for a `foreach:` job, null for a single-cwd job. */
+  repo: string | null;
+  cwd: string | null;
+  startedAt: string;
+  endedAt: string | null;
+  outcome: 'ok' | 'failed' | 'skipped' | 'timeout' | 'stopped' | null;
+  ms: number | null;
+  exit: number | null;
+  why: string | null;
+  /** Shell steps only: the last lines of combined output. */
+  tail: string | null;
+  /** Claude steps only; null for shell steps and steps still running. */
+  costUsd: number | null;
+  /** input + cache creation + cache read, summed by the wrapper — never re-derived. */
+  tokensIn: number | null;
+  tokensOut: number | null;
+  turns: number | null;
+  model: string | null;
+  /** Claude steps only: the id `--session-id` gave the child, what `GET /api/sessions/:id/row` opens. */
+  sessionId: string | null;
+}
+
+/** One run of a routine, or a refusal, as the server folds them from `~/.claude/routines/runs/*.jsonl`. */
+export interface RoutineRun {
+  /** The wrapper's uuid; a refusal has none in the log, so its id is `refused-<machine>-<job>-<epoch ms>`. */
+  id: string;
+  job: string;
+  machine: string;
+  trigger: 'schedule' | 'manual';
+  startedAt: string;
+  endedAt: string | null;
+  ms: number | null;
+  late: boolean;
+  /** `lost` is derived at read time, never logged: a start with no end whose wrapper is gone or past the age rule. */
+  state: 'running' | 'ok' | 'failed' | 'lost' | 'refused';
+  /** Step counts: the `end` record's, or counted from the step records so far when the run has none. */
+  ok: number;
+  failed: number;
+  skipped: number;
+  /** How many steps the wrapper planned (`start.steps`); `steps` may hold fewer while it runs or after a stop. */
+  total: number;
+  stopped: boolean;
+  /** Set only when the run failed before its first step. */
+  error: string | null;
+  /** A refusal's reason, or why a run reads lost. */
+  why: string | null;
+  steps: RoutineStep[];
+}
+
+/** The Jobs band over a window of whole local days ending today, plus the cost and run count of the window before it. */
+export interface RoutineStats {
+  runs: number;
+  ok: number;
+  failed: number;
+  lost: number;
+  costUsd: number;
+  tokensIn: number;
+  tokensOut: number;
+  wallMs: number;
+  /** Exactly `days` local days, oldest first, `YYYY-MM-DD`; a lost run counts as failed here. */
+  byDay: Array<{ day: string; ok: number; failed: number }>;
+  prev: { costUsd: number; runs: number };
+}
+
+/** Reconcile's verdict, as the toolbar chip reads it; `not-owner` is what every server but the owner reports (spec §Owning server). */
+export type ReconcileState = 'in-sync' | 'drift' | 'failed' | 'pending' | 'not-owner' | 'no-plugin' | 'cron-down' | 'bad-machine' | 'no-claude';
+/** One job's difference between its file and the OS scheduler. `pending` is a change deferred (a running job) or blocked (`why` says which). */
+export interface ReconcileChange { name: string; action: 'install' | 'update' | 'remove' | 'pending'; why: string }
+export interface ReconcileReport { state: ReconcileState; changes: ReconcileChange[]; unchanged: number; error: string | null; at: string }
+
+/** One job file as `GET /api/routines/:name` serves it to the editor: the raw text, and the parse of it. `job` is null when `errors` is not empty. */
+export interface RoutineFile {
+  name: string;
+  text: string;
+  job: RoutineJob | null;
+  errors: JobError[];
+  mtimeMs: number;
+}
+
+/** One ledger row of `GET /api/routines`: the file plus what this machine knows about it. */
+export interface RoutineJobRow extends RoutineFile {
+  /** The job names this machine in `machines:`. */
+  onThisMachine: boolean;
+  /** The OS scheduler holds a job for it now (an older version counts). Only an owner can tell: false whenever the report could not be planned. */
+  installed: boolean;
+  /** The next fire, ISO; null for an invalid, paused or other-machine job. */
+  nextAt: string | null;
+  /** The newest run that is not running (a refusal included). */
+  last: RoutineRun | null;
+  running: RoutineRun | null;
+}
+
+export interface RoutinesResponse {
+  machine: 'mac' | 'wsl';
+  /** The routines folder, `~` expanded. */
+  dir: string;
+  /** `ownedBy` is `<cwd>:<port>` of the live owner, or `''` when this server never opted in (`ROUTINES_OWNER`), or `seam` under the test seam. */
+  owner: 'owner' | { ownedBy: string };
+  reconcile: ReconcileReport;
+  /** Sorted by name. */
+  jobs: RoutineJobRow[];
+}
+
+/** `GET /api/routines/runs`: the filtered runs of the window, newest first, and the stats for the window (job and runner filters applied, outcome not). */
+export interface RoutineRunsResponse {
+  runs: RoutineRun[];
+  stats: RoutineStats;
+}
+
+/** `POST /api/routines/validate`: what the drawer shows under the textarea. `summary` is the one-line reading of a valid file, null otherwise. */
+export interface RoutineValidateResponse {
+  errors: JobError[];
+  summary: string | null;
 }

@@ -28,7 +28,7 @@ export interface Config {
   analyticsKeep: number;
   /** Feature toggle for the Analytics section. */
   showAnalytics: boolean;
-  /** Feature toggle for remote answers (the only write path). Off → the wait endpoint 404s. */
+  /** Feature toggle for remote answers (kill switch for the session write paths). Off → the wait endpoint 404s. */
   remoteAnswer: boolean;
   /**
    * Optional pass for every write route, from any address. Empty (default): only this machine and, while `trustTailnet` is on, the tailnet can
@@ -121,6 +121,14 @@ export interface Config {
    * single-label names and `.localhost`/`.local`/`.ts.net` are always allowed — this is for public tunnels. See `lib/request-guard.ts`.
    */
   allowedHosts: string[];
+  /** Routine job files (`ROUTINES_DIR`), as written — `~` is expanded by `routineDirs`, not here. */
+  routinesDir: string;
+  /** Machine name override (`ROUTINE_MACHINE`: `mac` or `wsl`). Empty = detect; any other value is reported by `machineName`, not coerced. */
+  routineMachine: string;
+  /** Opt this server in to owning the OS jobs, `pins.json` and the lock sweep (`ROUTINES_OWNER=true`). Off by default: only one server per machine may. */
+  routinesOwner: boolean;
+  /** Test and verification seam (`ROUTINES_STATE_ROOT`) moving the whole machine-local state folder; empty = `~/.claude/routines`. Undocumented on purpose. */
+  routinesStateRoot: string;
 }
 
 export const DEFAULTS = {
@@ -148,7 +156,11 @@ export const DEFAULTS = {
   CLAUDE_BIN: '',
   SPAWN_MAX_PERMISSION: 'auto',
   SYNC_PERMISSION_MODE: 'auto',
-  ALLOWED_HOSTS: ''
+  ALLOWED_HOSTS: '',
+  ROUTINES_DIR: '~/claude-global/routines',
+  ROUTINE_MACHINE: '',
+  ROUTINES_OWNER: false,
+  ROUTINES_STATE_ROOT: ''
 } as const;
 
 /** Parse a .env file body into a flat key/value object. Tolerant, minimal. */
@@ -331,6 +343,11 @@ export function loadConfig(options: { envPath?: string } = {}): Config {
     claudeBin: (src('CLAUDE_BIN') || DEFAULTS.CLAUDE_BIN).trim(),
     spawnMaxPermission: toPermissionMode(src('SPAWN_MAX_PERMISSION'), DEFAULTS.SPAWN_MAX_PERMISSION),
     syncPermissionMode: toPermissionMode(src('SYNC_PERMISSION_MODE'), DEFAULTS.SYNC_PERMISSION_MODE, 'SYNC_PERMISSION_MODE'),
-    allowedHosts: (src('ALLOWED_HOSTS') || DEFAULTS.ALLOWED_HOSTS).split(',').map(h => h.trim()).filter(Boolean)
+    allowedHosts: (src('ALLOWED_HOSTS') || DEFAULTS.ALLOWED_HOSTS).split(',').map(h => h.trim()).filter(Boolean),
+    // Each also reads its name from before Schedules became Routines (`SCHEDULES_DIR`, …), so an `.env` written then keeps working.
+    routinesDir: (src('ROUTINES_DIR') || src('SCHEDULES_DIR') || DEFAULTS.ROUTINES_DIR).trim(),
+    routineMachine: (src('ROUTINE_MACHINE') || src('SCHEDULE_MACHINE') || DEFAULTS.ROUTINE_MACHINE).trim(),
+    routinesOwner: toBool(src('ROUTINES_OWNER') || src('SCHEDULES_OWNER'), DEFAULTS.ROUTINES_OWNER),
+    routinesStateRoot: (src('ROUTINES_STATE_ROOT') || src('SCHEDULES_STATE_ROOT') || DEFAULTS.ROUTINES_STATE_ROOT).trim()
   };
 }

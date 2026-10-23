@@ -1,12 +1,16 @@
+import { useRef, useState } from 'react';
+
 import type { GitBranch, RepoGitStats, Session } from '../../../../shared/types';
 import { formatAgo } from '../../lib/format';
 import { gitBarWidth } from '../../lib/gitBar';
 import { gitBranchChipText, gitBranchCounts } from '../../lib/gitStatsText';
-
+import type { GitQuickControl } from '../../hooks/useGitQuick';
 import type { GitSyncControl } from '../../hooks/useGitSync';
+import { quickMenu, type QuickCtx } from '../../lib/gitQuick';
 import { GIT_LEVEL_DOT, agentOn, isStaleBranch, type GitAgent, type GitAssessed, type GitLevel } from '../../lib/gitLevels';
 import { canSync, syncKeyLabel, type OkRepo } from '../../lib/gitSync';
 import type { GitLayoutProps } from './gitLayoutProps';
+import { GitQuickMenu, type GitQuickMenuItem } from './GitQuickMenu';
 
 /**
  * The pieces the four Git layouts (Inbox, Matrix, Inspector, Branches) share: the level dot, agent chip, divergence figures and bar, the branch label and row,
@@ -24,7 +28,7 @@ export function GitWorktreeBadge({ b }: { b: GitBranch }) {
 }
 
 /** Two arrows chasing, not the band's ↻: that one re-reads the stats, this one spends a session. Turns while a sync runs (`.git-sync.on`). */
-function GitSyncGlyph() {
+export function GitSyncGlyph() {
   return (
     <svg viewBox="0 0 16 16" aria-hidden="true">
       <path d="M13.5 8a5.5 5.5 0 0 1-9.4 3.9M2.5 8a5.5 5.5 0 0 1 9.4-3.9" />
@@ -36,17 +40,32 @@ function GitSyncGlyph() {
 /**
  * The repo's Sync button (spec §9): a raised key, square where the fact chips are round, so the two never read alike. Nothing while the host cannot spawn
  * or git-sync would refuse the repo. Idle it launches; running it opens the chat; launching, unseen or mid-POST it is disabled. Its click never bubbles, so
- * a clickable row it sits in does not toggle.
+ * a clickable row it sits in does not toggle. Given `quick`, it is the left half of a split key whose caret opens Pull · Push · Sync with Claude (quick
+ * pull/push spec §The UI); the split draws even where the host cannot spawn, since Pull and Push need no session.
  */
-export function GitSyncButton({ repo, sync, verbs, primary, label }: {
+export function GitSyncButton({ repo, sync, verbs, primary, label, quick }: {
   repo: RepoGitStats;
   sync: GitSyncControl;
   verbs?: readonly string[];
   primary?: boolean;
   label?: string;
+  quick?: GitQuickControl;
 }) {
-  if (!sync.available || !canSync(repo)) return null;
-  // `canSync` narrowed `repo` to an ok one, so `toplevel` is there.
+  if (!canSync(repo)) return null;
+  if (quick) return <GitSyncSplit repo={repo} sync={sync} verbs={verbs} primary={primary} label={label} quick={quick} />;
+  if (!sync.available) return null;
+  return <GitSyncKey repo={repo} sync={sync} verbs={verbs} primary={primary} label={label} />;
+}
+
+function GitSyncKey({ repo, sync, verbs, primary, label, blocked = false }: {
+  repo: OkRepo;
+  sync: GitSyncControl;
+  verbs?: readonly string[];
+  primary?: boolean;
+  label?: string;
+  /** Disabled for a reason of the split's own: no spawn here, or a quick op running on this repo. */
+  blocked?: boolean;
+}) {
   const phase = sync.phaseFor(repo);
   const running = phase?.kind === 'running' ? phase : null;
   const idle = phase === null || phase.kind === 'ended' || phase.kind === 'failed';
@@ -54,7 +73,7 @@ export function GitSyncButton({ repo, sync, verbs, primary, label }: {
     <button
       type="button"
       className={`git-sync${running ? ' on' : primary ? ' primary' : ''}`}
-      disabled={!running && (!idle || sync.pending)}
+      disabled={blocked || (!running && (!idle || sync.pending))}
       aria-label={running ? `Open the git-sync chat for ${repo.name}` : `Sync ${repo.name}`}
       onClick={e => {
         e.stopPropagation();
@@ -65,6 +84,74 @@ export function GitSyncButton({ repo, sync, verbs, primary, label }: {
       <GitSyncGlyph />
       {syncKeyLabel(phase, sync.starting === repo.toplevel, { verbs, label })}
     </button>
+  );
+}
+
+/** What the menu's rules read of the remembered sync: launching, unseen or this repo's own POST out all count as busy. */
+function quickSyncState(sync: GitSyncControl, repo: OkRepo): QuickCtx['syncState'] {
+  const phase = sync.phaseFor(repo);
+  if (phase?.kind === 'running') return 'running';
+  if (sync.starting === repo.toplevel || phase?.kind === 'launching' || phase?.kind === 'unseen') return 'busy';
+  return 'idle';
+}
+
+function GitSyncSplit({ repo, sync, verbs, primary, label, quick }: {
+  repo: OkRepo;
+  sync: GitSyncControl;
+  verbs?: readonly string[];
+  primary?: boolean;
+  label?: string;
+  quick: GitQuickControl;
+}) {
+  const [open, setOpen] = useState(false);
+  const caret = useRef<HTMLButtonElement | null>(null);
+  const op = quick.runningFor(repo);
+  const syncState = quickSyncState(sync, repo);
+  const menu = quickMenu(repo, {
+    writeAccess: sync.writeAccess, tokenRequired: sync.tokenRequired, tokenStored: quick.tokenStored, syncAvailable: sync.available, syncState,
+    quickRunning: op !== null, syncPending: sync.pending,
+  });
+  const phase = sync.phaseFor(repo);
+  const items: GitQuickMenuItem[] = [
+    { key: 'pull', label: 'Pull', ...menu.pull, run: () => quick.run(repo, 'pull') },
+    { key: 'push', label: 'Push', ...menu.push, run: () => quick.run(repo, 'push') },
+    {
+      key: 'sync', label: 'Sync with Claude', ...menu.sync,
+      run: () => (phase?.kind === 'running' ? sync.openChat(phase.session.id) : sync.start(repo)),
+    },
+  ];
+  const close = (refocus: boolean) => {
+    setOpen(false);
+    if (refocus) caret.current?.focus();
+  };
+  return (
+    <span className="git-split">
+      <GitSyncKey repo={repo} sync={sync} verbs={verbs} primary={primary} label={label} blocked={!sync.available || op !== null} />
+      <button
+        ref={caret}
+        type="button"
+        className={`git-split-caret${op !== null ? ' on' : syncState === 'running' ? ' on' : primary ? ' primary' : ''}`}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        aria-disabled={op !== null}
+        aria-label={op === null ? `More sync options for ${repo.name}` : `${op === 'pull' ? 'Pulling' : 'Pushing'} ${repo.name}`}
+        onClick={e => {
+          e.stopPropagation();
+          if (op === null) setOpen(o => !o);
+        }}
+      >
+        {op !== null ? <GitSyncGlyph /> : <GitCaretGlyph />}
+      </button>
+      {open && op === null && <GitQuickMenu anchor={caret} items={items} label={`Sync options for ${repo.name}`} onClose={close} />}
+    </span>
+  );
+}
+
+function GitCaretGlyph() {
+  return (
+    <svg viewBox="0 0 10 10" aria-hidden="true">
+      <path d="M2 3.5l3 3 3-3" />
+    </svg>
   );
 }
 
@@ -158,7 +245,7 @@ export function GitKeys({ a, ctx, bare = false, compact = false }: { a: GitAsses
           {compact ? 'Retry' : 'Retry fetch'}
         </button>
       )}
-      <GitSyncButton repo={a.repo} sync={ctx.sync} verbs={bare || compact ? [] : a.verbs} primary={syncPrimary} />
+      <GitSyncButton repo={a.repo} sync={ctx.sync} verbs={bare || compact ? [] : a.verbs} primary={syncPrimary} quick={ctx.quick} />
     </>
   );
 }

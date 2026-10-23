@@ -1,0 +1,46 @@
+{
+  "initialized": true,
+  "version": "1.6.2",
+  "projectPath": "/repo",
+  "indexPath": "/repo/.codegraph",
+  "lastIndexed": "2026-10-19T08:14:07.660Z",
+  "fileCount": 416,
+  "nodeCount": 8254,
+  "edgeCount": 33969,
+  "dbSizeBytes": 36786176,
+  "walSizeBytes": 8272,
+  "backend": "node-sqlite",
+  "journalMode": "wal",
+  "nodesByKind": {
+    "class": 8,
+    "constant": 1145,
+    "file": 405,
+    "function": 2637,
+    "import": 1968,
+    "interface": 302,
+    "method": 65,
+    "property": 1481,
+    "type_alias": 134,
+    "variable": 109
+  },
+  "languages": [
+    "javascript",
+    "tsx",
+    "typescript",
+    "yaml"
+  ],
+  "pendingChanges": {
+    "added": 0,
+    "modified": 0,
+    "removed": 0
+  },
+  "worktreeMismatch": null,
+  "index": {
+    "builtWithVersion": "1.6.2",
+    "builtWithExtractionVersion": 27,
+    "currentExtractionVersion": 27,
+    "reindexRecommended": false,
+    "state": "complete",
+    "pendingRefs": 0
+  }
+}

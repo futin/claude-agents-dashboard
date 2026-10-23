@@ -17,9 +17,11 @@ import { isReady, stage, type StageOpts } from './stage.js';
 import { DAYLIGHT_TIERS } from './tiers.js';
 
 interface ShotCase extends StageOpts {
-  kind: 'shot' | 'detail' | 'triage' | 'git-matrix' | 'git-inspector' | 'git-branches' | 'projects-tiles' | 'projects-columns' | 'projects-lists' | 'releases';
+  kind: 'shot' | 'detail' | 'triage' | 'git-matrix' | 'git-inspector' | 'git-branches' | 'codegraph-inbox' | 'codegraph-matrix' | 'codegraph-inspector' | 'projects-tiles' | 'projects-columns' | 'projects-lists' | 'routines-runs' | 'releases';
   /** Per-pixel colour tolerance overriding the config's `0`; `maxDiffPixels` stays `0`, so a pixel that really changes colour still fails the shot. */
   threshold?: number;
+  /** Selectors painted over before the comparison, for a native control whose glyphs Chromium places a pixel apart at random. */
+  mask?: string[];
 }
 
 /**
@@ -28,6 +30,13 @@ interface ShotCase extends StageOpts {
  * edge removes it, so the 1280 projects shots accept one-step colour noise — about 0.004 in pixelmatch's YIQ scale, 0.01 leaves a little headroom.
  */
 const AA_NOISE = 0.01;
+
+/**
+ * Routines hits the same quirk: its stats band (`.rtn-stats`, rounded and `overflow: hidden`, at a fractional y) shows one-step noise on its corners in
+ * some runs, so every Routines shot takes `AA_NOISE`. The phone Runs shot also masks the native job `<select>`: at y 184.69 Chromium draws its label a whole
+ * pixel lower in about half the runs, a shift no colour tolerance absorbs. The 1280 Runs shot still pins the select.
+ */
+const ROUTINES = (c: ShotCase): ShotCase => (c.section === 'routines' ? { ...c, threshold: AA_NOISE } : c);
 
 const OTHER_THEMES: ThemeId[] = ['midnight', 'amber', 'graphite', 'nightshift'];
 
@@ -44,6 +53,12 @@ const GIT = {
   contentWidth: 'fixed' as const,
   fixtures: { '/api/sessions': gitSessions }
 };
+const CG = {
+  section: 'management' as Section,
+  theme: 'daylight' as ThemeId,
+  contentWidth: 'fixed' as const,
+  managementTab: 'codegraph' as const
+};
 const PROJ = {
   section: 'management' as Section,
   theme: 'daylight' as ThemeId,
@@ -53,7 +68,7 @@ const PROJ = {
 };
 
 const CASES: ShotCase[] = [
-  ...SECTIONS.flatMap((s) => casesFor(s.id)),
+  ...SECTIONS.flatMap((s) => casesFor(s.id)).map(ROUTINES),
   { section: 'sessions', theme: 'daylight', width: 1280, contentWidth: 'fixed', query: '?session=' + FIXTURE_SESSION_ID, kind: 'detail' },
   // The phone drawer folds the fixture plan's card to one `Plan 7/13 · …` line; the 1280 detail above pins its ellipsised `Plan · …` head.
   { section: 'sessions', theme: 'daylight', width: 375, contentWidth: 'fixed', query: '?session=' + FIXTURE_SESSION_ID, kind: 'detail' },
@@ -67,26 +82,35 @@ const CASES: ShotCase[] = [
   { ...GIT, width: 1280, storage: { 'management.gitLayout': 'inspector' }, kind: 'git-inspector' },
   { ...GIT, width: 375, storage: { 'management.gitLayout': 'branches' }, kind: 'git-branches' },
   { ...GIT, width: 1280, storage: { 'management.gitLayout': 'branches' }, kind: 'git-branches' },
+  // CodeGraph's Inbox is the default layout and drawn at 1280; the phone shot stores Matrix, which a narrow window does not offer, so it also pins that the
+  // stored choice is drawn as Inbox rather than a table the phone cannot hold.
+  { ...CG, width: 1280, kind: 'codegraph-inbox' },
+  { ...CG, width: 1280, storage: { 'management.codegraphLayout': 'matrix' }, kind: 'codegraph-matrix' },
+  { ...CG, width: 1280, storage: { 'management.codegraphLayout': 'inspector' }, kind: 'codegraph-inspector' },
+  { ...CG, width: 375, storage: { 'management.codegraphLayout': 'matrix' }, kind: 'codegraph-inbox' },
   // Projects with a pinned folder that is gone, so every layout shows the `Folder gone` chip.
   { ...PROJ, width: 1280, storage: { 'management.projectsLayout': 'tiles' }, kind: 'projects-tiles', threshold: AA_NOISE },
   { ...PROJ, width: 1280, storage: { 'management.projectsLayout': 'columns' }, kind: 'projects-columns', threshold: AA_NOISE },
   { ...PROJ, width: 375, storage: { 'management.projectsLayout': 'lists' }, kind: 'projects-lists' },
+  // Routines' default page (Jobs) is what the matrix above shows; Runs is the rail's other sub-item.
+  { section: 'routines', theme: 'daylight', width: 375, contentWidth: 'fixed', routinesTab: 'runs', kind: 'routines-runs', threshold: AA_NOISE, mask: ['.rtn-select'] },
+  { section: 'routines', theme: 'daylight', width: 1280, contentWidth: 'fixed', routinesTab: 'runs', kind: 'routines-runs', threshold: AA_NOISE },
   // What's new, opened from the version chip: full screen on the phone (reached through the menu, whose last row the chip is), the 400px panel from `md`.
   { section: 'sessions', theme: 'daylight', width: 375, contentWidth: 'fixed', kind: 'releases' },
   { section: 'sessions', theme: 'daylight', width: 1280, contentWidth: 'fixed', kind: 'releases' }
 ];
 
 /**
- * 12 per view × 6 views + 2 drawer details + 2 triage + 5 git layouts + 3 projects layouts + 2 What's new drawers. The 3 Trace shots (below) sit outside the
- * count. A changed `SECTIONS` fails here until the matrix (and its baselines) are reconsidered.
+  * 12 per view × 7 views + 2 drawer details + 2 triage + 5 git layouts + 4 codegraph layouts + 3 projects layouts + 2 routines runs + 2 What's new drawers. The
+  * 3 Trace shots (below) sit outside the count. A changed `SECTIONS` fails here until the matrix (and its baselines) are reconsidered.
  */
-const EXPECTED_SHOTS = 86;
+const EXPECTED_SHOTS = 104;
 
 /** Click the version chip — through the phone menu below `md`, where the rail is folded away — and wait until the drawer is drawn and settled. */
 async function openReleases(page: Page): Promise<void> {
   const menu = page.getByRole('button', { name: 'Open menu' });
   if (await menu.isVisible()) await menu.click();
-  await page.locator('.rel-chip').click();
+  await page.locator('.rel-chip .uk-chip').click();
   await expect(page.locator('.uk-drawer')).toBeVisible();
   await expect.poll(() => isReady(page), { timeout: 5000, message: 'the releases drawer never settled' }).toBe(true);
 }
@@ -116,7 +140,8 @@ for (const c of CASES) {
     // The drawer is `position: fixed`, so its shots are the viewport: a full-page shot would append the board scrolled out beneath it.
     await expect(page).toHaveScreenshot(title(c).replaceAll(' · ', '-') + '.png', {
       fullPage: c.kind !== 'releases',
-      ...(c.threshold !== undefined && { threshold: c.threshold })
+      ...(c.threshold !== undefined && { threshold: c.threshold }),
+      ...(c.mask && { mask: c.mask.map((s) => page.locator(s)) })
     });
   });
 }

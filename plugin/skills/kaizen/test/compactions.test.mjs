@@ -158,3 +158,11 @@ test('two launch rows resolving to one subagent file add its transcript once', (
   assert.equal(a.subagentTotals.count, 2)
   assert.equal(a.subagentTotals.usage.combined, 3100)
 })
+
+test('neverCompacted: a main-chain compact_boundary reads false even with no drop below half the peak', () => {
+  const grow = (n, cr) => turn(n, 0, cr)
+  assert.equal(analyze([grow(0, 20000), boundary(1, 'auto', 1000), summary(2, 's'), grow(3, 400000), grow(4, 600000)]).perTurn.neverCompacted, false)
+  // The same growth with no boundary, or a boundary only on a sidechain record, still reads true.
+  assert.equal(analyze([grow(0, 20000), grow(3, 400000), grow(4, 600000)]).perTurn.neverCompacted, true)
+  assert.equal(analyze([grow(0, 20000), { ...boundary(1, 'auto', 1000), isSidechain: true }, grow(3, 400000), grow(4, 600000)]).perTurn.neverCompacted, true)
+})

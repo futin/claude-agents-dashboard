@@ -3,6 +3,7 @@ import type { FixtureMap } from '../mock-api.js';
 
 import { account } from './account.js';
 import { analytics } from './analytics.js';
+import { codegraph } from './codegraph.js';
 import { configs } from './configs.js';
 import { configsFile } from './configs-file.js';
 import { configsProject } from './configs-project.js';
@@ -10,6 +11,7 @@ import { gitStats } from './git-stats.js';
 import { health } from './health.js';
 import { pins } from './pins.js';
 import { releases } from './releases.js';
+import { routineRuns, routines } from './routines.js';
 import { sessionChat } from './session-chat.js';
 import { sessionDetail } from './session-detail.js';
 import { sessionMessage } from './session-message.js';
@@ -49,5 +51,8 @@ export const fixtures: FixtureMap = {
   '/api/configs': configs,
   '/api/configs/project': configsProject,
   '/api/configs/file': configsFile,
-  '/api/git-stats': gitStats
+  '/api/git-stats': gitStats,
+  '/api/codegraph': codegraph,
+  '/api/routines': routines,
+  '/api/routines/runs': routineRuns
 };

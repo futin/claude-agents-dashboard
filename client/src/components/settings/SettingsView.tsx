@@ -6,6 +6,7 @@ import { useAnswerToken } from '../../hooks/useAnswerToken';
 import { authHeaders } from '../../lib/answerToken';
 import { useRemoteAnswer } from '../../hooks/useRemoteAnswer';
 import { useServerSettings } from '../../hooks/useServerSettings';
+import { NOTIFY_EVENT_ROWS, notifyRowState } from '../../lib/notifyRows';
 import { useSettings } from '../../hooks/useSettings';
 import {
   fireTestNotification, requestWebNotifyPermission, unlockAudio,
@@ -35,14 +36,6 @@ const SWATCHES: Record<ThemeId, [string, string, string]> = {
   nightshift: ['#07120d', '#12251b', '#4fe09a'],
   daylight: ['#f4f4f3', '#ffffff', '#131313']
 };
-
-/** The four push events, ordered by how much they matter when you are away. */
-const NOTIFY_EVENT_ROWS = [
-  { key: 'question' as const, name: 'Question waiting', hint: 'A session is asking something you can answer from the dashboard.' },
-  { key: 'permission' as const, name: 'Permission dialog open', hint: 'A terminal permission dialog is blocking a session until you return.' },
-  { key: 'plan' as const, name: 'Plan waiting for review', hint: 'A proposed plan is held for a remote send-back.' },
-  { key: 'stop' as const, name: 'Task finished', hint: 'A session finished its turn. Suppressed while background agents are still running.' }
-];
 
 const ON_OFF = [{ value: 'off' as const, label: 'Off' }, { value: 'on' as const, label: 'On' }];
 
@@ -217,16 +210,20 @@ export default function SettingsView() {
                 </div>
               )}
 
-              {NOTIFY_EVENT_ROWS.map(row => (
-                <SettingsRow key={row.key} name={row.name} hint={row.hint}>
-                  <Segmented
-                    value={notify?.events[row.key] ? 'on' : 'off'}
-                    options={ON_OFF}
-                    disabled={pushUnconfigured}
-                    onChange={v => void server.saveNotify({ events: { [row.key]: v === 'on' } })}
-                  />
-                </SettingsRow>
-              ))}
+              {NOTIFY_EVENT_ROWS.map(row => {
+                // Still loading: nothing is known to be missing, so nothing is disabled — the same posture as `pushUnconfigured`.
+                const state = server.state ? notifyRowState(row.key, server.state) : { disabled: false, note: null };
+                return (
+                  <SettingsRow key={row.key} name={row.name} hint={state.note ?? row.hint}>
+                    <Segmented
+                      value={notify?.events[row.key] ? 'on' : 'off'}
+                      options={ON_OFF}
+                      disabled={state.disabled}
+                      onChange={v => void server.saveNotify({ events: { [row.key]: v === 'on' } })}
+                    />
+                  </SettingsRow>
+                );
+              })}
 
               <SettingsRow
                 name="Only while accepting remote answers"

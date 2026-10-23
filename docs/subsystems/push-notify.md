@@ -83,7 +83,8 @@ Written down rather than fixed — each one is a real limit of riding the existi
 is the channel that has none of them:
 
 1. **The poll's window.** Only the top `maxSessions` sessions by recency are in the payload at
-   all (default 5). A sixth parked session announces nothing.
+   all (default 5). A sixth parked session announces nothing. A Sessions project filter narrows it further: the poll then carries only the picked
+   projects (`?project=`), so another project's session announces nothing until the filter is cleared.
 2. **Section-bound.** `SessionsView` owns the poll and unmounts on a section switch, so nothing
    fires while you sit on Claude Configs, Analytics, Usage or Settings. Chosen over lifting the poll
    to the shell, which would poll every 3s on every section and turn a contained feature into a
@@ -96,7 +97,7 @@ is the channel that has none of them:
 
 ## Why the server sends, not the hooks
 
-Three of the four events already arrive here as hook POSTs, at the moment they happen and
+Three of the four session events already arrive here as hook POSTs, at the moment they happen and
 with exactly the granularity the user picks events at:
 
 | Event | Enters at | Trigger |
@@ -106,7 +107,7 @@ with exactly the granularity the user picks events at:
 | `permission` | `POST /api/permissions/notify` | `servePermissionNotify` |
 | `stop` | `POST /api/notify/event` **or** `POST /api/messages/wait` | `scripts/stop-notify-hook.sh` — the plain fallback route at the desk / feature off, the [reply-window](remote-message.md) hold route away with remote answers on (headless sessions take the hold route at the desk too, unless an orchestrator run owns them or it is a one-shot launch) |
 
-All four sit behind the write gate (`refuseWrite`), so a hook off loopback that cannot read the token file reaches
+All four session routes sit behind the write gate (`refuseWrite`), so a hook off loopback that cannot read the token file reaches
 none of them — see the last row of [Fail directions](#fail-directions).
 
 Only `stop` needed a new route, because a finished turn registers nothing. So the whole
@@ -172,7 +173,8 @@ why an env var has to carry it — the tty and entrypoint the hook inspects both
 front end, and by those tests every one of these sessions is simply headless. Deliberately
 not a blanket headless exemption: a headless session a person started by hand is reachable
 on purpose and still holds. A one-shot launch (`CLAUDE_DASHBOARD_ONESHOT`, set by the dashboard's Close when done and on every Git Sync run)
-takes the same `notify_fallback` route, so it still pushes "finished". The dashboard's own token-renewal turn
+takes the same `notify_fallback` route, so it still pushes "finished". A routine step (`CLAUDE_DASHBOARD_ROUTINE=<job>`, set by the [routine wrapper](routines.md#the-wrapper)) is the other: the Stop hook exits on that marker too,
+so a 22:00 step is never held for `answerSecs` and never pushes "finished" — its own failure push below is the only one it can raise. The dashboard's own token-renewal turn
 (`CLAUDE_DASHBOARD_REFRESH`, [usage-limits](usage-limits.md)) is the one session that pushes nothing: the hook exits on the marker before the health probe,
 and the server drops `stop` events and message waits from the refresh cwd's transcripts as a backstop (#178). A stop that an `autopilot` run's guard blocks
 (`~/.claude/autopilot/<session_id>.json` counts as running, `stop_hook_active` exactly false) exits silently too — no hold, no push; the stop that then
@@ -208,7 +210,7 @@ Silence is the bug this feature exists to fix, so every failure gets an explicit
 | ntfy request fails or times out | **swallow — except in the test** | 2s cap, never awaited, never fails the caller — `maybeSend` `void`s the promise and catches it, since an un-awaited rejection would escape the surrounding `try` and take the process down. `sendTest` is the one send that *does* await the answer, distinguishing a refusal (`<server> refused it (HTTP 404): …  — check NTFY_TOPIC`, the first line of ntfy's own body) from an unreachable server (`couldn't reach <server>: …`), because a button whose job is proving delivery must be able to fail |
 | session scan fails | **push with a short id** | A poor label beats no push |
 | settings file unreadable | **all switches off** | Same fail-open read as the rest of `settings.ts` |
-| hook POST rejected `403 bad token` | **swallowed by the hook — but the server says so** | The four entry routes sit behind `refuseWrite` like every other write path. A hook on loopback always passes; one pointed at a non-loopback `CLAUDE_DASHBOARD_URL` (or running in a container) reads the token from `~/.claude/hooks/dashboard-token`. Missing or wrong there while the gate wants one, and every POST is refused before `maybeSend` runs; the hooks use `curl -sf`, so the 403 is still swallowed and the CLI itself never mentions it. What changed after this cost twelve silent hours: the gate now prints `[dashboard] rejected write: POST <path> from <peer> (bad or missing token)` (or `(read-only, no token set)`) once per path per minute, and `/api/health` carries `tokenRequired`, which `remote-decision-hook.sh` uses to refuse to claim remote answering is armed when the token file is absent. Neither carries the token. The Settings switches still read On and `notifyAvailable` still reports `true` — both describe the topic, not the token — so if nothing arrives and the test button works, read the server's output, then check the token file ([remote-answer-setup](../workflows/remote-answer-setup.md#failure-modes)) |
+| hook POST rejected `403 bad token` | **swallowed by the hook — but the server says so** | The four entry routes sit behind `refuseWrite` like every other route behind the write gate — gate-only writes, so they keep working with remote answering off. A hook on loopback always passes; one pointed at a non-loopback `CLAUDE_DASHBOARD_URL` (or running in a container) reads the token from `~/.claude/hooks/dashboard-token`. Missing or wrong there while the gate wants one, and every POST is refused before `maybeSend` runs; the hooks use `curl -sf`, so the 403 is still swallowed and the CLI itself never mentions it. What changed after this cost twelve silent hours: the gate now prints `[dashboard] rejected write: POST <path> from <peer> (bad or missing token)` (or `(read-only, no token set)`) once per path per minute, and `/api/health` carries `tokenRequired`, which `remote-decision-hook.sh` uses to refuse to claim remote answering is armed when the token file is absent. Neither carries the token. The Settings switches still read On and `notifyAvailable` still reports `true` — both describe the topic, not the token — so if nothing arrives and the test button works, read the server's output, then check the token file ([remote-answer-setup](../workflows/remote-answer-setup.md#failure-modes)) |
 
 ## The topic is a secret
 
@@ -247,11 +249,48 @@ visible payload stays clean.
 
 `ctx.phrase` is the one per-send override this table's default `PHRASE[event]` lookup
 allows — `maybeSend` uses it when given, so the same `stop` event reads differently
-depending on which route produced it, without becoming a fifth event type.
+depending on which route produced it, without becoming another event type.
 
 The label comes from `scanSessions` (`sessionName || project`), resolved *after* the
 predicate passes so the scan is never paid for a push that will not be sent. An id the scan
 no longer covers falls back to its first 8 characters.
+
+## The fifth event: `routine-failed`
+
+`NotifyEvent` has a fifth member, `routine-failed`, for [routines](routines.md): a run that failed (`failed > 0` or an `error`), a `refused` record
+whose `why` is not `running`, or a run that is lost. It is not a session event, so it has no hook and no session id and does not go through `maybeSend`: the
+server folds the run log and `sendRoutineEvent` (`lib/notify.ts`) delivers. It shares everything that is not session-shaped — the master switch, its own
+per-event checkbox (Settings → **Shared › Push notifications › Routine failed**, `NOTIFY_EVENTS` in `lib/settings.ts`), the desk/phone routing and the
+transport — and is **exempt from `requireAfk`, `requireRemoteAnswer` and `requireAutoMode`**: those gate interactive sessions, and a 22:00 job has none, so with
+the checkbox on it pushes at the desk too. Copy, the once-per-run ledger (`notified.json`) and the tap-through are in [routines](routines.md#notifications);
+the click is `<DASHBOARD_PUBLIC_URL>/?view=routines&run=<id>`, and without a public URL the push carries no link.
+
+## The usage events: `usage-limit` and `usage-reset`
+
+Two more members, `usage-limit` and `usage-reset`, push when the account's **5-hour** window reaches 100% (*5-hour limit reached*) and when a window that was
+pushed as reached is over (*5-hour limit reset*). The weekly window has no alert. Like `routine-failed` they are not session events: no hook, no session
+id, no `maybeSend`. The usage recorder hands every fetch to `onUsageReading` (`lib/usage-alerts.ts`), and `sendUsageEvent` (`lib/notify.ts`) delivers
+through the same master switch, per-event checkbox, desk/phone routing and transport, **exempt from `requireAfk`, `requireRemoteAnswer` and
+`requireAutoMode`**.
+
+- **Two gates before the checkbox.** The detector only runs while `SHOW_USAGE` is on and **Record usage history** is on: it reads the recorder's
+  once-a-minute fetch, so without recording there is nothing to judge (and nothing calls Anthropic while no browser is open). Settings disables both rows and
+  says which gate is shut; `/api/settings` carries `usageAvailable` (`SHOW_USAGE`) beside `notifyAvailable` for that.
+- **Copy.** *Reached*: `Resets at 14:30.` the same day, `Resets Tue at 09:10.` on another, `No reset time reported.` without one, in the server's local
+  time; with extra usage on (`hasExtraUsageEnabled` in `~/.claude.json`) it adds *Extra usage is on: you are now billed.* *Reset*: *Usage is available
+  again.*, or *Back on plan usage: extra-usage billing stops.* with extra usage on.
+- **One push per window, machine-wide.** A window is identified by its `resetsAt` (120 s of jitter allowed, `sameWindow`), and the claim lives in
+  `~/.claude/dashboard/usage-alerts.json` — under the home directory, not the checkout, so a prod and a dev dashboard recording side by side find each
+  other's claim and a restart does not re-push. It is written (tmp + rename) before the push goes out, and only once a window has been hit. Two processes
+  reading the file in the same second can still both send: there is no lock. The flip side: a second recording dashboard with no topic (a worktree's
+  dev server without `.env`) records the hit unpushed and so blocks the other one's push for that window. Record usage history on one dashboard only. If
+  the write fails (unwritable directory, full disk) the process keeps the claim in memory, so it still pushes once per window until it restarts.
+- **Recorded, not pushed.** A hit seen while the checkbox (or the master switch, or the topic) is off is still recorded, with `pushed: false`. Turning the
+  checkbox on mid-window then sends neither *reached* nor, later, *reset*: a reset only ever follows a reached that actually went out.
+- **Stale resets are retired silently.** A reset first noticed more than 60 minutes after it happened (server down, recording off) is marked done without a
+  push (`RESET_STALE_MS`). A hit with no `resetsAt` measures that hour from the last reading that still saw 100%.
+- **Account switch.** The ledger keeps only the current account's window; switching accounts drops the other one, so coming back never fires an old reset.
+- A failed fetch is no reading, never 0%: it neither resets nor hits anything.
 
 ## Tapping the notification
 
@@ -261,6 +300,11 @@ ntfy's `Click` header carries `<DASHBOARD_PUBLIC_URL>/?session=<id>`.
 `QuestionPanel`, `PlanPanel`, `MessagePanel` and `PermissionBanner` already render — one tap
 from buzz to answerable. That last one is why the reply-window `stop` push carries a link at
 all: the panel it lands you in is the composer the hold is waiting on.
+
+The `routine-failed` push carries `/?view=routines&run=<id>` instead and lands on Routines › Runs with that run unfolded (see
+[view-persistence](view-persistence.md)).
+
+The usage pushes carry `/?view=usage` and land on the Usage section.
 
 The parameter is stripped because session ids churn: a bookmarked or refreshed deep link
 would otherwise reopen a drawer for a session that no longer exists. Same reasoning that
@@ -351,6 +395,20 @@ Every failure here is invisible from the outside: an off switch, a missing topic
 dropped packet all look identical. So `POST /api/notify/test` fires one push **regardless of
 policy** and returns what actually happened, including whether taps will open anything. The
 Settings button surfaces that string verbatim.
+
+### Two silences that are not failures
+
+**The session called `PushNotification`.** That is Claude Code's own tool, and it is not wired to this dashboard. It shows a desktop banner and sends a phone
+push only through Claude's Remote Control. This dashboard exists for setups where Remote Control is unavailable (some company plans disallow it), so there
+the tool answers `Mobile push not sent (Remote Control inactive)` and nothing reaches ntfy. The path that does reach the phone is a session **ending its
+turn**: the Stop hook fires the `stop` event and the push deep-links to that session. Rule 5 of the remote-decision banner (`scripts/remote-decision-hook.sh`)
+tells the model exactly that. The banner only appears in auto-ish permission modes, so in any other mode a model can still reach for the tool.
+
+**The turn ended right after a reply you sent from the dashboard.** Only a turn's *first* stop pushes. A follow-up typed in the reply drawer comes back in
+as a blocked stop, so the stop that ends the following turn carries `stopHookActive` and `serveMessageWait` skips the push (see
+[why the server sends](#why-the-server-sends-not-the-hooks)). You are already in the drawer, so nothing is lost. But "I replied, walked away and got no
+ping" is this rule working, not a broken topic. The next push comes at the next first stop, for example a turn started by a finished background task or
+by you typing at the terminal.
 
 ### The failure a 2xx cannot see: a `.env` edited after startup
 

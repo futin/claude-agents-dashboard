@@ -1,8 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
+import { SuggestionChip, composerKeyDown } from './ComposerSuggestion';
 import MicButton from './MicButton';
 import { appendTranscript } from '../lib/dictation';
 import { useSpawn } from '../hooks/useSpawn';
+import { resumeErrorText } from '../lib/resume';
 import type { Session } from '../../../shared/types';
 
 /**
@@ -21,9 +23,18 @@ const SENT_RESET_MS = 15_000;
  * which relaunches `claude -p --resume <id>` in the session's own cwd; the
  * transcript keeps its id, so this very drawer live-tails the continuation.
  */
-export default function ResumePanel({ session }: { session: Session }) {
+export default function ResumePanel({ session, suggestion }: {
+  session: Session;
+  /** The last turn's recommended reply (`latestSuggestion`), offered on Tab. */
+  suggestion: string | null;
+}) {
   const { launch, pending: busy, error, needsToken, setToken } = useSpawn();
   const [text, setText] = useState('');
+  const boxRef = useRef<HTMLTextAreaElement>(null);
+  const accept = (s: string) => {
+    setText(s);
+    boxRef.current?.focus();
+  };
   const [tokenDraft, setTokenDraft] = useState('');
   const [sent, setSent] = useState(false);
 
@@ -72,17 +83,23 @@ export default function ResumePanel({ session }: { session: Session }) {
         </div>
       )}
 
-      {error && <div className="qp-note">{error}</div>}
+      {error && <div className="qp-note">{resumeErrorText(error)}</div>}
 
       <textarea
+        ref={boxRef}
         className="qp-feedback"
         maxLength={4000}
         rows={3}
-        placeholder="Follow-up for this session (resumes it with this as your next message)"
+        placeholder={suggestion ?? 'Follow-up for this session (resumes it with this as your next message)'}
         value={text}
         disabled={busy}
         onChange={e => setText(e.target.value)}
+        onKeyDown={composerKeyDown({
+          text, suggestion, canSend: !busy && !!text.trim(), onSend: () => void onSend(), onAccept: accept
+        })}
       />
+
+      {suggestion && !text && <SuggestionChip suggestion={suggestion} disabled={busy} onAccept={accept} />}
 
       <div className="qp-actions">
         <MicButton disabled={busy} onText={t => setText(cur => appendTranscript(cur, t))} />

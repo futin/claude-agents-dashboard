@@ -129,6 +129,18 @@ export function run(): number {
     }
   })) p++; else f++;
 
+  if (test('api-request-blob replays dropped, real records beside them kept', () => {
+    // Claude Code 2.1.302 replays each API request's turns as `type: "api-request-blob"` records — same role and content, no uuid, no timestamp.
+    const blobUser = { type: 'api-request-blob', sessionId: 's', hash: 'h1', message: { role: 'user', content: 'did you get double message?' } };
+    const blobAsst = { type: 'api-request-blob', sessionId: 's', hash: 'h2', message: { role: 'assistant', content: [
+      { type: 'text', text: 'earlier reply' }, { type: 'tool_use', name: 'Bash', input: { command: 'ls' } }
+    ] } };
+    assert.strictEqual(parseChatRecord(blobUser), null);
+    assert.strictEqual(parseChatRecord(blobAsst), null);
+    const file = writeJsonl([userRec('u1', 'did you get double message?'), blobUser, blobAsst, asstRec('a1', [{ type: 'text', text: 'No.' }])]);
+    assert.deepStrictEqual(readChatTail(file)!.messages.map(m => m.uuid), ['u1', 'a1']);
+  })) p++; else f++;
+
   if (test('system-reminder spans stripped; reminder-only record dropped', () => {
     const m = parseChatRecord(userRec('u1', 'real ask\n<system-reminder>\nnoise\n</system-reminder>'))!;
     assert.strictEqual(m.text, 'real ask');
@@ -167,6 +179,38 @@ export function run(): number {
     const plan = '# Plan\n\n- step one\n- step two';
     const m = parseChatRecord(asstRec('a1', [{ type: 'tool_use', id: 't1', name: 'ExitPlanMode', input: { plan } }]))!;
     assert.deepStrictEqual(m.tools, [{ id: 't1', name: 'ExitPlanMode', detail: plan.slice(0, 80), body: plan }]);
+  })) p++; else f++;
+
+  /* wrap_up's first button → the composer's Tab suggestion */
+  const wrapUp = (input: unknown) =>
+    parseChatRecord(asstRec('a1', [{ type: 'tool_use', id: 't1', name: 'mcp__ccd_turn__wrap_up', input }]))!.tools[0];
+
+  if (test('wrap_up: first reply button\'s message becomes the suggestion', () => {
+    const t = wrapUp({ recap: 'Done.', ask: 'Ship?', actions: [
+      { label: 'Yes, ship', message: '  Go ahead and open the PR.  ' }, { label: 'Not now' }
+    ] });
+    assert.strictEqual(t.suggestion, 'Go ahead and open the PR.');
+  })) p++; else f++;
+
+  if (test('wrap_up: a label-only first button suggests its label', () => {
+    assert.strictEqual(wrapUp({ recap: 'r', actions: [{ label: 'Fix 2 instead' }] }).suggestion, 'Fix 2 instead');
+    assert.strictEqual(wrapUp({ recap: 'r', actions: [{ label: 'Retry', message: '   ' }] }).suggestion, 'Retry');
+  })) p++; else f++;
+
+  if (test('wrap_up: an app action first suggests nothing — never the "Not now" behind it', () => {
+    const t = wrapUp({ recap: 'r', actions: [{ action: 'commit' }, { label: 'Not now', message: 'Leave it uncommitted.' }] });
+    assert.strictEqual('suggestion' in t, false);
+  })) p++; else f++;
+
+  if (test('wrap_up: no usable button → no suggestion field', () => {
+    for (const input of [undefined, { recap: 'r' }, { actions: [] }, { actions: 'x' }, { actions: [null] }, { actions: [{ label: 42 }] }, { actions: [{ label: '  ' }] }]) {
+      assert.strictEqual('suggestion' in wrapUp(input), false, JSON.stringify(input));
+    }
+  })) p++; else f++;
+
+  if (test('suggestion only rides the wrap_up tool, not a lookalike input', () => {
+    const m = parseChatRecord(asstRec('a1', [{ type: 'tool_use', id: 't1', name: 'Bash', input: { actions: [{ label: 'x', message: 'y' }] } }]))!;
+    assert.strictEqual('suggestion' in m.tools[0], false);
   })) p++; else f++;
 
   if (test('over-cap plan body truncated with flag', () => {

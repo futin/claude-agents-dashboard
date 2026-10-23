@@ -579,6 +579,44 @@ export async function run(): Promise<number> {
     });
   }));
 
+  check(await test('trunkCheckedOutElsewhere: main checkout on main, pin on a linked worktree → true', async () => {
+    await withGitFixture(async fx => {
+      const work = cleanClone(fx);
+      const wt = fx.p('wt');
+      fx.git(work, ['worktree', 'add', '-q', '-b', 'feat/x', wt]);
+      assert.strictEqual(ok(await read(wt)).trunkCheckedOutElsewhere, true);
+    });
+  }));
+
+  check(await test('trunkCheckedOutElsewhere: the pin itself on main → false', async () => {
+    await withGitFixture(async fx => {
+      const work = cleanClone(fx);
+      fx.git(work, ['worktree', 'add', '-q', '-b', 'feat/x', fx.p('wt')]);
+      assert.strictEqual(ok(await read(work)).trunkCheckedOutElsewhere, false);
+    });
+  }));
+
+  check(await test('trunkCheckedOutElsewhere: main checkout on feat/x, pin on feat/y, main checked out nowhere → false', async () => {
+    await withGitFixture(async fx => {
+      const work = cleanClone(fx);
+      fx.git(work, ['checkout', '-q', '-b', 'feat/x']);
+      const wt = fx.p('wt');
+      fx.git(work, ['worktree', 'add', '-q', '-b', 'feat/y', wt]);
+      assert.strictEqual(ok(await read(wt)).trunkCheckedOutElsewhere, false);
+    });
+  }));
+
+  check(await test('trunkCheckedOutElsewhere: no local trunk (only origin/main) → false', async () => {
+    await withGitFixture(async fx => {
+      const work = cleanClone(fx);
+      fx.git(work, ['checkout', '-q', '-b', 'feat/x']);
+      fx.git(work, ['branch', '-q', '-D', 'main']);
+      const r = ok(await read(work));
+      assert.deepStrictEqual(r.trunkRefs, { local: false, origin: true });
+      assert.strictEqual(r.trunkCheckedOutElsewhere, false);
+    });
+  }));
+
   check(await test('7 unmerged branches with distinct commit dates → all 7, newest first, unmergedTotal 7', async () => {
     await withGitFixture(async fx => {
       const work = cleanClone(fx);

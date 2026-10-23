@@ -57,7 +57,7 @@ That's the whole basic setup. Everything below is optional.
   and markdown rendering.
 - **[Remote answers](docs/subsystems/remote-answer.md)** — answer a session's
   `AskUserQuestion` from your phone; the pick is delivered into the live session. The first
-  of the app's four write paths, and the reason the hook install exists.
+  of the app's four session write paths, and the reason the hook install exists.
 - **[Remote plan verdicts](docs/subsystems/remote-plan.md)** — send a proposed
   `ExitPlanMode` plan back for revision with feedback, from the same drawer. Reject-only:
   the CLI discards a hook `allow` for plans, so accepting stays a terminal action.
@@ -76,7 +76,7 @@ That's the whole basic setup. Everything below is optional.
 - **[New session](docs/subsystems/spawn.md)** — the Board card's **+ New session** button starts a
   brand-new session from the dashboard: pick a recent (or pinned) project, write or dictate the prompt,
   tap `Launch`. The server spawns a detached, headless `claude -p` in that project's
-  directory and the row shows up a poll later, ordinary from then on. The fourth write
+  directory and the row shows up a poll later, ordinary from then on. The fourth session write
   path, and the first one the dashboard *initiates* rather than answers. A session started
   this way is also not a dead end once its turn is over: its chat drawer offers a **resume**
   composer that relaunches the same session id, so the same transcript continues and the

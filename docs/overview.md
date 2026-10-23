@@ -3,7 +3,7 @@
 A **monolith split into three domains**: a Node backend (`server/`), a Vite + React +
 TypeScript frontend (`client/`), and the shared API contract (`shared/`). One repo, one
 deploy. The **only** data crossing the frontend/backend boundary is the typed JSON
-payloads defined in `shared/types.ts` (the only code both sides run is `shared/frontmatter.ts` and `shared/gitUpstream.ts`) — when adding an API field, edit that file first,
+payloads defined in `shared/types.ts` (the only code both sides run is `shared/frontmatter.ts`, `shared/gitUpstream.ts`, `shared/cron.ts` and `shared/routine-file.ts`) — when adding an API field, edit that file first,
 then the server producer, then the client consumer.
 
 Everything the dashboard shows is read straight off disk from
@@ -53,6 +53,9 @@ via `tsx`, dev and prod alike).
   The second thing that reaches outside the dashboard's own state is [the Git fetch timer](subsystems/git-stats.md#the-fetch): off by default, it runs
   `git fetch origin` over the pinned repos while Management › Git is open, which writes their remote-tracking refs and `FETCH_HEAD`, never a branch or a
   working tree.
+  The third thing the server launches is the `codegraph` CLI ([codegraph](subsystems/codegraph.md)): `codegraph status --json` per pinned project, cached 25 s and run only
+  from inside a GET, and `codegraph sync` / `codegraph index` when the user presses Sync or Reindex. Every launch sets `CODEGRAPH_NO_UPDATE_CHECK=1` and
+  `CODEGRAPH_NO_DOWNLOAD=1`, so the shim neither checks for nor downloads a newer bundle.
 - **Zero runtime dependencies on the backend.** `server/` uses Node built-ins only, with two pinned exceptions, neither with deps of its own:
   `lookout-widgets` ([hub-widgets](subsystems/hub-widgets.md#the-dependency-exception)) and `release-kit`, whose memoised `createReleasesReader` backs
   [`GET /api/releases`](subsystems/releases.md); `test/server-deps.test.ts` pins both. Keep new npm deps out of it.
@@ -64,39 +67,43 @@ via `tsx`, dev and prod alike).
 
 ## HTTP surface
 
-All routes live in `server/index.ts` (dispatch) and `server/api.ts` (handlers):
+All routes live in `server/index.ts` (dispatch) and `server/api.ts` (handlers). Every POST runs the write gate; a **session write path** also needs the
+remote-answer switch on, a **gate-only write** needs the gate alone ([who may write](subsystems/remote-access.md#who-may-write) defines both):
 
 | Route | Purpose |
 |---|---|
-| `GET /api/sessions` | the poll snapshot: sessions + totals + usage bars (`?limit=&lookback=&active=` override the scan) |
+| `GET /api/sessions` | the poll snapshot: sessions + totals + usage bars (`?limit=&lookback=&active=` override the scan, repeatable `?project=` filters it before the limit) + every project in the lookback |
 | `GET /api/sessions/:id` | one session's subagent timeline |
 | `GET /api/sessions/:id/chat` | paged chat history (byte-offset cursors) |
 | `GET /api/sessions/:id/trace` | the causal trace: steps with why-links (`?after=<rev>&epoch=` live tail) |
 | `GET /api/sessions/:id/question` | pending remote question, if any |
-| `POST /api/sessions/:id/answer` | deliver a remote answer (write path) |
-| `POST /api/questions/wait` | the hook's held-open wait (write path) |
+| `POST /api/sessions/:id/answer` | deliver a remote answer (session write path — answer) |
+| `POST /api/questions/wait` | the hook's held-open wait (session write path — answer) |
 | `GET /api/sessions/:id/plan` | pending proposed plan, if any |
-| `POST /api/sessions/:id/plan-answer` | send a plan back for revision (write path) |
-| `POST /api/plans/wait` | the plan hook's held-open wait (write path) |
+| `POST /api/sessions/:id/plan-answer` | send a plan back for revision (session write path — plan) |
+| `POST /api/plans/wait` | the plan hook's held-open wait (session write path — plan) |
 | `GET /api/sessions/:id/message` | pending reply window, if any |
-| `POST /api/sessions/:id/message-answer` | send free text into a finished turn, or let it stop (write path) |
-| `POST /api/messages/wait` | the Stop hook's held-open wait, away only — except headless sessions, which hold at the desk too (write path) |
-| `POST /api/transcribe` | a recorded clip in, transcribed text out — feeds the reply composer's mic (write path) |
-| `POST /api/spawn` | start a new headless `claude -p` session in a recent or pinned project, or `resume` an ended `dashboard` one by id (write path, the one the dashboard initiates rather than answers) |
-| `POST /api/spawn/:id/stop` | SIGTERM a still-launching session's child (write path) |
-| `POST /api/sessions/:id/stop` | stop a dashboard-spawned session at any point in its life — graceful by default, `{"force":true}` to skip the grace window; the row's button only ever calls this one (write path) |
-| `POST /api/permissions/notify` | "a permission dialog is open" flag (display-only) |
-| `POST /api/notify/event` | the Stop hook's push trigger — the other three events notify from the endpoint they already POST to |
-| `POST /api/notify/test` | fire one push regardless of policy and report what ntfy said |
-| `POST /api/remote-answer` | flip the remote-answer toggle (write path) |
+| `POST /api/sessions/:id/message-answer` | send free text into a finished turn, or let it stop (session write path — message) |
+| `POST /api/messages/wait` | the Stop hook's held-open wait, away only — except headless sessions, which hold at the desk too (session write path — message) |
+| `POST /api/transcribe` | a recorded clip in, transcribed text out — feeds the reply composer's mic (session write path — dictation, rides the switch, not counted) |
+| `POST /api/spawn` | start a new headless `claude -p` session in a recent or pinned project, or `resume` an ended `dashboard` one by id (session write path — spawn, the one the dashboard initiates rather than answers) |
+| `POST /api/spawn/:id/stop` | SIGTERM a still-launching session's child (session write path — spawn) |
+| `POST /api/sessions/:id/stop` | stop a dashboard-spawned session at any point in its life — graceful by default, `{"force":true}` to skip the grace window; the row's button only ever calls this one (session write path — spawn) |
+| `POST /api/permissions/notify` | "a permission dialog is open" flag (display-only) (gate-only write) |
+| `POST /api/notify/event` | the Stop hook's push trigger — the other three events notify from the endpoint they already POST to (gate-only write) |
+| `POST /api/notify/test` | fire one push regardless of policy and report what ntfy said (gate-only write) |
+| `POST /api/remote-answer` | flip the remote-answer toggle (gate-only write) |
 | `GET /api/dismiss` | where a tapped desk push lands — a page that closes the tab it opened in; carries no deep link |
 | `GET /api/health` | liveness + remote-answer state + connection origin and this caller's `writeAccess` + the two hook numbers (idle threshold, answer window) |
-| `GET /api/settings`, `POST /api/settings` | the non-per-device settings — idle threshold, answer window, push policy, usage-history recording, tailnet write trust, plus `notifyAvailable` (never the ntfy topic itself); write path |
-| `GET /api/pins`, `POST /api/pins` | pinned projects — listed past `LOOKBACK_HOURS` — plus the recent and older ones on offer to pin; write path (see [configs](subsystems/configs.md)) |
-| `POST /api/pins/order` | the whole pin list in a new order, accepted only as an exact permutation of the stored pins (409 otherwise); token-guarded, answers the `GET /api/pins` payload (see [configs](subsystems/configs.md)) |
-| `POST /api/open-folder` | open a pinned project's folder with macOS `open`. Token-guarded, path must be a listed pin's, 501 off macOS (see [git-stats](subsystems/git-stats.md)) |
+| `GET /api/settings`, `POST /api/settings` | the non-per-device settings — idle threshold, answer window, push policy, usage-history recording, tailnet write trust, plus `notifyAvailable` and `usageAvailable` (never the ntfy topic itself); the POST is a gate-only write |
+| `GET /api/pins`, `POST /api/pins` | pinned projects — listed past `LOOKBACK_HOURS` — plus the recent and older ones on offer to pin; the POST is a gate-only write (see [configs](subsystems/configs.md)) |
+| `POST /api/pins/order` | the whole pin list in a new order, accepted only as an exact permutation of the stored pins (409 otherwise); gate-only write, answers the `GET /api/pins` payload (see [configs](subsystems/configs.md)) |
+| `POST /api/open-folder` | open a pinned project's folder with macOS `open` (gate-only write); path must be a listed pin's, 501 off macOS (see [git-stats](subsystems/git-stats.md)) |
 | `GET /api/git-stats` | local git state of every pinned project, in pin order, plus the fetch clock and each repo's last-fetch verdict; a repo that fails is its own `error` row (see [git-stats](subsystems/git-stats.md)) |
-| `POST /api/git-fetch` | `git fetch origin` over every pinned repo now, answering with the fetch clock; token-guarded write path (see [git-stats](subsystems/git-stats.md#the-fetch)) |
+| `GET /api/codegraph` | the `codegraph` CLI's state of every pinned project, in pin order: index health, watcher, run in flight, last run; `cli: 'missing'` once for the payload; `?fresh=1` (Re-read status) skips the status cache (see [codegraph](subsystems/codegraph.md)) |
+| `POST /api/codegraph/run` | `{dirName, kind: 'sync' \| 'reindex'}`: start `codegraph sync` / `index` on a pinned, indexed repo and answer at once (gate-only write, like `git-fetch`); 404 not indexed, 409 already running (see [codegraph](subsystems/codegraph.md#runs)) |
+| `POST /api/git-fetch` | `git fetch origin` over every pinned repo now, answering with the fetch clock; gate-only write (see [git-stats](subsystems/git-stats.md#the-fetch)) |
+| `POST /api/git-quick` | `{dirName, op: 'pull' \| 'push'}`: fast-forward pull or push of one pinned repo for the Sync menu; gate-only write, 409 when busy or a fetch is running (see [git-stats](subsystems/git-stats.md#quick-pull-and-push--the-writer)) |
 | `GET /api/configs`, `/project`, `/file` | config browser index / scope / file body |
 | `GET /api/analytics` | `/kaizen` post-mortem reports |
 | `GET /api/hub/widgets`, `/:id` | the Lookout hub catalog and widget data — usage gauge, sessions list and Git pending list; `POST` action paths are 404 (see [hub-widgets](subsystems/hub-widgets.md)) |
@@ -105,6 +112,16 @@ All routes live in `server/index.ts` (dispatch) and `server/api.ts` (handlers):
 | `GET /api/usage/profile` | the duty-cycle profile behind the weekly projection — cells + the forward walk, never raw samples or file paths |
 | `GET /api/usage/rates` | tokens per 1% of the 5h window per model: the pooled rate + drift verdict, the two-term split, the jointly-fitted rate and its gap against the pooled one, one cell per UTC day of the horizon, plus the coverage disclosure and the off-peak boost verdict (`lib/usage-boost.ts`) |
 | `GET /api/usage/history?days=N` | recorded 5h and weekly utilization over the last N days (default 7, clamped 1–365): windows by observed `resetsAt`, gap-split step segments downsampled to ~1440 points, and the recording gaps; served with recording off too (`lib/usage-history-series.ts`) |
+| `GET /api/routines` | routines: machine, routines folder, who owns it (`owner`), the reconcile state and every job with its last run ([routines](subsystems/routines.md)) |
+| `GET /api/routines/runs` | folded runs of the run log, newest first, with stats for `days` (7/30/90) and the window before it; `?job=&outcome=&runner=` filter, 400 `bad outcome` |
+| `GET /api/routines/:name` | one job's raw file text and parsed shape, for the editor |
+| `POST /api/routines`, `PUT`, `PATCH`, `DELETE /api/routines/:name` | create / replace / toggle `enabled` / delete a job file, then reconcile; 422 with `errors`, 409 `exists`; all gate-only writes, 409 `not-owner` off the owning server |
+| `POST /api/routines/validate` | `{text, name?}` → `{errors, summary}`; read-only, outside the write gate |
+| `POST /api/routines/reconcile` | `{apply?}`: the plan of installs, updates and removes against launchd / crontab, applied when `apply` (gate-only write) |
+| `POST /api/routines/reveal` | open the routines folder, or one job's file, in Finder with `open` / `open -R`; 501 off macOS (gate-only write) |
+| `POST /api/routines/:name/run` | start the wrapper now (`{only?: [pins]}`), 202 with the run id read back from the log; 409 `already-running` (gate-only write) |
+| `POST /api/routines/:name/stop` | SIGTERM the running wrapper by its lock's pid; 204, or 409 `not-running` (gate-only write) |
+| `GET /api/sessions/:id/row` | one session row for any id a transcript resolves, with no lookback — the Routines page's `session →` link opens it in the ChatDrawer |
 | anything else | static files from `client/dist` (production only) |
 
 ⚠️ The static catch-all resolves through `resolveStaticPath` in `index.ts`, which confines
@@ -154,6 +171,10 @@ shared/frontmatter.ts  zero-dep YAML-frontmatter subset parser — shared becaus
                   both sides parse it (lib/management.ts and configs/FileBlock.tsx)
 shared/gitUpstream.ts  zero-dep upstream rule (`gitUpstreamShown`) — shared so the Git view's chip and level
                   rule and the hub's Git pending tile cannot disagree about the same repo
+shared/cron.ts    zero-dep five-field cron parser: `parseCron`, next and last fire time, the launchd `StartCalendarInterval` expansion, a plain-words
+                  description — shared so the server, the client and the wrapper agree; `plugin/lib/cron.mjs` is its generated copy
+shared/routine-file.ts  zero-dep job-file `parseJob` (with its validation errors), `checkPins` and the `enabled:` writer `serializeEnabled` — the one
+                  validator the server, the client and the wrapper all run; `plugin/lib/routine-file.mjs` is its generated copy
 server/
   index.ts        HTTP entry + routing; static-serves client/dist in prod
   api.ts          all /api handlers (+ error fallbacks)
@@ -201,14 +222,27 @@ server/
                   plus `joinWeeklyIntervals` (tick-to-tick pairing over the
                   weekly window), `WEEKLY_FLOORS`, `EXTERNAL_WEIGHTED_MAX_WEEKLY`
                   and the exported `poolRate`
+  lib/usage-alerts.ts  5-hour limit reached/reset pushes: pure detector + copy, and the shell the recorder calls (ledger
+                  `~/.claude/dashboard/usage-alerts.json`)
   lib/usage-boost.ts  off-peak usage-limit boost detector over those intervals: weekday
                   off-peak vs same-day peak, weekend vs pooled weekday peak (pure)
   lib/token-refresh.ts  makes the CLI renew an expired OAuth token (auth status,
                   then one haiku turn) so the bars self-heal
   lib/management.ts   config scanner + servable-path security set
   lib/git-stats.ts    read-only git reader for the pinned repos: runner, trunk, memoised branch counts + merged proof
+  lib/codegraph.ts    the `codegraph` CLI reader: runner (update check off), status parser, graph-root walk, pid files
+  lib/codegraph-store.ts  CodeGraph's per-(root, pin) status cache, runs, lock-loss rule and the payload
   lib/git-fetch.ts    the Git fetch: detached `git fetch origin` per common dir, error classifier, watched-only timer + clock
-  lib/open-folder.ts  `open <path>` through `execFile`, behind POST /api/open-folder (the pin-membership gate is in api.ts)
+  lib/git-quick.ts    the Sync menu's Pull and Push: fast-forward-only pull and push of one pinned repo, never forced, hooks run
+  lib/git-locks.ts    one lock per git common dir, shared by git-quick and the fetch-all wait
+  lib/open-folder.ts  `open <path>` through `execFile`, behind POST /api/open-folder (the pin-membership gate is in api.ts); `revealFile` is `open -R <file>` for the Routines menu's Reveal in Finder
+  lib/routine-config.ts  machine name (`mac`/`wsl`), the routines and state-root folders, and `routineEnv` — the environment baked into every installed job and `/run` spawn
+  lib/routine-store.ts   job files (read, atomic write, delete), the owner claim, `pins.json`, lock sweep and the pid-liveness `Probe`
+  lib/routine-reconcile.ts  the pure plan of installs, updates and removes against launchd / crontab, its apply, the serialised trigger and the watchers
+  lib/routine-run.ts     `POST /run` and `/stop`: spawn the wrapper through `spawn.ts`'s `spawnProcess`, read the run id back from the log
+  lib/routine-log.ts     the incremental run-log reader, the lost rule, 20 MB rotation and the window stats
+  lib/routine-notify.ts  the `routine-failed` fold over runs: one push per run, `notified.json`, the first-start seed
+  lib/routine-boot.ts    what the owning server does on listen and on exit, and the shared log reader
   lib/hub-widgets.ts  the Lookout hub tiles (usage gauge, sessions list, Git pending list), declared through lookout-widgets
   lib/account.ts      `~/.claude.json` → `oauthAccount` as display strings, behind GET /api/account; fail-open to null
   lib/releases.ts     GET /api/releases: release-kit's memoised tag reader, pointed at the checkout, plus two test seams
@@ -216,7 +250,7 @@ server/
   lib/subagent-usage.ts  sums one session's subagent transcripts → per-subagent token classes
   lib/sessionAnalyticsLog.ts  parses ~/.claude/session-analytics-log.md
   lib/analytics.ts  reader for the Analytics tab
-  lib/pending.ts  in-memory pending-question store (the first of the four write paths)
+  lib/pending.ts  in-memory pending-question store (the first of the four session write paths)
   lib/plans.ts    in-memory pending-plan store (same machine, reject-only verdicts)
   lib/messages.ts in-memory turn-end reply-window store (same machine, plus a 5s
                   idle sweep that auto-releases every terminal-backed hold — headless
@@ -238,11 +272,11 @@ server/
   lib/transcribe.ts  ffmpeg → whisper-cli pipeline behind POST /api/transcribe: mime
                   allowlist, cached engine probe, single-flight guard, typed failures
   lib/spawn.ts    launches a detached, headless `claude -p` session, or resumes an ended
-                  one — the fourth write path, and the first the dashboard initiates;
+                  one — the fourth session write path, and the first the dashboard initiates;
                   also owns stopping one (graceful SIGTERM, grace window, escalation)
                   (see docs/subsystems/spawn.md)
 client/src/
-  App.tsx         shell: side rail (Sessions | Usage | Management | Claude Configs |
+  App.tsx         shell: side rail (Sessions | Routines | Usage | Management | Claude Configs |
                   Analytics | Settings) + lazy views
   components/     SideRail (section switcher — the rail on desktop, and below `sm`
                   (640px) the same markup as a menu dropped out of a top bar, every tree
@@ -254,7 +288,7 @@ client/src/
                   drawer behind the rail's version chip, plus the back gesture), Chevron (the one disclosure mark),
                   AsideBoard (clock, origin, counts, remote-answer switch, New session),
                   Toolbar (view switcher + filter/sort popovers; Popover is the shared
-                  dismiss primitive), sessions/ (atoms, Expanded, EmptyState, AsideStrip
+                  dismiss primitive), sessions/ (atoms, Expanded, SessionStopControl, EmptyState, AsideStrip
                   — the phone's one-bar aside — and the five views: Board, List, Split,
                   Tiles, Triage), SessionDetail (the subagent timeline),
                   ChatDrawer (Chat | Trace), TraceSpine (the Trace step spine and its cause arcs), TraceInspector (the picked step's sidecar card),
@@ -267,11 +301,17 @@ client/src/
                   projects on offer as Tiles, Columns or Lists; and the Git sub-view: GitView
                   (band, switcher, poll owner), GitClockChip (the sync/fetch clock chip and
                   its popover), GitInbox / GitMatrix / GitInspector /
-                  GitBranches (the four shapes, fed one `GitLayoutProps`) and GitParts (chips, divergence bar, branch list they share)), analytics/,
+                  GitBranches (the four shapes, fed one `GitLayoutProps`), GitParts (chips, divergence bar, branch list they share, the split Sync key)
+                  and GitQuickMenu (that key's Pull · Push · Sync with Claude menu); and the CodeGraph
+                  sub-view: CodegraphView (band, switcher, poll owner), CodegraphClockChip, CodegraphInbox / CodegraphMatrix / CodegraphInspector (fed one
+                  `CodegraphLayoutProps`) and CodegraphParts (chips, keys, Reindex confirm, kinds strip)), analytics/,
                   usage/ (UsageView + the three tabs, Sheet — the band / figure
                   strip / sheet / definitions
                   chrome the tabs draw, and
                   ReadingAids — the ⓘ button they both render), settings/
+  components/routines/  the Routines section (Jobs | Runs, picked in the rail), its own lazy chunk: RoutinesView (owns the poll, the write helper, the
+                  drawer and the ChatDrawer), StatsBand, JobLedger / JobFold / JobMenu, JobDrawer (the editor), RunNowPopover, RunsList, SessionLink,
+                  and `ctl.ts`, the one object of state and callbacks every part reads (see subsystems/routines.md)
   hooks/          useSessions (the main poll), useSessionDetail, useSessionChat,
                   useSessionTrace (the Trace poll: full once, then `?after=<rev>`),
                   useConfigs, useConfigsScope (the scope + the one index
@@ -279,7 +319,9 @@ client/src/
                   useUsageProfile, useUsageRates, useUsageHistory, usePendingQuestion, usePendingPlan,
                   usePendingMessage, useRemoteAnswer, useSpawn, useStopSession, usePins, usePinReorder (Projects' pin grip), useOpenFolder (Git's Open folder
                   key),
-                  useAccount (the header chip's 30s poll, owned by App), useGitFetch (Git's Fetch all key),
+                  useAccount (the header chip's 30s poll, owned by App), useGitFetch (Git's Fetch all key), useGitQuick (the Sync menu's Pull and Push),
+                  useCodegraph (the CodeGraph sub-view's 30s visible-only poll, 3s while a run is live), useCodegraphRun (its Sync / Reindex keys),
+                  useRoutines / useRoutineRuns (the Routines sub-view's 3s polls, one `createPollSeq` each) and useRoutineWrite (its one write helper),
                   useGitStats (the Git sub-view's 30s visible-only poll), useGitSync (its
                   Sync button: runs per device, a sessions poll only while one is live),
                   usePersistedState, useAnswerToken (the page's one Answer token copy), useSettings, useServerSettings, useDictation, useFloatingTip
@@ -288,7 +330,7 @@ client/src/
                   sessions), useBackClose, useHideOnScroll (the phone top bar's
                   auto-hide), useNarrow (the one JS read of the `md` breakpoint),
                   useStuckStrip (when the phone's aside strip pins)
-  lib/            filterSort, analyticsFilterSort, chatFilter, trace (the step merge, cause walk and filter), markdown, configsEntries,
+  lib/            routines (the Routines page's pure helpers: pills, run folding, the Repos helper, write-failure text), filterSort, analyticsFilterSort, chatFilter, trace (the step merge, cause walk and filter), heldBody (which timeline body a pinned panel folds), markdown, configsEntries,
                   format, settings,
                   sections, deepLink, dictation, spawnOptions, pins, resume, pace, usageProfile,
                   usageRatesFormat, usageHistory (the History tab's step path, ticks and figures), panelCollapse, surface, walkChart (the headroom
@@ -298,8 +340,10 @@ client/src/
                   tasks (taskProgress — the one count the row pill and the Tasks card share),
                   gitLayouts / gitLevels / gitLinks / gitStatsText (the Git sub-view's switcher rules,
                   the problems → levels rule and session join, the compare link, the copy table), gitBar (the divergence bar's scale),
+                  codegraphLayouts / codegraphLevels / codegraphText / codegraphPoll (the CodeGraph sub-view's switcher rules, the problems → levels rule,
+                  the copy table, its poll schedule and run notes),
                   gitPoll (its poll schedule, apart from the DOM), gitClock (the fetch clock's meters,
-                  re-poll timing and Fetch all key state), gitSync / gitSyncRuns
+                  re-poll timing and Fetch all key state), gitQuick (the Sync menu's rules and result copy), gitSync / gitSyncRuns
                   (the Sync button's rules, copy and run reconciler), projectsView (the
                   Projects sub-view's layouts, pinned / offered split, dir line and copy), releases (the
                   unseen dot's localStorage key; the chip and drawer logic are ui-kit's)
@@ -328,7 +372,11 @@ scripts/          install-hooks.sh (`pnpm hooks:install`), ask-remote-hook.sh,
                   sync-plugin.ts (`pnpm plugin:sync`) — fetches origin and fast-forwards
                   a clean main that is behind *before* comparing, then reinstalls the
                   plugin from GitHub's main when plugin/ differs from the installed copy;
-                  refuses a tree that is off main, dirty, unpushed or can't fast-forward,
+                  refuses a tree that is off main, dirty, unpushed or can't fast-forward;
+                  after a reinstall POSTs `/api/routines/reconcile` to a running server,
+                  gen-plugin-lib.ts (`pnpm plugin:gen`) — transpiles shared/{cron,frontmatter,
+                  routine-file}.ts into plugin/lib/*.mjs; test/plugin-manifest.test.ts
+                  regenerates and compares,
                   session-analytics.ts (`pnpm session-analytics`) — prints one
                   session's SessionAnalysis as JSON without the server running,
                   which is how `/kaizen` gets exact numbers,
@@ -347,6 +395,8 @@ scripts/          install-hooks.sh (`pnpm hooks:install`), ask-remote-hook.sh,
 plugin/           the installable Claude Code plugin (`/plugin install`, README §Install the skills);
                   plain JS skills, never imported by server/ or client/ at runtime
   .claude-plugin/plugin.json  name + version
+  lib/            generated `.mjs` copies of the shared routine modules, for plain-`node` use
+                  (never `bin/`: Claude Code puts that on every session's PATH)
   skills/git-sync/  repo chores across machines; engine tools/git-sync.mjs, own `node --test`
                   suite run by `pnpm test:skills` (~4 min, 2026-10-01)
   skills/kaizen/  session post-mortem; analyzer kaizen.mjs, own `node --test` suite run
@@ -362,11 +412,11 @@ that area:
 - [sessions](subsystems/sessions.md) — session rows, the status machine, subagent detail
 - [chat](subsystems/chat.md) — the chat drawer + byte-offset transcript tail
 - [trace](subsystems/trace.md) — the drawer's Trace mode: a session's tool calls as steps, with the earlier steps that led to each
-- [remote-answer](subsystems/remote-answer.md) — answering `AskUserQuestion` remotely (the first write path)
+- [remote-answer](subsystems/remote-answer.md) — answering `AskUserQuestion` remotely (the first session write path)
 - [remote-plan](subsystems/remote-plan.md) — sending an `ExitPlanMode` plan back for revision (reject-only, by upstream design)
-- [remote-message](subsystems/remote-message.md) — replying into a finished, away-from-keyboard turn (the third write path)
+- [remote-message](subsystems/remote-message.md) — replying into a finished, away-from-keyboard turn (the third session write path)
 - [dictation](subsystems/dictation.md) — the reply composer's mic: local whisper transcription, never auto-sent
-- [spawn](subsystems/spawn.md) — starting a new headless session from the dashboard (the fourth write path, and the first one it initiates), and stopping one from its row
+- [spawn](subsystems/spawn.md) — starting a new headless session from the dashboard (the fourth session write path, and the first one it initiates), and stopping one from its row or its chat drawer
 - [session-surfaces](subsystems/session-surfaces.md) — where a session lives, and where you can continue it (also where `Session.surface` is specified)
 - [remote-access](subsystems/remote-access.md) — the ways in + the origin badge
 - [configs](subsystems/configs.md) — read-only config browser
@@ -381,6 +431,8 @@ that area:
 - [permission-notify](subsystems/permission-notify.md) — the `Allow?` tab for terminal permission dialogs
 - [push-notify](subsystems/push-notify.md) — server-sent ntfy pushes: the layered policy, and the one narrow browser layer that came back for headless sessions
 - [breakpoints](subsystems/breakpoints.md) — the seven-tier mobile-first ladder in `styles.css`, the rail+measure lock, and the capped/full content-width matrix
+- [codegraph](subsystems/codegraph.md) — `GET /api/codegraph`, `POST /api/codegraph/run`: the `codegraph` CLI's index state per pinned project — a status cache, Sync and Reindex runs, the lock-loss rule, and the levels the Management › CodeGraph layouts draw
+- [routines](subsystems/routines.md) — the Routines section: job files in a git-synced folder, installed as launchd / cron jobs by reconcile, run by `plugin/lib/run-routine.mjs`, the run log, the owning server and `routine-failed` pushes
 - [visual-tests](subsystems/visual-tests.md) — `pnpm test:visual`: Playwright screenshots of every view against fixture data, overflow and daylight contrast, macOS only
 - [configuration](workflows/configuration.md) — the `.env` / hook-side variable reference
 - [ci](workflows/ci.md) — the PR gate: `ci / checks`, `ci / pr-title`, `ci / skills` from release-kit's reusable workflow, and the `main-pr-only` ruleset

@@ -287,6 +287,9 @@ export function setSpawner(fn: Spawner | null): void {
   spawner = fn;
 }
 
+/** The spawner `launch` uses, for the other detached launches that must share its test seam (`routine-run.ts`). */
+export const spawnProcess: Spawner = (command, args, options) => (spawner ?? nodeSpawn)(command, args, options);
+
 /**
  * Delivers a signal. Receives the pid *already negated* into a process-group
  * target, exactly as `process.kill` would — so a test asserting `-pid` is

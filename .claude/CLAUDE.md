@@ -7,13 +7,14 @@ usage and current tool activity per session. Polls every 3s.
 ## Orientation
 
 Monolith, three domains plus the plugin. The **only** things crossing the FE/BE boundary live in `shared/`:
-the typed JSON in `shared/types.ts`, plus two zero-dep modules both sides run: `shared/frontmatter.ts` and `shared/gitUpstream.ts`.
+the typed JSON in `shared/types.ts`, plus four zero-dep modules both sides run: `shared/frontmatter.ts`, `shared/gitUpstream.ts`, `shared/cron.ts` and
+`shared/routine-file.ts`.
 
 - `server/` — Node + TypeScript, run via `tsx`, **zero runtime deps** (Node built-ins only) but two: `lookout-widgets`, `release-kit`.
-- `client/` — Vite + React + TypeScript; side rail Sessions | Usage | Management |
+- `client/` — Vite + React + TypeScript; side rail Sessions | Routines | Usage | Management |
   Claude Configs | Analytics | Settings, all lazy but Sessions.
 - `shared/` — `types.ts` is the API contract and the single source of truth for it;
-  `frontmatter.ts` and `gitUpstream.ts` are the only modules both sides run.
+  `frontmatter.ts`, `gitUpstream.ts`, `cron.ts` and `routine-file.ts` are the only modules both sides run.
 - `test/` — node-assert tests over backend + client domain logic, tmpdir JSONL fixtures.
 - `plugin/` — the installable Claude Code plugin (the repo root's `.claude-plugin/marketplace.json` points at it): the skills the dashboard depends on, plain
   JS, never imported by server or client at runtime. `test/plugin-manifest.test.ts` pins what may live in it.
@@ -60,21 +61,25 @@ config; a public tunnel's hostname needs `ALLOWED_HOSTS` (the DNS-rebinding guar
 
 - **ESM everywhere** (`"type": "module"`). Server imports use the `.js` suffix (resolves to
   `.ts` under Bundler resolution + tsx). Cross-boundary imports use `import type` — no
-  runtime coupling, `shared/frontmatter.ts` and `shared/gitUpstream.ts` excepted.
+  runtime coupling, `shared/frontmatter.ts`, `shared/gitUpstream.ts`, `shared/cron.ts` and `shared/routine-file.ts` excepted.
 - **Server is never compiled.** `tsx` in dev *and* prod. No `dist/` for the server.
 - **Dev vs prod page:** in dev Vite serves the HTML and Node answers API only; in prod Node
   static-serves `client/dist` and auto-opens the browser.
 - **Adding an API field:** `shared/types.ts` first, then the server producer (`scan.ts` etc),
   then the client consumer.
-- **Keep CSS class names stable.** `client/src/styles.css` is a verbatim port of the original
-  inline `renderPage()`. React auto-escapes — no `esc()`.
+- **Keep CSS class names stable.** The visual suite (`test/visual/*.spec.ts`) and the subsystem docs address elements by them.
+  React auto-escapes — no `esc()`.
 - **Never hardcode a color or shadow in `styles.css`** below the theme-token block. The 5
   themes are pure `[data-theme]` token overrides; one literal breaks the light one.
-- **Keep new deps out of `server/`.** It reads disk and makes exactly two kinds of outbound
-  call — the ntfy push in `lib/notify.ts` and the usage read in `lib/usage.ts`. A third needs
-  a reason. `lib/token-refresh.ts` and `lib/spawn.ts` launch the `claude` CLI, which makes its
-  own network calls — the server does not, so they are not a third kind. `lib/git-fetch.ts` launches `git fetch`, which makes its own network call —
-  not a third kind either. `test/outbound.test.ts` pins the list.
+- **`styles.css` only maps ui-kit's `--uk-*` tokens; it never restyles a `.uk-*` class.** The chip and drawer look the same in every app that ships them,
+  and `test/ui-kit-guard.test.ts` (ui-kit's `checkHostCss`) fails on any other rule. The chip's place is the `.rel-chip` wrapper, nothing more.
+- **Keep new deps out of `server/`.** It reads disk and makes exactly two kinds of outbound call itself — the ntfy push in `lib/notify.ts` and the usage
+  read in `lib/usage.ts`. A third needs a reason. Launching a local program is not a third kind, even when that program makes network calls of its own:
+  `lib/token-refresh.ts` and `lib/spawn.ts` launch `claude`; `lib/git-fetch.ts` launches `git fetch`; `lib/git-quick.ts` launches `git fetch`,
+  `git merge --ff-only` and `git push` for the Sync menu; `lib/codegraph.ts` launches `codegraph` with `CODEGRAPH_NO_UPDATE_CHECK=1` and
+  `CODEGRAPH_NO_DOWNLOAD=1` set, which switch off its update check and bundle download; `lib/routine-reconcile.ts` launches `launchctl`, `crontab` and
+  `pgrep`; `lib/routine-store.ts` launches `ps` and `sysctl`; `lib/open-folder.ts` launches `open` and `open -R`; `lib/routine-run.ts` spawns the
+  plugin's `run-routine.mjs` through `spawn.ts`'s `spawnProcess`. `test/outbound.test.ts` pins the list.
   Two npm packages are allowed, by name, each with zero runtime deps of its own and pinned to a git tag: `lookout-widgets`, the Lookout contract producer
   behind `/api/hub/widgets`, and `release-kit`, whose reader is the one reader of the tag-message contract its release workflow writes (spec
   `docs/superpowers/specs/2026-10-15-release-pipeline-design.md` D7) and, as `createReleasesReader`, backs `/api/releases`; it uses Node built-ins only and launches `git`, so it is no
@@ -86,7 +91,7 @@ config; a public tunnel's hostname needs `ALLOWED_HOSTS` (the DNS-rebinding guar
 ## Subagent rules
 
 - **Subagents return terse findings, not prose.** Instruct every Explore/Plan/Task subagent
-  to answer with compact `file:line` tables + short conclusions, capped at **~15 lines, no
+  to answer with compact `file:line` tables + short conclusions, only as long as the findings need, with **no
   closing recap/summary section** — the table *is* the answer, and a restated summary doubles
   what replays through parent context every turn. For pure locate-code work prefer
   `caveman:cavecrew-investigator` (~60% smaller output than vanilla `Explore`).
@@ -114,7 +119,7 @@ Three rules are load-bearing:
 - **State what you did NOT verify.** Every merged PR here carries a "not verified, needs a
   human" line or an explicit *Unproven* row.
 - **Never claim green without the command output.**
-- **The PR title must pass `ci / pr-title`** (it becomes the squash commit once squash-only merges are applied): `feat|fix|perf` (`!` allowed) or
+- **The PR title must pass `ci / pr-title`** (it becomes the squash commit): `feat|fix|perf` (`!` allowed) or
   `docs|chore|test|refactor|ci|build`, optional lowercase `(scope)`, `: `, a description. `feat`/`fix`/`perf` cut a release (`docs/workflows/ci.md` §Releases).
 - **`main` is PR-only** (ruleset `main-pr-only`, `docs/workflows/ci.md`): every change reaches it through a PR, docs included. Specs, plans and notes go
   through a `docs:` PR, which passes CI and cuts no release. Never bypass the ruleset.

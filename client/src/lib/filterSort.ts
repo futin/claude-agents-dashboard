@@ -1,4 +1,4 @@
-import type { Session } from '../../../shared/types';
+import type { Session, SessionsResponse } from '../../../shared/types';
 
 /** Human labels for each status. Shared by the session views and the Toolbar. */
 export const STATUS_LABEL: Record<Session['status'], string> = {
@@ -145,14 +145,22 @@ export function distinctProjects(sessions: Session[]): string[] {
 }
 
 /**
- * Drop selected project names the payload no longer contains, so a filter
+ * The projects the toolbar offers and `pruneProjects` checks against: the server's lookback-wide `projects`, since with `?project=` set the rows hold
+ * only the chosen ones. An error snapshot carries none, so the rows' own projects stand in.
+ */
+export function availableProjects(data: Pick<SessionsResponse, 'sessions' | 'projects'>): string[] {
+  return data.projects ?? distinctProjects(data.sessions);
+}
+
+/**
+ * Drop selected project names the server no longer offers (`availableProjects`), so a filter
  * persisted from an earlier visit cannot silently hide every row (see
  * docs/subsystems/view-persistence.md). `describeEmpty` explains the cases this
  * deliberately leaves standing; healing a name that is simply gone is better
  * than explaining it.
  *
  * Rules, in the order they matter:
- * - An empty payload prunes nothing. No sessions is no evidence, not evidence
+ * - An empty list prunes nothing. No projects is no evidence, not evidence
  *   of absence, and the very first poll of a mount arrives before any rows do.
  * - Names still present survive; only the absent ones go. Pruning the last
  *   survivor yields `[]`, which the toolbar's picks and applyView both read
@@ -160,9 +168,9 @@ export function distinctProjects(sessions: Session[]): string[] {
  * - Nothing to prune returns `selected` itself, so a caller can compare by
  *   reference instead of deep-equality to decide whether to write state.
  */
-export function pruneProjects(selected: string[], sessions: Session[]): string[] {
-  if (!selected.length || !sessions.length) return selected;
-  const present = new Set(sessions.map(s => s.project));
+export function pruneProjects(selected: string[], available: string[]): string[] {
+  if (!selected.length || !available.length) return selected;
+  const present = new Set(available);
   const kept = selected.filter(p => present.has(p));
   return kept.length === selected.length ? selected : kept;
 }

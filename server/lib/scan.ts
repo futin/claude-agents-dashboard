@@ -8,11 +8,12 @@ import os from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 
-import { readTranscript } from './transcript.js';
+import { launchCwd, readTranscript } from './transcript.js';
 import { readAgentsCached } from './agents-cache.js';
 import { SUBAGENT_DIR } from './subagent-usage.js';
 import { refreshCwd } from './token-refresh.js';
 import { readSessionTasks } from './tasks.js';
+import { repoNameFor } from './worktree-repo.js';
 import { readSessionAnalyticsLog, lessonForSession } from './sessionAnalyticsLog.js';
 import type { SessionAnalyticsLesson } from './sessionAnalyticsLog.js';
 import type { Config } from './config.js';
@@ -34,6 +35,11 @@ interface ScanOptions {
   skipProcScan?: boolean;
   /** Override the live-cwd set (tests). null disables gating; undefined probes. */
   liveCwds?: Set<string> | null;
+  /**
+   * Override the set of session ids named by a live `claude` argv (tests). null = unknown, no row is flagged `processLive`; undefined probes
+   * (`liveSessionIds()`), unless `skipProcScan` is set.
+   */
+  liveSessionIds?: Set<string> | null;
   /** Override kaizen lessons (tests). null skips tagging; undefined reads the log. */
   lessons?: SessionAnalyticsLesson[] | null;
   /**
@@ -77,6 +83,11 @@ interface ScanOptions {
    * stopped — see {@link Session.stopState}.
    */
   stopStates?: ReadonlyMap<string, StopState> | null;
+  /**
+   * Keep only sessions whose `project` is one of these names, chosen *before* the `maxSessions` cap — so a project with no session among the newest N
+   * overall still fills its rows. Omitted/null/empty ⇒ every project. `GET /api/sessions?project=…` passes it.
+   */
+  projects?: ReadonlySet<string> | null;
 }
 
 /** Default transcripts root. */
@@ -504,6 +515,146 @@ export function liveSessionIds(): Set<string> | null {
   }
 }
 
+/** What one row needs beyond its transcript: the clock, the activity window and the injected sets `scanSessions` documents on {@link ScanOptions}. */
+export interface RowOptions extends Pick<ScanOptions, 'homeDir' | 'pendingIds' | 'planIds' | 'messageIds' | 'permissionWaits' | 'stopStates'> {
+  now: number;
+  activeWindowMin: number;
+  /** The live-cwd set; null fails open, as `skipProcScan` does. */
+  liveCwds: Set<string> | null;
+  /** Session ids named by a live `claude` argv; null or omitted fails open, as `skipProcScan` does: no row is flagged `processLive`. */
+  liveSessionIds?: Set<string> | null;
+  lessons: SessionAnalyticsLesson[] | null;
+  /**
+   * Apply the list's skips (no conversational message, slash-command only, the token-refresh cwd) by answering null. The row-by-id route leaves them
+   * off, so a routine run the list would hide still opens.
+   */
+  scanSkips?: boolean;
+}
+
+/** One `Session` row from one transcript; null when it cannot be read, or when `scanSkips` drops it. */
+export function sessionFromRef(ref: TranscriptRef, opts: RowOptions): Session | null {
+  const skips = opts.scanSkips === true;
+  const live = opts.liveCwds;
+  const parsed = readTranscript(ref.file);
+  if (!parsed) return null;
+  // Skip transcripts with no conversational message: a session just started or
+  // just `/clear`ed writes a fresh UUID file holding only queue-operation/
+  // attachment/meta records. Its fresh mtime would read recent + turnComplete
+  // = "incomplete", showing a phantom "pending" row beside the real session
+  // (which `/clear` abandoned). Nothing to display → drop it.
+  if (skips && !parsed.hasMessages) return null;
+  // Skip a transcript whose whole conversation is local slash-command plumbing
+  // — `/login` (or `!ls`) run in a fresh terminal. Those records are user-role
+  // messages, so the guard above passes them, but no assistant ever answered
+  // and no tokens were spent: a 0% phantom row reading "your turn". Same
+  // policy as above — nothing to display → drop it.
+  if (skips && parsed.commandOnly) return null;
+  // The launch cwd, not the newest record's: a `cd` inside a Bash tool call
+  // moves the transcript's cwd for the rest of the session, which would label
+  // the row with a fragment like `open` and group it there in the Settings
+  // filter. Falls back to the newest cwd when the head window held none.
+  const projectPath = parsed.originCwd || parsed.cwd || null;
+  // The dashboard's own token-renewal turns run in a dedicated cwd; their
+  // transcripts are plumbing, not a session to display.
+  if (skips && projectPath && normCwd(projectPath) === normCwd(refreshCwd(opts.homeDir))) return null;
+  const project = projectPath ? projectNameOf(projectPath) : decodeProjectName(ref.dirName);
+  // Recency tracks real agent activity, not file touches: selecting a session
+  // in Claude Code appends timestamp-less mode/last-prompt/custom-title records
+  // that bump the file mtime without any turn happening. Use the newest
+  // conversational message's timestamp; fall back to mtime only if absent.
+  const lastMsgMs = parsed.lastMessageTs ? Date.parse(parsed.lastMessageTs) : NaN;
+  const activityMs = Number.isFinite(lastMsgMs) ? lastMsgMs : ref.mtimeMs;
+  const recent = opts.now - activityMs <= opts.activeWindowMin * 60 * 1000;
+  let status: Session['status'];
+  // Dead process (cwd not in the live set) → nothing is running and nothing
+  // will resume on its own, so the session is idle no matter what the last
+  // transcript record implies (interrupted mid-turn, unanswered question…).
+  // Two keys, either one matching is proof of life. `lsof` reports the
+  // *process* cwd, and the transcript's newest cwd drifts away from it in
+  // both directions — shell drift moves the transcript (a `cd` in a tool
+  // call), process drift moves the process (entering a worktree) — so
+  // neither key alone is reliable (bug-7). Still exact equality per key: no
+  // containment, so per-cwd granularity stays the documented limit.
+  const liveKeys = [parsed.originCwd, parsed.cwd].filter((k): k is string => !!k);
+  const dead = live !== null && liveKeys.length > 0
+    && !liveKeys.some(k => live.has(normCwd(k)));
+  // A held wait outranks even the liveness gate: the hook is holding a socket
+  // open right now, which is stronger evidence of a live session than lsof's
+  // per-cwd view. It also beats the transcript, which won't show the question
+  // until the tool call resolves.
+  const remoteQuestion = opts.pendingIds ? opts.pendingIds.has(ref.id) : false;
+  // A held plan is the same kind of evidence as a held question — an open
+  // socket right now — so it sits beside it, above the liveness gate.
+  const remotePlan = !remoteQuestion && (opts.planIds ? opts.planIds.has(ref.id) : false);
+  // A held reply window is the same kind of evidence again — the Stop hook is
+  // holding a socket open right now — so it joins the chain above the gates.
+  const remoteReply = !remoteQuestion && !remotePlan
+    && (opts.messageIds ? opts.messageIds.has(ref.id) : false);
+  // A permission dialog is open in the terminal. It never reaches the
+  // transcript, so the flag comes from the Notification hook — and it is
+  // believed only until the transcript moves on: answering the dialog (allow
+  // OR deny) appends a record, so a message newer than the notification means
+  // the dialog is gone. Unlike a held remote wait this carries no liveness
+  // evidence (the hook fired and exited), so it sits BELOW the dead gate.
+  const notifiedAt = opts.permissionWaits?.get(ref.id);
+  const permissionWait = !remoteQuestion && !remotePlan && !remoteReply && !dead && notifiedAt !== undefined
+    && !(Number.isFinite(lastMsgMs) && lastMsgMs > notifiedAt);
+  if (remoteQuestion) status = 'question';                           // blue — a wait is held for it
+  else if (remotePlan) status = 'question';                          // blue — a plan is held for a verdict
+  else if (remoteReply) status = 'question';                         // blue — a reply window is open
+  else if (dead) status = 'idle';                                    // gray — no live process
+  else if (permissionWait) status = 'question';                      // blue — dialog open in the terminal
+  else if (parsed.waitingOnQuestion) status = 'question';            // blue — needs an answer, beats all
+  else if (recent && !parsed.turnComplete) status = 'working';       // green — machine actively churning
+  // A parent parked on a subagent writes nothing, so its own transcript reads
+  // done or stalled. Below `dead` and every question arm; evaluated only when
+  // the ladder would otherwise say idle/incomplete, so the probe stays off
+  // every row the arm above already settled.
+  else if (subagentRunning(ref.file, ref.id, opts.now)) status = 'working';   // green — parked on a running subagent
+  else if (parsed.turnComplete && !recent) status = 'idle';          // gray — finished and dormant
+  else status = 'incomplete';                                        // yellow — your turn (recent+done) OR stalled (stale+pending)
+  // Only present when this server holds a live handle for the id — the field
+  // is deliberately absent, not false, for every other row (see `stopState`).
+  const stopState = opts.stopStates?.get(ref.id);
+  const surface = sessionSurface(parsed.entrypoint);
+  // A process this server cannot signal but the process table shows (see `processLive`): the same absent-not-false encoding.
+  const processLive = surface === 'dashboard' && !stopState && !!opts.liveSessionIds?.has(ref.id);
+  const taskState = readSessionTasks(ref.file, projectPath);
+  return {
+    id: ref.id,
+    project,
+    projectPath,
+    repo: repoNameFor(projectPath),
+    sessionName: parsed.sessionName || null,
+    gitBranch: parsed.gitBranch || null,
+    model: parsed.model || '',
+    tokens: parsed.tokens,
+    contextWindow: parsed.contextWindow,
+    contextWindowLabel: parsed.contextWindowLabel,
+    contextPct: parsed.contextPct,
+    status,
+    surface,
+    remoteQuestion,
+    remotePlan,
+    remoteReply,
+    permissionWait,
+    ...(stopState ? { stopState } : {}),
+    ...(processLive ? { processLive: true as const } : {}),
+    activity: parsed.activity,
+    lastTimestamp: parsed.lastTimestamp,
+    updatedMs: ref.mtimeMs,
+    version: parsed.version || null,
+    kaizenLesson: opts.lessons ? lessonForSession(opts.lessons, ref.id) : null,
+    tasks: taskState.tasks,
+    taskPlan: taskState.plan
+  };
+}
+
+/** A `Session.project` from its launch cwd: the folder's basename. */
+function projectNameOf(cwd: string): string {
+  return cwd.split('/').filter(Boolean).pop() || cwd;
+}
+
 /** Build the ranked session snapshot. */
 export function scanSessions(config: Partial<Config>, options: ScanOptions = {}): SessionsResponse {
   const cfg = config || {};
@@ -515,7 +666,6 @@ export function scanSessions(config: Partial<Config>, options: ScanOptions = {})
   const root = options.root || projectsRoot(options.homeDir);
 
   const lookbackMs = lookbackHours * 60 * 60 * 1000;
-  const activeMs = activeWindowMin * 60 * 1000;
 
   // Candidate POOL, not the display count: the two skips below (no messages,
   // slash-command-only) can only be decided after parsing, so a slice of exactly
@@ -529,11 +679,24 @@ export function scanSessions(config: Partial<Config>, options: ScanOptions = {})
   // (see `newestPerId`) would otherwise spend two pool slots on itself and be
   // pushed as two `Session`s with the same id — one row per half, parsed from
   // different halves, so reading `working` and `idle` at once.
-  const candidates = newestPerId(
+  const inLookback = newestPerId(
     listTranscripts(root)
       .filter(t => !archived || !archived.has(t.id))
       .filter(t => now - t.mtimeMs <= lookbackMs))
-    .sort((a, b) => b.mtimeMs - a.mtimeMs)
+    .sort((a, b) => b.mtimeMs - a.mtimeMs);
+
+  // Project of every transcript in the lookback from the cached head read alone (`launchCwd`), never the tail parse: this runs over all of them each
+  // poll, ~226 at a 7-day lookback (2026-10-21). null = the head holds no cwd yet, so the project is unknown until the row is parsed. The dashboard's own
+  // token-renewal cwd is plumbing that `sessionFromRef` drops, so it is no project to offer.
+  const refresh = normCwd(refreshCwd(options.homeDir));
+  const projectOf = new Map<TranscriptRef, string | null>();
+  for (const t of inLookback) {
+    const cwd = launchCwd(t.file, t.size);
+    projectOf.set(t, cwd && normCwd(cwd) !== refresh ? projectNameOf(cwd) : null);
+  }
+  const wanted = options.projects && options.projects.size ? options.projects : null;
+  // An unknown project stays a candidate: the parsed row settles it below.
+  const candidates = (wanted ? inLookback.filter(t => { const p = projectOf.get(t); return p == null || wanted.has(p); }) : inLookback)
     .slice(0, maxSessions * 2);
 
   // Set of cwds with a live `claude` process. null = probe skipped/unavailable
@@ -542,6 +705,11 @@ export function scanSessions(config: Partial<Config>, options: ScanOptions = {})
   const live = options.liveCwds !== undefined
     ? options.liveCwds
     : options.skipProcScan ? null : liveCwds();
+  // Session ids in a live `claude` argv: one more `ps` per poll, the same cost class as the two above. A null probe fails open (no row flagged), leaving
+  // the server-side 409 on POST as the safety net.
+  const liveIds = options.liveSessionIds !== undefined
+    ? options.liveSessionIds
+    : options.skipProcScan ? null : liveSessionIds();
 
   // `/kaizen` lessons keyed to each session by UUID-prefix match. Read once per
   // scan (tiny, fail-open file). Skipped when analytics is disabled or injected
@@ -550,118 +718,20 @@ export function scanSessions(config: Partial<Config>, options: ScanOptions = {})
     ? options.lessons
     : cfg.showAnalytics === false ? null : readSessionAnalyticsLog();
 
+  const rowOptions: RowOptions = {
+    homeDir: options.homeDir, now, activeWindowMin, liveCwds: live, liveSessionIds: liveIds, lessons, scanSkips: true,
+    pendingIds: options.pendingIds, planIds: options.planIds, messageIds: options.messageIds,
+    permissionWaits: options.permissionWaits, stopStates: options.stopStates
+  };
   const sessions: Session[] = [];
   for (const c of candidates) {
     if (sessions.length >= maxSessions) break;   // the pool over-fetches; this is the cap
-    const parsed = readTranscript(c.file);
-    if (!parsed) continue;
-    // Skip transcripts with no conversational message: a session just started or
-    // just `/clear`ed writes a fresh UUID file holding only queue-operation/
-    // attachment/meta records. Its fresh mtime would read recent + turnComplete
-    // = "incomplete", showing a phantom "pending" row beside the real session
-    // (which `/clear` abandoned). Nothing to display → drop it.
-    if (!parsed.hasMessages) continue;
-    // Skip a transcript whose whole conversation is local slash-command plumbing
-    // — `/login` (or `!ls`) run in a fresh terminal. Those records are user-role
-    // messages, so the guard above passes them, but no assistant ever answered
-    // and no tokens were spent: a 0% phantom row reading "your turn". Same
-    // policy as above — nothing to display → drop it.
-    if (parsed.commandOnly) continue;
-    // The launch cwd, not the newest record's: a `cd` inside a Bash tool call
-    // moves the transcript's cwd for the rest of the session, which would label
-    // the row with a fragment like `open` and group it there in the Settings
-    // filter. Falls back to the newest cwd when the head window held none.
-    const projectPath = parsed.originCwd || parsed.cwd || null;
-    // The dashboard's own token-renewal turns run in a dedicated cwd; their
-    // transcripts are plumbing, not a session to display.
-    if (projectPath && normCwd(projectPath) === normCwd(refreshCwd(options.homeDir))) continue;
-    const project = projectPath ? (projectPath.split('/').filter(Boolean).pop() || projectPath) : decodeProjectName(c.dirName);
-    // Recency tracks real agent activity, not file touches: selecting a session
-    // in Claude Code appends timestamp-less mode/last-prompt/custom-title records
-    // that bump the file mtime without any turn happening. Use the newest
-    // conversational message's timestamp; fall back to mtime only if absent.
-    const lastMsgMs = parsed.lastMessageTs ? Date.parse(parsed.lastMessageTs) : NaN;
-    const activityMs = Number.isFinite(lastMsgMs) ? lastMsgMs : c.mtimeMs;
-    const recent = now - activityMs <= activeMs;
-    let status: Session['status'];
-    // Dead process (cwd not in the live set) → nothing is running and nothing
-    // will resume on its own, so the session is idle no matter what the last
-    // transcript record implies (interrupted mid-turn, unanswered question…).
-    // Two keys, either one matching is proof of life. `lsof` reports the
-    // *process* cwd, and the transcript's newest cwd drifts away from it in
-    // both directions — shell drift moves the transcript (a `cd` in a tool
-    // call), process drift moves the process (entering a worktree) — so
-    // neither key alone is reliable (bug-7). Still exact equality per key: no
-    // containment, so per-cwd granularity stays the documented limit.
-    const liveKeys = [parsed.originCwd, parsed.cwd].filter((k): k is string => !!k);
-    const dead = live !== null && liveKeys.length > 0
-      && !liveKeys.some(k => live.has(normCwd(k)));
-    // A held wait outranks even the liveness gate: the hook is holding a socket
-    // open right now, which is stronger evidence of a live session than lsof's
-    // per-cwd view. It also beats the transcript, which won't show the question
-    // until the tool call resolves.
-    const remoteQuestion = options.pendingIds ? options.pendingIds.has(c.id) : false;
-    // A held plan is the same kind of evidence as a held question — an open
-    // socket right now — so it sits beside it, above the liveness gate.
-    const remotePlan = !remoteQuestion && (options.planIds ? options.planIds.has(c.id) : false);
-    // A held reply window is the same kind of evidence again — the Stop hook is
-    // holding a socket open right now — so it joins the chain above the gates.
-    const remoteReply = !remoteQuestion && !remotePlan
-      && (options.messageIds ? options.messageIds.has(c.id) : false);
-    // A permission dialog is open in the terminal. It never reaches the
-    // transcript, so the flag comes from the Notification hook — and it is
-    // believed only until the transcript moves on: answering the dialog (allow
-    // OR deny) appends a record, so a message newer than the notification means
-    // the dialog is gone. Unlike a held remote wait this carries no liveness
-    // evidence (the hook fired and exited), so it sits BELOW the dead gate.
-    const notifiedAt = options.permissionWaits?.get(c.id);
-    const permissionWait = !remoteQuestion && !remotePlan && !remoteReply && !dead && notifiedAt !== undefined
-      && !(Number.isFinite(lastMsgMs) && lastMsgMs > notifiedAt);
-    if (remoteQuestion) status = 'question';                           // blue — a wait is held for it
-    else if (remotePlan) status = 'question';                          // blue — a plan is held for a verdict
-    else if (remoteReply) status = 'question';                         // blue — a reply window is open
-    else if (dead) status = 'idle';                                    // gray — no live process
-    else if (permissionWait) status = 'question';                      // blue — dialog open in the terminal
-    else if (parsed.waitingOnQuestion) status = 'question';            // blue — needs an answer, beats all
-    else if (recent && !parsed.turnComplete) status = 'working';       // green — machine actively churning
-    // A parent parked on a subagent writes nothing, so its own transcript reads
-    // done or stalled. Below `dead` and every question arm; evaluated only when
-    // the ladder would otherwise say idle/incomplete, so the probe stays off
-    // every row the arm above already settled.
-    else if (subagentRunning(c.file, c.id, now)) status = 'working';   // green — parked on a running subagent
-    else if (parsed.turnComplete && !recent) status = 'idle';          // gray — finished and dormant
-    else status = 'incomplete';                                        // yellow — your turn (recent+done) OR stalled (stale+pending)
-    // Only present when this server holds a live handle for the id — the field
-    // is deliberately absent, not false, for every other row (see `stopState`).
-    const stopState = options.stopStates?.get(c.id);
-    const taskState = readSessionTasks(c.file, projectPath);
-    sessions.push({
-      id: c.id,
-      project,
-      projectPath,
-      sessionName: parsed.sessionName || null,
-      gitBranch: parsed.gitBranch || null,
-      model: parsed.model || '',
-      tokens: parsed.tokens,
-      contextWindow: parsed.contextWindow,
-      contextWindowLabel: parsed.contextWindowLabel,
-      contextPct: parsed.contextPct,
-      status,
-      surface: sessionSurface(parsed.entrypoint),
-      remoteQuestion,
-      remotePlan,
-      remoteReply,
-      permissionWait,
-      ...(stopState ? { stopState } : {}),
-      activity: parsed.activity,
-      lastTimestamp: parsed.lastTimestamp,
-      updatedMs: c.mtimeMs,
-      version: parsed.version || null,
-      kaizenLesson: lessons ? lessonForSession(lessons, c.id) : null,
-      tasks: taskState.tasks,
-      taskPlan: taskState.plan
-    });
+    const row = sessionFromRef(c, rowOptions);
+    if (row && (!wanted || wanted.has(row.project))) sessions.push(row);
   }
+
+  const projects = new Set<string>(sessions.map(s => s.project));
+  for (const p of projectOf.values()) if (p) projects.add(p);
 
   return {
     generatedAt: new Date(now).toISOString(),
@@ -672,6 +742,7 @@ export function scanSessions(config: Partial<Config>, options: ScanOptions = {})
       shown: sessions.length,
       active: sessions.filter(s => s.status === 'working').length
     },
-    sessions
+    sessions,
+    projects: Array.from(projects).sort((a, b) => a.localeCompare(b))
   };
 }
