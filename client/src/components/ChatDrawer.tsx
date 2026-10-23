@@ -18,7 +18,7 @@ import { usePersistedState } from '../hooks/usePersistedState';
 import { useSettings } from '../hooks/useSettings';
 import { CHAT_FILTERS, filterMessages, isChatFilter, type ChatFilter } from '../lib/chatFilter';
 import { fmtTok } from '../lib/format';
-import { resumeEligible } from '../lib/resume';
+import { resumeEligible, stillRunningNote, STILL_RUNNING_DETAIL, STILL_RUNNING_HINT } from '../lib/resume';
 import { heldBodyUuid } from '../lib/heldBody';
 import { latestSuggestion } from '../lib/composer';
 import { formatInterval } from '../lib/settings';
@@ -115,11 +115,9 @@ export default function ChatDrawer({ session, onClose, spawnAvailable }: {
   const question = usePendingQuestion(session.id);
   const plan = usePendingPlan(session.id);
   const message = usePendingMessage(session.id);
-  const canResume = resumeEligible(
-    session,
-    { question: !!question.pending, plan: !!plan.pending, message: !!message.pending },
-    spawnAvailable
-  );
+  const holds = { question: !!question.pending, plan: !!plan.pending, message: !!message.pending };
+  const canResume = resumeEligible(session, holds, spawnAvailable);
+  const showStillRunning = stillRunningNote(session, holds);
   const [filter, setFilter] = usePersistedState<ChatFilter>('dashboard.chatFilter', 'all');
   const { settings: { refreshMs } } = useSettings();
   const mode = isChatFilter(filter) ? filter : 'all'; // guard a stale stored value
@@ -337,6 +335,18 @@ export default function ChatDrawer({ session, onClose, spawnAvailable }: {
                     live-tails the answer. Can render under MessagePanel's "gone" note,
                     which is the natural hand-off. */}
                 {canResume && <ResumePanel session={session} suggestion={suggestion} />}
+
+                {/* A dashboard session whose process is alive but not this server's to stop (`processLive`): the composer would only meet a 409,
+                    so say why it is missing. The composer returns on the first poll after the process exits. */}
+                {showStillRunning && (
+                  <div className="qpanel resume">
+                    <div className="qp-head">
+                      <span className="qp-badge">still running</span>
+                      <span className="qp-hint">{STILL_RUNNING_HINT}</span>
+                    </div>
+                    <div className="qp-note">{STILL_RUNNING_DETAIL}</div>
+                  </div>
+                )}
               </div>
             </div>
 

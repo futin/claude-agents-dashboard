@@ -1,6 +1,6 @@
 import assert from 'node:assert';
 
-import { resumeEligible } from '../client/src/lib/resume.js';
+import { resumeEligible, resumeErrorText, stillRunningNote, STILL_RUNNING_DETAIL } from '../client/src/lib/resume.js';
 
 function test(name: string, fn: () => void): boolean {
   try { fn(); console.log('  ✓ ' + name); return true; }
@@ -52,6 +52,33 @@ export function run(): number {
     assert.strictEqual(resumeEligible({ ...s, stopState: 'ready' }, NO_HOLDS, true), false);
     assert.strictEqual(resumeEligible({ ...s, stopState: 'stopping' }, NO_HOLDS, true), false);
     assert.strictEqual(resumeEligible({ ...s, status: 'idle', stopState: 'ready' }, NO_HOLDS, true), false);
+  })) p++; else f++;
+
+  if (test('a live process this server cannot signal (processLive) suppresses the composer; the same row without it is eligible', () => {
+    for (const status of ['idle', 'incomplete'] as const) {
+      const s = { surface: 'dashboard', status } as const;
+      assert.strictEqual(resumeEligible({ ...s, processLive: true }, NO_HOLDS, true), false, status + ' with processLive');
+      assert.strictEqual(resumeEligible(s, NO_HOLDS, true), true, status + ' without processLive');
+    }
+  })) p++; else f++;
+
+  if (test('stillRunningNote: shown for an ended dashboard row with processLive, nowhere else', () => {
+    const s = { surface: 'dashboard', status: 'idle', processLive: true } as const;
+    assert.strictEqual(stillRunningNote(s, NO_HOLDS), true);
+    assert.strictEqual(stillRunningNote({ ...s, status: 'incomplete' }, NO_HOLDS), true);
+    // mirror: no processLive, no note
+    assert.strictEqual(stillRunningNote({ surface: 'dashboard', status: 'idle' }, NO_HOLDS), false);
+    // alive already says so elsewhere: working, a held panel, a stoppable child
+    assert.strictEqual(stillRunningNote({ ...s, status: 'working' }, NO_HOLDS), false);
+    assert.strictEqual(stillRunningNote(s, { ...NO_HOLDS, message: true }), false);
+    assert.strictEqual(stillRunningNote({ ...s, stopState: 'ready' }, NO_HOLDS), false);
+    assert.strictEqual(stillRunningNote({ ...s, surface: 'local' }, NO_HOLDS), false);
+  })) p++; else f++;
+
+  if (test('resumeErrorText: the 409 for a live session reads plainly; other errors pass through unchanged', () => {
+    assert.strictEqual(resumeErrorText('session is still running'), STILL_RUNNING_DETAIL);
+    assert.strictEqual(resumeErrorText('already resuming'), 'already resuming');
+    assert.strictEqual(resumeErrorText('unknown session'), 'unknown session');
   })) p++; else f++;
 
   console.log(`\n  ${p} passed, ${f} failed`);
