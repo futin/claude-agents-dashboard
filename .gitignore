@@ -14,3 +14,4 @@ client/dist/
 .usage-profile.json
 test-results/
 playwright-report/
+.playwright-mcp/
