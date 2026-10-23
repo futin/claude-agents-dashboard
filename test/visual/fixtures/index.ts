@@ -11,7 +11,7 @@ import { gitStats } from './git-stats.js';
 import { health } from './health.js';
 import { pins } from './pins.js';
 import { releases } from './releases.js';
-import { scheduleRuns, schedules } from './schedules.js';
+import { routineRuns, routines } from './routines.js';
 import { sessionChat } from './session-chat.js';
 import { sessionDetail } from './session-detail.js';
 import { sessionMessage } from './session-message.js';
@@ -50,6 +50,6 @@ export const fixtures: FixtureMap = {
   '/api/configs/file': configsFile,
   '/api/git-stats': gitStats,
   '/api/codegraph': codegraph,
-  '/api/schedules': schedules,
-  '/api/schedules/runs': scheduleRuns
+  '/api/routines': routines,
+  '/api/routines/runs': routineRuns
 };

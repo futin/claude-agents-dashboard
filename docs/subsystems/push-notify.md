@@ -173,7 +173,7 @@ why an env var has to carry it — the tty and entrypoint the hook inspects both
 front end, and by those tests every one of these sessions is simply headless. Deliberately
 not a blanket headless exemption: a headless session a person started by hand is reachable
 on purpose and still holds. A one-shot launch (`CLAUDE_DASHBOARD_ONESHOT`, set by the dashboard's Close when done and on every Git Sync run)
-takes the same `notify_fallback` route, so it still pushes "finished". A scheduled step (`CLAUDE_DASHBOARD_SCHEDULE=<job>`, set by the [schedule wrapper](schedules.md#the-wrapper)) is the other: the Stop hook exits on that marker too,
+takes the same `notify_fallback` route, so it still pushes "finished". A routine step (`CLAUDE_DASHBOARD_ROUTINE=<job>`, set by the [routine wrapper](routines.md#the-wrapper)) is the other: the Stop hook exits on that marker too,
 so a 22:00 step is never held for `answerSecs` and never pushes "finished" — its own failure push below is the only one it can raise. The dashboard's own token-renewal turn
 (`CLAUDE_DASHBOARD_REFRESH`, [usage-limits](usage-limits.md)) is the one session that pushes nothing: the hook exits on the marker before the health probe,
 and the server drops `stop` events and message waits from the refresh cwd's transcripts as a backstop (#178). A stop that an `autopilot` run's guard blocks
@@ -255,20 +255,20 @@ The label comes from `scanSessions` (`sessionName || project`), resolved *after*
 predicate passes so the scan is never paid for a push that will not be sent. An id the scan
 no longer covers falls back to its first 8 characters.
 
-## The fifth event: `schedule-failed`
+## The fifth event: `routine-failed`
 
-`NotifyEvent` has a fifth member, `schedule-failed`, for [scheduled workflows](schedules.md): a run that failed (`failed > 0` or an `error`), a `refused` record
+`NotifyEvent` has a fifth member, `routine-failed`, for [routines](routines.md): a run that failed (`failed > 0` or an `error`), a `refused` record
 whose `why` is not `running`, or a run that is lost. It is not a session event, so it has no hook and no session id and does not go through `maybeSend`: the
-server folds the run log and `sendScheduleEvent` (`lib/notify.ts`) delivers. It shares everything that is not session-shaped — the master switch, its own
-per-event checkbox (Settings → **Shared › Push notifications › Scheduled job failed**, `NOTIFY_EVENTS` in `lib/settings.ts`), the desk/phone routing and the
+server folds the run log and `sendRoutineEvent` (`lib/notify.ts`) delivers. It shares everything that is not session-shaped — the master switch, its own
+per-event checkbox (Settings → **Shared › Push notifications › Routine failed**, `NOTIFY_EVENTS` in `lib/settings.ts`), the desk/phone routing and the
 transport — and is **exempt from `requireAfk`, `requireRemoteAnswer` and `requireAutoMode`**: those gate interactive sessions, and a 22:00 job has none, so with
-the checkbox on it pushes at the desk too. Copy, the once-per-run ledger (`notified.json`) and the tap-through are in [schedules](schedules.md#notifications);
-the click is `<DASHBOARD_PUBLIC_URL>/?view=schedules&run=<id>`, and without a public URL the push carries no link.
+the checkbox on it pushes at the desk too. Copy, the once-per-run ledger (`notified.json`) and the tap-through are in [routines](routines.md#notifications);
+the click is `<DASHBOARD_PUBLIC_URL>/?view=routines&run=<id>`, and without a public URL the push carries no link.
 
 ## The usage events: `usage-limit` and `usage-reset`
 
 Two more members, `usage-limit` and `usage-reset`, push when the account's **5-hour** window reaches 100% (*5-hour limit reached*) and when a window that was
-pushed as reached is over (*5-hour limit reset*). The weekly window has no alert. Like `schedule-failed` they are not session events: no hook, no session
+pushed as reached is over (*5-hour limit reset*). The weekly window has no alert. Like `routine-failed` they are not session events: no hook, no session
 id, no `maybeSend`. The usage recorder hands every fetch to `onUsageReading` (`lib/usage-alerts.ts`), and `sendUsageEvent` (`lib/notify.ts`) delivers
 through the same master switch, per-event checkbox, desk/phone routing and transport, **exempt from `requireAfk`, `requireRemoteAnswer` and
 `requireAutoMode`**.
@@ -301,7 +301,7 @@ ntfy's `Click` header carries `<DASHBOARD_PUBLIC_URL>/?session=<id>`.
 from buzz to answerable. That last one is why the reply-window `stop` push carries a link at
 all: the panel it lands you in is the composer the hold is waiting on.
 
-The `schedule-failed` push carries `/?view=schedules&run=<id>` instead and lands on Schedules › Runs with that run unfolded (see
+The `routine-failed` push carries `/?view=routines&run=<id>` instead and lands on Routines › Runs with that run unfolded (see
 [view-persistence](view-persistence.md)).
 
 The usage pushes carry `/?view=usage` and land on the Usage section.

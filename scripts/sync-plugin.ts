@@ -147,14 +147,14 @@ export function readInstall(installedPath = INSTALLED): InstallRecord | undefine
 }
 
 /**
- * Tell a running dashboard to reconcile its schedules: a reinstall moves the plugin into a new versioned directory, and the wrapper path baked into every
+ * Tell a running dashboard to reconcile its routines: a reinstall moves the plugin into a new versioned directory, and the wrapper path baked into every
  * launchd plist / crontab line moves with it. Resolves false on any failure — no server up is the normal case — and never throws.
  */
 export function postReconcile(port: number, timeoutMs = 2000): Promise<boolean> {
   return new Promise((resolve) => {
     const body = JSON.stringify({ apply: true });
     const req = http.request({
-      host: '127.0.0.1', port, path: '/api/schedules/reconcile', method: 'POST', timeout: timeoutMs,
+      host: '127.0.0.1', port, path: '/api/routines/reconcile', method: 'POST', timeout: timeoutMs,
       headers: { 'content-type': 'application/json', 'content-length': Buffer.byteLength(body) },
     }, (res) => {
       res.resume();

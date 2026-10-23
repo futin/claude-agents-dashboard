@@ -476,7 +476,7 @@ process is a terminal job (`kill <pid>`).
 
 ### `processLive`, the live process this server cannot signal
 
-`stopState` covers exactly the children this process still holds a handle for. Any other live headless `claude -p` — an orchestrator or scheduled run, a second dashboard,
+`stopState` covers exactly the children this process still holds a handle for. Any other live headless `claude -p` — an orchestrator or routine run, a second dashboard,
 or **anything spawned before the last restart** (`tsx watch` restarts the dev API on every server-side edit) — carries no `stopState`, reads `idle`/`incomplete` once its
 turn ends, and used to get the resume composer, whose POST then met the `ps` scan's 409. A pending background `Monitor` is the usual reason the process outlives its turn.
 
@@ -539,20 +539,20 @@ permission triplet carries a line under it naming that ceiling
 (`host ceiling · <mode> or below (SPAWN_MAX_PERMISSION)`) instead of hiding the reason in
 a `title` attribute.
 
-## Scheduled runs: the other detached launch
+## Routine runs: the other detached launch
 
-[Schedules](schedules.md)' **Run now** (`POST /api/schedules/:name/run`, `server/lib/schedule-run.ts`) is the second thing the dashboard initiates, and it is
-not a session launch: it spawns the plugin's `run-schedule.mjs` wrapper under `process.execPath`, detached with stdio ignored, `--trigger manual`, and the wrapper
+[Routines](routines.md)' **Run now** (`POST /api/routines/:name/run`, `server/lib/routine-run.ts`) is the second thing the dashboard initiates, and it is
+not a session launch: it spawns the plugin's `run-routine.mjs` wrapper under `process.execPath`, detached with stdio ignored, `--trigger manual`, and the wrapper
 is what launches `claude -p` for each step. It goes through `spawn.ts`'s exported `spawnProcess`, so `setSpawner` — the seam this file's tests use — is also the
 one seam for it, and nothing about `launch`'s own contract changes. Three differences from a session launch matter here:
 
-- **The environment is `scheduleEnv(config)` and nothing else** — `PATH`, `HOME`, `USER`, `LOGNAME`, `CLAUDE_BIN`, `SPAWN_MAX_PERMISSION`, `SYNC_PERMISSION_MODE`, `SCHEDULE_MACHINE`,
-  `SCHEDULES_DIR` — the same list an installed launchd/cron job bakes, so a manual run and a 22:00 run see one environment. The server's own env, which carries
+- **The environment is `routineEnv(config)` and nothing else** — `PATH`, `HOME`, `USER`, `LOGNAME`, `CLAUDE_BIN`, `SPAWN_MAX_PERMISSION`, `SYNC_PERMISSION_MODE`, `ROUTINE_MACHINE`,
+  `ROUTINES_DIR` — the same list an installed launchd/cron job bakes, so a manual run and a 22:00 run see one environment. The server's own env, which carries
   `CLAUDE_CODE_ENTRYPOINT` and the markers `launch` strips, never reaches the child.
 - **The permission ceiling is the wrapper's, from the baked `SPAWN_MAX_PERMISSION`**, applied with the same clamp as `clampPermission` — except `bypassPermissions`
-  is refused outright for a schedule, never clamped down (the validator and the wrapper both say so).
+  is refused outright for a routine, never clamped down (the validator and the wrapper both say so).
 - **The row is a normal one afterwards.** Each claude step runs with a `--session-id` the run log records, so its transcript opens in the chat drawer like any
-  other; the run is not a `dashboard`-surface spawn and is not in `listLaunching`. The `CLAUDE_DASHBOARD_SCHEDULE` marker keeps the [reply window](remote-message.md)
+  other; the run is not a `dashboard`-surface spawn and is not in `listLaunching`. The `CLAUDE_DASHBOARD_ROUTINE` marker keeps the [reply window](remote-message.md)
   and the other hooks off it.
 
 ## The pieces
@@ -560,7 +560,7 @@ one seam for it, and nothing about `launch`'s own contract changes. Three differ
 | Piece | What it does |
 |---|---|
 | `server/lib/spawn.ts` | pure `buildSpawnArgs`/`clampPermission`/`parseSpawnRequest`, plus the impure `probeSpawn`/`launch`/`listLaunching`/`adoptLaunched`/`stopSession`/`forceStopSession`/`escalateStop`/`stopStates`/`hasLiveChild` and the RAM-only store |
-| `spawnProcess` (`server/lib/spawn.ts`) | the `Spawner` seam as a function, exported for `schedule-run.ts`'s wrapper launch; see [Scheduled runs](#scheduled-runs-the-other-detached-launch) |
+| `spawnProcess` (`server/lib/spawn.ts`) | the `Spawner` seam as a function, exported for `routine-run.ts`'s wrapper launch; see [Routine runs](#routine-runs-the-other-detached-launch) |
 | `POST /api/spawn` | `serveSpawn` — validates, resolves the project, launches, returns `{sessionId}` immediately |
 | `POST /api/spawn/:id/stop` | `serveSpawnStop` — SIGTERM + delete for a `launching` entry; delegates to `stopSession` |
 | `POST /api/sessions/:id/stop` | `serveSessionStop` — the row button's route; graceful by default, `{force:true}` for SIGKILL |

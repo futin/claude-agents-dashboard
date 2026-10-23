@@ -45,15 +45,15 @@ cannot drift apart), chat truncation, refresh rate, row count, lookback, active 
 notifications, the launch panel's default model and default effort (`''` = send no flag and let
 the `claude` CLI choose; either way a launch can still override it), the Git Sync button's own
 model and effort (`syncModel` / `syncEffort`, default `''` each; the button never asks, so these are its whole say — its permission mode is the host's
-`SYNC_PERMISSION_MODE` and its remote control follows Remote answers, both shown read-only in the same card), the Schedules page's day window
-(`scheduleWindow`: `7` | `30` | `90`, default `30` — the stats band and the Runs list read it; a hand-edited value outside the three reads back as `30`, and
-the server's `SCHEDULE_WINDOWS` is the same list; see [schedules](schedules.md#the-schedules-page)), which Usage sub-tab
+`SYNC_PERMISSION_MODE` and its remote control follows Remote answers, both shown read-only in the same card), the Routines page's day window
+(`routineWindow`: `7` | `30` | `90`, default `30` — the stats band and the Runs list read it; a hand-edited value outside the three reads back as `30`, and
+the server's `ROUTINE_WINDOWS` is the same list; see [routines](routines.md#the-routines-page)), which Usage sub-tab
 opens (`forecast` | `rates` | `history`), which Management sub-view is showing (`managementTab`: `git` |
-`projects` | `codegraph`, default `projects`, which is also where a main-row click on Management lands: `items[0]` of its tree), which Schedules sub-view
-is showing (`schedulesTab`: `jobs` | `runs`, default `jobs`, the same way), and which Settings page is showing (`settingsTab`: `local` |
+`projects` | `codegraph`, default `projects`, which is also where a main-row click on Management lands: `items[0]` of its tree), which Routines sub-view
+is showing (`routinesTab`: `jobs` | `runs`, default `jobs`, the same way), and which Settings page is showing (`settingsTab`: `local` |
 `shared`). A `settingsTab: 'pinned'` stored by an older release fails the validator and falls back to
 `local`. A `managementTab: 'pinned'` is the other case: that sub-view was renamed, not removed, so `clampSettings` reads it as `projects` and the device keeps its
-place. A `managementTab: 'schedules'` from before Schedules became its own section is simply unknown now, and falls back to `projects`. The answer token is per browser too (`dashboard.answerToken`, its own key), which
+place. A `managementTab: 'schedules'` from before Routines became its own section is simply unknown now, and falls back to `projects`. The answer token is per browser too (`dashboard.answerToken`, its own key), which
 is why it sits under **Local › Connection** and not beside the remote-answer switch it
 unlocks — a Shared page carrying it would break the promise the two pages make. A phone propped on the desk
 wants five rows in the light theme and a slow poll; the laptop wants twenty, the dark theme and
@@ -234,7 +234,7 @@ Adding one means: copy a `[data-theme=…]` block, set `color-scheme`, add the i
 Nothing else.
 
 Five tokens exist purely so the light theme works: `--on-accent` (ink on a filled accent —
-the amber Send button), `--on-amber` (ink on the `--amber-solid` fill of Schedules' New job: `--on-accent` on the dark boards, the ink in daylight, where
+the amber Send button), `--on-amber` (ink on the `--amber-solid` fill of Routines' New job: `--on-accent` on the dark boards, the ink in daylight, where
 white on that amber is 3.5:1 — `test/daylight-contrast.test.ts` holds it to 4.5:1), `--scrim` (drawer backdrop), and `--shadow` / `--shadow2` (a lift that
 reads as depth on black reads as dirt on paper). **No color or shadow may be hardcoded below the
 token block** — that is the invariant the whole theme system rests on.
@@ -300,7 +300,7 @@ below — for the one case that argument never covered. The reasoning, and what 
 costs, is in [push-notify](push-notify.md).
 
 Ten rows — a master switch, one per event (question / permission dialog / plan / task
-finished / scheduled job failed), three optional AND-layers (only-while-accepting-remote-answers, only-when-away,
+finished / routine failed), three optional AND-layers (only-while-accepting-remote-answers, only-when-away,
 only-in-auto-modes), and a test button. The server sends them, so nothing here depends on a
 tab being open. Full mechanism, fail directions and the topic's secrecy rules:
 [push-notify](push-notify.md).
@@ -315,9 +315,9 @@ Worth knowing from this page's side:
   two events enabled), and **Away after** says so in its hint — because the threshold gates
   those pushes whether or not the push-side switch is on. Full layering:
   [push-notify](push-notify.md).
-- **The scheduled-job checkbox ignores the three AND-layers.** `schedule-failed` is exempt from only-while-accepting-remote-answers, only-when-away and
-  only-in-auto-modes, since those gate interactive sessions and a scheduled job has none; the page's hint on that row says so. It rides the master switch and the
-  routing only. See [push-notify](push-notify.md#the-fifth-event-schedule-failed).
+- **The routine checkbox ignores the three AND-layers.** `routine-failed` is exempt from only-while-accepting-remote-answers, only-when-away and
+  only-in-auto-modes, since those gate interactive sessions and a routine has none; the page's hint on that row says so. It rides the master switch and the
+  routing only. See [push-notify](push-notify.md#the-fifth-event-routine-failed).
 - **The two 5-hour limit rows ride the same exemption** and add two gates of their own: they are disabled, with a note saying which, while `SHOW_USAGE`
   is off (`usageAvailable: false`) or **Record usage history** is off. The rows live in `client/src/lib/notifyRows.ts` (`notifyRowState`). See
   [push-notify](push-notify.md#the-usage-events-usage-limit-and-usage-reset).

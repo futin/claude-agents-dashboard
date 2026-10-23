@@ -16,7 +16,7 @@ import { isReady, stage, type StageOpts } from './stage.js';
 import { DAYLIGHT_TIERS } from './tiers.js';
 
 interface ShotCase extends StageOpts {
-  kind: 'shot' | 'detail' | 'triage' | 'git-matrix' | 'git-inspector' | 'git-branches' | 'codegraph-inbox' | 'codegraph-matrix' | 'codegraph-inspector' | 'projects-tiles' | 'projects-columns' | 'projects-lists' | 'schedules-runs' | 'releases';
+  kind: 'shot' | 'detail' | 'triage' | 'git-matrix' | 'git-inspector' | 'git-branches' | 'codegraph-inbox' | 'codegraph-matrix' | 'codegraph-inspector' | 'projects-tiles' | 'projects-columns' | 'projects-lists' | 'routines-runs' | 'releases';
   /** Per-pixel colour tolerance overriding the config's `0`; `maxDiffPixels` stays `0`, so a pixel that really changes colour still fails the shot. */
   threshold?: number;
   /** Selectors painted over before the comparison, for a native control whose glyphs Chromium places a pixel apart at random. */
@@ -31,11 +31,11 @@ interface ShotCase extends StageOpts {
 const AA_NOISE = 0.01;
 
 /**
- * Schedules hits the same quirk: its stats band (`.sch-stats`, rounded and `overflow: hidden`, at a fractional y) shows one-step noise on its corners in
- * some runs, so every Schedules shot takes `AA_NOISE`. The phone Runs shot also masks the native job `<select>`: at y 184.69 Chromium draws its label a whole
+ * Routines hits the same quirk: its stats band (`.rtn-stats`, rounded and `overflow: hidden`, at a fractional y) shows one-step noise on its corners in
+ * some runs, so every Routines shot takes `AA_NOISE`. The phone Runs shot also masks the native job `<select>`: at y 184.69 Chromium draws its label a whole
  * pixel lower in about half the runs, a shift no colour tolerance absorbs. The 1280 Runs shot still pins the select.
  */
-const SCHEDULES = (c: ShotCase): ShotCase => (c.section === 'schedules' ? { ...c, threshold: AA_NOISE } : c);
+const ROUTINES = (c: ShotCase): ShotCase => (c.section === 'routines' ? { ...c, threshold: AA_NOISE } : c);
 
 const OTHER_THEMES: ThemeId[] = ['midnight', 'amber', 'graphite', 'nightshift'];
 
@@ -67,7 +67,7 @@ const PROJ = {
 };
 
 const CASES: ShotCase[] = [
-  ...SECTIONS.flatMap((s) => casesFor(s.id)).map(SCHEDULES),
+  ...SECTIONS.flatMap((s) => casesFor(s.id)).map(ROUTINES),
   { section: 'sessions', theme: 'daylight', width: 1280, contentWidth: 'fixed', query: '?session=' + FIXTURE_SESSION_ID, kind: 'detail' },
   // The phone drawer folds the fixture plan's card to one `Plan 7/13 · …` line; the 1280 detail above pins its ellipsised `Plan · …` head.
   { section: 'sessions', theme: 'daylight', width: 375, contentWidth: 'fixed', query: '?session=' + FIXTURE_SESSION_ID, kind: 'detail' },
@@ -91,16 +91,16 @@ const CASES: ShotCase[] = [
   { ...PROJ, width: 1280, storage: { 'management.projectsLayout': 'tiles' }, kind: 'projects-tiles', threshold: AA_NOISE },
   { ...PROJ, width: 1280, storage: { 'management.projectsLayout': 'columns' }, kind: 'projects-columns', threshold: AA_NOISE },
   { ...PROJ, width: 375, storage: { 'management.projectsLayout': 'lists' }, kind: 'projects-lists' },
-  // Schedules' default page (Jobs) is what the matrix above shows; Runs is the rail's other sub-item.
-  { section: 'schedules', theme: 'daylight', width: 375, contentWidth: 'fixed', schedulesTab: 'runs', kind: 'schedules-runs', threshold: AA_NOISE, mask: ['.sch-select'] },
-  { section: 'schedules', theme: 'daylight', width: 1280, contentWidth: 'fixed', schedulesTab: 'runs', kind: 'schedules-runs', threshold: AA_NOISE },
+  // Routines' default page (Jobs) is what the matrix above shows; Runs is the rail's other sub-item.
+  { section: 'routines', theme: 'daylight', width: 375, contentWidth: 'fixed', routinesTab: 'runs', kind: 'routines-runs', threshold: AA_NOISE, mask: ['.rtn-select'] },
+  { section: 'routines', theme: 'daylight', width: 1280, contentWidth: 'fixed', routinesTab: 'runs', kind: 'routines-runs', threshold: AA_NOISE },
   // What's new, opened from the version chip: full screen on the phone (reached through the menu, whose last row the chip is), the 400px panel from `md`.
   { section: 'sessions', theme: 'daylight', width: 375, contentWidth: 'fixed', kind: 'releases' },
   { section: 'sessions', theme: 'daylight', width: 1280, contentWidth: 'fixed', kind: 'releases' }
 ];
 
 /**
- * 12 per view × 7 views + 2 drawer details + 2 triage + 5 git layouts + 4 codegraph layouts + 3 projects layouts + 2 schedules runs + 2 What's new drawers. A changed `SECTIONS` fails here until the
+ * 12 per view × 7 views + 2 drawer details + 2 triage + 5 git layouts + 4 codegraph layouts + 3 projects layouts + 2 routines runs + 2 What's new drawers. A changed `SECTIONS` fails here until the
  * matrix (and its baselines) are reconsidered.
  */
 const EXPECTED_SHOTS = 104;

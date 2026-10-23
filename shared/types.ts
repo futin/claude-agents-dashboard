@@ -5,7 +5,7 @@
  * produces it; `useSessions` (client) consumes it. One definition, both sides.
  */
 
-import type { JobError } from './schedule-file.js';
+import type { JobError } from './routine-file.js';
 
 /** The session's most-recent tool call. */
 export interface Activity {
@@ -978,10 +978,10 @@ export type ConnectionOrigin = 'local' | 'lan' | 'tailnet' | 'unknown';
 export type WriteAccess = 'open' | 'token' | 'none';
 
 /**
- * What a push notification can announce: four session events, a failed scheduled job, and the 5-hour usage window reaching its limit
+ * What a push notification can announce: four session events, a failed routine, and the 5-hour usage window reaching its limit
  * (`usage-limit`) or resetting after one (`usage-reset`). The last three ignore the session-only `require*` conditions.
  */
-export type NotifyEvent = 'question' | 'stop' | 'permission' | 'plan' | 'schedule-failed' | 'usage-limit' | 'usage-reset';
+export type NotifyEvent = 'question' | 'stop' | 'permission' | 'plan' | 'routine-failed' | 'usage-limit' | 'usage-reset';
 
 /**
  * When to send a push. Every clause is AND-ed, and every layer is independently
@@ -2034,8 +2034,8 @@ export interface SessionsResponse {
   error?: boolean;
 }
 
-/** One scheduled job as `shared/schedule-file.ts` parses it from `<name>.md` in the schedules folder. */
-export interface ScheduleJob {
+/** One routine as `shared/routine-file.ts` parses it from `<name>.md` in the routines folder. */
+export interface RoutineJob {
   /** The filename without `.md`; also the launchd label suffix and the log key. */
   name: string;
   /** Five-field cron, local time of the machine that runs it. */
@@ -2058,8 +2058,8 @@ export interface ScheduleJob {
   script: string | null;
 }
 
-/** One step of a scheduled run, folded from its `step-start` / `step-end` log records. `outcome` is null while the step is in flight (or its run was lost). */
-export interface ScheduleStep {
+/** One step of a routine run, folded from its `step-start` / `step-end` log records. `outcome` is null while the step is in flight (or its run was lost). */
+export interface RoutineStep {
   index: number;
   /** The pin name for a `foreach:` job, null for a single-cwd job. */
   repo: string | null;
@@ -2083,8 +2083,8 @@ export interface ScheduleStep {
   sessionId: string | null;
 }
 
-/** One run of a scheduled job, or a refusal, as the server folds them from `~/.claude/schedules/runs/*.jsonl`. */
-export interface ScheduleRun {
+/** One run of a routine, or a refusal, as the server folds them from `~/.claude/routines/runs/*.jsonl`. */
+export interface RoutineRun {
   /** The wrapper's uuid; a refusal has none in the log, so its id is `refused-<machine>-<job>-<epoch ms>`. */
   id: string;
   job: string;
@@ -2107,11 +2107,11 @@ export interface ScheduleRun {
   error: string | null;
   /** A refusal's reason, or why a run reads lost. */
   why: string | null;
-  steps: ScheduleStep[];
+  steps: RoutineStep[];
 }
 
 /** The Jobs band over a window of whole local days ending today, plus the cost and run count of the window before it. */
-export interface ScheduleStats {
+export interface RoutineStats {
   runs: number;
   ok: number;
   failed: number;
@@ -2131,17 +2131,17 @@ export type ReconcileState = 'in-sync' | 'drift' | 'failed' | 'pending' | 'not-o
 export interface ReconcileChange { name: string; action: 'install' | 'update' | 'remove' | 'pending'; why: string }
 export interface ReconcileReport { state: ReconcileState; changes: ReconcileChange[]; unchanged: number; error: string | null; at: string }
 
-/** One job file as `GET /api/schedules/:name` serves it to the editor: the raw text, and the parse of it. `job` is null when `errors` is not empty. */
-export interface ScheduleFile {
+/** One job file as `GET /api/routines/:name` serves it to the editor: the raw text, and the parse of it. `job` is null when `errors` is not empty. */
+export interface RoutineFile {
   name: string;
   text: string;
-  job: ScheduleJob | null;
+  job: RoutineJob | null;
   errors: JobError[];
   mtimeMs: number;
 }
 
-/** One ledger row of `GET /api/schedules`: the file plus what this machine knows about it. */
-export interface ScheduleJobRow extends ScheduleFile {
+/** One ledger row of `GET /api/routines`: the file plus what this machine knows about it. */
+export interface RoutineJobRow extends RoutineFile {
   /** The job names this machine in `machines:`. */
   onThisMachine: boolean;
   /** The OS scheduler holds a job for it now (an older version counts). Only an owner can tell: false whenever the report could not be planned. */
@@ -2149,29 +2149,29 @@ export interface ScheduleJobRow extends ScheduleFile {
   /** The next fire, ISO; null for an invalid, paused or other-machine job. */
   nextAt: string | null;
   /** The newest run that is not running (a refusal included). */
-  last: ScheduleRun | null;
-  running: ScheduleRun | null;
+  last: RoutineRun | null;
+  running: RoutineRun | null;
 }
 
-export interface SchedulesResponse {
+export interface RoutinesResponse {
   machine: 'mac' | 'wsl';
-  /** The schedules folder, `~` expanded. */
+  /** The routines folder, `~` expanded. */
   dir: string;
-  /** `ownedBy` is `<cwd>:<port>` of the live owner, or `''` when this server never opted in (`SCHEDULES_OWNER`), or `seam` under the test seam. */
+  /** `ownedBy` is `<cwd>:<port>` of the live owner, or `''` when this server never opted in (`ROUTINES_OWNER`), or `seam` under the test seam. */
   owner: 'owner' | { ownedBy: string };
   reconcile: ReconcileReport;
   /** Sorted by name. */
-  jobs: ScheduleJobRow[];
+  jobs: RoutineJobRow[];
 }
 
-/** `GET /api/schedules/runs`: the filtered runs of the window, newest first, and the stats for the window (job and runner filters applied, outcome not). */
-export interface ScheduleRunsResponse {
-  runs: ScheduleRun[];
-  stats: ScheduleStats;
+/** `GET /api/routines/runs`: the filtered runs of the window, newest first, and the stats for the window (job and runner filters applied, outcome not). */
+export interface RoutineRunsResponse {
+  runs: RoutineRun[];
+  stats: RoutineStats;
 }
 
-/** `POST /api/schedules/validate`: what the drawer shows under the textarea. `summary` is the one-line reading of a valid file, null otherwise. */
-export interface ScheduleValidateResponse {
+/** `POST /api/routines/validate`: what the drawer shows under the textarea. `summary` is the one-line reading of a valid file, null otherwise. */
+export interface RoutineValidateResponse {
   errors: JobError[];
   summary: string | null;
 }

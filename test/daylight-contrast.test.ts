@@ -141,7 +141,7 @@ export function run(): number {
     assert.deepStrictEqual(fails, []);
   })) p++; else f++;
 
-  // A filled amber button (Schedules' New job) carries text, so its ink is held to 4.5:1 on the fill: white is 3.5:1 there, so daylight uses the ink.
+  // A filled amber button (Routines' New job) carries text, so its ink is held to 4.5:1 on the fill: white is 3.5:1 there, so daylight uses the ink.
   if (test('--on-amber clears 4.5:1 on the --amber-solid fill', () => {
     const r = ratio(at('on-amber'), at('amber-solid'));
     assert.ok(r >= AA, `--on-amber ${t['on-amber']} on --amber-solid ${t['amber-solid']}: ${r.toFixed(2)}:1`);

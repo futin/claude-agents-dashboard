@@ -46,10 +46,10 @@ export type SettingsScope = 'local' | 'shared';
 export type SettingsTab = SettingsScope;
 /** Which sub-view the Management section opens on. */
 export type ManagementTab = 'git' | 'projects' | 'codegraph';
-/** Which sub-view the Schedules section opens on. */
-export type SchedulesTab = 'jobs' | 'runs';
-/** The day windows the Schedules stats band and Runs list read: the server's `SCHEDULE_WINDOWS`. */
-export type ScheduleWindow = 7 | 30 | 90;
+/** Which sub-view the Routines section opens on. */
+export type RoutinesTab = 'jobs' | 'runs';
+/** The day windows the Routines stats band and Runs list read: the server's `ROUTINE_WINDOWS`. */
+export type RoutineWindow = 7 | 30 | 90;
 /** Which section opens on load. `last` restores whatever you were on. */
 export type Landing = Section | 'last';
 /**
@@ -112,10 +112,10 @@ export interface Settings {
   settingsTab: SettingsTab;
   /** Which Management sub-view is showing. Mirrors `usageTab` in every respect. */
   managementTab: ManagementTab;
-  /** Which Schedules sub-view is showing. Mirrors `usageTab` in every respect. */
-  schedulesTab: SchedulesTab;
-  /** The Schedules page's day window (stats band, Runs list). Per device, like the other view picks. */
-  scheduleWindow: ScheduleWindow;
+  /** Which Routines sub-view is showing. Mirrors `usageTab` in every respect. */
+  routinesTab: RoutinesTab;
+  /** The Routines page's day window (stats band, Runs list). Per device, like the other view picks. */
+  routineWindow: RoutineWindow;
   /**
    * Which of the five shapes the sessions list opens in, or `last` to reopen
    * whichever one the switcher was left on. A concrete shape pins every load
@@ -156,8 +156,8 @@ export const DEFAULT_SETTINGS: Settings = {
   usageTab: 'forecast',
   settingsTab: 'local',
   managementTab: 'git',
-  schedulesTab: 'jobs',
-  scheduleWindow: 30,
+  routinesTab: 'jobs',
+  routineWindow: 30,
   defaultLayout: 'last',
   contentWidth: 'fixed'
 };
@@ -245,8 +245,8 @@ const SPAWN_EFFORTS: SpawnDefaultEffort[] = ['', ...EFFORTS];
 const USAGE_TABS: UsageTab[] = ['forecast', 'rates', 'history'];
 const SETTINGS_TABS: SettingsTab[] = ['local', 'shared'];
 const MANAGEMENT_TABS: ManagementTab[] = ['git', 'projects', 'codegraph'];
-const SCHEDULES_TABS: SchedulesTab[] = ['jobs', 'runs'];
-export const SCHEDULE_WINDOWS: readonly ScheduleWindow[] = [7, 30, 90];
+const ROUTINES_TABS: RoutinesTab[] = ['jobs', 'runs'];
+export const ROUTINE_WINDOWS: readonly RoutineWindow[] = [7, 30, 90];
 /** Derived from the picker, so the offered set and the accepted set cannot drift. */
 const LAYOUT_IDS: DefaultLayout[] = LAYOUT_OPTIONS.map(o => o.value);
 const CONTENT_WIDTHS: ContentWidth[] = ['fixed', 'full'];
@@ -258,6 +258,8 @@ const CONTENT_WIDTHS: ContentWidth[] = ['fixed', 'full'];
  */
 export function clampSettings(raw: unknown): Settings {
   const s = (raw && typeof raw === 'object' ? raw : {}) as Partial<Settings>;
+  // Keys and values saved before Schedules became Routines.
+  const legacy = s as { schedulesTab?: unknown; scheduleWindow?: unknown };
   return {
     theme: pickOne(s.theme, THEME_IDS, DEFAULT_SETTINGS.theme),
     density: pickOne(s.density, ['comfortable', 'compact'] as const, DEFAULT_SETTINGS.density),
@@ -266,7 +268,7 @@ export function clampSettings(raw: unknown): Settings {
     maxSessions: clampNumber(s.maxSessions, DEFAULT_SETTINGS.maxSessions, LIMITS.maxSessions.min, LIMITS.maxSessions.max),
     lookbackHours: clampNumber(s.lookbackHours, DEFAULT_SETTINGS.lookbackHours, LIMITS.lookbackHours.min, LIMITS.lookbackHours.max),
     activeWindowMin: clampNumber(s.activeWindowMin, DEFAULT_SETTINGS.activeWindowMin, LIMITS.activeWindowMin.min, LIMITS.activeWindowMin.max),
-    landing: pickOne(s.landing, LANDINGS, DEFAULT_SETTINGS.landing),
+    landing: pickOne((s.landing as string) === 'schedules' ? 'routines' : s.landing, LANDINGS, DEFAULT_SETTINGS.landing),
     chatFullText: pickBool(s.chatFullText, DEFAULT_SETTINGS.chatFullText),
     spawnDefaultModel: pickOne(s.spawnDefaultModel, SPAWN_MODELS, DEFAULT_SETTINGS.spawnDefaultModel),
     spawnDefaultEffort: pickOne(s.spawnDefaultEffort, SPAWN_EFFORTS, DEFAULT_SETTINGS.spawnDefaultEffort),
@@ -278,9 +280,9 @@ export function clampSettings(raw: unknown): Settings {
     // The sub-view was called `pinned` before it became Projects; a device that stored the old id keeps its place. A stored `schedules` (the sub-view
     // that became its own section) is not one of the tabs any more, so it falls back to Projects like any unknown id.
     managementTab: pickOne((s.managementTab as string) === 'pinned' ? 'projects' : s.managementTab, MANAGEMENT_TABS, DEFAULT_SETTINGS.managementTab),
-    schedulesTab: pickOne(s.schedulesTab, SCHEDULES_TABS, DEFAULT_SETTINGS.schedulesTab),
+    routinesTab: pickOne(s.routinesTab ?? legacy.schedulesTab, ROUTINES_TABS, DEFAULT_SETTINGS.routinesTab),
     // Strict like `pickBool`: a stored "7" from a hand-edit is not a window, so it reads as the default.
-    scheduleWindow: SCHEDULE_WINDOWS.find(w => w === s.scheduleWindow) ?? DEFAULT_SETTINGS.scheduleWindow,
+    routineWindow: ROUTINE_WINDOWS.find(w => w === (s.routineWindow ?? legacy.scheduleWindow)) ?? DEFAULT_SETTINGS.routineWindow,
     defaultLayout: pickOne(s.defaultLayout, LAYOUT_IDS, DEFAULT_SETTINGS.defaultLayout),
     contentWidth: pickOne(s.contentWidth, CONTENT_WIDTHS, DEFAULT_SETTINGS.contentWidth)
   };

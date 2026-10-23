@@ -57,7 +57,7 @@ const ANSWER_ENV = 'CLAUDE_DASHBOARD_ANSWER_TIMEOUT';
 export const DEFAULT_NOTIFY: NotifyPolicy = {
   enabled: false,
   events: {
-    question: false, stop: false, permission: false, plan: false, 'schedule-failed': false, 'usage-limit': false, 'usage-reset': false
+    question: false, stop: false, permission: false, plan: false, 'routine-failed': false, 'usage-limit': false, 'usage-reset': false
   },
   requireRemoteAnswer: false,
   requireAfk: false,
@@ -65,7 +65,7 @@ export const DEFAULT_NOTIFY: NotifyPolicy = {
 };
 
 export const NOTIFY_EVENTS: readonly NotifyEvent[] = [
-  'question', 'stop', 'permission', 'plan', 'schedule-failed', 'usage-limit', 'usage-reset'
+  'question', 'stop', 'permission', 'plan', 'routine-failed', 'usage-limit', 'usage-reset'
 ];
 
 /** Off by default — recording makes the server poll Anthropic unattended. */
@@ -172,6 +172,17 @@ export function mergeNotify(current: NotifyPolicy, patch: unknown): NotifyPolicy
 }
 
 /** The stored values, each falling back independently to its default. */
+/**
+ * A file saved before Schedules became Routines stores `schedule-failed`, and `mergeNotify` refuses a whole policy over one unknown key — every switch
+ * would read as off. Carry that one key over to its new name.
+ */
+function renameLegacyEvents(notify: unknown): unknown {
+  const events = (notify as { events?: unknown } | null)?.events;
+  if (!events || typeof events !== 'object' || !('schedule-failed' in events)) return notify;
+  const { 'schedule-failed': old, ...rest } = events as Record<string, unknown>;
+  return { ...(notify as object), events: { 'routine-failed': old, ...rest } };
+}
+
 function readStored(): Stored {
   const fallback: Stored = {
     idleSecs: DEFAULT_IDLE_SECS,
@@ -188,7 +199,7 @@ function readStored(): Stored {
     return {
       idleSecs: clampIdleSecs(raw.idleSecs) ?? fallback.idleSecs,
       answerSecs: clampAnswerSecs(raw.answerSecs) ?? fallback.answerSecs,
-      notify: mergeNotify(DEFAULT_NOTIFY, raw.notify) ?? DEFAULT_NOTIFY,
+      notify: mergeNotify(DEFAULT_NOTIFY, renameLegacyEvents(raw.notify)) ?? DEFAULT_NOTIFY,
       recordUsageHistory:
         typeof raw.recordUsageHistory === 'boolean'
           ? raw.recordUsageHistory

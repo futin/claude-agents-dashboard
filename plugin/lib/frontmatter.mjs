@@ -60,7 +60,7 @@ export function parseFrontmatter(text) {
 }
 /**
  * Length of the value in `s` (the text after `key:` with its leading blanks dropped): a quoted value runs to its closing quote, an unquoted one stops
- * before a ` #` comment, and trailing blanks are never part of it. Shared by `writeFrontmatterLine` and the schedule-file parser so both read one
+ * before a ` #` comment, and trailing blanks are never part of it. Shared by `writeFrontmatterLine` and the routine-file parser so both read one
  * value the same way; `parseFrontmatter` above does not strip comments and is unchanged.
  */
 export function scalarEnd(s) {

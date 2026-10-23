@@ -15,7 +15,7 @@ export const NOTIFY_EVENT_ROWS: readonly NotifyEventRow[] = [
   { key: 'permission', name: 'Permission dialog open', hint: 'A terminal permission dialog is blocking a session until you return.' },
   { key: 'plan', name: 'Plan waiting for review', hint: 'A proposed plan is held for a remote send-back.' },
   { key: 'stop', name: 'Task finished', hint: 'A session finished its turn. Suppressed while background agents are still running.' },
-  { key: 'schedule-failed', name: 'Scheduled job failed', hint: 'A scheduled job failed, was refused or never finished. Ignores the three conditions below.' },
+  { key: 'routine-failed', name: 'Routine failed', hint: 'A routine failed, was refused or never finished. Ignores the three conditions below.' },
   {
     key: 'usage-limit',
     name: 'Usage limit reached',

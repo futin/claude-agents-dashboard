@@ -526,7 +526,7 @@ export interface RowOptions extends Pick<ScanOptions, 'homeDir' | 'pendingIds' |
   lessons: SessionAnalyticsLesson[] | null;
   /**
    * Apply the list's skips (no conversational message, slash-command only, the token-refresh cwd) by answering null. The row-by-id route leaves them
-   * off, so a scheduled run the list would hide still opens.
+   * off, so a routine run the list would hide still opens.
    */
   scanSkips?: boolean;
 }

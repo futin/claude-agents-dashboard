@@ -287,7 +287,7 @@ export function setSpawner(fn: Spawner | null): void {
   spawner = fn;
 }
 
-/** The spawner `launch` uses, for the other detached launches that must share its test seam (`schedule-run.ts`). */
+/** The spawner `launch` uses, for the other detached launches that must share its test seam (`routine-run.ts`). */
 export const spawnProcess: Spawner = (command, args, options) => (spawner ?? nodeSpawn)(command, args, options);
 
 /**
