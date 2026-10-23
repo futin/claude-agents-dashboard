@@ -464,6 +464,9 @@ export async function run(): Promise<number> {
     assert.strictEqual(after(argv, '--output-format'), 'json');
     const session = after(argv, '--session-id')!;
     assert.match(session, UUID_RE);
+    const at = new Date(ofKind(log(fx), 'start')[0].at);
+    const hhmm = `${String(at.getHours()).padStart(2, '0')}:${String(at.getMinutes()).padStart(2, '0')}`;
+    assert.strictEqual(after(argv, '--name'), `think · ${hhmm}`, 'job name and the run\'s local start time');
     assert.strictEqual(after(argv, '--permission-mode'), 'acceptEdits');
     assert.strictEqual(after(argv, '--disallowed-tools'), 'AskUserQuestion');
     assert.strictEqual(after(argv, '--max-turns'), '60');
