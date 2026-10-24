@@ -12,7 +12,7 @@ import path from 'node:path';
 import type { Config } from '../server/lib/config.js';
 import {
   applyReconcile, CRON_END, CRON_LINE_MAX, CRON_START, LABEL_PREFIX, PLUGIN_ID, lastReconcile, planReconcile, renderCronEnv, renderCronLine, renderPlist,
-  setReconcileHost, setRoutineRunner, LEGACY_CRON_END, LEGACY_CRON_START, LEGACY_LABEL_PREFIX
+  scheduled, setReconcileHost, setRoutineRunner, LEGACY_CRON_END, LEGACY_CRON_START, LEGACY_LABEL_PREFIX
 } from '../server/lib/routine-reconcile.js';
 import type { ReconcilePaths, ReconcileReport } from '../server/lib/routine-reconcile.js';
 import { claimOwner, releaseOwner } from '../server/lib/routine-store.js';
@@ -32,6 +32,7 @@ const SEVEN = ['PATH', 'HOME', 'CLAUDE_BIN', 'SPAWN_MAX_PERMISSION', 'SYNC_PERMI
 
 const SHELL = (machines = 'mac, wsl', extra: string[] = []): string =>
   ['---', 'cron: "0 7 * * 1-5"', `machines: [${machines}]`, 'run: shell', ...extra, '---', '```bash', 'echo hi', '```', ''].join('\n');
+const MANUAL = ['---', 'cron: manual', 'machines: [mac, wsl]', 'run: shell', '---', '```bash', 'echo hi', '```', ''].join('\n');
 const CLAUDE = ['---', 'cron: "0 9 * * *"', 'machines: [mac, wsl]', 'run: claude', '---', '/git-sync', ''].join('\n');
 
 function job(name: string, text: string): RoutineJob {
@@ -305,6 +306,40 @@ export async function run(): Promise<number> {
       assert.ok(!fs.existsSync(w.plist('pull-pins')));
       assert.deepStrictEqual(w.fake.verbs(), ['launchctl print', 'launchctl bootout']);
     });
+  }));
+
+  check(await test('mac: a manual file is never installed, and one installed from a scheduled version is removed with the reason "manual"', async () => {
+    await withWorld({}, async (w) => {
+      w.write('pull-pins', MANUAL);
+      const plan = actions(await planReconcile(w.cfg));
+      assert.ok(!plan.some((a) => a.startsWith('pull-pins:')), `no change for a manual file: ${plan.join(', ')}`);
+      w.write('pull-pins', SHELL());
+      await applyReconcile(w.cfg);
+      assert.ok(fs.existsSync(w.plist('pull-pins')));
+      w.write('pull-pins', MANUAL);
+      assert.deepStrictEqual(actions(await planReconcile(w.cfg)), ['pull-pins:remove:manual']);
+      assert.strictEqual((await applyReconcile(w.cfg)).state, 'in-sync');
+      assert.ok(!fs.existsSync(w.plist('pull-pins')));
+    });
+  }));
+
+  check(await test('wsl: a job turned manual loses its crontab line', async () => {
+    await withWorld({ routineMachine: 'wsl' }, async (w) => {
+      w.write('pull-pins', SHELL());
+      await applyReconcile(w.cfg);
+      assert.ok(w.fake.crontab?.includes('pull-pins'));
+      w.write('pull-pins', MANUAL);
+      assert.deepStrictEqual(actions(await planReconcile(w.cfg)), ['pull-pins:remove:manual']);
+      assert.strictEqual((await applyReconcile(w.cfg)).state, 'in-sync');
+      assert.ok(!(w.fake.crontab ?? '').includes('pull-pins'));
+    });
+  }));
+
+  check(await test('scheduled: enabled and not manual', () => {
+    assert.strictEqual(scheduled(job('a', SHELL())), true);
+    assert.strictEqual(scheduled(job('a', SHELL('mac, wsl', ['enabled: false']))), false);
+    assert.strictEqual(scheduled(job('a', MANUAL)), false);
+    assert.strictEqual(scheduled(job('a', MANUAL.replace('run: shell', 'run: shell\nenabled: false'))), false);
   }));
 
   check(await test('mac: a file naming only wsl → remove (not this machine); a deleted file → remove (file gone)', async () => {

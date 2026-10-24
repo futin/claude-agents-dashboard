@@ -7,7 +7,7 @@ import assert from 'node:assert';
 import {
   chipClass, costDelta, createPollSeq, editsWithoutAsking, foreachLine, formatStat, groupRunsByDay, isFanOut, jobTemplate, launchdLabel, medianMs, nameProblem,
   readForeach, reconcileChip, reconcilePreview, rowText, runClock, dotTone, topFailure, jobPins, pinOutcome, stepErrLine, runKicker, runPill, runsQueryString, setRepos,
-  splitNext, splitSteps, stepPill, successRate, topTokenShare, withLate, writeFailureText
+  pausedLook, splitNext, splitSteps, stepPill, successRate, topTokenShare, withLate, writeFailureText
 } from '../client/src/lib/routines.js';
 import { READ_ONLY_TEXT } from '../client/src/lib/writeRefusal.js';
 import { parseJob } from '../shared/routine-file.js';
@@ -85,6 +85,23 @@ export function run(): number {
       last: mkRun({ startedAt: at(4, 7, 9), ms: 360_000, steps: [step({ costUsd: 0.5 }), step({ costUsd: 0.02 })] })
     });
     assert.deepStrictEqual(rowText(r, NOW), { lastLine: '12d ago · 6m · $0.52', nextLine: 'paused', pill: { text: 'ok', tone: 'green' } });
+  });
+
+  t('rowText: a manual job reads "manual" for next, paused or not; a scheduled paused one still reads "paused"', () => {
+    for (const enabled of [false, true]) {
+      const r = mkRow({ job: mkJob({ cron: 'manual', enabled }), nextAt: null });
+      assert.deepStrictEqual(rowText(r, NOW), { lastLine: '', nextLine: 'manual', pill: { text: 'never run', tone: 'dim' } }, `enabled ${enabled}`);
+    }
+    assert.strictEqual(rowText(mkRow({ job: mkJob({ enabled: false }), nextAt: null }), NOW).nextLine, 'paused');
+    const away = mkRow({ job: mkJob({ cron: 'manual', machines: ['wsl'] }), onThisMachine: false, nextAt: null });
+    assert.deepStrictEqual(rowText(away, NOW), { lastLine: '', nextLine: '—', pill: { text: 'wsl only', tone: 'dim' } });
+  });
+
+  t('pausedLook: only an existing, disabled, non-manual job', () => {
+    assert.strictEqual(pausedLook(null), false);
+    assert.strictEqual(pausedLook(mkJob({ enabled: false })), true);
+    assert.strictEqual(pausedLook(mkJob({ cron: 'manual', enabled: false })), false);
+    assert.strictEqual(pausedLook(mkJob({ enabled: true })), false);
   });
 
   t('rowText: when the last run started: today, yesterday, under a fortnight ago in days, then the date', () => {

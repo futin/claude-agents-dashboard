@@ -1,4 +1,5 @@
 import type { RoutineJobRow } from '../../../../shared/types';
+import { isManualCron } from '../../../../shared/cron';
 import { isFanOut } from '../../lib/routines';
 import type { RoutineCtl } from './ctl';
 
@@ -23,7 +24,7 @@ export default function JobMenu({ row, ctl, onClose, onRunOne }: { row: RoutineJ
       {runnable && fanOut && !row.running && (
         <button type="button" role="menuitem" disabled={ctl.locked || busy} onClick={onRunOne}>Run now on one repo…</button>
       )}
-      {ctl.owner && job && (
+      {ctl.owner && job && !isManualCron(job.cron) && (
         <button type="button" role="menuitem" disabled={ctl.locked || ctl.busy === `toggle:${row.name}`} onClick={pick(() => ctl.toggle(row.name, !job.enabled))}>{job.enabled ? 'Pause' : 'Resume'}</button>
       )}
       {ctl.owner && mac && <button type="button" role="menuitem" disabled={ctl.locked} onClick={pick(() => ctl.reveal(row.name))}>Reveal in Finder</button>}

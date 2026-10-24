@@ -69,7 +69,7 @@ timeout: 30m
 
 | Key | Meaning |
 |---|---|
-| `cron` | five fields, local time of the machine that runs it |
+| `cron` | five fields, local time of the machine that runs it, or `manual` (never installed; Run now only) |
 | `machines` | `[mac]`, `[wsl]` or both; the job installs only where it is named |
 | `run` | `shell` (the body's first fenced `bash` block, run as `bash -e <tmpfile>`) or `claude` (the body is the prompt; one line starting with `/` is a skill) |
 | `foreach` | absent: one step in `cwd`; `pinned`: one sequential step per pinned repo; `[a, b]`: only those pins, by name (`dirName` when two pins share a basename) |
@@ -115,8 +115,8 @@ the runs watcher that seeds and folds the log for pushes.
 
 ## Reconcile: files in, OS jobs out
 
-`routine-reconcile.ts` plans a pure diff and applies it idempotently. **Desired** is every valid file with `enabled: true` whose `machines` names this
-machine. **Installed** is, on mac, every plist under `~/Library/LaunchAgents/` labelled `com.claude-dashboard.routine.*` that `launchctl print
+`routine-reconcile.ts` plans a pure diff and applies it idempotently. **Desired** is every valid file with `enabled: true` and a `cron` other than `manual` whose `machines` names
+this machine (the plan's removal reason for a manual file is `manual`, checked before `disabled`). **Installed** is, on mac, every plist under `~/Library/LaunchAgents/` labelled `com.claude-dashboard.routine.*` that `launchctl print
 gui/<uid>/<label>` says is loaded (exit 0 loaded; 3 and 113 mean not loaded); on WSL, every line between the two marker comments of the user's crontab:
 
 ```

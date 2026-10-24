@@ -693,6 +693,16 @@ export async function run(): Promise<number> {
     assert.strictEqual(start.late, true);
   }));
 
+  tally(await test('--trigger schedule on a `cron: manual` job runs and records no slot and no late flag', () => {
+    const fx = setup();
+    writeJob(fx, 'hand', ['cron: manual', 'machines: [mac]', 'run: shell'], '```bash\ntrue\n```');
+    assert.strictEqual(wrap(fx, ['hand', '--trigger', 'schedule']).code, 0);
+    const start = log(fx)[0];
+    assert.strictEqual(start.kind, 'start');
+    assert.ok(!('slot' in start), 'no slot to record');
+    assert.notStrictEqual(start.late, true);
+  }));
+
   tally(await test('mirror: --trigger schedule on time → slot set, late false', () => {
     const fx = setup();
     writeJob(fx, 'prompt', ['cron: "* * * * *"', 'machines: [mac]', 'run: shell'], '```bash\ntrue\n```');
