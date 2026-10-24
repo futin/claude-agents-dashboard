@@ -49,7 +49,7 @@ Size budgets anywhere below are soft.
    reconcile must uninstall on the switch. Pinned by Task 2.
 4. **Mid-typing Custom cron** (`*/1`, `25 9 * *`): must stay Custom with its text, never flip to a preset or lose characters. Pinned by Task 5.
 5. **A field whose line exists in a shape the form cannot write** (block-list `allowed-tools:`, an unclosed bash fence, an unknown machine): shows
-   "edit in File" and the write is never called. The read side is pinned by Task 4; that the row never writes is checked by hand in Task 7.
+   "edit in File" and the write is never called. The read side is pinned by Task 4; that the row never writes is checked by hand in Task 7 Step 2b.
 
 ---
 
@@ -102,17 +102,18 @@ Size budgets anywhere below are soft.
     scheduled version plans `pull-pins:remove:manual` on mac (the `actions()` shape the disabled case asserts), and the wsl twin removes its crontab line.
     The new reason string is exactly `manual`. For (a), assert the action list has no `pull-pins:` entry at all.
   - `test/routine-reconcile.test.ts`: `scheduled` — enabled scheduled → true; disabled scheduled → false; enabled manual → false; disabled manual → false.
-    And `installedFrom(<an in-sync report with no changes>, name, scheduled(manualJob))` is false (the api harness is always `no-plugin`, where
-    `installedFrom` is false for every job, so the api test alone cannot pin this).
+  - `test/api-routines.test.ts`, beside the `installedFrom` unit test (`:189-202`, next to its `:199` `desired=false` case):
+    `installedFrom(report('in-sync', [], 1), 'x', scheduled(manualJob))` is false.
   - `test/run-routine.test.ts`, mirroring the `--trigger schedule 20 min after the slot` case (`:684-692`): a `cron: manual` shell job run with `--trigger
-    schedule` exits 0 and its start record has no `slot` key and `late` is not true.
+    schedule` exits 0 and its start record has `kind === 'start'` (a refusal record has no `slot` either), no `slot` key, and `late` is not true.
   - `test/api-routines.test.ts`: `/validate` of a manual job's text answers a
     summary starting `manual · shell ·` and not containing `paused`; with `enabled: false` added the summary still has no `paused`.
   - `test/routines-view.test.ts`: `rowText` of a manual job row with `enabled: false` and no runs → `nextLine === 'manual'` and pill `never run`;
     with `enabled: true` → `nextLine === 'manual'`; a scheduled job with `enabled: false` still reads `paused`; a manual job not on this machine reads
     `nextLine: '—'` and the `<machines> only` pill, as any job off this machine does (that branch keeps winning). `pausedLook`: null → false; scheduled
     disabled → true; manual disabled → false; scheduled enabled → false.
-- [ ] **Step 2:** Run the three files; the new cases fail.
+- [ ] **Step 2:** Run the four files; the new cases fail, except the run-routine pin, which already passes once Task 1 regenerated `routine-file.mjs`
+  (`run-routine.mjs:265-267` records no slot when `parseCron` fails) — it guards against a regression, not a missing feature.
 - [ ] **Step 3:** `notDesired` returns `'manual'` for a manual cron, checked right after `invalid` and before `disabled`. `serveRoutines`' `desired` also
   requires the cron not be manual. `routineSummary` appends `paused` only when `pausedLook`-equivalent holds (server side: `!enabled && !isManualCron(cron)`);
   `when` already falls back to `job.cron` for an unparsed cron, so it reads `manual` — keep that, don't special-case it. `rowText`'s `nextLine` is `manual`
@@ -121,7 +122,7 @@ Size budgets anywhere below are soft.
   rendered for a manual job; `JobMenu` does not render Pause/Resume for a manual job. The when column already shows `manual`; leave it.
 - [ ] **Step 5:** Docs: `routines.md` key table `cron` row → "five fields, local time of the machine that runs it, or `manual` (never installed; Run now
   only)"; the §Reconcile sentence gains "and a cron other than `manual`", and the reasons list (if the section enumerates `disabled`) gains `manual`.
-- [ ] **Step 6:** Run the three test files and `pnpm typecheck`; all pass.
+- [ ] **Step 6:** Run the four test files and `pnpm typecheck`; all pass.
 - [ ] **Step 7:** Commit `feat(routines): manual jobs are never installed and never read as paused`.
 
 ### Task 3: `describeCron` words for steps, ranges and lists
@@ -321,6 +322,8 @@ Behaviour (the mockups show each opened row; follow their markup and the spec §
 - [ ] **Step 2:** New job: pick each kind; open each row; switch Schedule through all six presets and confirm File shows only the `cron:` line changed; pick
   Manual → one Save. Edit an existing routine (a copy, never a live one's schedule): change Model, Limits, Tools; confirm File shows only those lines changed.
   Do not press Save on a real routine unless it is a throwaway created for the check, and delete it afterwards through the drawer.
+- [ ] **Step 2b:** Unreadable shape (Review Focus 5): on the throwaway, write a block-list `allowed-tools:` in File, switch to Form → the Tools row reads
+  "edit in File" with no control; Save, then confirm the file on disk is byte-identical to what File held (`shasum` before and after).
 - [ ] **Step 3:** Phone width (375): every opened row wraps without horizontal scroll; screenshot the Schedule row opened.
 - [ ] **Step 4:** Ledger: the throwaway manual job reads `manual`, has no toggle, no Pause in its menu.
 - [ ] **Step 5:** Note for the report: `pnpm test:visual` Jobs shots change (`pr-triage` now reads in words) and need `pnpm test:visual --update-snapshots`
