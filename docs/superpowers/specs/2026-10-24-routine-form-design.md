@@ -80,7 +80,8 @@ be read as a form, fix it in File.
 
 **Validation in rows.** `/validate` errors carry a 1-based `line`. Each error whose line holds a key owned by a field is shown inside that field's row (the
 `.rtn-vmsg.err` line under its control) and turns the row's closed summary red ("cron needs fixing" style). Errors at line 0, or on lines no field owns,
-show where they show today, under the rows. The `Valid · …` summary line and the `acceptEdits` amber note stay; the amber note moves into the Permission row.
+show where they show today, under the rows — except `claude job needs a prompt`, which the validator pushes at line 0 but the Prompt row owns: it shows in
+that row, whose closed summary for an empty body reads "No prompt yet" in red. The `Valid · …` summary line and the `acceptEdits` amber note stay; the amber note moves into the Permission row.
 
 ## Rows
 
@@ -121,7 +122,8 @@ Per row, what the control does (the mockups show each opened):
   around the fence. A shell body with no ```` ```bash ```` fence reads as an empty script, and the first write appends a fence holding the script after any
   existing body text. A fence that opens and never closes reads as unreadable ("edit in File"), since a write could not know where the script ends.
 - **Model** — a text input with suggestion chips `Default, opus, sonnet, haiku, fable` (the file takes any one-token model, so free text stays allowed),
-  and an Effort `.seg`: `Default, low, medium, high, max`. Default removes the line.
+  and an Effort `.seg`: `Default, low, medium, high, xhigh, max` (mirroring `EFFORTS`). Default removes the line. A
+  token outside that list selects no segment; the closed summary shows the token as written and a pick replaces it.
 - **Permission** — `.seg`: `Default, plan, acceptEdits, auto`; acceptEdits shows the existing amber note in the row. `bypassPermissions` is not offered.
 - **Limits** — Max turns (positive integer, blank removes the line) and Timeout (a number plus an `s | m | h` unit; blank removes the line, meaning the 1h
   default, and the summary says "1h timeout (default)").
@@ -171,7 +173,7 @@ Behaviour, and where it lands:
 
 - **Parser** (`shared/routine-file.ts`, and the generated `plugin/lib/routine-file.mjs` via `pnpm plugin:gen`): `manual` is a valid cron value. The launchd
   day-of-month/weekday check does not apply to it. How `RoutineJob` carries it (keeping `cron: 'manual'`, or a separate flag) is the builder's call, as long
-  as no consumer passes `manual` to `parseCron` and reports it as broken.
+  as no consumer reports `manual` as a broken cron. The wrapper may still call `parseCron('manual')`; a failed parse there is the expected outcome.
 - **Reconcile** (`server/lib/routine-reconcile.ts`): a manual job is never desired. `notDesired` gives it its own reason (alongside `disabled`), so a job
   switched from a schedule to Manual is uninstalled on the next reconcile, the same path a disabled job takes. `renderPlist` and the crontab line never see
   one.
@@ -181,10 +183,11 @@ Behaviour, and where it lands:
 - **Ledger** (`client/src/components/routines/JobLedger.tsx`): the when column reads "manual". Run now works as today. The enabled toggle is hidden for a
   manual row, since enabling it would suggest the job will fire, and so is the row menu's Pause/Resume item (`JobMenu.tsx`). `enabled:` has no meaning for a
   manual job: its row reads "manual" in the next column whatever `enabled:` says (never "paused"), and its status dot follows its last run as an enabled
-  job's does (`rowText` / `dotTone` in `client/src/lib/routines.ts`). A manual file carrying `enabled: false` is valid and behaves the same.
+  job's does (`rowText` / `dotTone` in `client/src/lib/routines.ts`). Its name is never muted (`JobLedger.tsx`'s `rtn-muted` on `enabled === false`), and
+  `routineSummary` (`server/api.ts`) never appends `paused` for it. A manual file carrying `enabled: false` is valid and behaves the same.
 - **Drawer save buttons**: on a New job whose schedule is Manual, the two buttons Save and install / Save, keep paused become one **Save**, which writes
   `enabled: true` (nothing installs either way). Edit job keeps Save and reconcile: reconcile is what uninstalls a job just switched to Manual.
-- **Wrapper** (`plugin/lib/run-routine.mjs`): a `schedule` trigger computes no slot for a manual job (no `parseCron` of `manual`). A schedule-triggered run of
+- **Wrapper** (`plugin/lib/run-routine.mjs`): a `schedule` trigger computes no slot for a manual job: `parseCron(job.cron)` fails and no slot is recorded, as today — no change. A schedule-triggered run of
   a manual job cannot happen once reconcile has removed the install; it need not be refused.
 - **Validate summary**: `routineSummary` keeps its format (`<when> · claude · 6 repos · mac + wsl`); only `when` reads "manual". The mockups' "Valid ·
   Claude skill · …" lines are illustrative, not a format change.
