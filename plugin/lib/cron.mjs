@@ -160,23 +160,113 @@ function ordinal(n) {
         return `${n}th`;
     return `${n}${{ 1: 'st', 2: 'nd', 3: 'rd' }[n % 10] ?? 'th'}`;
 }
-/** The row's one-line reading ("07:00 Mon–Fri"); an expression that is not one of the plain shapes is shown as written. */
-export function describeCron(cron) {
+const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const sorted = (set) => [...set].sort((a, b) => a - b);
+const isRun = (v) => v[v.length - 1] - v[0] === v.length - 1;
+const clock = (h, m) => `${pad2(h)}:${pad2(m)}`;
+/**
+ * N when the values are exactly min, min+N, min+2N ... up to the field's end (so `*` over `/N` and `0-59/N` read alike), else null. N below 2 is
+ * not a step: it is every value, which callers already name.
+ */
+function stepOf(v, min, max) {
+    if (v.length < 2 || v[0] !== min)
+        return null;
+    const n = v[1] - v[0];
+    if (n < 2 || v[v.length - 1] + n <= max)
+        return null;
+    return v.every((x, i) => x === min + i * n) ? n : null;
+}
+/** First and last hour of an hour set that is one contiguous run shorter than the whole day, else null. */
+function hourSpan(hours) {
+    return hours.length < 24 && isRun(hours) ? [hours[0], hours[hours.length - 1]] : null;
+}
+/** The time part, or null when the rules cannot phrase the minute and hour fields together. */
+function describeTime(cron) {
+    const minutes = sorted(cron.minute);
+    const hours = sorted(cron.hour);
+    if (minutes.length === 1) {
+        const m = minutes[0];
+        if (hours.length === 1)
+            return clock(hours[0], m);
+        if (hours.length === 24)
+            return `Every hour at :${pad2(m)}`;
+        const n = stepOf(hours, 0, 23);
+        if (n !== null)
+            return `Every ${n}h at :${pad2(m)}`;
+        const span = hourSpan(hours);
+        if (span)
+            return `Every hour ${clock(span[0], m)}–${clock(span[1], m)}`;
+        return hours.length <= 4 ? hours.map((h) => clock(h, m)).join(', ') : null;
+    }
+    const step = stepOf(minutes, 0, 59);
+    const every = minutes.length === 60 ? 'Every minute' : step !== null ? `Every ${step} minutes` : null;
+    if (every === null)
+        return null;
+    if (hours.length === 24)
+        return every;
+    const span = hourSpan(hours);
+    return span ? `${every}, ${clock(span[0], 0)}–${clock(span[1], minutes[minutes.length - 1])}` : null;
+}
+/** The day part ('' for every day), or null when day-of-month and weekday cannot be read as one restriction. */
+function describeDays(cron) {
+    const domFull = cron.dom.size === 31;
+    const dowFull = cron.dow.size === 7;
+    if (domFull && dowFull)
+        return '';
+    // Cron ORs the two fields only when both were written restricted, and no single list says that.
+    if (cron.domRestricted && cron.dowRestricted)
+        return null;
+    if (dowFull) {
+        const days = sorted(cron.dom);
+        const first = ordinal(days[0]);
+        if (days.length === 1)
+            return `${first} of month`;
+        return isRun(days) ? `${first}–${ordinal(days[days.length - 1])} of month` : `${days.map(ordinal).join('/')} of month`;
+    }
+    if (domFull) {
+        const days = sorted(cron.dow);
+        if (days.length === 1)
+            return DAY_NAMES[days[0]];
+        return isRun(days) ? `${DAY_NAMES[days[0]]}–${DAY_NAMES[days[days.length - 1]]}` : days.map((d) => DAY_NAMES[d]).join('/');
+    }
+    return null;
+}
+function describeMonths(cron) {
+    if (cron.month.size === 12)
+        return '';
+    const months = sorted(cron.month);
+    if (months.length > 1 && isRun(months))
+        return `${MONTH_NAMES[months[0] - 1]}–${MONTH_NAMES[months[months.length - 1] - 1]}`;
+    return months.map((m) => MONTH_NAMES[m - 1]).join('/');
+}
+/** The four plain shapes read as a sentence ("07:00 Mon–Fri"); everything else goes through the part-by-part reading below. */
+function describeNamedShape(cron) {
     if (cron.minute.size !== 1 || cron.hour.size !== 1 || cron.month.size !== 12)
-        return cron.source;
-    const time = `${pad2([...cron.hour][0])}:${pad2([...cron.minute][0])}`;
+        return null;
+    const time = clock([...cron.hour][0], [...cron.minute][0]);
     const everyDom = cron.dom.size === 31;
     const everyDow = cron.dow.size === 7;
     if (everyDom && everyDow)
         return `${time} daily`;
     if (everyDom && !cron.domRestricted) {
-        const days = [...cron.dow].sort((a, b) => a - b);
+        const days = sorted(cron.dow);
         if (days.length === 1)
             return `${DAY_NAMES[days[0]]} ${time}`;
-        if (days[days.length - 1] - days[0] === days.length - 1)
+        if (isRun(days))
             return `${time} ${DAY_NAMES[days[0]]}–${DAY_NAMES[days[days.length - 1]]}`;
     }
     if (cron.dom.size === 1 && everyDow && !cron.dowRestricted)
         return `${ordinal([...cron.dom][0])} of month ${time}`;
-    return cron.source;
+    return null;
+}
+/** The row's one-line reading ("07:00 Mon–Fri", "Every 15 minutes, 09:00–17:45, Mon–Fri"); a part the rules cannot phrase makes it the source as written. */
+export function describeCron(cron) {
+    const named = describeNamedShape(cron);
+    if (named !== null)
+        return named;
+    const time = describeTime(cron);
+    const days = describeDays(cron);
+    if (time === null || days === null)
+        return cron.source;
+    return [time, days, describeMonths(cron)].filter(Boolean).join(', ');
 }
