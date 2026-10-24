@@ -22,7 +22,8 @@ Size budgets anywhere below are soft.
 
 ## Global Constraints
 
-- ESM; server imports use the `.js` suffix; client imports from `shared/` as the existing files do (`../../../../shared/...`).
+- ESM; server imports use the `.js` suffix; client imports from `shared/` as the existing files do: three hops from `client/src/lib/*.ts`
+  (`../../../shared/...`, as `routines.ts:8`), four from `client/src/components/routines/*.tsx` (`../../../../shared/...`).
 - No new dependency anywhere. No new API field; Manual is the value `'manual'` of `RoutineJob.cron` (the spec leaves the representation open; this plan picks
   the plain string).
 - CSS: existing class names stay (`.rtn-drawer`, `.rtn-field`, `.rtn-ta`, `.rtn-vmsg`, `.seg`, `.rtn-pick`, `.rtn-in`, `.rtn-kind` …); new classes start
@@ -37,7 +38,7 @@ Size budgets anywhere below are soft.
   called in `test/run-all.ts` the same way. Run single files with `npx tsx test/<file>.test.ts`. Never run the whole `pnpm test` before a push (CI does).
 - Comments explain why, not what; wrap new prose at 160 columns.
 - Commits: `git add <files>` then `git commit -- <files>` as separate commands, Conventional Commits, ending with
-  `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`. Never push.
+  the Co-Authored-By attribution line the implementing session is given. Never push.
 
 ## Review Focus
 
@@ -48,7 +49,7 @@ Size budgets anywhere below are soft.
    reconcile must uninstall on the switch. Pinned by Task 2.
 4. **Mid-typing Custom cron** (`*/1`, `25 9 * *`): must stay Custom with its text, never flip to a preset or lose characters. Pinned by Task 5.
 5. **A field whose line exists in a shape the form cannot write** (block-list `allowed-tools:`, an unclosed bash fence, an unknown machine): shows
-   "edit in File" and the write is never called. Pinned by Task 4.
+   "edit in File" and the write is never called. The read side is pinned by Task 4; that the row never writes is checked by hand in Task 7.
 
 ---
 
@@ -65,7 +66,8 @@ Size budgets anywhere below are soft.
 
 - [ ] **Step 1: Failing tests.** In `test/cron.test.ts`: `isManualCron('manual') === true`, `isManualCron(' manual ') === true`, `isManualCron('Manual')
   === false`, `isManualCron('0 9 * * *') === false`. In `test/routine-file.test.ts` (use its existing job-text builder):
-  - (the file has no builder helper; write the texts inline as `['---', …].join('\n')`, as `test/routine-reconcile.test.ts`'s `SHELL` does)
+  - (the file's `claude(...)` / `shell(...)` builders at `:33-39` hardcode `cron: "0 9 * * *"`, so passing `cron: manual` through `extra` gives `cron given
+    twice`; `.replace('cron: "0 9 * * *"', 'cron: manual')` on their output, or write the text inline)
   - `cron: manual` with `machines: [mac, wsl]`, `run: shell`, a bash block → `errors` is `[]`, `job.cron === 'manual'`.
   - `cron: "manual"` (quoted) → valid, `job.cron === 'manual'`.
   - `cron: manual` with `machines: [mac]` → no launchd error (the dom/dow check is skipped).
@@ -75,18 +77,22 @@ Size budgets anywhere below are soft.
 - [ ] **Step 3:** Add `isManualCron`. In `parseJob`, a cron value for which `isManualCron` holds is accepted without `parseCron`; the launchd check runs only
   for a cron that is not manual. Change the `RoutineJob.cron` comment to "Five-field cron or `manual`, local time of the machine that runs it."
 - [ ] **Step 4:** `pnpm plugin:gen`; then the two files above plus `npx tsx test/plugin-manifest.test.ts` pass.
-- [ ] **Step 5:** Commit `feat(routines): accept cron: manual in the job parser` with the four source files and the two regenerated `.mjs`.
+- [ ] **Step 5:** Commit `feat(routines): accept cron: manual in the job parser` with the three source files, the two test files and the two regenerated
+  `.mjs`.
 
 ### Task 2: Manual end to end — reconcile, API, ledger, menu, docs
 
 **Files:**
 - Modify: `server/lib/routine-reconcile.ts:203-210` (`notDesired`), `server/api.ts:1953-1959` (`routineSummary`) and `:1985-1994` (`desired` in
-  `serveRoutines`), `client/src/lib/routines.ts:124-127` (`rowText`) and `:523-526` (`dotTone` callers), `client/src/components/routines/JobLedger.tsx:62,
-  86-89, 97`, `client/src/components/routines/JobMenu.tsx:26-28`, `docs/subsystems/routines.md:72` (key table), `:118` (§Reconcile "Desired is…")
-- Test: `test/routine-reconcile.test.ts`, `test/api-routines.test.ts`, `test/routines-view.test.ts`
+  `serveRoutines`), `client/src/lib/routines.ts:124-127` (`rowText`), `client/src/components/routines/JobLedger.tsx:62` (the one `dotTone` caller to
+  change; `RunsList.tsx:78` passes `true` and stays), `:86-89, 97`, `plugin/lib/run-routine.mjs` (test only, no change expected), `client/src/components/routines/JobMenu.tsx:26-28`, `docs/subsystems/routines.md:72` (key table), `:118` (§Reconcile "Desired is…")
+- Test: `test/routine-reconcile.test.ts`, `test/api-routines.test.ts`, `test/routines-view.test.ts`, `test/run-routine.test.ts`
 
 **Interfaces:**
 - Consumes: `isManualCron` (Task 1).
+- Produces: `scheduled(job: RoutineJob): boolean`, exported from `server/lib/routine-reconcile.ts` — `job.enabled && !isManualCron(job.cron)`. `notDesired`
+  keeps its distinct reasons (`manual` before `disabled`) but `serveRoutines`' `desired` is `s.job !== null && scheduled(s.job) && onThisMachine`, so the two
+  can't drift.
 - Produces: `pausedLook(job: RoutineJob | null): boolean` in `client/src/lib/routines.ts` — true when the job exists, `enabled === false` and its cron is not
   manual. The ledger's muted name, its dot (`dotTone(pill, !pausedLook(job))`) and `rowText`'s "paused" all go through it.
 
@@ -95,10 +101,16 @@ Size budgets anywhere below are soft.
     plans no change for it; (b) the same job installed from an earlier
     scheduled version plans `pull-pins:remove:manual` on mac (the `actions()` shape the disabled case asserts), and the wsl twin removes its crontab line.
     The new reason string is exactly `manual`. For (a), assert the action list has no `pull-pins:` entry at all.
-  - `test/api-routines.test.ts`: a manual, enabled job on this machine → its row has `installed: false`, `nextAt: null`; `/validate` of that text answers a
+  - `test/routine-reconcile.test.ts`: `scheduled` — enabled scheduled → true; disabled scheduled → false; enabled manual → false; disabled manual → false.
+    And `installedFrom(<an in-sync report with no changes>, name, scheduled(manualJob))` is false (the api harness is always `no-plugin`, where
+    `installedFrom` is false for every job, so the api test alone cannot pin this).
+  - `test/run-routine.test.ts`, mirroring the `--trigger schedule 20 min after the slot` case (`:684-692`): a `cron: manual` shell job run with `--trigger
+    schedule` exits 0 and its start record has no `slot` key and `late` is not true.
+  - `test/api-routines.test.ts`: `/validate` of a manual job's text answers a
     summary starting `manual · shell ·` and not containing `paused`; with `enabled: false` added the summary still has no `paused`.
   - `test/routines-view.test.ts`: `rowText` of a manual job row with `enabled: false` and no runs → `nextLine === 'manual'` and pill `never run`;
-    with `enabled: true` → `nextLine === 'manual'`; a scheduled job with `enabled: false` still reads `paused`. `pausedLook`: null → false; scheduled
+    with `enabled: true` → `nextLine === 'manual'`; a scheduled job with `enabled: false` still reads `paused`; a manual job not on this machine reads
+    `nextLine: '—'` and the `<machines> only` pill, as any job off this machine does (that branch keeps winning). `pausedLook`: null → false; scheduled
     disabled → true; manual disabled → false; scheduled enabled → false.
 - [ ] **Step 2:** Run the three files; the new cases fail.
 - [ ] **Step 3:** `notDesired` returns `'manual'` for a manual cron, checked right after `invalid` and before `disabled`. `serveRoutines`' `desired` also
@@ -129,8 +141,8 @@ cannot be phrased makes the whole result `cron.source`:
 - **T (time).** One minute + one hour → `HH:MM`. One minute + every hour → `Every hour at :MM`. One minute + hour written `*/N` (values 0, N, 2N … to the
   end of the range, N ≥ 2) → `Every Nh at :MM`. One minute + a contiguous hour range a–b (≥ 2 hours, not all 24) → `Every hour HH:MM–HH:MM` (both ends at
   that minute). One minute + 2–4 non-contiguous hours → the times joined by `, ` (`09:00, 13:00, 17:00`). Every minute (60 values) → `Every minute`, or
-  `Every minute, HH:00–HH:59` over a contiguous hour range, or with a single hour. Minute written `*/N` (0, N … to 59; N ≥ 2) → `Every N minutes`, plus
-  `, HH:00–HH:LL` over a single hour or contiguous hour range (LL = the last minute value). Anything else → unphraseable.
+  `Every minute, HH:00–HH:59` over a single hour or a contiguous hour range that is not all 24. Minute written `*/N` (0, N … to 59; N ≥ 2) →
+  `Every N minutes`, plus `, HH:00–HH:LL` over a single hour or a contiguous hour range that is not all 24 (LL = the last minute value). Anything else → unphraseable.
 - **D (days).** Every day (dom and dow both unrestricted) → empty. Weekday-only: one → `Mon`; a contiguous run → `Mon–Fri`; otherwise names joined by `/`
   (`Mon/Wed/Fri`), in Sun..Sat order. Day-of-month-only: one → `1st of month`; contiguous → `1st–7th of month`; otherwise `1st/15th of month`. Both
   restricted → unphraseable.
@@ -142,6 +154,7 @@ cannot be phrased makes the whole result `cron.source`:
   - `*/30 9-18 * * 1-5` → `Every 30 minutes, 09:00–18:30, Mon–Fri` (the visual fixture's `pr-triage`)
   - `*/15 * * * *` → `Every 15 minutes`
   - `* * * * *` → `Every minute`
+  - `* 9-17 * * *` → `Every minute, 09:00–17:59`; `* 9 * * *` → `Every minute, 09:00–09:59`; `*/15 9 * * *` → `Every 15 minutes, 09:00–09:45`
   - `25 * * * *` → `Every hour at :25`
   - `25 */2 * * *` → `Every 2h at :25`
   - `0 9-17 * * *` → `Every hour 09:00–17:00`
@@ -222,7 +235,8 @@ cannot be phrased makes the whole result `cron.source`:
   - `visibleFields` for each of the three kinds, exactly as listed above.
   - `routeErrors` on skill text: an error at the `model:` line → `byField.model`; at line 0 `claude job needs a prompt` → `byField.prompt`; `shell job needs
     a \`\`\`bash block` (any line) with kind shell → `byField.script`; an error on the `model:` line with kind shell → `rest` (hidden row); line 0
-    `cron is required` → `rest`; an error on a comment line → `rest`; an error on the `cron:` line → `byField.schedule`.
+    `cron is required` → `rest`; an error on a comment line → `rest`; an error on the `cron:` line → `byField.schedule`; an error on the `machines:`
+    line → `byField.machines`.
 - [ ] **Step 2:** `npx tsx test/routine-form.test.ts` fails (module missing).
 - [ ] **Step 3:** Implement the module.
 - [ ] **Step 4:** Test file passes; `pnpm typecheck` passes.
