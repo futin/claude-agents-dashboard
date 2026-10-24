@@ -211,6 +211,9 @@ export default function ChatDrawer({ session, onClose, spawnAvailable }: {
     measure();
     const ro = new ResizeObserver(measure);
     ro.observe(pinned);
+    // The transcript itself shrinks when a card lands in the phone's band above it (the PR card answers after the first page); no scroll event fires, so
+    // without this the tail slips under the foot.
+    ro.observe(body);
     return () => ro.disconnect();
   }, []);
 
