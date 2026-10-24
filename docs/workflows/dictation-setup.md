@@ -88,6 +88,7 @@ server restart.
 | Transcription always fails (`500`, reason `engine`) | `whisper-cli` exited non-zero — often a model file that doesn't match what the installed binary expects | Re-download the model; confirm `whisper-cli -m <model> -f <any.wav> -nt` runs cleanly by hand |
 | Every request times out (`504`) | A spawn ran past its 30s ceiling — a very slow machine, or an oversized model | Try a smaller model, or confirm nothing else is pinning the CPU |
 | `403` on every attempt | `ANSWER_TOKEN` is set and the browser's saved token doesn't match | Re-enter the token in the composer's token prompt, same as the other remote-answer surfaces |
+| "Read-only from this network" (`403`) | No `ANSWER_TOKEN` is set and this browser is not a trusted peer — a LAN IP, or a tailnet device while Settings › Shared › Trust tailnet devices is off | Open the dashboard through Tailscale with tailnet trust on, or set `ANSWER_TOKEN` ([remote-access](../subsystems/remote-access.md#who-may-write)) |
 
 <!-- docs-sync:
   sources:
@@ -95,5 +96,5 @@ server restart.
     - server/lib/transcribe.ts
     - server/api.ts
   kind: workflow
-  verified: 142439e51a92c5c5faebaf0c867bc5a36fef7c57
+  verified: 24f8d773dd459e02b1e4ef4a093aed285939555c
 -->

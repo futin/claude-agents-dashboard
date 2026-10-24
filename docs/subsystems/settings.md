@@ -16,7 +16,7 @@ phone-only pill switch of its own; it is gone, so `settingsTab` has exactly one 
 at any width, as Usage's Forecast / Token value / History does. Each page is a band
 (title, a scope pill, one line) over sub-category cards: Local has Display, Live data,
 New sessions, Git Sync, Notify this browser, Connection and Reset; Shared has Push notifications,
-Remote answers, Usage forecast and Git fetch.
+Remote answers, Write access, Usage forecast and Git fetch.
 
 The Management › Projects page (`management/ProjectsView.tsx`) is no Settings card at all: it draws on the app ground under its own band, "Management ·
 Projects", which carries the "every device" scope pill (the pins are server-stored) and says a pin keeps a project in the launch sheet however long ago its
@@ -49,13 +49,15 @@ model and effort (`syncModel` / `syncEffort`, default `''` each; the button neve
 (`routineWindow`: `7` | `30` | `90`, default `30` — the stats band and the Runs list read it; a hand-edited value outside the three reads back as `30`, and
 the server's `ROUTINE_WINDOWS` is the same list; see [routines](routines.md#the-routines-page)), which Usage sub-tab
 opens (`forecast` | `rates` | `history`), which Management sub-view is showing (`managementTab`: `git` |
-`projects` | `codegraph`, default `projects`, which is also where a main-row click on Management lands: `items[0]` of its tree), which Routines sub-view
+`projects` | `codegraph`, default `git`, which is also where a main-row click on Management lands: `items[0]` of its tree), which Routines sub-view
 is showing (`routinesTab`: `jobs` | `runs`, default `jobs`, the same way), and which Settings page is showing (`settingsTab`: `local` |
 `shared`). A `settingsTab: 'pinned'` stored by an older release fails the validator and falls back to
 `local`. A `managementTab: 'pinned'` is the other case: that sub-view was renamed, not removed, so `clampSettings` reads it as `projects` and the device keeps its
-place. A `managementTab: 'schedules'` from before Routines became its own section is simply unknown now, and falls back to `projects`. The answer token is per browser too (`dashboard.answerToken`, its own key), which
+place. A `managementTab: 'schedules'` from before Routines became its own section is simply unknown now, and falls back to the default, `git`; a `landing: 'schedules'` is read as `routines`. The answer token is per browser too (`dashboard.answerToken`, its own key), which
 is why it sits under **Local › Connection** and not beside the remote-answer switch it
-unlocks — a Shared page carrying it would break the promise the two pages make. A phone propped on the desk
+unlocks — a Shared page carrying it would break the promise the two pages make. Above the field, a **This device** row reads this browser's write access off
+`GET /api/health` (`writeStatusLine` in `client/src/lib/writeStatus.ts`: how it reaches the dashboard, then whether writes need no token, need the token,
+or are read-only because none is set), and the field's hint says it is needed only when that line says so. A phone propped on the desk
 wants five rows in the light theme and a slow poll; the laptop wants twenty, the dark theme and
 three seconds. Sharing these would make one device wrong.
 
@@ -86,7 +88,9 @@ while nobody has Management › Git open — the timer fires only while the view
 Shared: the write gate on the server reads it on every request, through the same in-process cache `setSettings` updates, so flipping it takes effect without a
 restart and a per-device value could never reach the gate. It is the **Write access** card on the Shared page, after Remote answers. Turning it off is itself a
 write: a tailnet device that does so loses its own write access from its next request, and this machine, always `local`, can turn it back on. A hand-edited
-non-boolean reads back as the default, and a `POST /api/settings` patch carrying one is refused whole.
+non-boolean reads back as the default, and a `POST /api/settings` patch carrying one is refused whole. A Shared save refused as `read-only from this
+network` shows `READ_ONLY_TEXT` (`client/src/lib/writeRefusal.ts`) under Remote answers in place of the token warning, since no token could help
+(`useServerSettings`' `readOnly`).
 
 `pinnedProjects` (#161, default `[]`) rides in the same file: encoded project dir names that
 stay listed past `LOOKBACK_HOURS` (see [configs](configs.md) §Pinned projects). Its order is meaningful — Management › Projects, Management › Git and the
@@ -101,7 +105,9 @@ answer also carries the recent and older projects on offer — so the Settings p
 The three scan knobs are the interesting case: they change what the **server** computes, but
 they are still per-device, so they travel as query params on the poll the client already makes —
 `GET /api/sessions?limit=20&lookback=48&active=5`. Request input, not stored state. Nothing new
-is persisted and no device can change what another device sees.
+is persisted and no device can change what another device sees. `scanQuery` builds that string, and also appends one `project=` per name the Sessions
+toolbar's Project facet holds: view state from `dashboard.view` rather than a setting, sent so the server can fill the row limit from those projects alone
+([sessions](sessions.md)).
 
 **Chat messages** (`chatFullText`, default off = truncated) is the same shape, one endpoint over:
 `?full=1` on `GET /api/sessions/:id/chat`. It has to reach the server because the caps are
@@ -298,8 +304,8 @@ notification. A narrowed version of it is back directly above — see **Notify t
 below — for the one case that argument never covered. The reasoning, and what that trade
 costs, is in [push-notify](push-notify.md).
 
-Ten rows — a master switch, one per event (question / permission dialog / plan / task
-finished / routine failed), three optional AND-layers (only-while-accepting-remote-answers, only-when-away,
+Twelve rows — a master switch, one per event (question / permission dialog / plan / task
+finished / routine failed / usage limit reached / usage limit reset), three optional AND-layers (only-while-accepting-remote-answers, only-when-away,
 only-in-auto-modes), and a test button. The server sends them, so nothing here depends on a
 tab being open. Full mechanism, fail directions and the topic's secrecy rules:
 [push-notify](push-notify.md).
@@ -334,8 +340,8 @@ Worth knowing from this page's side:
 
 | Route | Purpose |
 |---|---|
-| `GET /api/settings` | the non-per-device settings + any detected override, plus `notifyAvailable` and `staleEnvKeys` (names only — never the topic or token itself) |
-| `POST /api/settings` | change them (`{idleSecs?, answerSecs?, notify?, recordUsageHistory?, gitFetchSecs?}` — any subset); a gate-only write, like the other settings writes; replies with the same body as GET (`settingsBody`), `staleEnvKeys` included, since the client replaces its whole state with it |
+| `GET /api/settings` | the non-per-device settings + any detected override, plus `notifyAvailable`, `usageAvailable` and `staleEnvKeys` (names only — never the topic or token itself) |
+| `POST /api/settings` | change them (`{idleSecs?, answerSecs?, notify?, recordUsageHistory?, gitFetchSecs?, trustTailnet?}` — any subset); a gate-only write, like the other settings writes; replies with the same body as GET (`settingsBody`), `staleEnvKeys` included, since the client replaces its whole state with it |
 | `GET /api/pins` | `{pinned: PinRow[], recent: ProjectRef[], older: ProjectRef[], home}` — the stored pins (a dead one `listed: false`) and the projects on offer to pin: `recent` is the listed ones not yet pinned, `older` the 30-day tail past the lookback, both minus Claude's own dirs (scratchpads, scratch workspaces, `~/.claude`) |
 | `POST /api/pins` | `{dirName, pinned}` — gate-only write; a pin must name a recent or older project (404 otherwise), 409 past 50; an unpin takes any stored dir; answers with the fresh `GET` payload |
 | `POST /api/pins/order` | `{order: string[]}` — gate-only write; the whole pin list in its new order, 409 unless it is an exact permutation of the stored pins (no membership check: a permutation cannot add a dir); answers with the fresh `GET /api/pins` payload |
@@ -369,5 +375,5 @@ a value the rows never reflect.
     - server/lib/settings.ts
     - client/index.html
   kind: subsystem
-  verified: 142439e51a92c5c5faebaf0c867bc5a36fef7c57
+  verified: 24f8d773dd459e02b1e4ef4a093aed285939555c
 -->

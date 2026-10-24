@@ -182,9 +182,9 @@ Handlers `serveMessageWait` / `serveSessionMessage` / `serveSessionMessageAnswer
 
 | Method | Path | Codes |
 |---|---|---|
-| `POST` | `/api/messages/wait` | held → 200 `MessageWaitResult`; 400 malformed / bad `sessionId`; 403 bad token; 404 feature off; 405 non-POST |
+| `POST` | `/api/messages/wait` | held → 200 `MessageWaitResult`; 400 malformed / bad `sessionId`; 403 refused by the write gate (`bad token`, or `read-only from this network`); 404 feature off; 405 non-POST |
 | `GET` | `/api/sessions/:id/message` | 200 `SessionMessage` (`pending: null` when idle); 400 bad id |
-| `POST` | `/api/sessions/:id/message-answer` | 200; 400 malformed / bad id; 403 bad token; 404 nothing waiting; 409 a *different* window is open now; 405 non-POST |
+| `POST` | `/api/sessions/:id/message-answer` | 200; 400 malformed / bad id; 403 refused by the write gate (`bad token`, or `read-only from this network`); 404 nothing waiting; 409 a *different* window is open now; 405 non-POST |
 
 **⚠️ No `sessionExists` on the wait**, unlike `serveQuestionWait`/`servePlanWait`. A `Stop`
 hook fires as the turn ends — exactly when the transcript may not yet be flushed for the
@@ -281,5 +281,5 @@ state, reset on a new `messageId`, never persisted.
     - client/src/hooks/usePendingMessage.ts
     - client/src/lib/holds.ts
   kind: subsystem
-  verified: 142439e51a92c5c5faebaf0c867bc5a36fef7c57
+  verified: 24f8d773dd459e02b1e4ef4a093aed285939555c
 -->

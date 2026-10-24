@@ -101,7 +101,7 @@ Each was settled in the spec rather than left to the builder:
 - **`partial` is Needs you**; **`indexing` is drawn as a run** with no level change (only a build with no live rebuild is a problem).
 - **A failed run clears on the next success or a server restart**, and a **sync that loses the lock to a watcher is not a failure** (above).
 - **Reindex asks first**, in an in-page confirm that focuses Cancel, since it throws the DB away. It stays allowed while a watcher runs (the user's decision, 2026-10-19), and the text
-  says the watcher will lose the graph until it restarts.
+  says the watcher stops first, so open sessions in that repo lose codegraph until it restarts.
 - **Languages are names only**: the CLI has no per-language counts.
 
 ## Timings
@@ -127,5 +127,5 @@ The 25 s TTL and the cap of 2 follow from those; `CODEGRAPH_STATUS_TIMEOUT_MS` (
     - client/src/components/management/CodegraphInspector.tsx
     - client/src/components/management/CodegraphClockChip.tsx
   kind: subsystem
-  verified: 39dcca06a8a1b600cf59b74c7adec6d4dc267895
+  verified: 24f8d773dd459e02b1e4ef4a093aed285939555c
 -->

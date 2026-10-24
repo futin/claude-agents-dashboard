@@ -47,8 +47,9 @@ override it (see `dashboard.section` below).
   flash of the previously-open one. Whichever of the two wins is passed through `isSection`
   first, so a value naming a section this build no longer has (the removed Guides tab) lands
   on `sessions` rather than falling through `App.tsx`'s chain to Settings. The id
-  `management` is the new Projects | Git tab; before the Claude Configs rename it named what is now
-  Claude Configs, and a stored one is not migrated — it opens the new tab.
+  `management` is the Management tab (Git | Projects | CodeGraph); before the Claude Configs rename it named what is now
+  Claude Configs, and a stored one is not migrated — it opens the new tab. A stored `schedules`, the section's id before Schedules became Routines, is
+  read as `routines` (`App.tsx`), so that device keeps its place.
   A `?session=` deep link outranks both and forces
   `sessions` (see the URL-param note below);
   `dashboard.layout` (which of the five shapes the switcher was left on — the shape note
@@ -72,6 +73,9 @@ override it (see `dashboard.section` below).
   `management.projectsLayout` (which of Management › Projects' three shapes, Tiles | Columns | Lists, the switcher was left on, a bare `ProjectsLayout` string
   guarded by `isProjectsLayout` on read, default `tiles`; per device, an `OWNED_KEYS` entry so Reset sweeps it, no Settings picker; unlike Git's, it is never
   coerced on a narrow window — see [settings](settings.md));
+  `management.codegraphLayout` (which of Management › CodeGraph's Inbox | Matrix | Inspector the switcher was left on, a bare string read through
+  `parseCodegraphLayout`, default `inbox`; a phone draws Inbox for a stored `matrix` without overwriting it; an `OWNED_KEYS` entry, so Reset sweeps it —
+  see [codegraph](codegraph.md));
   `management.syncRuns` (the Git Sync runs this device launched, keyed by repo — see [git-stats](git-stats.md); live state, so Reset leaves it);
   `dashboard.releases.lastSeen` (the newest release this browser has seen, a raw version string, not JSON, that ui-kit's `useWhatsNew` reads and writes
   under `LAST_SEEN_KEY` from `lib/releases.ts` rather than through `usePersistedState` — see [releases](releases.md); in `OWNED_KEYS`, so Reset clears it, and the next load reseeds the newest without a dot).
@@ -87,7 +91,8 @@ override it (see `dashboard.section` below).
   `?view=routines` is the third: it lands on the Routines section instead, on Jobs, or on Runs when the link carries a run (`routinesTab`). A failed
   routine run's push adds `&run=<id>` (`server/lib/notify.ts` `routineClickUrl`): `readRunParam` takes it in the same single parse, behind a
   `[A-Za-z0-9._-]{1,128}` shape check, `deepLinkRun()` keeps answering after the strip, and Routines › Runs opens with that run's fold open.
-  See [routines](routines.md#notifications).
+  See [routines](routines.md#notifications). `?view=usage`, a usage-limit push (`server/lib/notify.ts` `usageClickUrl`), lands on the Usage section and
+  has no sub-view to set.
 - **Which of the five shapes draws the list is deliberately NOT in `dashboard.view`.** It
   used to be a `View` field, which made one click in the switcher the shape every future load
   opened in. The shape is not a filter, and it does not belong in the object the filters are
@@ -162,5 +167,5 @@ override it (see `dashboard.section` below).
     - client/src/components/analytics/AnalyticsView.tsx
     - client/src/hooks/useSettings.tsx
   kind: subsystem
-  verified: 142439e51a92c5c5faebaf0c867bc5a36fef7c57
+  verified: 24f8d773dd459e02b1e4ef4a093aed285939555c
 -->

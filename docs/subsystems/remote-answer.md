@@ -105,10 +105,10 @@ Handlers `serveHealth` / `serveQuestionWait` / `serveSessionQuestion` /
 | Method | Path | Codes |
 |---|---|---|
 | `GET` | `/api/health` | 200 `HealthResponse` = `{ok, ...RemoteAnswerState, origin?, writeAccess?, idleSecs?, answerSecs?, tokenRequired?, transcribe?, spawnAvailable?, spawnMaxPermission?, syncPermissionMode?}` (`transcribe` is [dictation](dictation.md)'s engine-availability flag and the `spawn*`/`sync*` fields are [spawn](spawn.md)'s, all unrelated to the gates) — the hook's probe (all three gates *and* the wait window off one round trip), the pill's read, and the origin badge's source |
-| `POST` | `/api/remote-answer` | `{enabled}` → 200 `{...state, released}`; 400 non-boolean; 403 bad token; 409 `REMOTE_ANSWER=false`; 405 non-POST |
-| `POST` | `/api/questions/wait` | held → 200 `WaitResult`; 400 malformed / no usable questions; 403 bad token; 404 unknown session or feature off; 405 non-POST |
+| `POST` | `/api/remote-answer` | `{enabled}` → 200 `{...state, released}`; 400 non-boolean; 403 refused by the write gate (`bad token`, or `read-only from this network`); 409 `REMOTE_ANSWER=false`; 405 non-POST |
+| `POST` | `/api/questions/wait` | held → 200 `WaitResult`; 400 malformed / no usable questions; 403 refused by the write gate (`bad token`, or `read-only from this network`); 404 unknown session or feature off; 405 non-POST |
 | `GET` | `/api/sessions/:id/question` | 200 `SessionQuestion` (`pending: null` when idle); 400 bad id |
-| `POST` | `/api/sessions/:id/answer` | 200; 400 malformed; 403 bad token; 404 nothing waiting (answered elsewhere / expired / hook gone); 409 a *different* question is waiting now; 405 non-POST |
+| `POST` | `/api/sessions/:id/answer` | 200; 400 malformed; 403 refused by the write gate (`bad token`, or `read-only from this network`); 404 nothing waiting (answered elsewhere / expired / hook gone); 409 a *different* question is waiting now; 405 non-POST |
 
 ## State machine
 
@@ -220,6 +220,9 @@ already decide this?" versus "is the user back?".
   missing file and a malformed one all keep today's behaviour, so the blocker question and the final batched question stay answerable from the phone. The hook
   never writes the file, and a `session_id` outside `[A-Za-z0-9-]` skips the check. Deployment order: on each machine the dashboard checkout must be pulled
   together with the autopilot CLI (`sync.sh pull`), or a `running` run still idles on every denied question.
+- **A routine step steps the hook aside too.** `ask-remote-hook.sh` exits 0 right after its `CLAUDECODE` check when `CLAUDE_DASHBOARD_ROUTINE` (or the
+  pre-rename `CLAUDE_DASHBOARD_SCHEDULE`) is set, before the session id is even parsed: the [routine wrapper](routines.md#the-wrapper) stamps it on an
+  unattended child, so there is nobody to hold a question for (`test/hooks-routine-marker.test.ts`).
 
 ## Security posture
 
@@ -233,7 +236,8 @@ read-only Docker mount; `chmod 600`); the browser persists it as `dashboard.answ
 and asks for it when a 403 says a token would help. Every client caller reads it through `useAnswerToken`, one module-level store in `client/src/lib/answerToken.ts` with a `storage`
 listener, and builds the header with that file's `authHeaders` — so a token entered in one panel reaches every hook mounted beside it, where twelve
 private `usePersistedState` copies once each needed a remount to see it (#200). A refused write logs one stderr line — `rejected write: <METHOD>
-<path> from <peer> (bad or missing token)`, method, path and peer class only, never the token, the header or the
+<path> from <peer> (bad or missing token)`, or `(read-only, no token set)` when no token could have helped,
+method, path and peer class only, never the token, the header or the
 query string, and throttled to once per path per minute — because the hooks swallow a 403
 (`curl -sf` then `exit 0`), so nothing otherwise distinguished a missing token file from a
 feature nobody had switched on. HTTP + a static token is a tripwire, not real auth.
@@ -271,6 +275,8 @@ then turn tailnet trust off and use the token; behind a *public* tunnel it is th
   `idle → submitting → submitted | gone`, tracked against the current `questionId` so a
   new question resets the panel and a stale banner never leaks across questions.
   404/409 → `gone` ("answered in the terminal, or it expired"), 403 → the token prompt.
+  A 403 whose body is `read-only from this network` sets `readOnly` instead (`refusalKind` in `client/src/lib/writeRefusal.ts`): no token can unlock that
+  network, so the panel shows `READ_ONLY_TEXT` where the prompt would be. The plan and reply panels do the same, and the switch shows a `read-only` mark.
 - **Visible without the drawer.** `QuestionPanel` only exists inside `ChatDrawer`, so a
   held question used to be invisible unless you already had that exact session's drawer
   open, and the transcript-derived blue dot can't cover it (the wait is registered during
@@ -324,5 +330,5 @@ then turn tailnet trust off and use the token; behind a *public* tunnel it is th
     - client/src/components/sessions/atoms.tsx
     - client/src/lib/holds.ts
   kind: subsystem
-  verified: 142439e51a92c5c5faebaf0c867bc5a36fef7c57
+  verified: 24f8d773dd459e02b1e4ef4a093aed285939555c
 -->

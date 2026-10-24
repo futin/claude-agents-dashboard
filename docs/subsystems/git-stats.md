@@ -205,11 +205,14 @@ the server watched forever. The chip opens a popover (`.git-pop`, dismissed by `
 with two rows — **Local sync** (`now` = the old ↻) and **Fetch all** (`now` = `POST /api/git-fetch` through `useGitFetch`, then a poll) — and, under them, one
 amber line per repo whose last fetch failed with anything but `lock`. The Fetch all key is disabled with a reason when the server wants an Answer token this
 device has not stored, or after a `403`.
+A read-only network (`writeAccess: 'none'` from `GET /api/health`) outranks both: the key is disabled with `READ_ONLY_TEXT`, since no token could make the press
+work (`fetchKeyState`).
 
 **The layouts.** A `.seg` switcher offers `gitLayoutsFor(narrow)` and stores the pick per device in `management.gitLayout` (default `inbox`), read through
 `parseGitLayout`; what is drawn is `drawableGitLayout`, so a phone draws Inbox while a stored Matrix waits for the next wide window
 (`client/src/lib/gitLayouts.ts`). GitView hands every layout one `GitLayoutProps` (`gitLayoutProps.ts`: the repos in pin order, the sessions, the clock, the
-Sync / Fetch / Unpin / Open folder controls), so none fetches for itself, and they share `GitParts.tsx` (level dot, agent chip, `GitDv`, `GitDvBar`, `GitKeys`,
+Sync / Fetch / Quick pull and push /
+Unpin / Open folder controls), so none fetches for itself, and they share `GitParts.tsx` (level dot, agent chip, `GitDv`, `GitDvBar`, `GitKeys`,
 `gitTracked`, `GitInBranchRow`):
 
 | Layout    | Shape |
@@ -232,13 +235,19 @@ descending, then pin order, so a repo moves between levels but equal repos never
 `working` reads `working`, `question` reads `waiting` (`needs answer`), `idle` reads `idle <age>`, and `incomplete` is no agent; several sessions on one
 branch pick working over waiting over idle, then the most recent.
 
-**The keys** (`GitKeys`). **Sync** is labelled with its verbs (`Sync · commit + pull + push`, from `gitSyncVerbs`, calm problems excluded). **Retry fetch**
+**The keys** (`GitKeys`). **Sync** is labelled with its verbs (`Sync · commit + pull + push`, from `gitSyncVerbs`, calm problems excluded).
+In `GitKeys` and on a Branches card it is the left half of a split key (`.git-split`) whose caret (`.git-split-caret`) opens Pull · Push · Sync with Claude
+(`GitQuickMenu`, each item's state from `quickMenu` in `client/src/lib/gitQuick.ts`). The split draws even where the host cannot spawn, with the Sync half
+disabled, since Pull and Push need no session; while a quick op runs on the repo both halves are disabled. The Inspector pane's "Clean up via Sync" stays a
+plain key. The last quick op's result is one line under the toolbar (`.git-quick-note`, or `.git-sync-note` for a warning), cleared when a sync starts or by
+the first poll after it has stood 30s (`quickNoteExpired`). **Retry fetch**
 shows
 for a failed fetch and runs Fetch all, since no per-repo fetch route exists. **Unpin** is the only key on a dead repo and goes through `usePins`. **Open PR**
 is a link on a Ready card in Branches, from `gitCompareUrl` (`client/src/lib/gitLinks.ts`) over `originUrl`, for `github.com` and `gitlab.com` only: any other
 host gets no key. **Open folder** is on the Inspector pane for an `ok` repo with a path: `useOpenFolder` posts `POST /api/open-folder` `{path}` with the Answer
 token, and the server runs macOS `open` on it only when the path string-equals a listed pin's (`server/lib/open-folder.ts`, argv through `execFile`, no
-shell). The order of its answers is `405` for a non-POST, `403 bad token`, `400`, `501 open folder needs macOS`, `403 not a pinned project`, `500 open failed`,
+shell). The order of its answers is `405` for a non-POST, `403 bad token` or
+`read-only from this network`, `400`, `501 open folder needs macOS`, `403 not a pinned project`, `500 open failed`,
 then `200 {ok: true}`; the hook turns each into a note under the toolbar. It is not a third kind of outbound call: `open` makes none.
 
 **A branch row** is the name (plus a "worktree" badge when `worktreePath` is set and the agent chip when a session sits on it), the divergence bar, `.git-dv`
@@ -308,5 +317,5 @@ in flight, and only the clicked one reads "Starting…". The runs key is not a s
     - client/src/hooks/useOpenFolder.ts
     - server/lib/open-folder.ts
   kind: subsystem
-  verified: 142439e51a92c5c5faebaf0c867bc5a36fef7c57
+  verified: 24f8d773dd459e02b1e4ef4a093aed285939555c
 -->

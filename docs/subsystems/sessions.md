@@ -65,8 +65,8 @@ The atoms in `sessions/atoms.tsx`, in every view that has room for them:
   transcript's *first* `cwd` — where the session was launched, not where its shell has
   since wandered). Either way the row also carries its `gitBranch`. A session launched in a linked git worktree also carries `repo`, the main
   checkout's name (`server/lib/worktree-repo.ts`: the worktree's `.git` file, else the `.claude/worktrees/<n>` / `.worktrees/<n>` path shape once the
-  worktree is deleted). `project` stays the worktree folder — the filter, pins and chat drawer key on it — and only the List view's Project column reads
-  `repo` today.
+  worktree is deleted). `project` stays the worktree folder — pins and the chat drawer key on it. The Project filter files the row under `repo ??
+  project` instead (`filterProjectOf`, mirroring the server's `pickerProjectOf`), and the List view's Project column shows `repo`.
 - **Model + CLI version** — what the session is running. Every view shows the model through `lib/modelLabel.ts` (`Opus 5.5`); only the chat drawer's
   facts panel keeps the full id, the one place with room for it.
 - **Surface pill** — where the session lives, when that isn't the obvious answer. A headless
@@ -501,7 +501,8 @@ read — a plain `find` would serve the abandoned half to the detail or [chat](c
 `message.role` of `user`/`assistant`): `transcript.ts` exposes `turnComplete` (default
 true; false unless that record is an assistant with `end_turn`), `waitingOnQuestion`, and
 `lastMessageTs` (that record's timestamp — the recency signal). Records without a role
-(usage-only, meta, last-prompt, queue-operation) are ignored for state.
+(usage-only, meta, last-prompt, queue-operation) are ignored for state, and so are `api-request-blob` records, which carry a role but only replay
+turns already recorded (`isConversationRecord` in `transcript.ts`).
 
 ## Expandable subagent detail
 
@@ -513,7 +514,8 @@ type, so that width goes to the description), description, running/done,
 duration, tokens (the harness's figure: the subagent's final context size, not its spend — the Analytics
 inspector sums the real spend from the subagent transcripts), tool-use count — under a `N running · N finished · N agents` summary.
 Served by an incremental byte-offset cache (`agents.ts` / `agents-cache.ts`) so repeat
-opens stay cheap.
+opens stay cheap. A compaction can replay earlier records verbatim, tool_use ids included, so `applyEvent` drops a launch or `SendMessage` whose id
+`ScanState.seen` already holds (#174); without that a replayed launch reads as a second row.
 
 **Resumed agents get their own row.** `SendMessage` to a stopped subagent wakes it for another run — the subagent-driven fix loop does this every round. The
 result carries `toolUseResult.resumedAgentId`, and the run completes like a background launch, on a `<task-notification>` keyed by that agentId. `agents.ts`
@@ -653,5 +655,5 @@ Measured at the same scroll position in all three configurations: default `24 / 
     - client/src/hooks/useSessionDetail.ts
     - client/src/lib/filterSort.ts
   kind: subsystem
-  verified: 142439e51a92c5c5faebaf0c867bc5a36fef7c57
+  verified: 24f8d773dd459e02b1e4ef4a093aed285939555c
 -->

@@ -261,13 +261,14 @@ visible to the dashboard.
   branch 'claude/<name>'`.
 - **Start on the phone → continue at the Mac:** `claude --resume <session-id>` in a
   terminal — full history, everything local. (The id is in the dashboard row / chat
-  drawer URL.)
+  drawer URL, and the chat drawer's `Session` fact copies the full id in one tap — [chat](chat.md).)
 - **Dashboard spawn → keep going from the dashboard after it stopped:** the ended
   session's chat drawer offers the resume composer — `--resume` on the same id, so the
   same transcript continues and the same row wakes up. `dashboard`-surface (C/D) only: a
   terminal session stays terminal-owned, since resuming one here could race a still-open
   interactive session on the same transcript
-  ([spawn](spawn.md#resuming-an-ended-session-resume)).
+  ([spawn](spawn.md#resuming-an-ended-session-resume)). While a `claude` process this server cannot stop still carries the id
+  (`Session.processLive`), a `still running` note stands in for the composer until that process exits.
 - **Start at the Mac (Harness) → continue on the phone:** the dashboard already
   monitors every local session; use the reply window. A-sessions are not
   RC-registered, so the phone *app* cannot attach to them.
@@ -284,5 +285,5 @@ visible to the dashboard.
     - client/src/lib/holds.ts
     - client/src/components/ChatDrawer.tsx
   kind: subsystem
-  verified: 142439e51a92c5c5faebaf0c867bc5a36fef7c57
+  verified: 24f8d773dd459e02b1e4ef4a093aed285939555c
 -->

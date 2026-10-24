@@ -41,7 +41,7 @@ the `.env` keys and `git mv`-ing the job folder are optional and can come any ti
 | `runs/<machine>.jsonl` | the append-only run log; rotated to `<machine>.<yyyymmdd>.jsonl` at 20 MB | the wrapper (appends), the owner (rotates) |
 | `locks/<job>.lock` | the job lock: pid and boot id | the wrapper; the owner sweeps dead ones on start |
 | `launchd/` | the plists' stdout and stderr files (mac) | reconcile creates it, launchd writes the files in it |
-| `pins.json` | `[{dirName, name, path}]` in pin order, what `foreach:` resolves against | the owner, on start and when pins change |
+| `pins.json` | `[{dirName, name, path, listed}]` in pin order, what `foreach:` resolves against | the owner, on start and when pins change |
 | `owner.json` | `{pid, bootId, cwd, port, at}`, the owner claim | the owner |
 | `notified.json` | `{seen: {<run id>: <ms>}, floor?}`, the runs already pushed, pruned at 7 days | the owner |
 | `cron.env` | the baked environment, WSL only (0600) | reconcile |
@@ -116,8 +116,8 @@ the runs watcher that seeds and folds the log for pushes.
 ## Reconcile: files in, OS jobs out
 
 `routine-reconcile.ts` plans a pure diff and applies it idempotently. **Desired** is every valid file with `enabled: true` and a `cron` other than `manual` whose `machines` names
-this machine (the plan's removal reason for a manual file is `manual`, checked before `disabled`). **Installed** is, on mac, every plist under `~/Library/LaunchAgents/` labelled `com.claude-dashboard.routine.*` that `launchctl print
-gui/<uid>/<label>` says is loaded (exit 0 loaded; 3 and 113 mean not loaded); on WSL, every line between the two marker comments of the user's crontab:
+this machine (the plan's removal reason for a manual file is `manual`, checked before `disabled`). **Installed** is, on mac, every plist under `~/Library/LaunchAgents/` labelled `com.claude-dashboard.routine.*`, with `launchctl print
+gui/<uid>/<label>` saying whether it is loaded (exit 0 loaded, any other exit not); on WSL, every line between the two marker comments of the user's crontab:
 
 ```
 # >>> claude-dashboard routines >>>
@@ -180,7 +180,8 @@ only process that runs a job. In order:
 1. Read `<dir>/<job>.md` and validate it with the same module the server uses. On a `--trigger schedule` fire with a missing, invalid, disabled or
    other-machine file it appends a `refused` record and exits 0, because the dashboard may have been down when the file changed. A manual run of a disabled
    file is allowed (that is Run now on a paused job); the other three refuse manually too.
-2. Take `locks/<job>.lock` with `O_EXCL`, pid and boot id inside. A live pid from this boot whose command line is `run-routine <job>` makes it append
+2. Take `locks/<job>.lock` by linking a complete temp file into place (it fails on an existing lock, and no reader sees it empty), pid and boot id inside.
+   A live pid from this boot whose command line is `run-routine <job>` makes it append
    `refused` (`running`) and exit **75**; any other lock is stale and taken over, and the reader shows that run as lost. The boot id is the seconds of
    `sysctl -n kern.boottime` on mac and `/proc/sys/kernel/random/boot_id` on WSL.
 3. A scheduled fire more than 10 minutes after its slot is marked `late` (never a manual one).
@@ -294,9 +295,10 @@ line under the toolbar, one `busy` key so only the clicked control greys out, an
   setting the job's `run:` kind shows (Schedule, Machines, Repos, Script or Prompt, Model, Permission, Limits, Tools), one opened at a time, each control
   writing only the lines its field owns through the registry in `client/src/lib/routineForm.ts` (Schedule's six presets live in `ScheduleControl`). A
   `/validate` error shows inside the row that owns its line and turns that row's summary red; the rest show under the rows. A value the form cannot show
-  reads `edit in File`. File is the raw textarea. The text is validated on each keystroke (debounced) in both views; **Save and install** writes
-  `enabled: true`, **Save, keep paused** writes `false`, and a New job whose schedule is Manual has a single **Save** (`enabled: true`; nothing installs
-  either way). Delete confirms inside it; a file changed on disk while it is open shows `on disk changed` and refuses Save until reloaded.
+  reads `edit in File`. File is the raw textarea. The text is validated on each keystroke (debounced) in both views; a New job's **Save and install**
+  writes `enabled: true` and **Save, keep paused** writes `false`, a New job whose schedule is Manual has a single **Save** (`enabled: true`; nothing
+  installs either way), and an edit has one **Save and reconcile**, which writes the text as it stands.
+  Delete confirms inside it; a file changed on disk while it is open shows `on disk changed` and refuses Save until reloaded.
 - **Run now:** `RunNowPopover` lists the job's pins with each one's last outcome (a sheet on a phone); a step's `run again` is `/run` with `only: [repo]`.
 
 Write controls render only for the owner. They stay drawn but disabled when the network is read-only or the Answer token is missing, with the reason in
@@ -351,5 +353,5 @@ All class names are `.rtn-` prefixed and colours are theme tokens.
     - client/src/lib/routines.ts
     - client/src/lib/deepLink.ts
   kind: subsystem
-  verified: 55ae263c1c834e6d8c942b91f0100e8d7508107e
+  verified: 24f8d773dd459e02b1e4ef4a093aed285939555c
 -->
