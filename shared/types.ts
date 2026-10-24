@@ -66,8 +66,9 @@ export interface Session {
    */
   projectPath: string | null;
   /**
-   * Name of the main checkout when `projectPath` is a linked git worktree (`zen-joliot-19719c` → `backlog-manager`), else null. Display only: `project`
-   * stays the worktree folder, because the project filter, pinned projects and the chat drawer key on it. See `server/lib/worktree-repo.ts`.
+   * Name of the main checkout when `projectPath` is a linked git worktree (`zen-joliot-19719c` → `backlog-manager`), else null. `project` stays the
+   * worktree folder, because pinned projects and the chat drawer key on it; the Sessions project filter files the row under `repo ?? project` instead
+   * (`filterProjectOf`), so a worktree comes with its repo's chip. See `server/lib/worktree-repo.ts`.
    */
   repo: string | null;
   /** User-set custom title from Claude Code (custom-title record); null when unnamed. */
@@ -2001,9 +2002,10 @@ export interface SessionsResponse {
   totals: Totals;
   sessions: Session[];
   /**
-   * Every project with a transcript in the lookback window, sorted — what the Sessions toolbar's project picker offers. A superset of the projects in
-   * `sessions`: with `?project=` set, `sessions` holds only the chosen ones, and the picker still has to offer the rest. Absent on the error snapshot,
-   * where the client falls back to the projects of the rows it has.
+   * Every project with a transcript in the lookback window, sorted — what the Sessions toolbar's project picker offers. A linked worktree is listed
+   * under its repo, and a dir Claude made for itself (scratchpad, scratch workspace, `~/.claude`) not at all (`scan.ts` `pickerProjectOf`). A superset
+   * of the projects in `sessions`: with `?project=` set, `sessions` holds only the chosen ones, and the picker still has to offer the rest. Absent on
+   * the error snapshot, where the client falls back to the projects of the rows it has.
    */
   projects?: string[];
   /**

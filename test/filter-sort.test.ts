@@ -37,7 +37,7 @@ function sess(p: Partial<Session>): Session {
     id: p.id ?? p.project ?? 'id',
     project: p.project ?? 'proj',
     projectPath: null,
-    repo: null,
+    repo: p.repo ?? null,
     sessionName: p.sessionName ?? null,
     gitBranch: null,
     model: 'claude-opus-4-8',
@@ -85,6 +85,17 @@ export function run(): number {
     assert.strictEqual(out.length, 2);
     assert.strictEqual(out[0].project, 'new'); // newest first
     assert.strictEqual(out[1].project, 'old');
+  })) p++; else f++;
+
+  if (test('project filter: a worktree session files under its repo, not its own folder', () => {
+    const rows = [
+      sess({ id: 'main', project: 'dash' }),
+      sess({ id: 'wt', project: 'wt-1a2b3c', repo: 'dash' }),
+      sess({ id: 'other', project: 'other' })
+    ];
+    assert.deepStrictEqual(applyView(rows, view({ projects: ['dash'] }), NOW).map(s => s.id).sort(), ['main', 'wt']);
+    assert.deepStrictEqual(applyView(rows, view({ projects: ['wt-1a2b3c'] }), NOW).map(s => s.id), [], 'the folder name is no chip');
+    assert.deepStrictEqual(distinctProjects(rows), ['dash', 'other']);
   })) p++; else f++;
 
   if (test('status filter: keeps only matching', () => {
