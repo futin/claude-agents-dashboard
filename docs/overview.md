@@ -84,6 +84,7 @@ remote-answer switch on, a **gate-only write** needs the gate alone ([who may wr
 | `POST /api/sessions/:id/answer` | deliver a remote answer (session write path — answer) |
 | `POST /api/questions/wait` | the hook's held-open wait (session write path — answer) |
 | `GET /api/sessions/:id/plan` | pending proposed plan, if any |
+| `GET /api/sessions/:id/pr` | the PR this session created, with live `gh` status |
 | `POST /api/sessions/:id/plan-answer` | send a plan back for revision (session write path — plan) |
 | `POST /api/plans/wait` | the plan hook's held-open wait (session write path — plan) |
 | `GET /api/sessions/:id/message` | pending reply window, if any |

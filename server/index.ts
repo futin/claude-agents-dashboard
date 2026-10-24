@@ -42,7 +42,7 @@ import {
   serveConfigsIndex, serveConfigsProject, serveConfigsFile,
   serveAnalytics, serveHealth, serveDismiss, serveQuestionWait, serveSessionQuestion, serveSessionAnswer,
   serveRemoteAnswerToggle, servePermissionNotify,
-  servePlanWait, serveSessionPlan, serveSessionPlanAnswer,
+  servePlanWait, serveSessionPlan, serveSessionPlanAnswer, serveSessionPr,
   serveMessageWait, serveSessionMessage, serveSessionMessageAnswer,
   serveSettingsRead, serveSettingsWrite, servePinsRead, servePinsWrite, servePinsOrder, serveGitStats, serveGitFetch, serveGitQuick, serveCodegraph, serveCodegraphRun,
   serveNotifyEvent, serveNotifyTest,
@@ -438,6 +438,12 @@ export function createRequestListener(config: Config): http.RequestListener {
       const id = decodePath(plan[1]);
       if (id === null) return badRequest(res);
       return void serveSessionPlan(id, res);
+    }
+    const pr = u.pathname.match(/^\/api\/sessions\/([^/]+)\/pr$/);
+    if (pr) {
+      const id = decodePath(pr[1]);
+      if (id === null) return badRequest(res);
+      return void serveSessionPr(id, res);
     }
     const planAnswer = u.pathname.match(/^\/api\/sessions\/([^/]+)\/plan-answer$/);
     if (planAnswer) {
