@@ -1,6 +1,6 @@
 import assert from 'node:assert';
 
-import { describeCron, lastBefore, nextAfter, parseCron, toCalendarIntervals } from '../shared/cron.js';
+import { describeCron, isManualCron, lastBefore, nextAfter, parseCron, toCalendarIntervals } from '../shared/cron.js';
 import type { Cron } from '../shared/cron.js';
 
 function test(name: string, fn: () => void): boolean {
@@ -34,6 +34,13 @@ const iso = (d: Date | null): string | null => (d === null ? null : d.toISOStrin
 export function run(): number {
   console.log('\n=== cron.ts ===\n');
   let p = 0, f = 0;
+
+  if (test('isManualCron: true only for the literal "manual" after trimming; case-sensitive, and a cron is not manual', () => {
+    assert.strictEqual(isManualCron('manual'), true);
+    assert.strictEqual(isManualCron(' manual '), true);
+    assert.strictEqual(isManualCron('Manual'), false);
+    assert.strictEqual(isManualCron('0 9 * * *'), false);
+  })) p++; else f++;
 
   if (test('parseCron: "0 22 * * *" is ok with single minute and hour', () => {
     const c = must('0 22 * * *');
@@ -220,10 +227,38 @@ export function run(): number {
     assert.strictEqual(describeCron(must('0 9 21 * *')), '21st of month 09:00');
   })) p++; else f++;
 
-  if (test('describeCron: anything else is the expression itself, whitespace-normalised', () => {
-    assert.strictEqual(describeCron(must('*/15 * * * *')), '*/15 * * * *');
-    assert.strictEqual(describeCron(must('0  9   * *  1,3')), '0 9 * * 1,3');
-    assert.strictEqual(describeCron(must('0 9 1 6 *')), '0 9 1 6 *');
+  if (test('describeCron: steps, ranges and lists read in words', () => {
+    const pairs: Array<[string, string]> = [
+      ['*/15 9-17 * * 1-5', 'Every 15 minutes, 09:00–17:45, Mon–Fri'],
+      ['*/30 9-18 * * 1-5', 'Every 30 minutes, 09:00–18:30, Mon–Fri'],
+      ['*/15 * * * *', 'Every 15 minutes'],
+      ['0-59/15 * * * *', 'Every 15 minutes'],
+      ['*/7 * * * *', 'Every 7 minutes'],
+      ['* * * * *', 'Every minute'],
+      ['* 9-17 * * *', 'Every minute, 09:00–17:59'],
+      ['* 9 * * *', 'Every minute, 09:00–09:59'],
+      ['*/15 9 * * *', 'Every 15 minutes, 09:00–09:45'],
+      ['25 * * * *', 'Every hour at :25'],
+      ['25 */2 * * *', 'Every 2h at :25'],
+      ['0 9-17 * * *', 'Every hour 09:00–17:00'],
+      ['0 10-18/2 * * *', 'Every 2h 10:00–18:00'],
+      ['30 1,4,7,10,13 * * *', 'Every 3h 01:30–13:30'],
+      ['0 9,13,17,21 * * *', '09:00, 13:00, 17:00, 21:00'],
+      ['0 9,13,17 * * *', '09:00, 13:00, 17:00'],
+      ['0  9   * *  1,3', '09:00, Mon/Wed'],
+      ['0 9 * * 1,3,5', '09:00, Mon/Wed/Fri'],
+      ['0 9 1 6 *', '09:00, 1st of month, Jun'],
+      ['0 9 1,15 * *', '09:00, 1st/15th of month'],
+      ['0 9 1-7 * *', '09:00, 1st–7th of month'],
+      ['0 9 * 6-8 1-5', '09:00, Mon–Fri, Jun–Aug'],
+      ['0 9 * 1,4,7,10 *', '09:00, Jan/Apr/Jul/Oct'],
+    ];
+    for (const [src, words] of pairs) assert.strictEqual(describeCron(must(src)), words, src);
+  })) p++; else f++;
+
+  if (test('describeCron: what the rules cannot phrase is the whitespace-normalised source', () => {
+    for (const src of ['0 9 1 * 1', '5,35 9 * * *', '*/15 */2 * * *', '0 1,2,5,7,9 * * *']) assert.strictEqual(describeCron(must(src)), src, src);
+    assert.strictEqual(describeCron(must('0   9 1  * 1')), '0 9 1 * 1');
   })) p++; else f++;
 
   // New York falls back 2026-11-01: 01:00 EDT = 05:00Z, then 01:00 EST = 06:00Z, so 01:45 happens at 05:45Z and again at 06:45Z.

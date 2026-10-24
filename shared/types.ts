@@ -2040,7 +2040,7 @@ export interface SessionsResponse {
 export interface RoutineJob {
   /** The filename without `.md`; also the launchd label suffix and the log key. */
   name: string;
-  /** Five-field cron, local time of the machine that runs it. */
+  /** Five-field cron or `manual`, local time of the machine that runs it. */
   cron: string;
   machines: ('mac' | 'wsl')[];
   run: 'shell' | 'claude';

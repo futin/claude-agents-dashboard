@@ -71,13 +71,13 @@ import {
   probeSpawn, stopSession, stopStates
 } from './lib/spawn.js';
 import { staleEnvKeys, toPosInt, type Config } from './lib/config.js';
-import { describeCron, nextAfter, parseCron } from '../shared/cron.js';
+import { describeCron, isManualCron, nextAfter, parseCron } from '../shared/cron.js';
 import { checkPins, parseJob, serializeEnabled } from '../shared/routine-file.js';
 import type { JobError, PinSnapshot } from '../shared/routine-file.js';
 import { foldForPush, ownerStatus, runsReader } from './lib/routine-boot.js';
 import { machineName, routineDirs } from './lib/routine-config.js';
 import { computeStats } from './lib/routine-log.js';
-import { applyReconcile, lastReconcile, planReconcile } from './lib/routine-reconcile.js';
+import { applyReconcile, lastReconcile, planReconcile, scheduled } from './lib/routine-reconcile.js';
 import { runJob, stopJob } from './lib/routine-run.js';
 import { RoutineStoreError, deleteJob, isOwner, readJobs, writeJob, writePinsSnapshot } from './lib/routine-store.js';
 import type {
@@ -1956,7 +1956,7 @@ function routineSummary(job: RoutineJob): string {
   const where = job.foreach === 'pinned' ? 'every pinned repo'
     : Array.isArray(job.foreach) ? `${job.foreach.length} repo${job.foreach.length === 1 ? '' : 's'}`
       : job.cwd ?? 'the routines folder\'s parent';
-  return [when, job.run, where, job.machines.join(' + '), job.enabled ? null : 'paused'].filter(Boolean).join(' · ');
+  return [when, job.run, where, job.machines.join(' + '), job.enabled || isManualCron(job.cron) ? null : 'paused'].filter(Boolean).join(' · ');
 }
 
 /** Whether the OS holds a job for `name`, read off a planned report. A bare report (not owner, no plugin, bad machine) knows nothing: false. */
@@ -1991,7 +1991,7 @@ export async function serveRoutines(config: Config, res: ServerResponse): Promis
     const now = new Date();
     const jobs: RoutineJobRow[] = stored.map(s => {
       const onThisMachine = s.job?.machines.includes(machine) ?? false;
-      const desired = s.job !== null && s.job.enabled && onThisMachine;
+      const desired = s.job !== null && scheduled(s.job) && onThisMachine;
       return {
         ...s,
         onThisMachine,

@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 
 import type { RoutineJobRow } from '../../../../shared/types';
-import { describeCron, parseCron } from '../../../../shared/cron';
-import { chipClass, dotTone, jobPins, rowText, splitNext, withLate } from '../../lib/routines';
+import { describeCron, isManualCron, parseCron } from '../../../../shared/cron';
+import { chipClass, dotTone, jobPins, pausedLook, rowText, splitNext, withLate } from '../../lib/routines';
 import Chevron from '../Chevron';
 import type { RoutineCtl } from './ctl';
 import JobFold from './JobFold';
@@ -59,7 +59,7 @@ function Row({ row, ctl, folded, onFold, menu, setMenu }: {
   const { lastLine, nextLine, pill } = rowText(row, ctl.now);
   const line = withLate(lastLine, !row.running && row.last?.late === true);
   const [day, clock] = splitNext(nextLine);
-  const dot = dotTone(pill, job?.enabled ?? true);
+  const dot = dotTone(pill, !pausedLook(job));
   const runnable = ctl.owner && row.onThisMachine && job !== null;
   const busy = ctl.busy === `run:${row.name}`;
   const actRef = useRef<HTMLSpanElement>(null);
@@ -83,7 +83,8 @@ function Row({ row, ctl, folded, onFold, menu, setMenu }: {
   const runBtn = runnable && (row.running
     ? <button type="button" className="rtn-btn rtn-sm" disabled={ctl.locked || busy} onClick={() => ctl.stop(row.name)}>Stop</button>
     : <button type="button" className="rtn-btn rtn-sm" disabled={ctl.locked || busy} onClick={() => ctl.runNow(row.name)}>Run now</button>);
-  const toggle = ctl.owner && job && (
+  // A manual job is never installed, so an on/off switch would promise something the file cannot do.
+  const toggle = ctl.owner && job && !isManualCron(job.cron) && (
     <button type="button" role="switch" aria-checked={job.enabled} aria-label={job.enabled ? `Pause ${row.name}` : `Resume ${row.name}`}
       className={`rtn-tog${job.enabled ? ' on' : ''}`} disabled={ctl.locked || ctl.busy === `toggle:${row.name}`}
       onClick={() => ctl.toggle(row.name, !job.enabled)} />
@@ -94,7 +95,7 @@ function Row({ row, ctl, folded, onFold, menu, setMenu }: {
       <div className={`rtn-ledger${folded ? ' rtn-folded' : ''}`} onClick={onFold}>
         <span className={`rtn-dot ${dot}`} />
         <div className="rtn-cell">
-          <button type="button" className={`rtn-name${job?.enabled === false ? ' rtn-muted' : ''}`} aria-expanded={folded} onClick={e => { e.stopPropagation(); onFold(); }}>
+          <button type="button" className={`rtn-name${pausedLook(job) ? ' rtn-muted' : ''}`} aria-expanded={folded} onClick={e => { e.stopPropagation(); onFold(); }}>
             {row.name}
           </button>
           <div className="rtn-sub">

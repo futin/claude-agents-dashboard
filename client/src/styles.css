@@ -3390,6 +3390,35 @@ button.chip[aria-pressed="true"]{color:var(--ink);background:var(--strip-hi)}
 .rtn-vmsg.warn{color:var(--amber-ink);background:var(--amber-tint)}
 .rtn-dfoot{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:14px}
 .rtn-confirm{margin-top:4px}
+/* The drawer's Form view (spec §Rows, the routine-form mock): one summary row per setting, the opened one showing its control. The opened control wraps
+   rather than scrolling sideways on a phone; the wrap is scoped under `.rtn-f-ctl` so the app-wide `.seg` keeps its one line everywhere else. */
+.rtn-f-head{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.rtn-f-rows{border:1px solid var(--hairline2);border-radius:12px;overflow:hidden;background:var(--strip)}
+.rtn-f-ar{border-top:1px solid var(--hairline)}
+.rtn-f-ar:first-child{border-top:0}
+.rtn-f-ar.open{background:var(--strip-hi)}
+.rtn-f-arh{display:flex;align-items:center;gap:10px;padding:11px 14px;width:100%;background:none;border:0;font-family:var(--font);color:var(--ink);cursor:pointer;text-align:left}
+.rtn-f-arh .chev{color:var(--ink3)}
+.rtn-f-k{flex:0 0 88px;font-size:13px;color:var(--ink2)}
+.rtn-f-val{flex:1;min-width:0;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rtn-f-val.dim{color:var(--ink3)}
+.rtn-f-val.err{color:var(--red)}
+.rtn-f-arb{padding:2px 14px 14px;min-width:0}
+.rtn-f-ctl .seg{flex-wrap:wrap;max-width:100%}
+.rtn-f-ctl button:disabled{cursor:default}
+.rtn-f-ctl .rtn-f-last,.rtn-f-two .rtn-field{margin:0}
+.rtn-f-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:10px;min-width:0}
+.rtn-f-row.rtn-f-tight{margin-top:0}
+.rtn-f-at{font-size:13px;color:var(--ink2)}
+.rtn-f-grow{flex:1 1 220px}
+.rtn-f-time{flex:0 1 150px}
+.rtn-f-num{flex:0 1 90px}
+.rtn-f-two{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.rtn-f-hint{font-size:12px;color:var(--ink3);margin-top:8px;line-height:1.5}
+.rtn-f-hint b{color:var(--ink2);font-weight:500}
+.rtn-f-here{font-size:10px;letter-spacing:.05em;text-transform:uppercase;color:var(--ink3);margin-left:4px}
+.rtn-pick.rtn-f-ro{cursor:default;border-style:dashed}
+.rtn-pick.rtn-f-add{border-style:dashed;color:var(--ink3)}
 
 .rtn-view .rtn-hide{display:none}
 @media (min-width:640px){

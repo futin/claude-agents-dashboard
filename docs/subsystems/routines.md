@@ -69,7 +69,7 @@ timeout: 30m
 
 | Key | Meaning |
 |---|---|
-| `cron` | five fields, local time of the machine that runs it |
+| `cron` | five fields, local time of the machine that runs it, or `manual` (never installed; Run now only) |
 | `machines` | `[mac]`, `[wsl]` or both; the job installs only where it is named |
 | `run` | `shell` (the body's first fenced `bash` block, run as `bash -e <tmpfile>`) or `claude` (the body is the prompt; one line starting with `/` is a skill) |
 | `foreach` | absent: one step in `cwd`; `pinned`: one sequential step per pinned repo; `[a, b]`: only those pins, by name (`dirName` when two pins share a basename) |
@@ -115,8 +115,8 @@ the runs watcher that seeds and folds the log for pushes.
 
 ## Reconcile: files in, OS jobs out
 
-`routine-reconcile.ts` plans a pure diff and applies it idempotently. **Desired** is every valid file with `enabled: true` whose `machines` names this
-machine. **Installed** is, on mac, every plist under `~/Library/LaunchAgents/` labelled `com.claude-dashboard.routine.*` that `launchctl print
+`routine-reconcile.ts` plans a pure diff and applies it idempotently. **Desired** is every valid file with `enabled: true` and a `cron` other than `manual` whose `machines` names
+this machine (the plan's removal reason for a manual file is `manual`, checked before `disabled`). **Installed** is, on mac, every plist under `~/Library/LaunchAgents/` labelled `com.claude-dashboard.routine.*` that `launchctl print
 gui/<uid>/<label>` says is loaded (exit 0 loaded; 3 and 113 mean not loaded); on WSL, every line between the two marker comments of the user's crontab:
 
 ```
@@ -290,8 +290,13 @@ line under the toolbar, one `busy` key so only the clicked control greys out, an
   which re-plans on the server, and closes the plan; **Cancel** closes it. Apply is disabled when only `pending` changes are planned.
 - **Runs:** `RunsList`, grouped by day, filtered by outcome, runner and job; a fan-out run is one row with its steps folded, failed steps open. `SessionLink`
   fetches the row and opens the ChatDrawer, and its failure shows beside the link that was clicked.
-- **Drawer:** `JobDrawer` validates on each keystroke (debounced) through `/validate`; **Save and install** writes `enabled: true`, **Save, keep paused**
-  writes `false`; Delete confirms inside it; a file changed on disk while it is open shows `on disk changed` and refuses Save until reloaded.
+- **Drawer:** `JobDrawer` shows one text two ways, switched by a `Form | File` seg in its header (Form by default). Form is `JobRows`: one summary row per
+  setting the job's `run:` kind shows (Schedule, Machines, Repos, Script or Prompt, Model, Permission, Limits, Tools), one opened at a time, each control
+  writing only the lines its field owns through the registry in `client/src/lib/routineForm.ts` (Schedule's six presets live in `ScheduleControl`). A
+  `/validate` error shows inside the row that owns its line and turns that row's summary red; the rest show under the rows. A value the form cannot show
+  reads `edit in File`. File is the raw textarea. The text is validated on each keystroke (debounced) in both views; **Save and install** writes
+  `enabled: true`, **Save, keep paused** writes `false`, and a New job whose schedule is Manual has a single **Save** (`enabled: true`; nothing installs
+  either way). Delete confirms inside it; a file changed on disk while it is open shows `on disk changed` and refuses Save until reloaded.
 - **Run now:** `RunNowPopover` lists the job's pins with each one's last outcome (a sheet on a phone); a step's `run again` is `/run` with `only: [repo]`.
 
 Write controls render only for the owner. They stay drawn but disabled when the network is read-only or the Answer token is missing, with the reason in

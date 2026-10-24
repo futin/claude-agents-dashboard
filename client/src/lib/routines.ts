@@ -5,8 +5,9 @@
  * Everything takes `now` and formats in local time with fixed English names, so the output is the same in every TZ and locale a test runs under (the
  * dashboard shows the clock of the machine the job runs on, which is the browser's in the single-machine case this page is built for).
  */
+import { isManualCron } from '../../../shared/cron';
 import { scalarEnd, writeFrontmatterLine } from '../../../shared/frontmatter';
-import type { ReconcileChange, RoutineJobRow, RoutineRun, RoutineStats, RoutineStep, RoutinesResponse } from '../../../shared/types';
+import type { ReconcileChange, RoutineJob, RoutineJobRow, RoutineRun, RoutineStats, RoutineStep, RoutinesResponse } from '../../../shared/types';
 import { READ_ONLY_TEXT, refusalKind } from './writeRefusal';
 
 /** The chip colours a pill may take; `run` is the cyan "in flight" one the mock draws, `dim` the dashed one. */
@@ -85,7 +86,7 @@ function whenText(at: Date, now: Date): string {
 }
 
 /** When the next fire is: `today 22:00`, `tomorrow 07:00`, `Nov 1 09:30` (a stack of two short lines in the mock, one ellipsizable line here). */
-function nextText(at: Date, now: Date): string {
+export function nextText(at: Date, now: Date): string {
   const ahead = dayDiff(now, at);
   const time = `${String(at.getHours()).padStart(2, '0')}:${String(at.getMinutes()).padStart(2, '0')}`;
   if (ahead <= 0) return `today ${time}`;
@@ -119,12 +120,12 @@ function runningPill(run: RoutineRun): Pill {
 /**
  * What one ledger row says in its three stacked cells. `lastLine` goes under the pill (it is empty when there is nothing to say), `nextLine` is the Next
  * column. A job that does not name this machine reads `<machines> only` and has no next line; a paused one reads `paused` there; a file that does not parse
- * reads `invalid` so the row still draws.
+ * reads `invalid` so the row still draws. A `manual` job never reads `paused`: it has no clock to pause.
  */
 export function rowText(job: RoutineJobRow, now: Date): { lastLine: string; nextLine: string; pill: Pill } {
   const parsed = job.job;
   if (parsed === null) return { lastLine: '', nextLine: '—', pill: { text: 'invalid', tone: 'red' } };
-  const nextLine = !parsed.enabled ? 'paused' : job.nextAt !== null && Number.isFinite(Date.parse(job.nextAt)) ? nextText(new Date(job.nextAt), now) : '—';
+  const nextLine = isManualCron(parsed.cron) ? 'manual' : !parsed.enabled ? 'paused' : job.nextAt !== null && Number.isFinite(Date.parse(job.nextAt)) ? nextText(new Date(job.nextAt), now) : '—';
 
   if (job.running) {
     const run = job.running;
@@ -517,6 +518,11 @@ export function reconcilePreview(body: unknown): ReconcilePreview | null {
     error: typeof error === 'string' && error !== '' ? error : null,
     canApply: acts > 0
   };
+}
+
+/** Whether the ledger draws a job as paused: disabled, and not manual (a manual job is never installed, so `enabled` changes nothing about it). */
+export function pausedLook(job: RoutineJob | null): boolean {
+  return job !== null && !job.enabled && !isManualCron(job.cron);
 }
 
 /** The ledger's and the Runs page's status dot, read off the row's pill: a paused job is `off` whatever its last run said. */

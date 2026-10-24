@@ -6,10 +6,10 @@ import { useAnswerToken } from '../../hooks/useAnswerToken';
 import { useBackClose } from '../../hooks/useBackClose';
 import type { RoutineWriteControl } from '../../hooks/useRoutineWrite';
 import { authHeaders } from '../../lib/answerToken';
-import {
-  editsWithoutAsking, jobPins, jobTemplate, launchdLabel, nameProblem, readForeach, setRepos, type ForeachMode, type JobKind
-} from '../../lib/routines';
+import { FIELDS, UNREADABLE } from '../../lib/routineForm';
+import { editsWithoutAsking, jobTemplate, launchdLabel, nameProblem, type JobKind } from '../../lib/routines';
 import type { RoutineCtl } from './ctl';
+import JobRows from './JobRows';
 
 const VALIDATE_MS = 300;
 
@@ -20,8 +20,8 @@ const KINDS: Array<{ kind: JobKind; title: string; line: string; small: string }
 ];
 
 /**
- * New job and Edit job (spec §UI, screens 4–5): one drawer, the file is the form. The kind picker only fills a template; the Repos helper reads the
- * `foreach:` line on every change and rewrites only that line (and `cwd:`) when used. The text is checked against `/validate` as it is typed. An edit
+ * New job and Edit job (spec §UI, screens 4–5): one drawer over one text, shown as Form (`JobRows`, a summary row per setting, each control rewriting
+ * only its own lines) or File (the raw textarea). The kind picker only fills a template. The text is checked against `/validate` as it is typed. An edit
  * whose file changed on disk since it was loaded (the row's `mtimeMs` moved) cannot be saved until it is reloaded, so a save never overwrites an edit
  * made elsewhere. A non-owner sees the file read-only.
  */
@@ -45,6 +45,7 @@ export default function JobDrawer({ mode, row, confirmDelete, existing, ctl, sen
   const [failure, setFailure] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [asking, setAsking] = useState(confirmDelete);
+  const [view, setView] = useState<'form' | 'file'>('form');
   const seq = useRef(0);
   const readOnly = !ctl.owner;
   const fileName = mode === 'edit' && row ? row.name : name;
@@ -83,15 +84,13 @@ export default function JobDrawer({ mode, row, confirmDelete, existing, ctl, sen
     return () => window.clearTimeout(timer);
   }, [text, fileName, loaded === null]);
 
-  const pinNames = jobPins('pinned', ctl.pins);
-  const repos = readForeach(text);
-  const picks = [...repos.picks, ...pinNames.filter(n => !repos.picks.includes(n))];
-  const setMode = (m: ForeachMode) => {
-    if (m === repos.mode) return;
-    // Pick starts from every pin, so switching from All pinned is a no-op in what runs until a chip is turned off.
-    setText(setRepos(text, m, m === 'pick' ? (repos.picks.length > 0 ? repos.picks : pinNames) : []));
-  };
-  const flipPick = (n: string) => setText(setRepos(text, 'pick', repos.picks.includes(n) ? repos.picks.filter(x => x !== n) : [...repos.picks, n]));
+  const edit = (next: string) => { setText(next); setServerErrors(null); };
+  const sched = FIELDS.schedule.read(text);
+  // A manual job installs nowhere, so New job's install-or-keep-paused choice means nothing for it: one Save, written enabled.
+  const manual = sched !== UNREADABLE && sched.preset === 'manual';
+  const reading = mode === 'edit' && loaded === null
+    ? <span className="rtn-dsub">{loadFailed ? 'Couldn’t read the file.' : 'Reading the file…'}</span>
+    : null;
 
   const nameErr = mode === 'new' ? nameProblem(name, existing) : null;
   const errors = serverErrors ?? check?.errors ?? [];
@@ -124,13 +123,22 @@ export default function JobDrawer({ mode, row, confirmDelete, existing, ctl, sen
   return (
     <div className="rtn-back" onClick={() => { if (!dirty || readOnly) onClose(); }}>
       <aside className="rtn-drawer" role="dialog" aria-label={title} onClick={e => e.stopPropagation()}>
-        <h3 className="rtn-dtitle">
-          {title}
-          {mode === 'edit' && row && <span className="rtn-muted">{row.name}.md</span>}
-          {mode === 'edit' && dirty && !readOnly && <span className="git-chip amber">unsaved</span>}
-          {diskChanged && <span className="git-chip rtn-red">on disk changed</span>}
-          {readOnly && <span className="git-chip dim">read-only</span>}
-        </h3>
+        <div className="rtn-f-head">
+          <h3 className="rtn-dtitle">
+            {title}
+            {mode === 'edit' && row && <span className="rtn-muted">{row.name}.md</span>}
+            {mode === 'edit' && dirty && !readOnly && <span className="git-chip amber">unsaved</span>}
+            {diskChanged && <span className="git-chip rtn-red">on disk changed</span>}
+            {readOnly && <span className="git-chip dim">read-only</span>}
+          </h3>
+          {!asking && (
+            <div className="seg rtn-sm" role="group" aria-label="View">
+              {(['form', 'file'] as const).map(v => (
+                <button key={v} type="button" aria-pressed={view === v} className={view === v ? 'on' : ''} onClick={() => setView(v)}>{v === 'form' ? 'Form' : 'File'}</button>
+              ))}
+            </div>
+          )}
+        </div>
         <div className="rtn-dsub">
           {mode === 'new'
             ? <>Saved to <code>{ctl.dir}</code></>
@@ -181,45 +189,28 @@ export default function JobDrawer({ mode, row, confirmDelete, existing, ctl, sen
                 {name !== '' && nameErr && <span className="rtn-vmsg err">{nameErr}</span>}
               </label>
             )}
-            {!readOnly && (
+            {view === 'form' ? (
               <div className="rtn-field">
-                <span className="rtn-label">Repos</span>
-                <div className="seg rtn-sm" role="group" aria-label="Repos">
-                  {([['all', ctl.phone ? 'All' : `All pinned (${pinNames.length})`], ['pick', 'Pick'], ['cwd', ctl.phone ? 'cwd' : 'Single cwd']] as const).map(([m, label]) => (
-                    <button key={m} type="button" aria-pressed={repos.mode === m} className={repos.mode === m ? 'on' : ''} onClick={() => setMode(m)}>{label}</button>
-                  ))}
-                </div>
-                {repos.mode === 'pick' && (
-                  <div className="rtn-picks">
-                    {picks.map(n => (
-                      <button key={n} type="button" aria-pressed={repos.picks.includes(n)} className={`rtn-pick${repos.picks.includes(n) ? ' on' : ''}`} onClick={() => flipPick(n)}>
-                        {n}
-                      </button>
-                    ))}
-                  </div>
-                )}
-                <div className="rtn-dsub rtn-hide">
-                  Writes the <code>foreach:</code> line below; a name not pinned on a machine is skipped there and noted in the run.
-                </div>
+                {reading ?? <JobRows key={`${kind}:${loaded?.mtimeMs ?? ''}`} text={text} onText={edit} errors={errors} readOnly={readOnly} ctl={ctl} onFile={() => setView('file')} />}
+                {errors.length === 0 && check?.summary && <span className="rtn-vmsg ok">Valid · {check.summary}</span>}
               </div>
-            )}
-            <label className="rtn-field">
-              <span className="rtn-label">File</span>
-              {mode === 'edit' && loaded === null
-                ? <span className="rtn-dsub">{loadFailed ? 'Couldn’t read the file.' : 'Reading the file…'}</span>
-                : (
+            ) : (
+              <label className="rtn-field">
+                <span className="rtn-label">File</span>
+                {reading ?? (
                   <textarea className="rtn-ta" value={text} readOnly={readOnly} spellCheck={false} autoCapitalize="off" autoCorrect="off" wrap="off"
                     rows={Math.min(24, Math.max(10, text.split('\n').length + 1))}
-                    onChange={e => { setText(e.target.value); setServerErrors(null); }} />
+                    onChange={e => edit(e.target.value)} />
                 )}
-              {errors.length > 0 && (
-                <span className="rtn-vmsg err">{errors.map(e => (e.line > 0 ? `line ${e.line}: ${e.message}` : e.message)).join(' · ')}</span>
-              )}
-              {errors.length === 0 && check?.summary && <span className="rtn-vmsg ok">Valid · {check.summary}</span>}
-              {editsWithoutAsking(text) && (
-                <span className="rtn-vmsg warn">permission-mode acceptEdits: the run can edit files in each repo without asking. bypassPermissions is refused here.</span>
-              )}
-            </label>
+                {errors.length > 0 && (
+                  <span className="rtn-vmsg err">{errors.map(e => (e.line > 0 ? `line ${e.line}: ${e.message}` : e.message)).join(' · ')}</span>
+                )}
+                {errors.length === 0 && check?.summary && <span className="rtn-vmsg ok">Valid · {check.summary}</span>}
+                {editsWithoutAsking(text) && (
+                  <span className="rtn-vmsg warn">permission-mode acceptEdits: the run can edit files in each repo without asking. bypassPermissions is refused here.</span>
+                )}
+              </label>
+            )}
             {diskChanged && (
               <div className="rtn-vmsg warn">
                 The file changed on disk since it was opened. Reload it to save; your edits here are dropped.{' '}
@@ -228,7 +219,10 @@ export default function JobDrawer({ mode, row, confirmDelete, existing, ctl, sen
             )}
             {failure && <div className="rtn-vmsg err">{failure}</div>}
             <div className="rtn-dfoot">
-              {!readOnly && mode === 'new' && (
+              {!readOnly && mode === 'new' && manual && (
+                <button type="button" className="rtn-btn rtn-primary" disabled={!canSave} onClick={() => { void save(true); }}>Save</button>
+              )}
+              {!readOnly && mode === 'new' && !manual && (
                 <>
                   <button type="button" className="rtn-btn rtn-primary" disabled={!canSave} onClick={() => { void save(true); }}>Save and install</button>
                   <button type="button" className="rtn-btn" disabled={!canSave} onClick={() => { void save(false); }}>{ctl.phone ? 'Keep paused' : 'Save, keep paused'}</button>
@@ -243,8 +237,12 @@ export default function JobDrawer({ mode, row, confirmDelete, existing, ctl, sen
             </div>
             {!readOnly && mode === 'new' && (
               <div className="rtn-dsub rtn-hide">
-                <b>Save and install</b> writes the file with <code>enabled: true</code> and reconciles. <b>Save, keep paused</b> writes <code>enabled: false</code>:
-                the row appears, nothing is installed, and Run now still works, so a new job can be tried by hand first.
+                {manual
+                  ? <><b>Save</b> writes the file with <code>enabled: true</code>. A manual job is never installed; it runs only through Run now.</>
+                  : <>
+                    <b>Save and install</b> writes the file with <code>enabled: true</code> and reconciles. <b>Save, keep paused</b> writes{' '}
+                    <code>enabled: false</code>: the row appears, nothing is installed, and Run now still works, so a new job can be tried by hand first.
+                  </>}
               </div>
             )}
           </>

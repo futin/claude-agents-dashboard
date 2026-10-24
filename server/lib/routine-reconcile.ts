@@ -10,7 +10,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-import { parseCron, toCalendarIntervals } from '../../shared/cron.js';
+import { isManualCron, parseCron, toCalendarIntervals } from '../../shared/cron.js';
 import type { CalendarInterval } from '../../shared/cron.js';
 import type { ReconcileChange, ReconcileReport, ReconcileState, RoutineJob } from '../../shared/types.js';
 import type { Config } from './config.js';
@@ -199,10 +199,16 @@ const now = (): string => new Date().toISOString();
 const bare = (state: ReconcileState, error: string | null = null): ReconcileReport => ({ state, changes: [], unchanged: 0, error, at: now() });
 const lastLine = (s: string): string => s.trim().split('\n').pop()?.trim() ?? '';
 
+/** Whether the job fires on a clock at all; `serveRoutines` asks the same question, so a ledger row and the plan cannot disagree about "desired". */
+export function scheduled(job: RoutineJob): boolean {
+  return job.enabled && !isManualCron(job.cron);
+}
+
 /** Why a file that exists is not desired on `machine`, or null when it is. */
 function notDesired(stored: StoredJob, machine: 'mac' | 'wsl', claudeBin: string): string | null {
   const job = stored.job;
   if (!job || stored.errors.length > 0) return 'invalid';
+  if (isManualCron(job.cron)) return 'manual';
   if (!job.enabled) return 'disabled';
   if (!job.machines.includes(machine)) return 'not this machine';
   if (job.run === 'claude' && claudeBin === '') return 'claude cli not configured';

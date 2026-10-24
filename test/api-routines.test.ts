@@ -16,11 +16,12 @@ import { overrideOpenFolder } from '../server/lib/open-folder.js';
 import type { ChildProcess } from 'node:child_process';
 import { EventEmitter } from 'node:events';
 import { resetRoutineBoot, setRoutineProbe } from '../server/lib/routine-boot.js';
-import { PLUGIN_ID, setReconcileHost, setRoutineRunner } from '../server/lib/routine-reconcile.js';
+import { PLUGIN_ID, scheduled, setReconcileHost, setRoutineRunner } from '../server/lib/routine-reconcile.js';
 import { claimOwner, releaseOwner } from '../server/lib/routine-store.js';
 import type { Probe } from '../server/lib/routine-store.js';
 import { resetSettings, setPinned } from '../server/lib/settings.js';
 import { setSpawner } from '../server/lib/spawn.js';
+import { parseJob } from '../shared/routine-file.js';
 import type { ReconcileChange, ReconcileReport, RoutineFile, RoutineRunsResponse, RoutinesResponse, Session } from '../shared/types.js';
 
 const ENV = 'SHOW_USAGE=false\nSKIP_PROC_SCAN=true\nROUTINES_DIR=~/routines\nROUTINE_MACHINE=mac\nNTFY_TOPIC=\n';
@@ -197,6 +198,9 @@ export async function run(): Promise<number> {
     assert.strictEqual(installedFrom(one('pending', 'no claude'), 'x', true), false);
     assert.strictEqual(installedFrom(report('in-sync', [], 1), 'x', true), true, 'no change for a wanted job: it is installed');
     assert.strictEqual(installedFrom(report('in-sync', [], 1), 'x', false), false);
+    const manual = parseJob('x', ['---', 'cron: manual', 'machines: [mac]', 'run: shell', '---', '```bash', 'true', '```', ''].join('\n')).job;
+    assert.ok(manual);
+    assert.strictEqual(installedFrom(report('in-sync', [], 1), 'x', scheduled(manual)), false, 'a manual job is never wanted, so never installed');
     for (const bare of ['not-owner', 'no-plugin', 'bad-machine'] as const) assert.strictEqual(installedFrom(report(bare), 'x', true), false, bare);
     assert.strictEqual(installedFrom(report('failed'), 'x', true), false, 'failed before planning');
     assert.strictEqual(installedFrom(report('failed', [], 2), 'x', true), true, 'failed applying, but planned');
@@ -315,6 +319,20 @@ export async function run(): Promise<number> {
       assert.strictEqual(v.status, 200);
       assert.match(JSON.stringify(v.json?.errors), /repo is ambiguous/);
       assert.strictEqual(v.json?.summary, null);
+    });
+  }));
+
+  tally(await testAsync('/validate of a manual job summarises "manual · shell ·" and never says paused, enabled or not', async () => {
+    await withRoutines('', false, async c => {
+      const text = (enabled: boolean) => ['---', 'cron: manual', 'machines: [mac]', 'run: shell', `enabled: ${enabled}`, '---', '```bash', 'echo hi', '```', ''].join('\n');
+      for (const enabled of [true, false]) {
+        const r = await send(c.h, 'POST', '/api/routines/validate', { text: text(enabled) }, UNTRUSTED);
+        assert.deepStrictEqual(r.json?.errors, [], r.raw);
+        assert.match(String(r.json?.summary), /^manual · shell ·/);
+        assert.ok(!String(r.json?.summary).includes('paused'), String(r.json?.summary));
+      }
+      const scheduledOff = await send(c.h, 'POST', '/api/routines/validate', { text: job({ run: 'shell', enabled: false }) }, UNTRUSTED);
+      assert.match(String(scheduledOff.json?.summary), /paused/);
     });
   }));
 
