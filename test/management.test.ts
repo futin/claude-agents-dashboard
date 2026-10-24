@@ -707,17 +707,33 @@ export async function run(): Promise<number> {
     for (const l of links) assert.strictEqual(await mgmt.readServableFile(l, allowed), null);
   }));
 
-  tally(await test('project scope: regular CLAUDE.md/settings and a symlink staying inside the project are still servable (#289 mirror)', async () => {
+  tally(await test('project scope: a symlink to a secret inside the project (CLAUDE.md -> .env) is not servable (#289)', async () => {
     const proj = makeProject();
-    put(proj, 'AGENTS.md', '# agents');
-    fs.symlinkSync('AGENTS.md', path.join(proj, 'CLAUDE.md'));
-    const inner = put(proj, '.claude/CLAUDE.md', '# inner');
-    const settings = put(proj, '.claude/settings.json', '{}');
+    put(proj, '.env', 'API_KEY=hush');
+    const link = path.join(proj, 'CLAUDE.md');
+    fs.symlinkSync('.env', link);
+    const script = path.join(proj, '.claude/hook.sh');
+    put(proj, '.claude/settings.json', JSON.stringify({ hooks: { Stop: [{ hooks: [{ type: 'command', command: script }] }] } }));
+    fs.symlinkSync('../.env', script);
     const allowed = await servableFor(proj);
-    assert.ok(allowed.has(path.join(proj, 'CLAUDE.md')));
+    assert.ok(!allowed.has(link));
+    assert.ok(!allowed.has(script));
+    assert.strictEqual(await mgmt.readServableFile(link, allowed), null);
+  }));
+
+  tally(await test('project scope: regular CLAUDE.md, .claude/CLAUDE.md and settings are still servable, under a project path that is itself a link (#289 mirror)', async () => {
+    const proj = makeProject();
+    // os.tmpdir() is under the /var -> /private/var link on macOS; make the link explicit so the case holds on every platform.
+    const via = path.join(makeProject(), 'via');
+    fs.symlinkSync(proj, via);
+    put(via, 'CLAUDE.md', '# outer');
+    const inner = put(via, '.claude/CLAUDE.md', '# inner');
+    const settings = put(via, '.claude/settings.json', '{}');
+    const allowed = await servableFor(via);
+    assert.ok(allowed.has(path.join(via, 'CLAUDE.md')));
     assert.ok(allowed.has(inner));
     assert.ok(allowed.has(settings));
-    assert.strictEqual((await mgmt.readServableFile(path.join(proj, 'CLAUDE.md'), allowed))!.content, '# agents');
+    assert.strictEqual((await mgmt.readServableFile(path.join(via, 'CLAUDE.md'), allowed))!.content, '# outer');
   }));
 
   tally(await test('project scope: a .claude dir symlinked outside the project contributes nothing servable (#289)', async () => {

@@ -494,17 +494,18 @@ export async function readGlobalScope(homeDir?: string): Promise<ScopeConfig> {
 }
 
 /**
- * A predicate true for paths whose real location is at or under `root`'s (#289). A project is somebody else's tree: a cloned repo can ship
- * `CLAUDE.md -> ~/.ssh/id_rsa`, or a `.claude` that links out, and whatever the project scanners emit becomes servable to LAN peers with no token.
- * Comparing realpaths rather than refusing every link keeps an in-repo `CLAUDE.md -> AGENTS.md` working. The global scope is never confined:
- * ~/.claude is the user's own, and a dotfiles setup links it out on purpose. A path or root that does not resolve is outside.
+ * A predicate true for paths under `root` reached through no symlink below it (#289): the path's realpath is exactly root's realpath joined with
+ * its lexical rel. A project is somebody else's tree: a cloned repo can ship `CLAUDE.md -> ~/.ssh/id_rsa`, a `.claude` that links out, or
+ * `CLAUDE.md -> .env`, a gitignored secret inside the repo itself, and whatever the project scanners emit becomes servable to LAN peers with no
+ * token. So every link is refused, an in-repo `CLAUDE.md -> AGENTS.md` included; only links above root (macOS's `/var`) are allowed. The global
+ * scope is never confined: ~/.claude is the user's own, and a dotfiles setup links it out on purpose. A path or root that does not resolve fails.
  */
-async function insideRealRoot(root: string): Promise<(p: string) => Promise<boolean>> {
+async function unlinkedUnder(root: string): Promise<(p: string) => Promise<boolean>> {
   let real: string | null = null;
-  try { real = await fsp.realpath(root); } catch { /* nothing is inside a root that does not resolve */ }
+  try { real = await fsp.realpath(root); } catch { /* nothing is under a root that does not resolve */ }
   return async p => {
-    if (real === null) return false;
-    try { return isUnder(await fsp.realpath(p), real); } catch { return false; }
+    if (real === null || !isUnder(p, root)) return false;
+    try { return await fsp.realpath(p) === path.join(real, path.relative(root, p)); } catch { return false; }
   };
 }
 
@@ -525,8 +526,8 @@ export async function readProjectScope(projectPath: string, dirName?: string, ho
     settingsHooks(dir, 'project', [dir]),
     readClaudeJson(homeDir)
   ]);
-  // Everything read from the project tree is confined to it before it can become servable (#289). The memory store is not: it is under ~/.claude.
-  const inside = await insideRealRoot(projectPath);
+  // Everything read from the project tree is held to it, links refused, before it can become servable (#289). The memory store is not: it is under ~/.claude.
+  const inside = await unlinkedUnder(projectPath);
   const keep = async <T>(rows: T[], pathOf: (r: T) => string): Promise<T[]> => {
     const ok = await Promise.all(rows.map(r => inside(pathOf(r))));
     return rows.filter((_, i) => ok[i]);
