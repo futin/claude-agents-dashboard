@@ -22,7 +22,7 @@ without opening GitHub or the terminal.
 - **Below `md` (768px)** the card folds to one band line, like the Tasks fold: `PR #304 [Open] 3/4 checks · review required ▾`; tapping unfolds the rows.
 - **Merged / Closed** drop the three rows and show `into <base> · <relative time>` / `not merged · <relative time>` instead.
 - **Degrades to transcript-only** when `gh` is missing, signed out, times out, or the URL is not github.com: the card still shows `#<number>`, the title if
-  the transcript gave one, the `owner/repo`, the link, and one row `Status · unavailable · <short reason>`.
+  the transcript gave one, the `owner/repo`, the link, and one row **Status** (`unavailable · <short reason>`).
 
 ## Non-goals
 
@@ -43,8 +43,8 @@ without opening GitHub or the terminal.
   "launching a local program" exception in `.claude/CLAUDE.md`'s zero-deps rule. `test/outbound.test.ts` must stay green unchanged.
 - **The card never pushes or reflows the transcript.** It lives in the sidecar; the transcript column is untouched.
 - **No hardcoded colours in `styles.css`.** State pills and check bars use existing tokens (`--green`, `--green-tint`, `--magenta`, `--red`, `--mustard`, …);
-  a missing `--red-tint` / `--magenta-tint` is defined on `:root` as `color-mix(… var(--red) …)` like the existing tints, plus a Daylight line only if
-  Daylight overrides its siblings — never a literal.
+  a missing `--red-tint` / `--magenta-tint` is defined on `:root` as `color-mix(… var(--red) …)` like the existing tints, plus one Daylight line each,
+  since Daylight overrides the sibling tints (`styles.css:132-137`) — never a literal.
 
 ## Decided by the user
 
@@ -74,8 +74,8 @@ The PR a session **created** is the newest one of these, in transcript order:
 - Detection reads the transcript server-side, like `readSessionTasks` (`server/lib/tasks.ts`) folds tasks — incremental by byte offset, cached per file, so a
   re-read only scans what was appended.
 - A `gh pr create` that failed (non-zero exit, or no URL in its output) contributes nothing.
-- **Builder may widen** detection to the Desktop app's own PR tools: `mcp__ccd_pr__*` calls occur 43 times in this project's top-level transcripts
-  (2026-10-24). Read their real record shape from those transcripts before deciding; do not guess it.
+- **Builder may widen** detection to the Desktop app's own PR tools: `mcp__ccd_pr__bind_pr` occurs 43 times (`get_status` 80) in this project's top-level
+  transcripts (2026-10-25). Read their real record shape from those transcripts before deciding; do not guess it.
 
 ## How status is read
 
@@ -107,12 +107,13 @@ failure classifier reads.
   | `StatusContext` | `state` `SUCCESS` | passed |
   | `StatusContext` | `state` `PENDING` or `EXPECTED` | running |
   | `StatusContext` | `state` `FAILURE`, `ERROR`, or unknown | failed |
+  | any other `__typename` | — | excluded |
 - **Review** maps `reviewDecision`: `APPROVED` → Approved, `CHANGES_REQUESTED` → Changes requested, `REVIEW_REQUIRED` → Required, empty → Not requested.
 - **Merge** maps `mergeable`: `MERGEABLE` → No conflicts, `CONFLICTING` → Conflicts with `<base>`, `UNKNOWN` → `Checking…` (GitHub computes it lazily).
 - **Failure** (ENOENT, non-zero exit, timeout, unparsable JSON) yields a reason string for the fallback row: `gh not installed`, `gh not signed in` (stderr
   mentions auth / `gh auth login`), `timed out`, else `gh failed`. Failures cache for the short window too, so a missing `gh` isn't relaunched every poll.
 - Launching goes through the same child-process helper style as `server/lib/git-fetch.ts` (spawn, kill the group on timeout) with an injectable runner
-  for tests, as `git-fetch.ts` and `codegraph-store.ts` do.
+  for tests, as `git-fetch.ts` (`overrideFetchRunner`) and `codegraph.ts` (`overrideCodegraphRunner`) do.
 
 ## API
 
@@ -123,7 +124,7 @@ id → 400 `{ id, pr: null, error: true }`; any well-formed id, known or not →
 from "fetch failed" (`error: true`, keep the last card).
 
 **The handler awaits the `gh` read** (the shared in-flight promise, bounded by the ≈10s timeout) rather than answering before it lands, so there is no
-in-flight value in the payload. A cache hit answers at once. The hook skips a poll tick while its previous request is still pending, so a slow `gh` never
+in-flight value in the payload. A cache hit answers at once. The hook skips a poll tick while its previous request is still pending (unlike its siblings, so there is no pattern to copy), so a slow `gh` never
 stacks requests. Payload, added to `shared/types.ts` first:
 
 ```
@@ -188,7 +189,7 @@ The mockup's "Draft, checks failing" cell already follows the row rule; the `Che
 
 - `.claude/CLAUDE.md`: API field order is `shared/types.ts` → server producer → client consumer; ESM with `.js` suffixes in server imports; never hardcode a
   colour below the theme-token block; keep class names stable.
-- Add `lib/<file>.ts launches gh pr view` to the launched-programs sentence in `.claude/CLAUDE.md`'s zero-deps rule, and to `docs/overview.md`'s `lib/` map.
+- Add `lib/<file>.ts launches gh pr view with GH_NO_UPDATE_NOTIFIER=1 and GH_PROMPT_DISABLED=1 set` to the launched-programs sentence in `.claude/CLAUDE.md`'s zero-deps rule, and to `docs/overview.md`'s `lib/` map.
 - Docs: a new paragraph in `docs/subsystems/chat.md` (the sidecar section — where the card sits, what it reads, the fold) and the new route in
   `docs/overview.md`'s API table; `.claude/DESIGN.md` §8.6 gets one line pointing at the mockup.
 - Five themes: check the card in at least Daylight and one dark theme.
@@ -214,8 +215,7 @@ The mockup's "Draft, checks failing" cell already follows the row rule; the `Che
 
 - Exact cache windows and timeout, file and hook names, the exact `SessionPr` field names.
 - Whether detection lives in its own `server/lib/` module or inside the chat reader — own module preferred, as `tasks.ts` is.
-- Whether the `—` fallback title is the `--title` arg or `#<n>` alone when neither the arg nor `gh` gave one.
-- The relative-time wording on Merged / Closed.
+- What the title slot shows when neither the arg nor `gh` gave one: `—` or `#<n>` alone.
 
 ## Calls the author made (not discussed with the user)
 
