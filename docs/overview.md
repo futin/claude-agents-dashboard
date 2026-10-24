@@ -203,6 +203,8 @@ server/
   lib/agents.ts   whole-file subagent parser → AgentJob[]
   lib/agents-cache.ts  incremental byte-offset cache over agents.ts
   lib/tasks.ts    whole-file fold of the plan signals and TaskCreate/TaskUpdate → Session.tasks / taskPlan (plan wins), incremental by byte offset (the creates sit below the 256 KB tail)
+  lib/pr-detect.ts    the newest PR a session created: Claude Code's `gitOperation.pr` create, else a `gh pr create` result's last PR URL; never `pr-link`; incremental by byte offset
+  lib/pr-status.ts    a PR's live state for the chat PR card: launches `gh pr view --json`, folds checks/review/merge, caches per URL (20s busy or failed, 60s settled, forever once ended)
   lib/plan-progress.ts  pure half of plan progress: signals from one tool_use input, the plan file's `Task N:` headings, the composed rows
   lib/chat.ts     byte-offset paged chat history
   lib/usage.ts    account 5h/weekly limits from Anthropic (OAuth) — the other
