@@ -14,6 +14,7 @@ import { SUBAGENT_DIR } from './subagent-usage.js';
 import { refreshCwd } from './token-refresh.js';
 import { readSessionTasks } from './tasks.js';
 import { repoNameFor } from './worktree-repo.js';
+import { defaultClaudeRoots, isClaudeOwned } from './management.js';
 import { readSessionAnalyticsLog, lessonForSession } from './sessionAnalyticsLog.js';
 import type { SessionAnalyticsLesson } from './sessionAnalyticsLog.js';
 import type { Config } from './config.js';
@@ -84,10 +85,12 @@ interface ScanOptions {
    */
   stopStates?: ReadonlyMap<string, StopState> | null;
   /**
-   * Keep only sessions whose `project` is one of these names, chosen *before* the `maxSessions` cap — so a project with no session among the newest N
-   * overall still fills its rows. Omitted/null/empty ⇒ every project. `GET /api/sessions?project=…` passes it.
+   * Keep only sessions whose picker name ({@link pickerProjectOf}) is one of these, chosen *before* the `maxSessions` cap — so a project with no session
+   * among the newest N overall still fills its rows. Omitted/null/empty ⇒ every project. `GET /api/sessions?project=…` passes it.
    */
   projects?: ReadonlySet<string> | null;
+  /** Override the dirs Claude makes for itself (tests); undefined ⇒ `defaultClaudeRoots(homeDir)`. */
+  claudeRoots?: readonly string[];
 }
 
 /** Default transcripts root. */
@@ -655,6 +658,16 @@ function projectNameOf(cwd: string): string {
   return cwd.split('/').filter(Boolean).pop() || cwd;
 }
 
+/**
+ * The name the Sessions project picker files a cwd under, or null when it offers none: a linked worktree folds into its repo, so its sessions come with
+ * the repo's chip instead of a chip of their own, and a dir Claude made for itself (a scratchpad, a scratch workspace, `~/.claude`) has no chip at all —
+ * its sessions show only under "All projects". Must agree with the client's `filterProjectOf`.
+ */
+function pickerProjectOf(cwd: string, claudeRoots: readonly string[]): string | null {
+  if (isClaudeOwned(cwd, claudeRoots)) return null;
+  return repoNameFor(cwd) ?? projectNameOf(cwd);
+}
+
 /** Build the ranked session snapshot. */
 export function scanSessions(config: Partial<Config>, options: ScanOptions = {}): SessionsResponse {
   const cfg = config || {};
@@ -689,12 +702,16 @@ export function scanSessions(config: Partial<Config>, options: ScanOptions = {})
   // poll, ~226 at a 7-day lookback (2026-10-21). null = the head holds no cwd yet, so the project is unknown until the row is parsed. The dashboard's own
   // token-renewal cwd is plumbing that `sessionFromRef` drops, so it is no project to offer.
   const refresh = normCwd(refreshCwd(options.homeDir));
+  const claudeRoots = options.claudeRoots ?? defaultClaudeRoots(options.homeDir);
   const projectOf = new Map<TranscriptRef, string | null>();
   for (const t of inLookback) {
     const cwd = launchCwd(t.file, t.size);
-    projectOf.set(t, cwd && normCwd(cwd) !== refresh ? projectNameOf(cwd) : null);
+    // '' = a cwd the picker offers nothing for: known, so a `?project=` filter drops it here instead of parsing it.
+    projectOf.set(t, cwd && normCwd(cwd) !== refresh ? pickerProjectOf(cwd, claudeRoots) ?? '' : null);
   }
   const wanted = options.projects && options.projects.size ? options.projects : null;
+  // A row with no launch cwd is named only by its parsed `project`, which stands in.
+  const rowPicker = (s: Session): string | null => s.projectPath === null ? s.project : pickerProjectOf(s.projectPath, claudeRoots);
   // An unknown project stays a candidate: the parsed row settles it below.
   const candidates = (wanted ? inLookback.filter(t => { const p = projectOf.get(t); return p == null || wanted.has(p); }) : inLookback)
     .slice(0, maxSessions * 2);
@@ -727,10 +744,11 @@ export function scanSessions(config: Partial<Config>, options: ScanOptions = {})
   for (const c of candidates) {
     if (sessions.length >= maxSessions) break;   // the pool over-fetches; this is the cap
     const row = sessionFromRef(c, rowOptions);
-    if (row && (!wanted || wanted.has(row.project))) sessions.push(row);
+    if (row && (!wanted || wanted.has(rowPicker(row) ?? ''))) sessions.push(row);
   }
 
-  const projects = new Set<string>(sessions.map(s => s.project));
+  const projects = new Set<string>();
+  for (const s of sessions) { const p = rowPicker(s); if (p) projects.add(p); }
   for (const p of projectOf.values()) if (p) projects.add(p);
 
   return {

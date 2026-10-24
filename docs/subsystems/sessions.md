@@ -542,7 +542,8 @@ not, and is the one control here that survives nothing:
 
 - **View switcher** — Board · List · Split · Tiles · Triage. Owned by `SessionsView` as
   ephemeral state (`layout` / `onLayout` props), seeded from the `defaultLayout` setting.
-- **Filter popover** — *Project* (pills from `availableProjects`, the server's lookback-wide `projects`; "All projects" clears), *Status* (multi-pick
+- **Filter popover** — *Project* (pills from `availableProjects`, the server's lookback-wide `projects`; "All projects" clears. A linked worktree has no
+  pill of its own: it files under its repo's (`filterProjectOf`), and a scratchpad or scratch workspace has none at all), *Status* (multi-pick
   pills with the status dot; none picked = all), *Active in the last* (the
   `ACTIVITY_WINDOWS` pill switch), and **Clear all**, disabled when nothing is set.
   `filterCount` counts a facet once however many values it holds, and is the badge on

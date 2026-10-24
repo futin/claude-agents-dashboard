@@ -249,6 +249,22 @@ export function run(): number {
     assert.deepStrictEqual(scan.scanSessions(projCfg, { root, now, skipProcScan: true }).projects, ['late'], 'a null head was not cached');
   })) p++; else f++;
 
+  if (test('scanSessions projects folds a worktree into its repo and leaves out a Claude-owned dir', () => {
+    const now = 1_700_000_000_000;
+    const root = makeRoot([
+      { dirName: '-a-repo', id: 'm1', mtimeMs: now - 60 * 1000, records: [metaRec('/a/repo', 'main'), usageRec(1000)] },
+      { dirName: '-a-repo-wt', id: 'w1', mtimeMs: now - 2 * 60 * 1000, records: [metaRec('/a/repo/.claude/worktrees/wt-1a2b3c', 'main'), usageRec(1000)] },
+      { dirName: '-scratch-ws', id: 's1', mtimeMs: now - 3 * 60 * 1000, records: [metaRec('/scratch/ws-9f8e7d', 'main'), usageRec(1000)] }
+    ]);
+    const opts = { root, now, skipProcScan: true, claudeRoots: ['/scratch'] };
+    const all = scan.scanSessions({ ...projCfg, maxSessions: 5 }, opts);
+    assert.deepStrictEqual(all.projects, ['repo']);
+    assert.deepStrictEqual(all.sessions.map(s => s.id), ['m1', 'w1', 's1'], 'every session still shows under All projects');
+    const picked = scan.scanSessions({ ...projCfg, maxSessions: 5 }, { ...opts, projects: new Set(['repo']) });
+    assert.deepStrictEqual(picked.sessions.map(s => s.id), ['m1', 'w1'], 'the repo chip brings its worktree');
+    assert.deepStrictEqual(scan.scanSessions({ ...projCfg, maxSessions: 5 }, { ...opts, projects: new Set(['wt-1a2b3c']) }).sessions, []);
+  })) p++; else f++;
+
   if (test('scanSessions projects leaves out the token-refresh cwd', () => {
     const now = 1_700_000_000_000;
     const home = fs.mkdtempSync(path.join(os.tmpdir(), 'cad-home-'));

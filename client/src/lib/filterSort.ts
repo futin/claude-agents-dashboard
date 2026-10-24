@@ -139,9 +139,17 @@ export const DEFAULT_VIEW: View = {
   sortDir: 'desc'
 };
 
-/** Sorted unique project names present in the session list. */
+/**
+ * The project-picker name a session files under: its repo when it runs in a linked worktree, so picking the repo's chip brings its worktree sessions
+ * with it, else its own `project`. Mirrors the server's `pickerProjectOf`, which builds the `projects` list the chips come from.
+ */
+export function filterProjectOf(s: Pick<Session, 'project' | 'repo'>): string {
+  return s.repo ?? s.project;
+}
+
+/** Sorted unique picker names ({@link filterProjectOf}) present in the session list. */
 export function distinctProjects(sessions: Session[]): string[] {
-  return Array.from(new Set(sessions.map(s => s.project))).sort((a, b) => a.localeCompare(b));
+  return Array.from(new Set(sessions.map(filterProjectOf))).sort((a, b) => a.localeCompare(b));
 }
 
 /**
@@ -198,7 +206,7 @@ const FILTER_KEYS: FilterKey[] = ['projects', 'statuses', 'window'];
 /** True = this row survives that one facet. The predicates `applyView` ANDs together. */
 function keeps(key: FilterKey, s: Session, view: View, nowMs: number): boolean {
   switch (key) {
-    case 'projects': return !view.projects.length || view.projects.includes(s.project);
+    case 'projects': return !view.projects.length || view.projects.includes(filterProjectOf(s));
     case 'statuses': return !view.statuses.length || view.statuses.includes(s.status);
     case 'window': {
       const win = ACTIVITY_WINDOWS.find(w => w.key === view.window);
