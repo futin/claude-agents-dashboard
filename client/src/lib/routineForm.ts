@@ -1,8 +1,9 @@
 /**
  * routineForm.ts — the field registry behind the job drawer's summary rows (spec `docs/superpowers/specs/2026-10-24-routine-form-design.md` §The field
  * registry, §Rows). The file's text stays the only state: each field reads its value out of the text, writes a new value back by touching only the lines it
- * owns, and says in plain words what it holds. React only renders these; the schedule field joins `FIELDS` from its own task.
+ * owns, and says in plain words what it holds. React only renders these.
  */
+import { describeCron, isManualCron, parseCron } from '../../../shared/cron';
 import { scalarEnd, writeFrontmatterLine } from '../../../shared/frontmatter';
 import type { JobError } from '../../../shared/routine-file';
 import { readForeach, setRepos, type ForeachMode } from './routines';
@@ -31,6 +32,14 @@ export interface FieldDef<V> {
   summary(v: V, ctx: SummaryCtx): Summary;
 }
 
+export type Preset = 'manual' | 'hourly' | 'daily' | 'weekdays' | 'weekly' | 'custom';
+/** `days`: 0 = Sunday .. 6, sorted and unique. */
+export type Schedule =
+  | { preset: 'manual' }
+  | { preset: 'hourly'; minute: number; every: 1 | 2 | 3 | 6 | 12 }
+  | { preset: 'daily' | 'weekdays'; hour: number; minute: number }
+  | { preset: 'weekly'; days: number[]; hour: number; minute: number }
+  | { preset: 'custom'; text: string };
 export type Machines = { mac: boolean; wsl: boolean };
 export type Repos = { mode: ForeachMode; picks: string[]; cwd: string };
 export type Script = string;
@@ -378,7 +387,110 @@ const tools: FieldDef<Tools> = {
   },
 };
 
+const HOURLY_STEPS = [2, 3, 6, 12] as const;
+const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const pad2 = (n: number): string => String(n).padStart(2, '0');
+const inRange = (token: string, max: number): number | null => (/^\d+$/.test(token) && Number(token) <= max ? Number(token) : null);
+
+/**
+ * A cron value into a preset, by its raw tokens and never the parsed sets: `0-5 9 * * *` parses to the same minutes as `0,1,2,3,4,5 9 * * *`, and neither
+ * is a single minute the Daily control could show. Anything that is not exactly a preset's shape is Custom, with its text kept as typed.
+ */
+function recognise(raw: string): Schedule {
+  const custom: Schedule = { preset: 'custom', text: raw };
+  if (isManualCron(raw)) return { preset: 'manual' };
+  const tok = raw.trim().split(/\s+/);
+  if (tok.length !== 5 || tok[2] !== '*' || tok[3] !== '*') return custom;
+  const minute = inRange(tok[0], 59);
+  if (minute === null) return custom;
+  const [, hourTok, , , dow] = tok;
+  if (hourTok === '*' && dow === '*') return { preset: 'hourly', minute, every: 1 };
+  const step = /^\*\/(\d+)$/.exec(hourTok);
+  if (step && dow === '*') {
+    const every = HOURLY_STEPS.find(n => String(n) === step[1]);
+    return every === undefined ? custom : { preset: 'hourly', minute, every };
+  }
+  const hour = inRange(hourTok, 23);
+  if (hour === null) return custom;
+  if (dow === '*') return { preset: 'daily', hour, minute };
+  if (dow === '1-5') return { preset: 'weekdays', hour, minute };
+  if (!/^[0-7](,[0-7])*$/.test(dow)) return custom;
+  const days = [...new Set(dow.split(',').map(d => Number(d) % 7))].sort((a, b) => a - b);
+  return { preset: 'weekly', days, hour, minute };
+}
+
+/** The `cron:` value a schedule writes; null while it has none to write (Weekly before a day is picked). */
+export function cronFor(s: Schedule): string | null {
+  switch (s.preset) {
+    case 'manual': return 'manual';
+    case 'hourly': return s.every === 1 ? `${s.minute} * * * *` : `${s.minute} */${s.every} * * *`;
+    case 'daily': return `${s.minute} ${s.hour} * * *`;
+    case 'weekdays': return `${s.minute} ${s.hour} * * 1-5`;
+    case 'weekly': return s.days.length === 0 ? null : `${s.minute} ${s.hour} * * ${s.days.join(',')}`;
+    case 'custom': return s.text;
+  }
+}
+
+/** Quote a written value the way `jobTemplate` does, falling back to single quotes (or none) for text that holds a double quote. */
+function quoted(v: string): string {
+  if (!v.includes('"')) return `"${v}"`;
+  return v.includes("'") ? v : `'${v}'`;
+}
+
+/**
+ * Move to another preset, carrying the minute and hour across where both sides have them. A Custom cron that is really one of the presets is derived through
+ * `recognise` first, so leaving it keeps its time; one that is not starts from 09:00 (spec §Schedule presets, the builder's call).
+ */
+export function switchPreset(from: Schedule, to: Preset): Schedule {
+  if (to === from.preset) return from;
+  if (to === 'manual') return { preset: 'manual' };
+  const base = from.preset === 'custom' ? recognise(from.text) : from;
+  if (to === 'custom') return { preset: 'custom', text: cronFor(from) ?? '' };
+  const minute = 'minute' in base ? base.minute : 0;
+  const hour = 'hour' in base ? base.hour : 9;
+  if (to === 'hourly') return base.preset === 'hourly' ? base : { preset: 'hourly', minute, every: 1 };
+  if (to === 'weekly') return base.preset === 'weekly' ? base : { preset: 'weekly', days: [], hour, minute };
+  return { preset: to, hour, minute };
+}
+
+const sameSchedule = (a: Schedule, b: Schedule): boolean => JSON.stringify(a) === JSON.stringify(b);
+
+const schedule: FieldDef<Schedule> = {
+  id: 'schedule', label: 'Schedule', keys: ['cron'], kinds: kindsOf('schedule'),
+  read(text) {
+    const v = scalar(text, 'cron');
+    if (v === UNREADABLE) return UNREADABLE;
+    return recognise(v ?? '');
+  },
+  write(text, v) {
+    const now = schedule.read(text);
+    const cron = cronFor(v);
+    if (now === UNREADABLE || cron === null || sameSchedule(now, v)) return text;
+    return setKey(text, 'cron', v.preset === 'manual' ? cron : quoted(cron));
+  },
+  summary(v) {
+    const at = (h: number, m: number): string => `${pad2(h)}:${pad2(m)}`;
+    switch (v.preset) {
+      case 'manual': return { text: 'Manual · Run now only', tone: 'set' };
+      case 'hourly': return { text: `${v.every === 1 ? 'Every hour' : `Every ${v.every}h`} at :${pad2(v.minute)}`, tone: 'set' };
+      case 'daily': return { text: `Daily at ${at(v.hour, v.minute)}`, tone: 'set' };
+      case 'weekdays': return { text: `Weekdays at ${at(v.hour, v.minute)}`, tone: 'set' };
+      case 'weekly': {
+        if (v.days.length === 0) return { text: 'Pick a day', tone: 'err' };
+        const names = [...v.days].sort((a, b) => (a + 6) % 7 - (b + 6) % 7).map(d => DAY_NAMES[d]);
+        return { text: `${names.join(', ')} at ${at(v.hour, v.minute)}`, tone: 'set' };
+      }
+      case 'custom': {
+        if (v.text.trim() === '') return { text: 'No schedule', tone: 'err' };
+        const p = parseCron(v.text);
+        return p.ok ? { text: describeCron(p.cron), tone: 'set' } : { text: 'Cron needs fixing', tone: 'err' };
+      }
+    }
+  },
+};
+
 export const FIELDS: {
+  schedule: FieldDef<Schedule>;
   machines: FieldDef<Machines>;
   repos: FieldDef<Repos>;
   script: FieldDef<Script>;
@@ -387,9 +499,9 @@ export const FIELDS: {
   permission: FieldDef<Permission>;
   limits: FieldDef<Limits>;
   tools: FieldDef<Tools>;
-} = { machines, repos, script, prompt, model, permission, limits, tools };
+} = { schedule, machines, repos, script, prompt, model, permission, limits, tools };
 
-/** Which row owns a frontmatter key's line. Kept apart from `FIELDS` so the cron line routes to Schedule before that field exists here. */
+/** Which row owns a frontmatter key's line. */
 const OWNER: Record<string, FieldId> = {
   cron: 'schedule', machines: 'machines', foreach: 'repos', cwd: 'repos', model: 'model', effort: 'model', 'permission-mode': 'permission',
   'allowed-tools': 'tools', 'max-turns': 'limits', timeout: 'limits',

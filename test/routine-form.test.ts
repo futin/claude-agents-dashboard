@@ -6,9 +6,10 @@
 import assert from 'node:assert';
 
 import {
-  FIELDS, UNREADABLE, fmValue, formKind, frontmatterReadable, routeErrors, setKey, visibleFields
+  FIELDS, UNREADABLE, cronFor, fmValue, formKind, frontmatterReadable, routeErrors, setKey, switchPreset, visibleFields
 } from '../client/src/lib/routineForm.js';
 import { jobTemplate, setRepos } from '../client/src/lib/routines.js';
+import type { Schedule } from '../client/src/lib/routineForm.js';
 
 function test(name: string, fn: () => void): boolean {
   try { fn(); console.log('  ✓ ' + name); return true; }
@@ -323,6 +324,93 @@ export function run(): number {
     assert.deepStrictEqual(rs.rest, [shellModel]);
 
     assert.deepStrictEqual(routeErrors(SKILL, [prompt], 'shell'), { byField: {}, rest: [prompt] });
+  });
+
+  // --- schedule presets ---
+
+  const withCron = (value: string): string => setKey(SKILL, 'cron', value);
+  const readCron = (value: string) => FIELDS.schedule.read(withCron(value));
+  const daily = (hour: number, minute: number): Schedule => ({ preset: 'daily', hour, minute });
+
+  t('schedule read: each preset from its raw cron text, a quoted value alike', () => {
+    assert.deepStrictEqual(readCron('manual'), { preset: 'manual' });
+    assert.deepStrictEqual(readCron('25 * * * *'), { preset: 'hourly', minute: 25, every: 1 });
+    assert.deepStrictEqual(readCron('25 */6 * * *'), { preset: 'hourly', minute: 25, every: 6 });
+    assert.deepStrictEqual(readCron('25 9 * * *'), daily(9, 25));
+    assert.deepStrictEqual(readCron('"25 9 * * *"'), daily(9, 25));
+    assert.deepStrictEqual(readCron('25 9 * * 1-5'), { preset: 'weekdays', hour: 9, minute: 25 });
+    assert.deepStrictEqual(readCron('25 9 * * 1,4'), { preset: 'weekly', days: [1, 4], hour: 9, minute: 25 });
+    assert.deepStrictEqual(readCron('25 9 * * 0,7'), { preset: 'weekly', days: [0], hour: 9, minute: 25 });
+    assert.deepStrictEqual(FIELDS.schedule.read(SKILL), daily(22, 0));
+  });
+
+  t('schedule read: near-misses and mid-typing text are Custom with their text, a missing line is Custom empty', () => {
+    for (const text of ['25 9 * * 1-3', '25 */5 * * *', '25 9 1 * *', '*/15 * * * *', '25 9 * 1 *', '0-5 9 * * *', '*/1', '25 9 * *']) {
+      assert.deepStrictEqual(readCron(text), { preset: 'custom', text }, text);
+    }
+    assert.deepStrictEqual(FIELDS.schedule.read(setKey(SKILL, 'cron', null)), { preset: 'custom', text: '' });
+  });
+
+  t('schedule write: presets are quoted and keep the line comment, Manual is bare, Weekly with no day writes nothing', () => {
+    const out = FIELDS.schedule.write(SKILL, daily(9, 25));
+    assert.ok(out.split('\n')[1].startsWith('cron: "25 9 * * *"'), out.split('\n')[1]);
+    assert.ok(out.split('\n')[1].endsWith('# five fields, local time of the machine that runs it'));
+    onlyLineChanged(SKILL, out, 1);
+    const manual = FIELDS.schedule.write(SKILL, { preset: 'manual' });
+    assert.ok(manual.split('\n')[1].startsWith('cron: manual '), manual.split('\n')[1]);
+    assert.ok(manual.split('\n')[1].endsWith('# five fields, local time of the machine that runs it'));
+    assert.strictEqual(FIELDS.schedule.write(SKILL, { preset: 'weekly', days: [], hour: 9, minute: 25 }), SKILL);
+    assert.strictEqual(fmValue(FIELDS.schedule.write(SKILL, { preset: 'custom', text: '*/15 9-17 * * 1-5' }), 'cron')!.value, '*/15 9-17 * * 1-5');
+    assert.ok(FIELDS.schedule.write(SKILL, { preset: 'custom', text: '*/15 9-17 * * 1-5' }).includes('cron: "*/15 9-17 * * 1-5"'));
+    assert.strictEqual(FIELDS.schedule.write(SKILL, FIELDS.schedule.read(SKILL) as Schedule), SKILL);
+    assert.strictEqual(FIELDS.schedule.write(withCron('>'), daily(9, 0)), withCron('>'));
+  });
+
+  t('schedule write: an absent line goes before the closing fence, CRLF survives', () => {
+    const bare = '---\nrun: claude\n---\nhi\n';
+    assert.strictEqual(FIELDS.schedule.write(bare, daily(9, 0)), '---\nrun: claude\ncron: "0 9 * * *"\n---\nhi\n');
+    const out = FIELDS.schedule.write(crlf(SKILL), daily(9, 25));
+    assert.strictEqual(out.split('\n').length, SKILL.split('\n').length);
+    assert.ok(out.split('\n').every((l, i, a) => i === a.length - 1 || l.endsWith('\r')));
+  });
+
+  t('schedule: read(write(t, s)) round-trips one value of every preset', () => {
+    const values: Schedule[] = [
+      { preset: 'manual' }, { preset: 'hourly', minute: 25, every: 1 }, { preset: 'hourly', minute: 0, every: 12 }, daily(9, 25),
+      { preset: 'weekdays', hour: 7, minute: 5 }, { preset: 'weekly', days: [0, 3, 6], hour: 23, minute: 59 },
+      { preset: 'custom', text: '*/15 9-17 * * 1-5' }, { preset: 'custom', text: '25 9 1 * *' },
+    ];
+    for (const v of values) assert.deepStrictEqual(FIELDS.schedule.read(FIELDS.schedule.write(SKILL, v)), v, JSON.stringify(v));
+    assert.strictEqual(cronFor({ preset: 'weekly', days: [], hour: 9, minute: 0 }), null);
+    assert.strictEqual(cronFor({ preset: 'manual' }), 'manual');
+    assert.strictEqual(cronFor({ preset: 'hourly', minute: 25, every: 2 }), '25 */2 * * *');
+  });
+
+  t('schedule summary: every preset, Mon-first weekdays, and the Custom states', () => {
+    const s = (v: Schedule) => FIELDS.schedule.summary(v, ctx);
+    assert.strictEqual(s({ preset: 'manual' }).text, 'Manual · Run now only');
+    assert.strictEqual(s({ preset: 'hourly', minute: 25, every: 1 }).text, 'Every hour at :25');
+    assert.strictEqual(s({ preset: 'hourly', minute: 25, every: 2 }).text, 'Every 2h at :25');
+    assert.strictEqual(s(daily(9, 25)).text, 'Daily at 09:25');
+    assert.strictEqual(s({ preset: 'weekdays', hour: 9, minute: 25 }).text, 'Weekdays at 09:25');
+    assert.strictEqual(s({ preset: 'weekly', days: [1, 4], hour: 9, minute: 25 }).text, 'Mon, Thu at 09:25');
+    assert.strictEqual(s({ preset: 'weekly', days: [0, 6], hour: 9, minute: 25 }).text, 'Sat, Sun at 09:25');
+    assert.strictEqual(s({ preset: 'custom', text: '*/15 9-17 * * 1-5' }).text, 'Every 15 minutes, 09:00–17:45, Mon–Fri');
+    assert.deepStrictEqual(s({ preset: 'custom', text: '25 9 *' }), { text: 'Cron needs fixing', tone: 'err' });
+    assert.deepStrictEqual(s({ preset: 'custom', text: '' }), { text: 'No schedule', tone: 'err' });
+  });
+
+  t('switchPreset: carries time where both sides have one, derives through read, defaults to 09:00', () => {
+    assert.deepStrictEqual(switchPreset(daily(9, 25), 'weekdays'), { preset: 'weekdays', hour: 9, minute: 25 });
+    assert.deepStrictEqual(switchPreset(daily(9, 25), 'hourly'), { preset: 'hourly', minute: 25, every: 1 });
+    assert.deepStrictEqual(switchPreset({ preset: 'hourly', minute: 25, every: 1 }, 'daily'), daily(9, 25));
+    assert.deepStrictEqual(switchPreset(daily(9, 25), 'weekly'), { preset: 'weekly', days: [], hour: 9, minute: 25 });
+    assert.deepStrictEqual(switchPreset({ preset: 'weekdays', hour: 9, minute: 25 }, 'custom'), { preset: 'custom', text: '25 9 * * 1-5' });
+    assert.deepStrictEqual(switchPreset({ preset: 'custom', text: '0 14 * * *' }, 'daily'), daily(14, 0));
+    assert.deepStrictEqual(switchPreset({ preset: 'custom', text: '*/15 * * * *' }, 'daily'), daily(9, 0));
+    assert.deepStrictEqual(switchPreset(daily(9, 25), 'manual'), { preset: 'manual' });
+    assert.deepStrictEqual(switchPreset({ preset: 'custom', text: '*/15 * * * *' }, 'manual'), { preset: 'manual' });
+    assert.deepStrictEqual(switchPreset({ preset: 'manual' }, 'daily'), daily(9, 0));
   });
 
   console.log(`\n  ${p} passed, ${f} failed`);
