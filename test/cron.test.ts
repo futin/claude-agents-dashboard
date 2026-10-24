@@ -241,6 +241,9 @@ export function run(): number {
       ['25 * * * *', 'Every hour at :25'],
       ['25 */2 * * *', 'Every 2h at :25'],
       ['0 9-17 * * *', 'Every hour 09:00–17:00'],
+      ['0 10-18/2 * * *', 'Every 2h 10:00–18:00'],
+      ['30 1,4,7,10,13 * * *', 'Every 3h 01:30–13:30'],
+      ['0 9,13,17,21 * * *', '09:00, 13:00, 17:00, 21:00'],
       ['0 9,13,17 * * *', '09:00, 13:00, 17:00'],
       ['0  9   * *  1,3', '09:00, Mon/Wed'],
       ['0 9 * * 1,3,5', '09:00, Mon/Wed/Fri'],
@@ -254,7 +257,7 @@ export function run(): number {
   })) p++; else f++;
 
   if (test('describeCron: what the rules cannot phrase is the whitespace-normalised source', () => {
-    for (const src of ['0 9 1 * 1', '5,35 9 * * *', '*/15 */2 * * *', '0 1,3,5,7,9 * * *']) assert.strictEqual(describeCron(must(src)), src, src);
+    for (const src of ['0 9 1 * 1', '5,35 9 * * *', '*/15 */2 * * *', '0 1,2,5,7,9 * * *']) assert.strictEqual(describeCron(must(src)), src, src);
     assert.strictEqual(describeCron(must('0   9 1  * 1')), '0 9 1 * 1');
   })) p++; else f++;
 

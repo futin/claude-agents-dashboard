@@ -187,6 +187,13 @@ function stepOf(v: number[], min: number, max: number): number | null {
   return v.every((x, i) => x === min + i * n) ? n : null;
 }
 
+/** N when the values are evenly N apart (N ≥ 2) without spanning the whole field from `min` — `10-18/2`, the shape `stepOf` leaves out. */
+function spacedBy(v: number[]): number | null {
+  if (v.length < 3) return null;
+  const n = v[1] - v[0];
+  return n >= 2 && v.every((x, i) => x === v[0] + i * n) ? n : null;
+}
+
 /** First and last hour of an hour set that is one contiguous run shorter than the whole day, else null. */
 function hourSpan(hours: number[]): [number, number] | null {
   return hours.length < 24 && isRun(hours) ? [hours[0], hours[hours.length - 1]] : null;
@@ -204,7 +211,9 @@ function describeTime(cron: Cron): string | null {
     if (n !== null) return `Every ${n}h at :${pad2(m)}`;
     const span = hourSpan(hours);
     if (span) return `Every hour ${clock(span[0], m)}–${clock(span[1], m)}`;
-    return hours.length <= 4 ? hours.map((h) => clock(h, m)).join(', ') : null;
+    if (hours.length <= 4) return hours.map((h) => clock(h, m)).join(', ');
+    const spaced = spacedBy(hours);
+    return spaced !== null ? `Every ${spaced}h ${clock(hours[0], m)}–${clock(hours[hours.length - 1], m)}` : null;
   }
   const step = stepOf(minutes, 0, 59);
   const every = minutes.length === 60 ? 'Every minute' : step !== null ? `Every ${step} minutes` : null;
