@@ -4,6 +4,7 @@
  * fall back to a safe empty payload if the scan throws.
  */
 
+import { createHash, timingSafeEqual } from 'node:crypto';
 import fs from 'node:fs';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import nodePath from 'node:path';
@@ -532,6 +533,12 @@ function requestWriteAccess(config: Config, req: IncomingMessage): { peer: Conne
   return { peer, access: writeAccessFor(peer, getSettings().trustTailnet, config.answerToken !== '') };
 }
 
+/** `header` is exactly `Bearer <token>`, compared in constant time. Both sides are hashed first, so a length mismatch neither throws nor answers early. */
+function bearerMatches(header: string | undefined, token: string): boolean {
+  const digest = (s: string) => createHash('sha256').update(s).digest();
+  return timingSafeEqual(digest(header ?? ''), digest(`Bearer ${token}`));
+}
+
 /**
  * The gate every write route runs: true when it has already sent the 403 and the caller must return. A trusted peer passes; so does an exact
  * `Bearer <ANSWER_TOKEN>` from anywhere. The two refusal bodies tell a client whether a token could help (`bad token`) or not (`read-only from this
@@ -540,7 +547,7 @@ function requestWriteAccess(config: Config, req: IncomingMessage): { peer: Conne
 export function refuseWrite(config: Config, req: IncomingMessage, res: ServerResponse): boolean {
   const { peer, access } = requestWriteAccess(config, req);
   if (access === 'open') return false;
-  if (access === 'token' && req.headers.authorization === `Bearer ${config.answerToken}`) return false;
+  if (access === 'token' && bearerMatches(req.headers.authorization, config.answerToken)) return false;
   const kind = access === 'token' ? 'token' : 'read-only';
   logRejectedWrite(req, peer, kind);
   sendJson(res, 403, { error: kind === 'token' ? 'bad token' : 'read-only from this network' });

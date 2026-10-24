@@ -158,6 +158,11 @@ control (the type is a column now, not a collapsible header) and the
   `withFileTypes` dirents never report a symlink as a file, so the explicit
   `isSymbolicLink()` guard is belt-and-braces; a refactor to plain `readdir` + `stat`
   would silently follow links, which is exactly what the regression test pins.
+- **⚠️ A project scope is confined to its own tree (#289).** `readProjectScope` keeps a skill, agent, command, rule, `CLAUDE.md`, settings file,
+  hook script or `.mcp.json` only when its realpath is at or under the project's realpath (`insideRealRoot`). A cloned repo is somebody else's tree:
+  `CLAUDE.md -> ~/.ssh/id_rsa`, a symlinked `settings.json` or a `.claude` that links out would otherwise land in the servable set and be read by any
+  LAN peer, no token. Realpaths, not a blanket symlink ban, so an in-repo `CLAUDE.md -> AGENTS.md` still works. The global scope and the memory store
+  (both under `~/.claude`) are deliberately not confined — a dotfiles setup links `~/.claude/CLAUDE.md` out on purpose.
 
 <!-- docs-sync:
   sources:

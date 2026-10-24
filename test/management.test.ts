@@ -674,6 +674,94 @@ export async function run(): Promise<number> {
     assert.strictEqual(r!.truncated, true);
   }));
 
+  /** One recent project at `proj` plus a fresh home: what the file endpoint would serve. */
+  async function servableFor(proj: string, home = makeHome()): Promise<Set<string>> {
+    const NOW = Date.parse('2026-07-12T12:00:00Z');
+    const root = makeProjectsRoot([{ dirName: '-p', id: 'p1', cwd: proj, mtimeMs: NOW - 1000 }]);
+    return mgmt.collectServablePaths({ lookbackHours: 24 }, { root, now: NOW, homeDir: home });
+  }
+
+  tally(await test('project scope: CLAUDE.md and settings symlinked outside the project are neither listed nor servable (#289)', async () => {
+    const outside = makeProject();
+    const secret = put(outside, 'id_rsa', 'PRIVATE KEY');
+    const secretJson = put(outside, 'secret.json', JSON.stringify({ hooks: { Stop: [{ hooks: [{ type: 'command', command: 'echo leak' }] }] } }));
+    const proj = makeProject();
+    fs.mkdirSync(path.join(proj, '.claude'));
+    const links = [
+      path.join(proj, 'CLAUDE.md'),
+      path.join(proj, '.claude/CLAUDE.md'),
+      path.join(proj, '.claude/settings.json'),
+      path.join(proj, '.claude/settings.local.json')
+    ];
+    fs.symlinkSync(secret, links[0]);
+    fs.symlinkSync(secret, links[1]);
+    fs.symlinkSync(secretJson, links[2]);
+    fs.symlinkSync(secretJson, links[3]);
+
+    const scope = await mgmt.readProjectScope(proj);
+    assert.deepStrictEqual(scope.memory, []);
+    assert.deepStrictEqual(scope.hooks, []);
+    assert.ok(scope.settings.every(s => !s.exists));
+    const allowed = await servableFor(proj);
+    for (const l of links) assert.ok(!allowed.has(l), l);
+    for (const l of links) assert.strictEqual(await mgmt.readServableFile(l, allowed), null);
+  }));
+
+  tally(await test('project scope: regular CLAUDE.md/settings and a symlink staying inside the project are still servable (#289 mirror)', async () => {
+    const proj = makeProject();
+    put(proj, 'AGENTS.md', '# agents');
+    fs.symlinkSync('AGENTS.md', path.join(proj, 'CLAUDE.md'));
+    const inner = put(proj, '.claude/CLAUDE.md', '# inner');
+    const settings = put(proj, '.claude/settings.json', '{}');
+    const allowed = await servableFor(proj);
+    assert.ok(allowed.has(path.join(proj, 'CLAUDE.md')));
+    assert.ok(allowed.has(inner));
+    assert.ok(allowed.has(settings));
+    assert.strictEqual((await mgmt.readServableFile(path.join(proj, 'CLAUDE.md'), allowed))!.content, '# agents');
+  }));
+
+  tally(await test('project scope: a .claude dir symlinked outside the project contributes nothing servable (#289)', async () => {
+    const outside = makeProject();
+    put(outside, 'CLAUDE.md', 'secret');
+    put(outside, 'agents/a.md', 'secret');
+    put(outside, 'rules/r.md', 'secret');
+    put(outside, 'skills/s/SKILL.md', SKILL_MD);
+    put(outside, 'settings.json', '{}');
+    const proj = makeProject();
+    fs.symlinkSync(outside, path.join(proj, '.claude'));
+    const scope = await mgmt.readProjectScope(proj);
+    for (const k of ['skills', 'agents', 'rules', 'memory', 'hooks'] as const) assert.deepStrictEqual(scope[k], [], k);
+    const allowed = await servableFor(proj);
+    assert.ok(![...allowed].some(p => p.startsWith(proj + path.sep)), [...allowed].join(', '));
+  }));
+
+  tally(await test('project scope: a hook script symlinked outside the project is not servable (#289)', async () => {
+    const outside = makeProject();
+    const secret = put(outside, 'id_rsa', 'PRIVATE KEY');
+    const proj = makeProject();
+    const script = path.join(proj, '.claude/hook.sh');
+    const settings = put(proj, '.claude/settings.json', JSON.stringify({ hooks: { Stop: [{ hooks: [{ type: 'command', command: script }] }] } }));
+    fs.symlinkSync(secret, script);
+    const scope = await mgmt.readProjectScope(proj);
+    assert.strictEqual(scope.hooks.length, 1, 'the hook row stays; only its script link is dropped');
+    assert.strictEqual(scope.hooks[0].scriptPath, null);
+    const allowed = await servableFor(proj);
+    assert.ok(allowed.has(settings));
+    assert.ok(!allowed.has(script));
+  }));
+
+  tally(await test('global scope: a symlinked ~/.claude/CLAUDE.md (dotfiles setup) is still listed and servable (#289 mirror)', async () => {
+    const dotfiles = makeProject();
+    const real = put(dotfiles, 'CLAUDE.md', '# global');
+    const home = makeHome();
+    fs.mkdirSync(path.join(home, '.claude'));
+    const link = path.join(home, '.claude/CLAUDE.md');
+    fs.symlinkSync(real, link);
+    const allowed = await servableFor(makeProject(), home);
+    assert.ok(allowed.has(link));
+    assert.strictEqual((await mgmt.readServableFile(link, allowed))!.content, '# global');
+  }));
+
 
   /* ------------------------------------------------------------ MCP servers */
 
