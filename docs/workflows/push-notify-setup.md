@@ -76,6 +76,8 @@ orchestrator run spawned (`BM_ORCH_RUN` set in its environment) never holds eith
 the *task finished* push and exits, because nobody is going to answer a session that was
 dispatched to work one item unattended. A one-shot launch (`CLAUDE_DASHBOARD_ONESHOT`: every Git Sync run, and the spawn form's
 *Close when done*) takes the same exit. The dashboard's own token-renewal turn (`CLAUDE_DASHBOARD_REFRESH`) gets neither the hold nor the push.
+Neither does a [routine](../subsystems/routines.md) step (`CLAUDE_DASHBOARD_ROUTINE`, or `CLAUDE_DASHBOARD_SCHEDULE` from a wrapper installed before
+Schedules became Routines): the routine's own failure push is the only one it raises.
 Nor does a stop an `autopilot` run's guard blocks; the stop that then ends that turn pushes as usual ([remote-message](../subsystems/remote-message.md)).
 
 **6. Verify.** Settings → **Test push**. It fires one push *ignoring every switch above*
@@ -99,6 +101,7 @@ hook installed produces silence, not an error.
 | *A plan is waiting* | `plan-remote-hook.sh` | [remote-plan](../subsystems/remote-plan.md#install) |
 | *A permission dialog opened* | `permission-notify-hook.sh` | [permission-notify](../subsystems/permission-notify.md#install-manual-user-consented) |
 | *A task finished* | `stop-notify-hook.sh` | step 5 above |
+| *Routine failed* | no hook — the server folds the routine run log | [push-notify](../subsystems/push-notify.md#the-fifth-event-routine-failed) |
 | *5-hour limit reached* | no hook — `SHOW_USAGE` and **Record usage history** on | [push-notify](../subsystems/push-notify.md#the-usage-events-usage-limit-and-usage-reset) |
 | *5-hour limit reset* | no hook — same as above | [push-notify](../subsystems/push-notify.md#the-usage-events-usage-limit-and-usage-reset) |
 
@@ -127,6 +130,10 @@ environment:
 Listed bare, without `=${...}`: Compose omits an unset variable in that form, whereas
 `VAR=${VAR}` injects an empty string, and `loadConfig` tests `!== undefined`, so an empty
 string counts as set.
+
+`ANSWER_TOKEN` is passed through the same way, beside them. Inside a container every client — a hook on the host included — arrives from the bridge
+gateway, which the write gate classifies as LAN, so without a token the image is read-only and every hook POST that would raise a push is refused. Put
+the same value in `~/.claude/hooks/dashboard-token` ([remote-access](../subsystems/remote-access.md)).
 
 ⚠️ `DASHBOARD_PUBLIC_URL` matters most here. It has no default anywhere, and inside a
 container even a hand-written `localhost` would resolve to the container's own network
@@ -319,5 +326,5 @@ Assume a leaked topic reveals both.
     - .env.example
     - docker-compose.yml
   kind: workflow
-  verified: 142439e51a92c5c5faebaf0c867bc5a36fef7c57
+  verified: 24f8d773dd459e02b1e4ef4a093aed285939555c
 -->

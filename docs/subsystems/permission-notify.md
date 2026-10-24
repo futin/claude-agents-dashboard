@@ -173,6 +173,9 @@ silencing an unrelated prompt.
 - **Behind the write gate** like the other POSTs (this machine, a trusted tailnet peer, or
   `ANSWER_TOKEN`; a hook on loopback needs no token). It steers no agent, but without the gate
   anyone on the LAN could light up rows.
+- **A routine step never notifies.** The hook exits 0 right after its `CLAUDECODE` check when `CLAUDE_DASHBOARD_ROUTINE` (or the pre-rename
+  `CLAUDE_DASHBOARD_SCHEDULE`) is set, so a dialog in an unattended [routine](routines.md#the-wrapper) step neither lights the row nor pushes
+  (`test/hooks-routine-marker.test.ts`).
 - **Per-session, not per-call:** one entry per session id, a second notify supersedes the first
   and re-arms the TTL — matching the CLI, which shows one dialog at a time.
 
@@ -186,5 +189,5 @@ silencing an unrelated prompt.
     - client/src/components/sessions/atoms.tsx
     - client/src/lib/holds.ts
   kind: subsystem
-  verified: 142439e51a92c5c5faebaf0c867bc5a36fef7c57
+  verified: 24f8d773dd459e02b1e4ef4a093aed285939555c
 -->

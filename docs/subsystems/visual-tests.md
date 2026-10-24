@@ -12,7 +12,7 @@ of `pnpm test`. Design and plan: [2026-10-01-visual-regression-design.md](../sup
 |---|---|---|
 | `views.spec.ts` | 104 shots + 1 count check | each of the 7 `SECTIONS` views at 12 states, plus Sessions with the chat drawer open (`?session=`) at 375 and 1280 and in the Triage layout at 375 and 1280, Git's Matrix (1280), Inspector and Branches (375 and 1280), CodeGraph's Inbox, Matrix and Inspector (1280) and Inbox at 375 with a stored Matrix (the phone draws Inbox), and Projects' Tiles, Columns (1280) and Lists (375) with a gone pin, Routines' Runs page at 375 and 1280, and the What's new drawer opened from the version chip at 375 and 1280 |
 | `layout.spec.ts` | 56 overflow + 7 contrast | overflow: 7 views × 8 daylight tiers; contrast: 7 views, daylight, 1280, axe `color-contrast` |
-| `stage.spec.ts` | 17 | the staging itself: seeded theme beats the default, clock, UTC, DPR 1, font loaded, deep link, every section reachable |
+| `stage.spec.ts` | 19 | the staging itself: seeded theme beats the default, clock, UTC, DPR 1, font loaded, deep link, every section reachable; the chat drawer's two-stage stop control in its sidecar at 1280 and 375 (armed and cancelled, never fired, since the mock serves no `/stop`), and no stop control on a session this dashboard did not spawn |
 | `scroll-hit.spec.ts` | 9 + 1 mirror | Management › Projects with 60 offered projects, Tiles / Columns / Lists at 1280, 1536 and 1921 (`full`): scrolled to the bottom, every on-screen Pin must take the hit and `.wrap` must hold the whole view (#194); the mirror checks Analytics stays pinned to the viewport |
 | `mock-api.spec.ts` | 5 | the mock: 404 for no fixture, 405 for writes, query ignored, exact path beats `:param`, off-origin refused |
 
@@ -51,8 +51,8 @@ A fixture body may be a function of the request URL. One uses it: the chat trans
 tail poll would otherwise append the whole transcript again on every tick.
 
 `stage.ts` puts a page into a known state: fixed clock at `EPOCH` (2026-09-30T14:00:00Z, `fixtures/epoch.ts`), UTC, `en-US`, DPR 1, sRGB, the viewport at
-the case's width × 900, and the full `Settings` object seeded into `localStorage` (theme, landing section, content width, Sessions layout and Management
-sub-view; everything else at its default).
+the case's width × 900, and the full `Settings` object seeded into `localStorage` (theme, landing section, content width, Sessions layout, Management
+sub-view and Routines sub-view; everything else at its default).
 It then waits until the page is ready: `document.fonts.ready`, a Hanken Grotesk face with `status === 'loaded'`, no `/api` request in flight, and no text node
 starting with "loading". Specs poll that predicate rather than reading it once, because a poll can be in flight right after staging.
 
@@ -122,5 +122,5 @@ Dark-theme contrast is off: those themes are due for a redesign, and recording t
     - test/visual/tiers.ts
     - test/visual/fixtures/index.ts
   kind: subsystem
-  verified: 142439e51a92c5c5faebaf0c867bc5a36fef7c57
+  verified: 24f8d773dd459e02b1e4ef4a093aed285939555c
 -->

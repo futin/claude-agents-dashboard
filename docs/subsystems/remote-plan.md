@@ -110,6 +110,9 @@ remote as a held question.
   run that must not ask. In plan mode (stdin `permission_mode` is `plan`) it does not opt out: the autopilot gate lets `ExitPlanMode` through, so the approval
   card still reaches the phone. A `session_id` outside `[A-Za-z0-9-]` skips the check. Deployment order: on each machine the dashboard checkout must be pulled
   together with the autopilot CLI (`sync.sh pull`), or a `running` run still idles on every denied question.
+- **A routine step steps both hooks aside.** `plan-remote-hook.sh` and `remote-decision-hook.sh` exit 0 right after their `CLAUDECODE` check when
+  `CLAUDE_DASHBOARD_ROUTINE` (or the pre-rename `CLAUDE_DASHBOARD_SCHEDULE`) is set: the [routine wrapper](routines.md#the-wrapper) stamps it on an
+  unattended child, so no plan is held and no away-mode instruction is injected (`test/hooks-routine-marker.test.ts`).
 
 ## The away-mode alternative: skip plan mode entirely
 
@@ -146,6 +149,10 @@ never end a turn on a prose question, don't enter plan mode — summarize the pl
 proceed/revise instead — and prefer already-allowed tools, since a permission dialog would
 park the session. The rule changes how the session asks, not whether: a skill or task that says to proceed on stated
 assumptions still does, rather than stopping to ask.
+Two more rules follow. Starting a new session (`start_session`) needs the user's own typed words in chat: an
+`AskUserQuestion` answer does not count, so when the user picks "start it" there the model asks once for the request to be typed and does not retry. And
+to get the user's attention it ends the turn, so the Stop hook pushes, rather than calling `PushNotification`, which rides on Claude's Remote Control
+and never reaches the phone (see [push-notify](push-notify.md#answering-is-it-working)).
 
 That first rule is now explicitly conditional on the tool being available, **and** carries
 a named fallback. Neither gate implies `AskUserQuestion` is in the session's tool list — a
@@ -202,5 +209,5 @@ same failure mode, and the same one setting as
     - client/src/hooks/usePendingPlan.ts
     - client/src/lib/holds.ts
   kind: subsystem
-  verified: 142439e51a92c5c5faebaf0c867bc5a36fef7c57
+  verified: 24f8d773dd459e02b1e4ef4a093aed285939555c
 -->

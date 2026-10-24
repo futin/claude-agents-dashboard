@@ -56,6 +56,11 @@ via `tsx`, dev and prod alike).
   The third thing the server launches is the `codegraph` CLI ([codegraph](subsystems/codegraph.md)): `codegraph status --json` per pinned project, cached 25 s and run only
   from inside a GET, and `codegraph sync` / `codegraph index` when the user presses Sync or Reindex. Every launch sets `CODEGRAPH_NO_UPDATE_CHECK=1` and
   `CODEGRAPH_NO_DOWNLOAD=1`, so the shim neither checks for nor downloads a newer bundle.
+  The Sync menu's [Pull and Push](subsystems/git-stats.md#quick-pull-and-push--the-writer) go further than the fetch: one pinned repo at a time, Pull
+  fast-forwards the checked-out branch with `merge --ff-only` and Push runs `git push`, never forced.
+  The [Routines](subsystems/routines.md) section writes job files into `ROUTINES_DIR` (default `~/claude-global/routines`, owner only), keeps its state
+  under `~/.claude/routines/`, and installs the jobs as launchd jobs or crontab lines; the 5-hour
+  [usage alerts](subsystems/push-notify.md#the-usage-events-usage-limit-and-usage-reset) keep their claim in `~/.claude/dashboard/usage-alerts.json`.
 - **Zero runtime dependencies on the backend.** `server/` uses Node built-ins only, with two pinned exceptions, neither with deps of its own:
   `lookout-widgets` ([hub-widgets](subsystems/hub-widgets.md#the-dependency-exception)) and `release-kit`, whose memoised `createReleasesReader` backs
   [`GET /api/releases`](subsystems/releases.md); `test/server-deps.test.ts` pins both. Keep new npm deps out of it.
@@ -232,6 +237,7 @@ server/
   lib/git-fetch.ts    the Git fetch: detached `git fetch origin` per common dir, error classifier, watched-only timer + clock
   lib/git-quick.ts    the Sync menu's Pull and Push: fast-forward-only pull and push of one pinned repo, never forced, hooks run
   lib/git-locks.ts    one lock per git common dir, shared by git-quick and the fetch-all wait
+  lib/worktree-repo.ts  `Session.repo`: the main checkout's name for a session launched in a linked git worktree (see subsystems/sessions.md)
   lib/open-folder.ts  `open <path>` through `execFile`, behind POST /api/open-folder (the pin-membership gate is in api.ts); `revealFile` is `open -R <file>` for the Routines menu's Reveal in Finder
   lib/routine-config.ts  machine name (`mac`/`wsl`), the routines and state-root folders, and `routineEnv` — the environment baked into every installed job and `/run` spawn
   lib/routine-store.ts   job files (read, atomic write, delete), the owner claim, `pins.json`, lock sweep and the pid-liveness `Probe`
@@ -273,7 +279,7 @@ server/
                   also owns stopping one (graceful SIGTERM, grace window, escalation)
                   (see docs/subsystems/spawn.md)
 client/src/
-  App.tsx         shell: side rail (Sessions | Routines | Usage | Management | Claude Configs |
+  App.tsx         shell: side rail (Sessions | Routines | Management | Usage | Claude Configs |
                   Analytics | Settings) + lazy views
   components/     SideRail (section switcher — the rail on desktop, and below `sm`
                   (640px) the same markup as a menu dropped out of a top bar, every tree
@@ -290,10 +296,11 @@ client/src/
                   Tiles, Triage), SessionDetail (the subagent timeline),
                   ChatDrawer, TasksCard (the sidecar's checklist card and its phone fold), QuestionPanel, PlanPanel,
                   MessagePanel, PanelChrome (the head/stub the three panels share),
+                  ComposerSuggestion (`composerKeyDown`, the Enter-sends / Tab-takes-the-suggestion keydown MessagePanel and ResumePanel share),
                   MicButton, SpawnPanel, PinPicker (the launch sheet's older projects to
                   pin), ResumePanel, PermissionBanner,
                   RemoteAnswerToggle, OriginBadge, Markdown, configs/, management/ (ManagementView —
-                  the Projects | Git section — ProjectsView, the Projects sub-view: the pins and the
+                  the Git | Projects | CodeGraph section — ProjectsView, the Projects sub-view: the pins and the
                   projects on offer as Tiles, Columns or Lists; and the Git sub-view: GitView
                   (band, switcher, poll owner), GitClockChip (the sync/fetch clock chip and
                   its popover), GitInbox / GitMatrix / GitInspector /
@@ -333,6 +340,9 @@ client/src/
                   sections, deepLink, dictation, spawnOptions, pins, resume, pace, usageProfile,
                   usageRatesFormat, usageHistory (the History tab's step path, ticks and figures), panelCollapse, surface, walkChart (the headroom
                   chart's geometry), walkRows (the same walk as day rows), holds,
+                  composer (that keyboard's pure rules and the session's latest `wrap_up` suggestion), modelLabel (`claude-opus-5-5` → `Opus 5.5`),
+                  notifyRows (Settings' push-event rows), writeRefusal (a 403's token vs read-only-network kind), writeStatus (Settings › Local ›
+                  Connection's write-access line),
                   webNotify, backClose, clipboard (copyText with the execCommand fallback), stopControl, triage (the board/triage piles), answerToken (the token store + authHeaders),
                   stickyStrip, agentLabel (a subagent's type only when informative),
                   tasks (taskProgress — the one count the row pill and the Tasks card share),
@@ -450,5 +460,5 @@ that area:
     - vite.config.ts
     - package.json
   kind: overview
-  verified: 142439e51a92c5c5faebaf0c867bc5a36fef7c57
+  verified: 24f8d773dd459e02b1e4ef4a093aed285939555c
 -->

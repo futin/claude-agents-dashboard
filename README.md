@@ -13,7 +13,8 @@ opt-in features that need one ([remote answers](docs/subsystems/remote-answer.md
 finished-turn [push](docs/subsystems/push-notify.md) and
 [remote messages](docs/subsystems/remote-message.md)). Two runtime dependencies on the backend, [`lookout-widgets`](docs/subsystems/hub-widgets.md#the-dependency-exception)
 and `release-kit` (the rest is Node built-ins), and exactly two kinds of outbound call — the ntfy push and the usage-bar read
-from Anthropic's API — plus `git fetch` on the pinned repos when you turn the Git fetch timer on.
+from Anthropic's API — plus `git fetch` on the pinned repos when you turn the Git fetch timer on, and the fetch and push behind the Git Sync menu's
+Pull and Push when you press them.
 
 ## Quick start
 
@@ -81,13 +82,18 @@ That's the whole basic setup. Everything below is optional.
   this way is also not a dead end once its turn is over: its chat drawer offers a **resume**
   composer that relaunches the same session id, so the same transcript continues and the
   same row wakes up. And it can be ended from the dashboard too: while the server still
-  holds a handle on the child, the expanded row carries a two-tap **stop** control
+  holds a handle on the child, the expanded row and its chat drawer's sidecar carry a two-tap **stop** control
   (`Stop session` → `Really stop?`, with `Force stop` if the graceful signal doesn't
   land). Off by default (empty `CLAUDE_BIN`); how much a launch can do unattended is
   bounded by the `SPAWN_MAX_PERMISSION` ceiling on the host, never by the browser.
+- **[Routines](docs/subsystems/routines.md)** — scheduled jobs as markdown files in a git-synced folder (default `~/claude-global/routines/`), installed
+  as launchd jobs (macOS) or crontab lines (WSL), with a Jobs ledger, an editor drawer (a Form view or the raw file) and the Runs log; a failed run sends
+  a push. No scheduler runs in the server: the OS fires the plugin's wrapper, so a job still runs while the dashboard is down.
 - **Management tab** — **Projects**: the pinned projects and the ones on offer to pin, as tiles, columns or lists, with the pins reordered by drag or
   keyboard. **Git** ([git-stats](docs/subsystems/git-stats.md)): read-only local git state of each pinned repo — uncommitted work, unmerged branches and how
   far they are from the trunk — plus an opt-in background `git fetch` and a Sync button that launches a headless `/git-sync` session in that repo.
+  Its menu also offers a fast-forward-only **Pull** and a **Push** of that one repo, never forced. **CodeGraph** ([codegraph](docs/subsystems/codegraph.md)):
+  the `codegraph` CLI's index state of each pinned repo, with Sync and Reindex keys. The tab opens on Git.
 - **[What's new](docs/subsystems/releases.md)** — the version chip at the foot of the side rail opens every release of the dashboard, newest first, read
   from the checkout's own release tags.
 - **[Claude Configs tab](docs/subsystems/configs.md)** — read-only browser for all Claude
@@ -114,7 +120,8 @@ That's the whole basic setup. Everything below is optional.
   types only — no currency anywhere. A third, **History**, charts the recorded 5h and weekly utilization over the last N days.
 - **[Push notifications](docs/subsystems/push-notify.md)** — the server publishes to an
   [ntfy](https://ntfy.sh) topic when a session needs you (question, plan, permission
-  dialog, finished turn); tapping the push opens that session's chat. Off by default, and
+  dialog, finished turn), when a routine fails, and when the 5-hour usage limit is reached and resets; tapping a session push opens that
+  session's chat. Off by default, and
   the only channel that reaches you with the browser closed — which is why the old
   in-browser alert layer was deleted rather than kept: WebKit has no `Notification` API in
   a tab, so it could never fire on an iPhone. Set a second `NTFY_TOPIC_DESK` and the
@@ -126,7 +133,7 @@ That's the whole basic setup. Everything below is optional.
 - **[Settings tab](docs/subsystems/settings.md)** — themes, density and text scale, which
   section the app lands on, refresh rate, the scan knobs, the default model and effort for
   the launch panel, the browser-notification switch, the push-notification policy,
-  usage-history recording, and the remote-answer idle threshold and answer window — all
+  usage-history recording, tailnet write trust, and the remote-answer idle threshold and answer window — all
   editable in the app, no `.env` edit or rebuild. Two pages, one per store: Local (this
   browser) and Shared (the server's settings file). It also names any `.env` key edited
   since the server started, because those are read once, at startup.
@@ -182,6 +189,9 @@ claude plugin install claude-agents-dashboard@claude-agents-dashboard-marketplac
 - **`/git-sync`** — the repo's git chores in one pass: commit what's lying around behind a secret scan, sync and verify the trunk, push it, and prune
   branches proven merged. The trunk is pushed once it verifies; every deletion, branch push and stash change is asked first.
 
+The plugin also carries `plugin/lib/run-routine.mjs`, the wrapper every [routine](docs/subsystems/routines.md) runs: reconcile points launchd and cron at the
+installed copy, so Routines need the install too.
+
 The installed copy is a cached snapshot of GitHub's `main`, not a link to this checkout, so a skill edit in `plugin/` reaches a session only once it is
 committed and pushed and `pnpm plugin:sync` has run. The script compares `plugin/` with the installed copy, refuses a tree GitHub does not have (off
 `main`, uncommitted, unpushed or behind), reinstalls, and re-checks the result; restart Claude Code afterwards.
@@ -207,5 +217,5 @@ dictation setup, CI and releases) in
     - scripts/
     - package.json
   kind: readme
-  verified: 142439e51a92c5c5faebaf0c867bc5a36fef7c57
+  verified: 24f8d773dd459e02b1e4ef4a093aed285939555c
 -->

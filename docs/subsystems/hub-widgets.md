@@ -71,7 +71,8 @@ shows "No data yet" with "Claude Agents Dashboard answered 500". The reason stay
 `server/` is otherwise Node built-ins only. `lookout-widgets` is one of two named exceptions (`.claude/CLAUDE.md`, "Keep new deps out of `server/`"; the
 other is `release-kit`, see [releases](releases.md)): it has no runtime dependencies of its own and is pinned to a git tag,
 `github:futin/lookout-widgets#v0.1.0`, with `dist/` committed so nothing builds at install. `test/server-deps.test.ts` holds both ends: every bare import
-under `server/` must be one of the named packages, and `package.json` must carry each one's pinned spec. The package makes no network calls, so
+under `server/` must be one of the named packages, and `package.json` must pin `lookout-widgets` to that literal tag and `release-kit` to any exact
+`vX.Y.Z` tag (`isExactKitPin`). The package makes no network calls, so
 `test/outbound.test.ts` is unchanged.
 
 ## Adding a widget
@@ -94,5 +95,5 @@ data the dashboard already exposes, and a write path through Lookout would need 
     - test/hub-widgets.test.ts
     - test/server-deps.test.ts
   kind: subsystem
-  verified: 142439e51a92c5c5faebaf0c867bc5a36fef7c57
+  verified: 24f8d773dd459e02b1e4ef4a093aed285939555c
 -->

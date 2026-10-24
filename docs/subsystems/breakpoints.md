@@ -18,7 +18,7 @@ true complement of the CSS's `min-width`, with no gap at fractional viewport wid
 | (base) | 0 | Phone: rail is a top bar, board full-bleed, grids single-column |
 | `sm` | 640 | Desktop shell returns (rail, board radius, `.main` padding) |
 | `md` | 768 | Density: column counts, table columns, control fitting |
-| `lg` | 1024 | Analytics metrics reach 5-across; Management › Projects' Columns and Lists go two-up |
+| `lg` | 1024 | Analytics metrics reach 5-across; Management › Projects' Columns and Lists go two-up; Routines' 7-column ledger replaces its stacked phone rows |
 | `xl` | 1280 | Board/Tiles 3-col, Claude Configs 3-col, Analytics pinned to the viewport (its tab the scroller) |
 | `2xl` | 1536 | **The lock.** Measure reaches 1248; Sessions aside moves beside |
 | `3xl` | 1537 | Full content-width mode only: structural gains |
@@ -74,9 +74,11 @@ The seven numbers live in a documented `:root`-adjacent comment block in `styles
 not as CSS custom properties. `@media` cannot read `var()` in its condition — a
 `--tier-2xl: 1536px` token would be unreachable from every query that needs it, and the
 value would drift the moment someone edited the token but not the query (or the reverse).
-The comment block is the single source of truth; every `min-width` in the file is a literal
+The comment block is the single source of truth; every `@media` `min-width` in the file is a literal
 copy of one of its numbers, and `test/breakpoints.test.ts` guards that no other literal
 width sneaks in beside them.
+The Sessions ledger's two `@container` queries (950px, 1200px) are not tiers and the guard does not read them: they key on the table's own width, which the
+aside and the Width setting decide, not on the viewport.
 
 ## Tier blocks are section-local
 
@@ -134,5 +136,5 @@ migration:
     - client/src/components/configs/ConfigsView.tsx
     - test/breakpoints.test.ts
   kind: subsystem
-  verified: 142439e51a92c5c5faebaf0c867bc5a36fef7c57
+  verified: 24f8d773dd459e02b1e4ef4a093aed285939555c
 -->

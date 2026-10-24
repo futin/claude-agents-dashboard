@@ -83,6 +83,7 @@ without waiting for a real question.
   there. (Or you copied the hook instead of symlinking it — see step 2.)
 - **Silent for one session only** — that session is an `autopilot` run whose `~/.claude/autopilot/<session_id>.json` says `status: "running"`: the hook
   exits before the health probe by design (see [remote-answer](../subsystems/remote-answer.md)). Any other status, or no file, routes as usual.
+  A routine step (`CLAUDE_DASHBOARD_ROUTINE` set by the routine wrapper) is silent the same way, and on purpose.
 - **The window feels shorter than configured** — the `settings.json` `timeout` is below
   the wait window; the CLI kills the hook first (see the warning in step 3).
 - **403 from the POSTs** — the caller is not trusted (a LAN device, a container, or a
@@ -101,5 +102,5 @@ without waiting for a real question.
     - scripts/ask-remote-hook.sh
     - server/api.ts
   kind: workflow
-  verified: 142439e51a92c5c5faebaf0c867bc5a36fef7c57
+  verified: 24f8d773dd459e02b1e4ef4a093aed285939555c
 -->

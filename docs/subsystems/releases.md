@@ -5,7 +5,7 @@ newest first. The record is the checkout's annotated `vX.Y.Z` tags, which the re
 ([ci](../workflows/ci.md) §Releases). Design: [the release pipeline spec](../superpowers/specs/2026-10-15-release-pipeline-design.md) §App.
 
 Code: `server/lib/releases.ts` (points release-kit's memoised reader at the checkout), `serveReleases` in `server/api.ts`, and on the client [ui-kit](https://github.com/futin/ui-kit)
-(pinned to `v0.3.0` as of 2026-10-19): its `useWhatsNew` hook, `VersionChip` and `ReleasesDrawer` own the read, the dot, the chip and the drawer. What is
+(pinned to `v0.3.1` as of 2026-10-24): its `useWhatsNew` hook, `VersionChip` and `ReleasesDrawer` own the read, the dot, the chip and the drawer. What is
 this app's own: `client/src/lib/releases.ts` (the storage key), `client/src/components/ReleasesDrawer.tsx` (the wrapper adding the back gesture and `narrow`;
 the notes are ui-kit's own renderer), the chip's placement (the `.rel-chip` wrapper, and its `narrow`, in `SideRail.tsx`), the wiring in `AppShell`
 (`App.tsx`), the `--uk-*` token mapping in `styles.css` and its import of `ui-kit/styles.css` in `main.tsx`.
@@ -14,7 +14,7 @@ the notes are ui-kit's own renderer), the chip's placement (the `.rel-chip` wrap
 
 Answers `ReleasesResponse` (`shared/types.ts`): `current` is the newest release tag reachable from HEAD and how many commits HEAD is past it, `releases`
 every release tag, newest first. Parsing the tag messages (subject, notes, `Release-Type` / `Release-Scope` / `Release-PR` / `Release-Breaking`
-trailers) is [release-kit](https://github.com/futin/release-kit)'s `createReleasesReader`, pinned to an exact `vX.Y.Z` tag (`v1.2.0` as of 2026-10-18) — the second of the two packages `server/` may import
+trailers) is [release-kit](https://github.com/futin/release-kit)'s `createReleasesReader`, pinned to an exact `vX.Y.Z` tag (`v1.3.0` as of 2026-10-24) — the second of the two packages `server/` may import
 (`test/server-deps.test.ts`). It runs `git` and reads nothing else, so it adds no outbound call. A tag with no `Release-Type` trailer is the **baseline**:
 where numbering starts, not a release of anything. Lightweight tags and names that are not exactly `vX.Y.Z` are ignored.
 
@@ -78,5 +78,5 @@ the release workflow and are not read back.
     - client/src/components/SideRail.tsx
     - client/src/App.tsx
   kind: subsystem
-  verified: 142439e51a92c5c5faebaf0c867bc5a36fef7c57
+  verified: 24f8d773dd459e02b1e4ef4a093aed285939555c
 -->

@@ -104,7 +104,8 @@ default, `bodyTruncated` flag) — and renders as a collapsible `<details open>`
 renders closed, because the pinned panel already shows it (`lib/heldBody.ts`, [remote-answer](remote-answer.md)).
 
 Dropped: records with no user/assistant `message.role` (`last-prompt`, `custom-title`,
-`queue-operation`, `attachment`, `system`), `isSidechain` records (subagent traffic —
+`queue-operation`, `attachment`, `system`), `api-request-blob` records (`isConversationRecord` in `transcript.ts`: they replay each API request's
+turns with the same role and content and no uuid, so a role-keyed reader would show every turn twice), `isSidechain` records (subagent traffic —
 `SessionDetail`'s agent timeline already covers it), `isMeta` records, `thinking` blocks,
 `tool_result` bodies (they're most of a transcript's bytes and all noise here),
 `<system-reminder>` spans, and anything empty after that filtering. Text is capped at
@@ -242,6 +243,10 @@ magenta (plan), green for a turn that finished cleanly (reply window), neutral f
 that has ended (resume), and mustard for the permission banner, which is a sign rather than a
 control since nothing outside that terminal can answer it.
 
+`QuestionPanel`, `PlanPanel` and `MessagePanel` each have two refusal rows above their actions, both `.qp-token`. A 403 `bad token` shows the token field
+(`needsToken`). A 403 `read-only from this network` shows `READ_ONLY_TEXT` from `lib/writeRefusal.ts` (`readOnly`) and no field, because no token was set for
+the field to supply ([remote-access](remote-access.md)).
+
 - **`QuestionPanel` is the terminal's AskUserQuestion dialog, not a chip wrap.** The question
   is the heading; each option is a full-width row — 15/500 label over a 13px description —
   and the picked row takes an ink border plus ring and a paper fill. Each row carries
@@ -319,5 +324,5 @@ control since nothing outside that terminal can answer it.
     - client/src/components/ComposerSuggestion.tsx
     - client/src/lib/markdown.ts
   kind: subsystem
-  verified: 142439e51a92c5c5faebaf0c867bc5a36fef7c57
+  verified: 24f8d773dd459e02b1e4ef4a093aed285939555c
 -->

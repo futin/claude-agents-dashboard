@@ -264,6 +264,8 @@ per-event checkbox (Settings → **Shared › Push notifications › Routine fai
 transport — and is **exempt from `requireAfk`, `requireRemoteAnswer` and `requireAutoMode`**: those gate interactive sessions, and a 22:00 job has none, so with
 the checkbox on it pushes at the desk too. Copy, the once-per-run ledger (`notified.json`) and the tap-through are in [routines](routines.md#notifications);
 the click is `<DASHBOARD_PUBLIC_URL>/?view=routines&run=<id>`, and without a public URL the push carries no link.
+A settings file saved before Schedules became Routines stores the key as `schedule-failed`; `readStored` carries it over to `routine-failed`, because
+`mergeNotify` refuses a whole policy over one unknown key and every switch would read as off.
 
 ## The usage events: `usage-limit` and `usage-reset`
 
@@ -302,7 +304,7 @@ from buzz to answerable. That last one is why the reply-window `stop` push carri
 all: the panel it lands you in is the composer the hold is waiting on.
 
 The `routine-failed` push carries `/?view=routines&run=<id>` instead and lands on Routines › Runs with that run unfolded (see
-[view-persistence](view-persistence.md)).
+[view-persistence](view-persistence.md)). A `?view=schedules` link, from a push sent before Schedules became Routines, lands there too.
 
 The usage pushes carry `/?view=usage` and land on the Usage section.
 
@@ -465,5 +467,5 @@ server write path. ntfy makes it unnecessary for now.
     - client/src/lib/deepLink.ts
     - client/src/components/settings/SettingsView.tsx
   kind: subsystem
-  verified: 142439e51a92c5c5faebaf0c867bc5a36fef7c57
+  verified: 24f8d773dd459e02b1e4ef4a093aed285939555c
 -->

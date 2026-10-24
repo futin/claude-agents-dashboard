@@ -212,6 +212,8 @@ returned — no backend change, so the read-only invariant above still holds.
   heuristic. `kaizen.mjs`'s `compactions` block — one row per boundary, a replayed boundary with the same timestamp counted once in
   `duplicatesSkipped` — is kaizen-only by decision: a `/kaizen` lesson input with no dashboard consumer, like `--trend`
   (`plugin/skills/kaizen/test/compactions.test.mjs`).
+  That heuristic (`errorSignals.userCorrections`) also skips a user turn carrying `<agent-message`, on both sides: it is a subagent's hand-back
+  delivered as a user turn, not the user correcting anything (#302).
 - **The lesson line's figures are data, not only prose.** `kaizen.mjs --trend [log]` reads the `<billable> billable (<ctx> ctx` prefix back out of
   every lesson line (`k` / `M` / `B` suffixes, decimals, thousands commas; trailing `, 231 turns` and the like ignored) and prints per-project and
   overall ctx series, which `/kaizen review` step 2 reports. Drift is the median ctx of a group's newest 3 sessions at ≥ 1.5× the median of all its
@@ -258,5 +260,5 @@ The live session meter (status line, `/compact` nudge, tool and subagent pane) u
     - client/src/hooks/useSettings.tsx
     - plugin/skills/kaizen/
   kind: subsystem
-  verified: 142439e51a92c5c5faebaf0c867bc5a36fef7c57
+  verified: 24f8d773dd459e02b1e4ef4a093aed285939555c
 -->

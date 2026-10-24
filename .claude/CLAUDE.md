@@ -11,13 +11,14 @@ the typed JSON in `shared/types.ts`, plus four zero-dep modules both sides run: 
 `shared/routine-file.ts`.
 
 - `server/` — Node + TypeScript, run via `tsx`, **zero runtime deps** (Node built-ins only) but two: `lookout-widgets`, `release-kit`.
-- `client/` — Vite + React + TypeScript; side rail Sessions | Routines | Usage | Management |
+- `client/` — Vite + React + TypeScript; side rail Sessions | Routines | Management | Usage |
   Claude Configs | Analytics | Settings, all lazy but Sessions.
 - `shared/` — `types.ts` is the API contract and the single source of truth for it;
   `frontmatter.ts`, `gitUpstream.ts`, `cron.ts` and `routine-file.ts` are the only modules both sides run.
 - `test/` — node-assert tests over backend + client domain logic, tmpdir JSONL fixtures.
 - `plugin/` — the installable Claude Code plugin (the repo root's `.claude-plugin/marketplace.json` points at it): the skills the dashboard depends on, plain
-  JS, never imported by server or client at runtime. `test/plugin-manifest.test.ts` pins what may live in it.
+  JS, never imported by server or client at runtime; `plugin/lib/` holds the Routines wrapper and its generated `.mjs` copies of the shared modules.
+  `test/plugin-manifest.test.ts` pins what may live in it.
 
 **The file-by-file map is `docs/overview.md`, not this file.** It is not auto-loaded —
 read it (plus the relevant `docs/subsystems/*.md`) *before* changing an area. `docs/overview.md`
@@ -35,6 +36,8 @@ read it (plus the relevant `docs/subsystems/*.md`) *before* changing an area. `d
   On demand, **macOS only**, not part of `pnpm test`; re-baseline with `pnpm test:visual --update-snapshots` (no `--`).
 - `pnpm plugin:sync` — reinstall the plugin once a `plugin/` change is pushed to `main`; the installed copy is a snapshot, not a link, so until this
   runs the edit reaches no session. Refuses an unpushed tree (`scripts/sync-plugin.ts`).
+- `pnpm plugin:gen` — regenerates `plugin/lib/{cron,frontmatter,routine-file}.mjs` from `shared/`; run it after editing those three, or
+  `test/plugin-manifest.test.ts` fails (`scripts/gen-plugin-lib.ts`).
 - `pnpm typecheck` — `tsc --noEmit`.
 - CI (`.github/workflows/ci.yml`) runs `pnpm typecheck`, `pnpm build`, `pnpm test` on every PR into `main`, plus `pnpm test:skills` when the PR touches
   `plugin/skills/git-sync/**` (`docs/workflows/ci.md`). **CI is the full-suite gate — never re-run the whole `pnpm test` locally just before a push.** Push
@@ -151,5 +154,5 @@ filling them with nothing.
     - shared/gitUpstream.ts
     - package.json
   kind: index
-  verified: 142439e51a92c5c5faebaf0c867bc5a36fef7c57
+  verified: 24f8d773dd459e02b1e4ef4a093aed285939555c
 -->

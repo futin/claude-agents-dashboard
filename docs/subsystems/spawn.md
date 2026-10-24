@@ -566,27 +566,27 @@ one seam for it, and nothing about `launch`'s own contract changes. Three differ
 | `POST /api/sessions/:id/stop` | `serveSessionStop` — the row button's route; graceful by default, `{force:true}` for SIGKILL |
 | `client/src/lib/stopControl.ts` | the pure decision function behind the Stop control: render or not, the label, and which POST it sends |
 | `client/src/components/sessions/SessionStopControl.tsx` | the Stop control itself, rendered by the expanded row and the chat drawer's sidecar |
-| `client/src/hooks/useStopSession.ts` | POSTs the stop, same bearer-token pattern as `useSpawn` |
+| `client/src/hooks/useStopSession.ts` | POSTs the stop, same bearer-token pattern as `useSpawn`, read-only 403 included (`READ_ONLY_TEXT`, no token prompt) |
 | `serveSessions` wiring | calls `adoptLaunched(ids)` then `listLaunching()` before every `/api/sessions` response, so `launching` rides the poll the client already makes |
 | `serveHealth` wiring | publishes `spawnAvailable` (`probeSpawn`) and `spawnMaxPermission` (`config.spawnMaxPermission`) |
 | `client/src/components/SpawnPanel.tsx` | the launch form, as a **modal** (below) — project picker, prompt textarea with the reply composer's own `MicButton` in the foot, name on its own line, then model/effort/permission as a triplet (model and effort start at the per-device Settings defaults, `spawnDefaultModel`/`spawnDefaultEffort` in `client/src/lib/settings.ts`, where `''` still means "send no flag and let the CLI decide"), and remote control and Close when done as the board's pill switch; own lazy chunk, cyan chrome (a compose surface opened on purpose, not a hold waiting on you) |
 | Management › Git's Sync button | a second launcher (`client/src/hooks/useGitSync.ts`): `useSpawn().launch` with no sheet, the body built by `syncRequest` (`client/src/lib/gitSync.ts`) from the Settings › Git Sync model and effort, the host's `SYNC_PERMISSION_MODE` (`HealthResponse.syncPermissionMode`, clamped to the ceiling) and Remote answers' state, always `oneShot`; `docs/subsystems/git-stats.md` §Client |
-| `client/src/hooks/useSpawn.ts` | POSTs the request, the same bearer-token pattern as `useRemoteAnswer`'s toggle |
+| `client/src/hooks/useSpawn.ts` | POSTs the request, the same bearer-token pattern as `useRemoteAnswer`'s toggle; a 403 `read-only from this network` (`refusalKind`, `client/src/lib/writeRefusal.ts`) sets `readOnly` and `READ_ONLY_TEXT` as the error instead of `needsToken` |
 | `client/src/lib/spawnOptions.ts` | the client's copy of `MODELS`/`EFFORTS`/`PERMISSION_MODES` (duplicated, not imported — the FE/BE boundary is `shared/types.ts` alone — kept honest by `test/spawn-options.test.ts` asserting byte-for-byte equality against the server's arrays) and `allowedPermissionModes` |
 | The Board card's `+ New session` | rendered only when `spawnAvailable` is true on the one `/api/health` poll `SessionsView` already owns |
 | each view's phantom row | renders each `launching` entry at the head of its list — project, truncated prompt, `starting…` or (for `failed`) the error — and disappears on its own once the real row adopts the id; never interactive |
 | `sessionSurface` (`server/lib/scan.ts`) | maps the transcript's `entrypoint` → `Session.surface`; `sdk-cli` ⇒ `dashboard`, everything else ⇒ `local` |
-| `client/src/components/ResumePanel.tsx` | the resume composer pinned in an ended dashboard session's chat drawer — textarea + mic + *resume session*, POSTing `useSpawn().launch({prompt, resume: id})` |
-| `client/src/lib/resume.ts` | `resumeEligible` — the pure gate deciding when the drawer offers that composer (dashboard surface, nothing pending, turn over, spawn available); unit-tested like every other client lib |
+| `client/src/components/ResumePanel.tsx` | the resume composer pinned in an ended dashboard session's chat drawer — textarea + mic + *resume session*, POSTing `useSpawn().launch({prompt, resume: id})`; Enter sends and Tab takes the last turn's suggested reply (`ComposerSuggestion.tsx`, see [chat](chat.md)) |
+| `client/src/lib/resume.ts` | `resumeEligible` — the pure gate deciding when the drawer offers that composer (dashboard surface, nothing pending, turn over, spawn available, no `stopState` or `processLive`); `stillRunningNote` and `resumeErrorText` for the [still-running note](#processlive-the-live-process-this-server-cannot-signal); unit-tested like every other client lib |
 | `client/src/lib/surface.ts` | the pill's label + tooltip, one copy shared by the session views (`sessions/atoms.tsx`) and the `ChatDrawer` header |
 
 ## Endpoints
 
 | Method | Path | Codes |
 |---|---|---|
-| `POST` | `/api/spawn` | Body is `SpawnRequest` (`project`, `prompt`, optional `name`/`model`/`effort`/`permissionMode`/`remoteControl`/`oneShot`/`resume`). 200 `{sessionId}` (`SpawnResponse`); 400 malformed body / unknown project / empty or oversized prompt / bad or unknown `resume` id / non-dashboard resume target / resume target with no recorded cwd; 403 bad token; 404 remote answers off *or* feature off; 409 resume of a still-running or already-resuming session; 429 `MAX_LAUNCHING` launches already in flight; 500 spawn threw |
-| `POST` | `/api/spawn/:id/stop` | 200 `{stopped: true}` for a still-`launching` entry, or `{stopping: true}` if that id has since become a running session (it delegates to `stopSession`); 400 bad id shape; 403 bad token; 404 remote answers off *or* no live launch for that id |
-| `POST` | `/api/sessions/:id/stop` | 200 `{stopping: true}` (graceful) or `{stopped: true}` (`{"force": true}`); 400 bad id shape, bad path encoding, *or* a present-but-unparseable body — an absent/empty body is normal; 403 bad token; 404 remote answers off *or* no live session for that id; 405 + `Allow: POST` for any other method |
+| `POST` | `/api/spawn` | Body is `SpawnRequest` (`project`, `prompt`, optional `name`/`model`/`effort`/`permissionMode`/`remoteControl`/`oneShot`/`resume`). 200 `{sessionId}` (`SpawnResponse`); 400 malformed body / unknown project / empty or oversized prompt / bad or unknown `resume` id / non-dashboard resume target / resume target with no recorded cwd; 403 refused by the write gate (`bad token`, or `read-only from this network`); 404 remote answers off *or* feature off; 409 resume of a still-running or already-resuming session; 429 `MAX_LAUNCHING` launches already in flight; 500 spawn threw |
+| `POST` | `/api/spawn/:id/stop` | 200 `{stopped: true}` for a still-`launching` entry, or `{stopping: true}` if that id has since become a running session (it delegates to `stopSession`); 400 bad id shape; 403 refused by the write gate (`bad token`, or `read-only from this network`); 404 remote answers off *or* no live launch for that id |
+| `POST` | `/api/sessions/:id/stop` | 200 `{stopping: true}` (graceful) or `{stopped: true}` (`{"force": true}`); 400 bad id shape, bad path encoding, *or* a present-but-unparseable body — an absent/empty body is normal; 403 refused by the write gate (`bad token`, or `read-only from this network`); 404 remote answers off *or* no live session for that id; 405 + `Allow: POST` for any other method |
 
 All three sit behind the same write gate, `refuseWrite` (`api.ts`), that every route behind the write gate
 uses — this machine and a trusted tailnet pass with no token, anyone else needs
@@ -758,5 +758,5 @@ new reason:
     - client/src/lib/spawnOptions.ts
     - client/src/lib/surface.ts
   kind: subsystem
-  verified: 142439e51a92c5c5faebaf0c867bc5a36fef7c57
+  verified: 24f8d773dd459e02b1e4ef4a093aed285939555c
 -->
