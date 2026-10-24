@@ -16,6 +16,7 @@ import { sessionChat } from './session-chat.js';
 import { sessionDetail } from './session-detail.js';
 import { sessionMessage } from './session-message.js';
 import { sessionPlan } from './session-plan.js';
+import { sessionPr } from './session-pr.js';
 import { sessionQuestion } from './session-question.js';
 import { SESSION_IDS, sessions } from './sessions.js';
 import { settings } from './settings.js';
@@ -34,6 +35,7 @@ export const fixtures: FixtureMap = {
   // The tail poll (`?after=<cursor>`) appends what it gets; answering it with the first page again would grow the drawer every 3s.
   '/api/sessions/:id/chat': (url: URL) => url.searchParams.has('after') ? { ...sessionChat, messages: [] } : sessionChat,
   '/api/sessions/:id/plan': sessionPlan,
+  '/api/sessions/:id/pr': sessionPr,
   '/api/sessions/:id/message': sessionMessage,
   '/api/sessions/:id/question': sessionQuestion,
   '/api/account': account,
