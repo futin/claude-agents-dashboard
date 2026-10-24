@@ -160,6 +160,7 @@ import { run as runRoutineRun } from './routine-run.test.js';
 import { run as runRoutineBoot } from './routine-boot.test.js';
 import { run as runApiRoutines } from './api-routines.test.js';
 import { run as runRoutinesView } from './routines-view.test.js';
+import { run as runClipboard } from './clipboard.test.js';
 import { run as runSyncPlugin } from './sync-plugin.test.js';
 
 let failed = 0;
@@ -323,6 +324,7 @@ failed += await runRoutineRun();
 failed += await runRoutineBoot();
 failed += await runApiRoutines();
 failed += runRoutinesView();
+failed += await runClipboard();
 
 console.log(failed > 0 ? `FAILED (${failed})` : 'ALL PASS');
 process.exit(failed > 0 ? 1 : 0);

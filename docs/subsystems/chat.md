@@ -11,12 +11,17 @@ that it is full-screen, because a 1080px modal with margins does not fit a phone
 carries the session name, the project pill and ✕. A 290px **sidecar** on the subtle ground
 carries everything the head used to: the live context reading as a metric block (percent,
 `tokens / window`, a track, amber at the same 70% threshold the list row uses), then a facts
-list — project, branch, model, surface, messages loaded, current tool. Below `md` the sidecar
+list — project, branch, model, session, surface, messages loaded, current tool. Below `md` the sidecar
 becomes a band over the transcript and drops project, messages and current tool: the head pill,
 the foot count and the transcript's last turn already carry them. The context reading
 is off the same 3s poll rather than a second read, and it is there because a modal opened
 straight from a tapped push ([deep link](push-notify.md)) never showed the list, so this is
 the only place that reader sees how full the session is.
+
+**The Session fact is a copy button** (`.chat-facts .f .sid`, shown at every width): it reads the id's first 8 characters and `…`, and a tap puts the
+full id on the clipboard — for `claude --resume <id>` or a prompt in another session — then reads `copied` (or `copy failed`) for 1.5s. `lib/clipboard.ts`'s
+`copyText` falls back to an off-screen `<textarea>` + `execCommand('copy')` where `navigator.clipboard` is missing (the plain-HTTP LAN shape is not a secure
+context) or rejects.
 
 **The Stop control sits in the sidecar, directly under the context reading** — the same
 `sessions/SessionStopControl.tsx` the expanded row renders, so arm, confirm, cancel, `stopping…` + `Force stop`, the token hint and the server's error line

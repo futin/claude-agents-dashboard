@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 
 import Chevron from './Chevron';
 import { Markdown } from './Markdown';
@@ -23,6 +23,7 @@ import { heldBodyUuid } from '../lib/heldBody';
 import { latestSuggestion } from '../lib/composer';
 import { formatInterval } from '../lib/settings';
 import { surfacePill } from '../lib/surface';
+import { copyText } from '../lib/clipboard';
 import type { ChatMessage, Session } from '../../../shared/types';
 
 /** Distance from the bottom (px) still counted as "following the tail". */
@@ -81,12 +82,30 @@ function Message({ m, folded }: { m: ChatMessage; folded?: string }) {
   );
 }
 
+/** The session id, shortened, as its own copy button: one tap puts the full id on the clipboard for `claude --resume` or another prompt. */
+function SessionIdCopy({ id }: { id: string }) {
+  const [note, setNote] = useState<'copied' | 'copy failed' | null>(null);
+  const timer = useRef<ReturnType<typeof setTimeout>>();
+  useEffect(() => () => clearTimeout(timer.current), []);
+  const copy = async () => {
+    const ok = await copyText(id);
+    clearTimeout(timer.current);
+    setNote(ok ? 'copied' : 'copy failed');
+    timer.current = setTimeout(() => setNote(null), 1500);
+  };
+  return (
+    <button type="button" className="sid" aria-label={`Copy session id ${id}`} onClick={copy}>
+      {note ?? `${id.slice(0, 8)}…`}
+    </button>
+  );
+}
+
 /**
  * A centred modal showing a session's chat history: the newest page on open,
  * live-tailed every 3s, "load older" walking backwards through the transcript.
  *
  * Layout is the sidecar of `.claude/DESIGN.md` §8.6 — a 290px left column
- * carrying the session's facts (context gauge, project, branch, model, surface,
+ * carrying the session's facts (context gauge, project, branch, model, session id, surface,
  * messages loaded, current tool), with the All / Text / You filter down in the
  * foot beside the count it changes. The modal floats over the
  * scrim with air on every side, so the scrim is a real exit at every width
@@ -256,6 +275,8 @@ export default function ChatDrawer({ session, onClose, spawnAvailable }: {
                 <div className="f"><span>Branch</span><b title={session.gitBranch}>{session.gitBranch}</b></div>
               )}
               <div className="f"><span>Model</span><b>{session.model}</b></div>
+              {/* keyed by id: a drawer reused for another session remounts it, dropping a pending `copied` and its timer */}
+              <div className="f"><span>Session</span><SessionIdCopy key={session.id} id={session.id} /></div>
               {/* repeated from the row on purpose: a drawer opened straight from
                   a tapped push (`?session=<id>`) never showed the list, so this
                   is the first place the reader learns the session lives only
