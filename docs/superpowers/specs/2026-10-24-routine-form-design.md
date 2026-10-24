@@ -98,7 +98,11 @@ Order and visibility, by kind:
 | Limits | ✓ (timeout only) | ✓ (max turns + timeout) | `max-turns`, `timeout` |
 | Tools | | ✓ | `allowed-tools` |
 
-A key present in the file whose row the kind hides (a `model:` line in a shell job) stays in the file untouched and is visible only in File.
+The kind is read from the `run:` line on every render: `shell` shows the Shell column, `claude` the Claude column. A missing or invalid `run:` shows only
+Schedule, Machines, Repos and Limits (timeout), and the validator's `run` error shows under the rows; the body is then reachable only in File.
+
+A key present in the file whose row the kind hides (a `model:` line in a shell job) stays in the file untouched and is visible only in File. An error on
+such a line — or on any line whose owning row is hidden — shows under the rows, so a disabled Save always has a visible reason.
 
 **New job** keeps the existing Kind cards and Name field above the rows (picking a kind still replaces the text with that kind's `jobTemplate`). **Edit job**
 has no Kind control, as today.
@@ -106,15 +110,16 @@ has no Kind control, as today.
 Per row, what the control does (the mockups show each opened):
 
 - **Schedule** — a `.seg` of six presets: Manual, Hourly, Daily, Weekdays, Weekly, Custom (§Schedule presets).
-- **Machines** — two `.rtn-pick` chips, `mac` and `wsl`; the chip matching `RoutinesResponse.machine` carries a small "this machine" label. None picked shows
-  the validator's own `machines needs mac, wsl or both` in the row. A hint says which machine this dashboard is and that it comes from the OS or
+- **Machines** — two `.rtn-pick` chips, `mac` and `wsl`; the chip matching `RoutinesResponse.machine` carries a small "this machine" label. None picked writes
+  `machines: []` and shows the validator's own `machines needs mac, wsl or both` in the row. A hint says which machine this dashboard is and that it comes from the OS or
   `ROUTINE_MACHINE` in `.env` (`machineName` in `server/lib/routine-config.ts`) — machines are not configured in `.env`; the file decides which machines
   install a job.
 - **Repos** — today's `All pinned (n) | Pick | Single cwd` segmented control, relabelled `All pinned | Pick | One folder`. All pinned lists the pinned
   names read-only; Pick shows them as toggle chips (today's behaviour, starting from every pin); One folder is a text input for `cwd:` with the pinned repos'
   paths offered as suggestions, any path allowed, empty meaning the routines folder's parent.
 - **Script / Prompt** — the existing `.rtn-ta` textarea, holding only the script or only the prompt. The Script write keeps the fence lines and any text
-  around the fence.
+  around the fence. A shell body with no ```` ```bash ```` fence reads as an empty script, and the first write appends a fence holding the script after any
+  existing body text. A fence that opens and never closes reads as unreadable ("edit in File"), since a write could not know where the script ends.
 - **Model** — a text input with suggestion chips `Default, opus, sonnet, haiku, fable` (the file takes any one-token model, so free text stays allowed),
   and an Effort `.seg`: `Default, low, medium, high, max`. Default removes the line.
 - **Permission** — `.seg`: `Default, plan, acceptEdits, auto`; acceptEdits shows the existing amber note in the row. `bypassPermissions` is not offered.
@@ -135,8 +140,11 @@ Reading a `cron` value into a preset (anything not matched is **Custom**, never 
 | Weekly | `M H * * d,d,…` with single weekday numbers (7 read as 0) | day chips Mon–Sun + time input | "Mon, Thu at 09:25" |
 | Custom | anything else that parses | the cron text input + its five field names, the `describeCron` text and the next fire (`nextAfter`) | the `describeCron` text (§Plain words) |
 
+A `cron` value that does not parse (the normal state while typing in the Custom input) reads as Custom too: the input holds its text, the `/validate` error
+shows in the row, and the words and next-fire line are left out until it parses. A missing `cron:` line reads as Custom with an empty input.
+
 `M` and `H` are single integers. Every preset but Manual and Custom also shows its next fire and the cron line it writes, as the mockups do. Preset writes
-are quoted (`cron: "25 9 * * 1-5"`), as `jobTemplate` writes them. Weekly with no day picked is an error in the row and writes nothing until one is picked.
+are quoted (`cron: "25 9 * * 1-5"`), as `jobTemplate` writes them; Manual writes bare `cron: manual`. Weekly with no day picked is an error in the row and writes nothing until one is picked.
 
 Switching presets carries the time (and minute) over where both sides have one; Custom pre-fills with the current cron text. Leaving Custom for a preset
 whose fields cannot be derived starts from 09:00 — builder's call on the exact default.
@@ -167,16 +175,22 @@ Behaviour, and where it lands:
 - **Reconcile** (`server/lib/routine-reconcile.ts`): a manual job is never desired. `notDesired` gives it its own reason (alongside `disabled`), so a job
   switched from a schedule to Manual is uninstalled on the next reconcile, the same path a disabled job takes. `renderPlist` and the crontab line never see
   one.
-- **API** (`server/api.ts`, the `when` text and `nextAt`): `when` reads "manual", `nextAt` is null.
+- **API** (`server/api.ts`): `when` reads "manual", `nextAt` is null. `serveRoutines` computes its own `desired` (`s.job.enabled && onThisMachine`) and
+  `installedFrom` returns it when the plan lists no change for the job, so that `desired` must also be false for a manual job — the same predicate as
+  `notDesired` — or an enabled manual job reads `installed: true` and the drawer says "Installed on this machine as …".
 - **Ledger** (`client/src/components/routines/JobLedger.tsx`): the when column reads "manual". Run now works as today. The enabled toggle is hidden for a
-  manual row, since enabling it would suggest the job will fire.
+  manual row, since enabling it would suggest the job will fire, and so is the row menu's Pause/Resume item (`JobMenu.tsx`). `enabled:` has no meaning for a
+  manual job: its row reads "manual" in the next column whatever `enabled:` says (never "paused"), and its status dot follows its last run as an enabled
+  job's does (`rowText` / `dotTone` in `client/src/lib/routines.ts`). A manual file carrying `enabled: false` is valid and behaves the same.
 - **Drawer save buttons**: on a New job whose schedule is Manual, the two buttons Save and install / Save, keep paused become one **Save**, which writes
   `enabled: true` (nothing installs either way). Edit job keeps Save and reconcile: reconcile is what uninstalls a job just switched to Manual.
 - **Wrapper** (`plugin/lib/run-routine.mjs`): a `schedule` trigger computes no slot for a manual job (no `parseCron` of `manual`). A schedule-triggered run of
   a manual job cannot happen once reconcile has removed the install; it need not be refused.
 - **Validate summary**: `routineSummary` keeps its format (`<when> · claude · 6 repos · mac + wsl`); only `when` reads "manual". The mockups' "Valid ·
   Claude skill · …" lines are illustrative, not a format change.
-- **Docs**: `docs/subsystems/routines.md` key table (`cron` row) gains `manual`.
+- **Docs**: in `docs/subsystems/routines.md`, the key table's `cron` row gains `manual`; §Reconcile's "Desired is every valid file with `enabled: true`…"
+  gains "and a cron other than `manual`"; the §UI Drawer line describes the rows, the Form | File switch and Manual's single Save. The `RoutineJob.cron`
+  comment in `shared/types.ts` ("Five-field cron") gains `or manual`.
 
 Because the wrapper and its generated libs are under `plugin/`, the change reaches running sessions only after merge plus `pnpm plugin:sync`.
 
@@ -190,7 +204,7 @@ Because the wrapper and its generated libs are under `plugin/`, the change reach
 - The drawer's existing behaviour is kept as is: validate-as-typed with the sequence guard, the disk-changed guard and Reload, read-only for a non-owner
   (rows show values; controls disabled; File read-only), the `locked` state, Save and install / Save, keep paused / Save and reconcile, Delete, Escape and
   back-to-close, and the dirty-close guard on the backdrop.
-- Phone (< 640px): the rows are the drawer's full width; an opened row's control wraps rather than scrolls sideways. The mockups' 375px frames are the target.
+- Phone (< 640px): the rows are the drawer's full width; an opened row's control wraps rather than scrolls sideways (the wrap is scoped under an `rtn-f-` ancestor, never added to the app-wide `.seg`). The mockups' 375px frames are the target.
 
 ## Verification the builder owns
 
@@ -200,7 +214,8 @@ Because the wrapper and its generated libs are under `plugin/`, the change reach
 - Manual: parser accepts `manual` and still rejects an absent `cron`; reconcile does not desire and does uninstall a manual job (in the existing
   `test/routine-reconcile.test.ts` style); the wrapper computes no slot; the regenerated `plugin/lib/*.mjs` matches (`test/plugin-manifest.test.ts`).
 - `describeCron`: the simple shapes keep today's exact text; steps, ranges and lists in each field get words; an unphraseable cron falls back to its source.
-- `pnpm test:visual` baselines that show the drawer will change and need re-baselining (macOS only, on demand).
+- `pnpm test:visual`: no baseline shows the drawer, but the Jobs shots change — the fixture's `*/30 9-18 * * 1-5` reaches the ledger through
+  `describeCron` — and need re-baselining (macOS only, on demand).
 - In the browser: open Edit job on a real routine, change each row, confirm File shows only those lines changed, save, confirm the ledger and the installed
   job follow.
 
@@ -209,7 +224,7 @@ Because the wrapper and its generated libs are under `plugin/`, the change reach
 - Component split (one `JobRows` component, a row component, per-field controls) and where the field registry module lives.
 - Where an inserted key goes when the file lacks it, as long as it is stable and never reorders existing lines.
 - Whether one or several rows may be open at once (the mockups show one).
-- The exact default time when leaving Custom, the Hourly interval set beyond the five above, and the exact wording `describeCron` produces.
+- The exact default time when leaving Custom, and the exact wording `describeCron` produces.
 - How `RoutineJob` represents Manual.
 
 ## Calls the author made (not discussed with the user)
