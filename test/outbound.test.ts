@@ -124,6 +124,13 @@ export function run(): number {
     assert.match(rule.slice(0, rule.indexOf('`client/dist/`')), /lib\/git-quick\.ts/);
   })) p++; else f++;
 
+  if (test('.claude/CLAUDE.md zero-deps rule names lib/pr-status.ts, which launches gh pr view', () => {
+    const md = fs.readFileSync(path.join(root, '.claude/CLAUDE.md'), 'utf8').replace(/\s+/g, ' ');
+    const rule = md.slice(md.indexOf('Keep new deps out of'));
+    const head = rule.slice(0, rule.indexOf('`client/dist/`'));
+    for (const name of ['lib/pr-status.ts', '`gh pr view`']) assert.ok(head.includes(name), name);
+  })) p++; else f++;
+
   if (test('.claude/CLAUDE.md zero-deps rule names lib/routine-reconcile.ts and lib/routine-store.ts, which launch launchctl, crontab, pgrep, ps, sysctl', () => {
     const md = fs.readFileSync(path.join(root, '.claude/CLAUDE.md'), 'utf8').replace(/\s+/g, ' ');
     const rule = md.slice(md.indexOf('Keep new deps out of'));
