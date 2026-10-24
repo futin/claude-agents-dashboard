@@ -42,8 +42,8 @@ it from the chat modal only and renders `PrCard` after `TasksCard`; all copy rul
    Task 2 case S12.
 4. **The PR merges while the modal is open.** The next poll after the window shows Merged; a merged PR is never launched for again. Pinned by Task 2 cases
    S13–S15.
-5. **The modal switches to another session.** The previous session's card must not linger on the new one: the hook resets to `null` on an id change. Pinned by
-   Task 6's dev-server step (open session A with a PR, then session B without).
+5. **The modal switches to another session.** The previous session's card must not linger on the new one: the hook resets to `null` on an id change and drops an answer for
+   the old id. Pinned by Task 4 case C8 (`acceptPrAnswer`) and Task 6's dev-server step (open session A with a PR, then session B without).
 
 ---
 
@@ -69,7 +69,7 @@ it from the chat modal only and renders `PrCard` after `TasksCard`; all copy rul
   - `resetPrDetectCache(): void` (test seam)
 
 Behaviour:
-- Same incremental shape as `server/lib/tasks.ts`: per-file entry with byte offset and size, LRU of 64, `CHUNK_BYTES` reads, a smaller size means the file was
+- Same incremental shape as `server/lib/tasks.ts`: per-file entry with byte offset and size, a 64-entry cache evicting the oldest insertion (as `tasks.ts:235`), `CHUNK_BYTES` reads, a smaller size means the file was
   replaced and is re-folded from 0, a malformed line is skipped.
 - Assistant records: remember each `Bash` `tool_use` by id with its `input.command` and the record-level `cwd`.
 - User records: for each `tool_result` block answering a remembered Bash id:
@@ -135,7 +135,7 @@ Reuse the `call` / `result` / `line` helper style of `test/tasks.test.ts`.
 **Interfaces:**
 - Consumes: `FetchRunner`, `makeFetchRunner` from `server/lib/git-fetch.ts`; `SessionPrLive`, `PrChecks` from Task 1.
 - Produces (`server/lib/pr-status.ts`):
-  - `GH_PR_RE` — the validated-URL pattern from Global Constraints, capturing `owner/repo` and the number.
+  - `GH_PR_RE` — the validated-URL pattern from Global Constraints; group 1 = `owner/repo`, group 2 = the number.
   - `foldPrView(json: unknown): SessionPrLive | null` — null when the JSON lacks `state` / `headRefName` / `baseRefName` strings.
   - `classifyGhFailure(failure: Error | { code: number; stderr: string; timedOut: boolean }): string`
   - `readPrStatus(url: string, cwd: string | null): Promise<{ live: SessionPrLive | null; unavailable: string | null }>` — never rejects.
@@ -157,8 +157,8 @@ Behaviour:
 
 - [ ] **Step 1: Write the failing tests in `test/pr-status.test.ts`** with a spy runner recording `(cwd, args, env)` and a fixed clock:
   - S1 argv equals the Global Constraints argv for `https://github.com/o/r/pull/7`; env has both `GH_*` vars `'1'`.
-  - S2 rollup of nine: CheckRun COMPLETED SUCCESS ×2, CheckRun IN_PROGRESS ×1, CheckRun COMPLETED SKIPPED ×1, CheckRun COMPLETED FAILURE ×1,
-    StatusContext SUCCESS ×1, StatusContext PENDING ×1, StatusContext ERROR ×1, `__typename: 'Other'` ×1 → `{ passed: 3, failed: 2, running: 2, total: 7 }`.
+  - S2 rollup of eleven: CheckRun COMPLETED SUCCESS ×2, CheckRun IN_PROGRESS ×1, CheckRun QUEUED ×2, CheckRun COMPLETED SKIPPED ×1, CheckRun COMPLETED FAILURE ×1,
+    StatusContext SUCCESS ×1, StatusContext PENDING ×1, StatusContext ERROR ×1, `__typename: 'Other'` ×1 → `{ passed: 3, failed: 2, running: 4, total: 9 }`.
   - S3 all SKIPPED → `checks: null`; `[]` → null; field missing → null.
   - S4 states: MERGED + isDraft true → merged; CLOSED + isDraft true → closed; OPEN + isDraft → draft; OPEN → open.
   - S5 each `reviewDecision` (`APPROVED`, `CHANGES_REQUESTED`, `REVIEW_REQUIRED`, `''`, missing) → approved, changes, required, none, none.
@@ -203,13 +203,14 @@ Behaviour:
 Behaviour: `!ID_RE.test(id)` → 400 `{ id, pr: null, error: true }`. Then inside one try: no transcript → 200 `{ id, pr: null }`; no detected PR → 200
 `{ id, pr: null }`; else await `readPrStatus(url, cwd)` and answer 200 with `repo` = `owner/repo` from `GH_PR_RE` (else from any `https://<host>/<owner>/<repo>/pull/<n>`,
 else null), `title` = `live.title ?? detected.title`, `live`, `unavailable`. A throw → log `[dashboard] session pr failed:` and 500 `{ id, pr: null, error: true }`.
-`Cache-Control: no-store` as the siblings. The route must sit before the session-detail regex (the comment at `server/index.ts:420` explains why).
+`Cache-Control: no-store` as the siblings. The route must sit before the session-detail regex (the comment at `server/index.ts:421-422` explains why).
 
-- [ ] **Step 1: Write the failing tests** through `withServer` (`test/api-harness.ts`), with `overrideGhRunner` set to a stub and reset after:
+- [ ] **Step 1: Write the failing tests** through `withServer` (`test/api-harness.ts`), with `overrideGhRunner` set to a stub and reset after, and `resetPrStatusCache()` + `resetPrDetectCache()` called before each case
+  (`withServer`'s `resetStores`, `test/api-harness.ts:106-112`, knows neither module, and A4 caches `…/pull/7` as merged forever):
   - A1 `/api/sessions/bad%20id!/pr` → 400, `error: true`, `pr: null`.
   - A2 a well-formed id with no transcript → 200, `pr: null`, no `error`.
   - A3 a transcript with no PR → 200, `pr: null`.
-  - A4 a transcript with a gitOperation create of `https://github.com/o/r/pull/7`, stub answering a merged PR titled `Real title` → 200 with `number: 7`,
+  - A4 a transcript with a gitOperation create of `https://github.com/o/r/pull/7` whose command carries `--title "Arg title"`, stub answering a merged PR titled `Real title` → 200 with `number: 7`,
     `repo: 'o/r'`, `title: 'Real title'`, `live.state: 'merged'`, `unavailable: null`.
   - A5 same transcript with `--title "Arg title"`, stub rejecting ENOENT → `live: null`, `unavailable: 'gh not installed'`, `title: 'Arg title'`.
   - A6 the transcript file at mode `000` → 500, `error: true` (skip as root).
@@ -240,6 +241,8 @@ else null), `title` = `live.title ?? detected.title`, `live`, `unavailable`. A t
   - `stateLabel(s: SessionPrLive['state']): string`
   - `endedLine(live: SessionPrLive, ago: (iso: string) => string): string` — merged/closed only
   - `bandLine(pr: SessionPrInfo, ago: (iso: string) => string): string`
+  - `acceptPrAnswer(currentId: string, body: SessionPrResponse, prev: SessionPr): SessionPr` — the hook's whole update rule: `body.id !== currentId` → `prev`;
+    `body.error` → `prev`; else `body.pr`.
 
 - [ ] **Step 1: Write the failing tests** (`ago` stubbed to return `'2h'`):
   - C1 `checksRow`: null → `None`/dim; `{3,1,0,4}` (passed, failed, running, total) → `1 failed · 3 passed`/bad; `{2,1,1,4}` → `1 failed · 2 passed · 1 running`/bad;
@@ -252,6 +255,8 @@ else null), `title` = `live.title ?? detected.title`, `live`, `unavailable`. A t
   - C7 `bandLine`: open `{3,0,1,4}` + required → `3/4 checks · review required`; draft `{2,1,0,3}` + changes → `1 failed · changes requested`; open null checks
     + none → `no checks · no review`; open `{4,0,0,4}` + approved → `4/4 checks · approved`; merged → `into main · 2h`; closed → `not merged · 2h`;
     `live: null` → `status unavailable`.
+  - C8 `acceptPrAnswer`: an answer for another id → prev (unchanged object); `error: true` → prev; `pr: null` for the current id → null; a PR for the
+    current id → that PR.
 
 - [ ] **Step 2: Run** `npx tsx test/client-pr.test.ts` — expect failures.
 
@@ -278,21 +283,22 @@ else null), `title` = `live.title ?? detected.title`, `live`, `unavailable`. A t
 
 Behaviour:
 - Hook: polls `/api/sessions/:id/pr` every `refreshMs` (`useSettings`), first fetch at once; skips a tick while its previous request is pending (a ref flag —
-  no sibling has this guard); on `error: true` or a network failure keeps the last value; on an id change resets to `null` before the first answer, and drops
-  answers that arrive for the old id.
+  no sibling has this guard); on a network failure keeps the last value; every answer goes through `acceptPrAnswer` (Task 4); on an id change resets to `null`
+  before the first answer.
 - Card: `null` → renders nothing. One DOM for both widths with `.folded` (default folded), the `TasksCard` pattern: `.kv.pr-kv` holding `.pr-top`
   (glyph, `PR #<n>`, the `.pr-state` pill unless `live` is null), the `.pr-title` link (`target="_blank" rel="noopener noreferrer"`; text = `title`, else `—`),
   `.pr-ref` (`head → base`, or `repo` when `live` is null), `.pr-rows` (Checks with `.pr-checks` bar segments, Review, Merge for open/draft; the ended line for
-  merged/closed; one **Status** row `unavailable · <reason>` when `live` is null), and the `.pr-band` fold button (`PR #<n>`, pill, `bandLine`, chevron) that
+  merged/closed; one **Status** row `unavailable · <reason>` when `live` is null), and the `.pr-band` fold button (`PR #<n>`, the pill under the same condition as `.pr-top`, `bandLine`, chevron) that
   toggles `.folded`. `ago` = `iso => formatAgo(Date.parse(iso))`.
 - CSS: desktop hides `.pr-band`; phone (`md` breakpoint block) hides the head/title/ref, shows `.pr-band`, and hides `.pr-rows` when `.folded`. Pills: open →
-  `--green` on `--green-tint`, draft → `--ink2` on a neutral existing tint, merged → `--magenta` on new `--magenta-tint`, closed → `--red` on new `--red-tint`.
+  `--green` on `--green-tint`, draft → `--ink2` on `--steel` (the pair Daylight already pins, `test/daylight-contrast.test.ts:124`), merged → `--magenta` on new `--magenta-tint`, closed → `--red` on new `--red-tint`.
   Tones: `ok` `--green`, `bad` `--red`, `run` `--mustard`, `dim` `--ink3`. New tints: `color-mix(in srgb,var(--red) 14%,transparent)` and the magenta twin on
-  `:root`, plus one Daylight override line each in the same `color-mix` form.
+  `:root`, plus one Daylight override line each written with Daylight's own hexes — `color-mix(in srgb,#aa3927 14%,transparent)` and
+  `color-mix(in srgb,#6950a5 14%,transparent)` (`styles.css:130`) — because `test/daylight-contrast.test.ts:56` parses only `#rrggbb` inside a Daylight mix.
 
 - [ ] **Step 1: Implement the hook, the card and the `ChatDrawer` line.**
 - [ ] **Step 2: Add the CSS and tokens.** Then `npx tsx test/ui-kit-guard.test.ts` — pass (no `.uk-*` rule added); grep the new block for `#` and `rgb(` —
-  none below the token block.
+  none below the token block. `npx tsx test/daylight-contrast.test.ts` — pass (it checks every accent on its own tint, the new pills included).
 - [ ] **Step 3: Run** `pnpm typecheck` and `pnpm build` — clean.
 - [ ] **Step 4: Commit** `feat(chat): pull request card in the chat sidecar`.
 
