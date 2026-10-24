@@ -44,6 +44,17 @@ card column is `flex-wrap:nowrap; align-items:stretch`: the phone `.kv` row's wr
 collapsed the gauge track to 0px. Rows are the plan's tasks with the status the transcript recorded;
 [sessions](sessions.md#the-task-list-and-why-it-folds-the-whole-file) has the signals and the cases that show no card.
 
+**A PR card sits under the Tasks card** once the session has created a pull request — the newest one only. `GET /api/sessions/:id/pr` finds it in the
+transcript (`server/lib/pr-detect.ts`): a `gitOperation.pr` record marked `created` decides alone, else the last github PR URL in a `gh pr create` result;
+a `pr-link` record never counts, because it also names PRs the session only looked at. `server/lib/pr-status.ts` then reads the live state with
+`gh pr view --json …` (10s timeout, `GH_NO_UPDATE_NOTIFIER=1`, `GH_PROMPT_DISABLED=1`) and caches it per URL: 20s while a check runs, mergeability is
+still being computed or `gh` failed, 60s once settled, for good once merged or closed, with one shared launch per URL in flight. `usePullRequest` polls at
+the board's refresh rate, keeps the last card on a network error or an `error` answer, and drops an answer whose `id` is no longer the open session. On
+desktop the card is a head (`PR #n`, the state pill), the title linking to GitHub, `head → base`, and the Checks (with a bar), Review and Merge rows — a
+merged or closed PR swaps the rows for one `into main · 2h` line. Below `md` it folds like the Tasks card into one `PR #n` band carrying the pill and a
+summary (`3/4 checks · review required`), the rows opening under it. When `gh` cannot answer (not installed, not signed in, timed out) the card keeps the
+transcript's number and title and shows one `Status: unavailable · <reason>` row instead.
+
 The **All / Text / You** filter is not in that column: it narrows the transcript, so it sits
 in the **foot** at the right edge, just past the `n of m shown` count it changes — control
 and readout on one line, and no chrome row spent on either. Still the board's segmented
@@ -308,6 +319,11 @@ the field to supply ([remote-access](remote-access.md)).
     - client/src/components/ChatDrawer.tsx
     - client/src/components/sessions/SessionStopControl.tsx
     - client/src/components/TasksCard.tsx
+    - client/src/components/PrCard.tsx
+    - client/src/hooks/usePullRequest.ts
+    - client/src/lib/pr.ts
+    - server/lib/pr-detect.ts
+    - server/lib/pr-status.ts
     - client/src/components/PanelChrome.tsx
     - client/src/components/QuestionPanel.tsx
     - client/src/components/PlanPanel.tsx
