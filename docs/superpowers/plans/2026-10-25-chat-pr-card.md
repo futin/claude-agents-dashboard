@@ -284,7 +284,9 @@ else null), `title` = `live.title ?? detected.title`, `live`, `unavailable`. A t
 Behaviour:
 - Hook: polls `/api/sessions/:id/pr` every `refreshMs` (`useSettings`), first fetch at once; skips a tick while its previous request is pending (a ref flag —
   no sibling has this guard); on a network failure keeps the last value; every answer goes through `acceptPrAnswer` (Task 4); on an id change resets to `null`
-  before the first answer.
+  before the first answer. `acceptPrAnswer`'s `currentId` is the hook's latest id read from a ref at answer time (the `tokenRef` pattern,
+  `client/src/hooks/usePendingPlan.ts:51-52`), never the fetch closure's `id` — the server echoes the requested id, so the closure's would never mismatch.
+  The effect also keeps the sibling's `live` cleanup flag (`usePendingPlan.ts:63-73`).
 - Card: `null` → renders nothing. One DOM for both widths with `.folded` (default folded), the `TasksCard` pattern: `.kv.pr-kv` holding `.pr-top`
   (glyph, `PR #<n>`, the `.pr-state` pill unless `live` is null), the `.pr-title` link (`target="_blank" rel="noopener noreferrer"`; text = `title`, else `—`),
   `.pr-ref` (`head → base`, or `repo` when `live` is null), `.pr-rows` (Checks with `.pr-checks` bar segments, Review, Merge for open/draft; the ended line for
