@@ -493,6 +493,22 @@ export async function readGlobalScope(homeDir?: string): Promise<ScopeConfig> {
   };
 }
 
+/**
+ * A predicate true for paths under `root` reached through no symlink below it (#289): the path's realpath is exactly root's realpath joined with
+ * its lexical rel. A project is somebody else's tree: a cloned repo can ship `CLAUDE.md -> ~/.ssh/id_rsa`, a `.claude` that links out, or
+ * `CLAUDE.md -> .env`, a gitignored secret inside the repo itself, and whatever the project scanners emit becomes servable to LAN peers with no
+ * token. So every link is refused, an in-repo `CLAUDE.md -> AGENTS.md` included; only links above root (macOS's `/var`) are allowed. The global
+ * scope is never confined: ~/.claude is the user's own, and a dotfiles setup links it out on purpose. A path or root that does not resolve fails.
+ */
+async function unlinkedUnder(root: string): Promise<(p: string) => Promise<boolean>> {
+  let real: string | null = null;
+  try { real = await fsp.realpath(root); } catch { /* nothing is under a root that does not resolve */ }
+  return async p => {
+    if (real === null || !isUnder(p, root)) return false;
+    try { return await fsp.realpath(p) === path.join(real, path.relative(root, p)); } catch { return false; }
+  };
+}
+
 export async function readProjectScope(projectPath: string, dirName?: string, homeDir?: string): Promise<ScopeConfig> {
   const dir = path.join(projectPath, '.claude');
   // The file-based memory store lives outside the project tree, under the
@@ -510,18 +526,33 @@ export async function readProjectScope(projectPath: string, dirName?: string, ho
     settingsHooks(dir, 'project', [dir]),
     readClaudeJson(homeDir)
   ]);
+  // Everything read from the project tree is held to it, links refused, before it can become servable (#289). The memory store is not: it is under ~/.claude.
+  const inside = await unlinkedUnder(projectPath);
+  const keep = async <T>(rows: T[], pathOf: (r: T) => string): Promise<T[]> => {
+    const ok = await Promise.all(rows.map(r => inside(pathOf(r))));
+    return rows.filter((_, i) => ok[i]);
+  };
+  const byPath = (i: ConfigItem) => i.path;
+  const keptHooks = await Promise.all((await keep(hooks, h => h.declaredIn)).map(async h =>
+    h.scriptPath && !(await inside(h.scriptPath)) ? { ...h, scriptPath: null } : h));
+  const keptExisting = new Set(await keep([...existing], p => p));
   // `projects` is keyed by the exact project path string; its two disabled lists cover both sources.
   const projects = isObject(claudeJson.projects) ? claudeJson.projects : {};
   const entry = isObject(projects[projectPath]) ? projects[projectPath] as JsonObject : {};
   const disabledMcp = new Set([...stringList(entry.disabledMcpServers), ...stringList(entry.disabledMcpjsonServers)]);
   const localMcp = normalizeMcpServers(entry.mcpServers, 'local', claudeJsonPath(homeDir), disabledMcp);
-  const projectMcp = await readMcpJson(path.join(projectPath, '.mcp.json'), 'project', disabledMcp);
+  const mcpJson = path.join(projectPath, '.mcp.json');
+  const projectMcp = await inside(mcpJson) ? await readMcpJson(mcpJson, 'project', disabledMcp) : [];
   return {
     scope: 'project',
     root: projectPath,
-    skills, agents, commands, rules, hooks,
-    memory: claudeMd.concat(memoryStore),
-    settings: settingsInfo(dir, existing),
+    skills: await keep(skills, byPath),
+    agents: await keep(agents, byPath),
+    commands: await keep(commands, byPath),
+    rules: await keep(rules, byPath),
+    hooks: keptHooks,
+    memory: (await keep(claudeMd, byPath)).concat(memoryStore),
+    settings: settingsInfo(dir, keptExisting),
     plugins: [],
     mcpServers: localMcp.concat(projectMcp)
   };
