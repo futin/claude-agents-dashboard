@@ -17,7 +17,7 @@ without opening GitHub or the terminal.
 - A **Pull request card in the chat modal's sidecar** (`.chat-side`), between the Tasks card and the facts list — always in view while the modal is open.
 - It shows the session's **newest** PR: `#<number>` + title (a link to the PR), a state pill (Open / Draft / Merged / Closed), `head → base`, and three
   rows: **Checks** (passed / failed / running counts plus a segmented bar), **Review** (Approved / Changes requested / Required / Not requested), **Merge**
-  (No conflicts / Conflicts with `<base>` / unknown).
+  (No conflicts / Conflicts with `<base>` / Checking…). Exact row and band copy per state: §Copy.
 - **Live status** comes from `gh pr view --json …`, launched by the server, cached, and refreshed while a modal showing it is open.
 - **Below `md` (768px)** the card folds to one band line, like the Tasks fold: `PR #304 [Open] 3/4 checks · review required ▾`; tapping unfolds the rows.
 - **Merged / Closed** drop the three rows and show `into <base> · <relative time>` / `not merged · <relative time>` instead.
@@ -43,7 +43,8 @@ without opening GitHub or the terminal.
   "launching a local program" exception in `.claude/CLAUDE.md`'s zero-deps rule. `test/outbound.test.ts` must stay green unchanged.
 - **The card never pushes or reflows the transcript.** It lives in the sidecar; the transcript column is untouched.
 - **No hardcoded colours in `styles.css`.** State pills and check bars use existing tokens (`--green`, `--green-tint`, `--magenta`, `--red`, `--mustard`, …);
-  where a `*-tint` token is missing for a theme (e.g. a red or magenta tint), add it to every theme block rather than a literal.
+  a missing `--red-tint` / `--magenta-tint` is defined on `:root` as `color-mix(… var(--red) …)` like the existing tints, plus a Daylight line only if
+  Daylight overrides its siblings — never a literal.
 
 ## Decided by the user
 
@@ -65,28 +66,49 @@ The PR a session **created** is the newest one of these, in transcript order:
 3. **Never** the top-level `{"type":"pr-link", prNumber, prUrl, prRepository}` record. Claude Code writes it for any PR URL that appears in output — on
    this machine (2026-10-24) it marked 11 PRs that sessions did not create, including PR URLs printed by a `grep`.
 
-- **Subagents don't count** (author's call). A subagent writes its own `<id>/subagents/agent-*.jsonl`; only the parent transcript is scanned. One
-  subagent on this machine has ever created a PR (2026-10-24).
-- The title comes from the same tool call's `--title "<…>"` / `-t "<…>"` argument when present (best-effort; for the transcript-only fallback). `gh` gives
+- **Subagents don't count** (author's call). A subagent writes its own `<id>/subagents/agent-*.jsonl`; only the parent transcript is scanned. No `gitOperation.pr` record appears in any of this
+  machine's 3,047 `subagents/*.jsonl` files (2026-10-24).
+- The title comes from the same tool call's title argument when present (best-effort; for the transcript-only fallback). In scope: `--title "<…>"`,
+  `--title '<…>'`, `--title=<…>` (quoted or not), and `-t` in the same forms; a heredoc-carried title is out of scope and yields `title: null`. `gh` gives
   the authoritative title when available.
 - Detection reads the transcript server-side, like `readSessionTasks` (`server/lib/tasks.ts`) folds tasks — incremental by byte offset, cached per file, so a
   re-read only scans what was appended.
 - A `gh pr create` that failed (non-zero exit, or no URL in its output) contributes nothing.
-- **Builder may widen** detection to the Desktop app's own PR tools (e.g. `mcp__ccd_pr__bind_pr` carries a PR URL) if those appear in real transcripts on
-  this machine — check `~/.claude/projects/*/*.jsonl` before deciding; do not guess their shape.
+- **Builder may widen** detection to the Desktop app's own PR tools: `mcp__ccd_pr__*` calls occur 43 times in this project's top-level transcripts
+  (2026-10-24). Read their real record shape from those transcripts before deciding; do not guess it.
 
 ## How status is read
 
 `gh pr view <url> --json number,title,url,state,isDraft,headRefName,baseRefName,statusCheckRollup,reviewDecision,mergeable,mergedAt,closedAt`, launched
-with the session's `projectPath` as cwd (not required for a full URL, but keeps `gh`'s host config consistent), a timeout (≈10s), and no shell.
+with the session's `projectPath` as cwd (not required for a full URL, but keeps `gh`'s host config consistent), a timeout (≈10s), no shell, and
+`GH_NO_UPDATE_NOTIFIER=1` + `GH_PROMPT_DISABLED=1` in the child env (as `lib/codegraph.ts` silences its tool), so no update notice reaches the stderr the
+failure classifier reads.
+
+- **cwd must exist.** `projectPath` can be null or a pruned worktree, and Node reports a missing cwd as the same `spawn gh ENOENT` as a missing binary
+  (checked 2026-10-24: `spawn('ls', [], { cwd: '/nonexistent' })` → `ENOENT spawn ls ENOENT`), which would read `gh not installed`. `statSync` the
+  cwd first; when it is null or not a directory, launch from `os.homedir()`.
+- **Only a validated URL reaches argv.** Launch `gh` only for a URL matching `^https://github\.com/[\w.-]+/[\w.-]+/pull/\d+$`; derive `repo`
+  (`owner/repo`) and `number` from that match. The same test decides "not github.com → transcript-only, `unavailable: 'not a GitHub PR'`". This guards the
+  primary signal's `gitOperation.pr.url` too: a flag-shaped value (`--web`, `-R …`) must never be passed to `gh`.
 
 - **Cache per PR URL**, with one launch in flight per URL (a second caller shares the promise). Suggested windows — builder may tune: **20s** while
-  open/draft with any check pending, **60s** while open and settled, **indefinitely** once merged or closed (state can't change back in a way the card
+  open/draft with any check running or `mergeable: UNKNOWN`, **60s** while open and settled, **indefinitely** once merged or closed (state can't change back in a way the card
   cares about; a reopen is rare enough to need a modal reopen at most).
-- **Checks** fold `statusCheckRollup` into passed / failed / running / skipped counts. `CheckRun` items use `status` + `conclusion`; `StatusContext` items
-  use `state`. Neutral and skipped count as neither failed nor running; the "N of M passed" denominator excludes skipped.
+- **Checks** fold `statusCheckRollup` into passed / failed / running counts plus excluded; `total` = passed + failed + running (excluded never counts).
+  An empty or missing rollup, or one whose every item is excluded (`total = 0`) → `checks: null`.
+- **State** precedence: `state: MERGED` → merged, `CLOSED` → closed (even with `isDraft: true`), then `isDraft` → draft, else open.
+
+  | Item | Value | Counts as |
+  |---|---|---|
+  | `CheckRun` | `status` ≠ `COMPLETED` (`QUEUED`, `IN_PROGRESS`, `WAITING`, `PENDING`, `REQUESTED`) | running |
+  | `CheckRun` | `COMPLETED` + `conclusion` `SUCCESS` | passed |
+  | `CheckRun` | `COMPLETED` + `conclusion` `NEUTRAL` or `SKIPPED` | excluded |
+  | `CheckRun` | `COMPLETED` + any other `conclusion` (`FAILURE`, `CANCELLED`, `TIMED_OUT`, `ACTION_REQUIRED`, `STARTUP_FAILURE`, `STALE`, unknown) | failed |
+  | `StatusContext` | `state` `SUCCESS` | passed |
+  | `StatusContext` | `state` `PENDING` or `EXPECTED` | running |
+  | `StatusContext` | `state` `FAILURE`, `ERROR`, or unknown | failed |
 - **Review** maps `reviewDecision`: `APPROVED` → Approved, `CHANGES_REQUESTED` → Changes requested, `REVIEW_REQUIRED` → Required, empty → Not requested.
-- **Merge** maps `mergeable`: `MERGEABLE` → No conflicts, `CONFLICTING` → Conflicts with `<base>`, `UNKNOWN` → `checking…` (GitHub computes it lazily).
+- **Merge** maps `mergeable`: `MERGEABLE` → No conflicts, `CONFLICTING` → Conflicts with `<base>`, `UNKNOWN` → `Checking…` (GitHub computes it lazily).
 - **Failure** (ENOENT, non-zero exit, timeout, unparsable JSON) yields a reason string for the fallback row: `gh not installed`, `gh not signed in` (stderr
   mentions auth / `gh auth login`), `timed out`, else `gh failed`. Failures cache for the short window too, so a missing `gh` isn't relaunched every poll.
 - Launching goes through the same child-process helper style as `server/lib/git-fetch.ts` (spawn, kill the group on timeout) with an injectable runner
@@ -96,8 +118,13 @@ with the session's `projectPath` as cwd (not required for a full URL, but keeps 
 
 A new `GET /api/sessions/:id/pr`, next to `/plan` and `/question` in `server/api.ts`, fetched by the chat modal only (a `usePullRequest(id)` hook, polling
 at the modal's `refreshMs`; the server cache absorbs the frequency). It follows the siblings' envelope (`server/api.ts` `/question`, `/plan`): a malformed
-id → 400 `{ id, pr: null, error: true }`; any well-formed id, known or not → 200 `{ id, pr }`; `error: true` also when the transcript read fails. So the
-hook tells "no PR" (`pr: null`, no `error`) from "fetch failed" (`error: true`, keep the last card). Payload, added to `shared/types.ts` first:
+id → 400 `{ id, pr: null, error: true }`; any well-formed id, known or not → 200 `{ id, pr }`; a transcript read that throws → 500
+`{ id, pr: null, error: true }`, as `/chat` does (`server/api.ts` `serveSessionChat`'s `fail(500)`). So the hook tells "no PR" (`pr: null`, no `error`)
+from "fetch failed" (`error: true`, keep the last card).
+
+**The handler awaits the `gh` read** (the shared in-flight promise, bounded by the ≈10s timeout) rather than answering before it lands, so there is no
+in-flight value in the payload. A cache hit answers at once. The hook skips a poll tick while its previous request is still pending, so a slow `gh` never
+stacks requests. Payload, added to `shared/types.ts` first:
 
 ```
 SessionPrResponse = { id: string; pr: SessionPr; error?: boolean }
@@ -123,10 +150,39 @@ branch) is already visible in the chat transcript the same viewer can read.
 - `client/src/components/PrCard.tsx`, rendered by `ChatDrawer` in `.chat-side` after `TasksCard`. One DOM for both widths with a `.folded` class, the
   pattern `TasksCard` documents: desktop shows the head row + title + ref + rows; below `md` the sidecar is a band and the card is one fold button
   (`.pr-band`) that toggles the rows.
-- Class names from the mockup are proposals (`pr-kv`, `pr-state`, `pr-title`, `pr-ref`, `pr-rows`, `pr-row`, `pr-checks`, `pr-band`); once shipped they are
-  stable (visual suite and docs address them).
-- The title link opens the PR in a new tab (`target="_blank" rel="noopener"`).
-- Relative time for Merged / Closed uses whatever relative-time helper the client already has; don't add a new one if one exists.
+- Class names from the mockup are proposals (`pr-kv`, `pr-top`, `pr-glyph`, `pr-state`, `pr-title`, `pr-ref`, `pr-rows`, `pr-row`, `pr-checks`,
+  `pr-band`); once shipped they are stable (visual suite and docs address them).
+- The title link opens the PR in a new tab (`target="_blank" rel="noopener noreferrer"`, as `Markdown.tsx` and `GitBranches.tsx` do).
+- Relative time for Merged / Closed uses the client's existing `formatAgo` (`client/src/lib/format.ts`), so it reads `2h` / `1d`, not the mock's
+  `2h ago` / `yesterday`. No new helper.
+- Open and Draft both carry all three rows (the mock's draft cell omits Merge; the spec wins).
+
+## Copy
+
+**Checks row** (desktop), first matching rule:
+
+| Condition | Text | Tone |
+|---|---|---|
+| `checks: null` | `None` | dim |
+| `failed > 0` | `<failed> failed · <passed> passed`, plus ` · <running> running` when running > 0 | bad |
+| `running > 0` | `<passed> of <total> passed · <running> running` | running |
+| otherwise | `<total> of <total> passed` | ok |
+
+The segmented bar has one segment per counted check (failed first, then running, then passed) and is absent when `checks` is null.
+
+**Review row:** Approved (ok) · Changes requested (bad) · Required (dim) · Not requested (dim). **Merge row:** No conflicts (ok) · Conflicts with `<base>`
+(bad) · Checking… (dim).
+
+**Phone band** (`PR #<n> [pill] <line> ▾`), `<line>` by state:
+
+| State | `<line>` |
+|---|---|
+| Open / Draft | `<checks short> · <review short>`; checks short: `no checks` / `<failed> failed` / `<passed>/<total> checks`, same precedence as the row; review short: `approved` / `changes requested` / `review required` / `no review` |
+| Merged | `into <base> · <relative time>` |
+| Closed | `not merged · <relative time>` |
+| live null (unavailable) | `status unavailable` — no pill |
+
+The mockup's "Draft, checks failing" cell already follows the row rule; the `Checking…` merge value is drawn in its own States cell.
 
 ## Constraints
 
@@ -134,7 +190,7 @@ branch) is already visible in the chat transcript the same viewer can read.
   colour below the theme-token block; keep class names stable.
 - Add `lib/<file>.ts launches gh pr view` to the launched-programs sentence in `.claude/CLAUDE.md`'s zero-deps rule, and to `docs/overview.md`'s `lib/` map.
 - Docs: a new paragraph in `docs/subsystems/chat.md` (the sidecar section — where the card sits, what it reads, the fold) and the new route in
-  `docs/overview.md`'s API table; DESIGN.md §8.6 gets one line pointing at the mockup.
+  `docs/overview.md`'s API table; `.claude/DESIGN.md` §8.6 gets one line pointing at the mockup.
 - Five themes: check the card in at least Daylight and one dark theme.
 
 ## Verification the builder owns
@@ -145,10 +201,14 @@ branch) is already visible in the chat transcript the same viewer can read.
   incremental re-read after an append. Fixtures copy the record shapes from a real transcript on this machine, not from memory.
 - Unit tests for the `gh` JSON fold with an injected runner: each state, draft, checks mix (CheckRun + StatusContext, skipped excluded), each
   `reviewDecision` and `mergeable` value, each failure reason, and the cache windows (a second call inside the window does not launch; merged never relaunches).
-- An API test through `test/api-harness.ts`: malformed id → 400 `error: true`; unknown or PR-less session → 200 `pr: null`.
+- An API test through `test/api-harness.ts`: malformed id → 400 `error: true`; unknown or PR-less session → 200 `pr: null`; a transcript read that
+  throws → 500 `error: true`.
 - A visual check in the dev server at desktop and 375px, light and dark, against a real session on this machine that ran `gh pr create`.
-- `pnpm typecheck`; the touched test files; `pnpm test:visual` only if a baseline covers the chat sidecar (it does — `test/visual/fixtures/session-chat.ts`),
-  in which case add the PR card to the fixture and re-baseline.
+- `pnpm typecheck`; the touched test files.
+- **Visual suite precondition.** The harness fails any case in which a `/api/*` GET had no fixture (`test/visual/harness.ts` header, `test/visual/mock-api.ts`
+  "no fixture"), so once `usePullRequest` polls inside `ChatDrawer`, every chat-opening case fails until `/api/sessions/:id/pr` answers. Add a
+  `test/visual/fixtures/session-pr.ts` answering `{ id, pr: null }` for every fixture session and a populated PR for one, then run `pnpm test:visual` and
+  re-baseline. The suite is on-demand and macOS-only, so it is not in CI — it must be run here, not skipped.
 
 ## Left to the builder
 
@@ -164,6 +224,6 @@ branch) is already visible in the chat transcript the same viewer can read.
 - **Subagent-created PRs don't show** on the parent's card.
 - **Endpoint envelope matches `/plan` / `/question`** (400 malformed, 200 otherwise, `error` flag), not a bare body.
 - **Endpoint per modal, not a field on `Session`.** Putting it on the list poll would either launch `gh` for every row or need a second cache layer; the
-  modal already runs three per-session polls (`/question`, `/plan`, `/message`) and this is a fourth of the same shape.
+  modal already runs per-session polls of this shape (`/question`, `/plan`, `/message`, beside the `/chat` tail) and this is one more.
 - **Merged / closed is cached for the life of the server process.**
 - **Order in the sidecar**: Context → Stop control → Tasks → Pull request → facts.
