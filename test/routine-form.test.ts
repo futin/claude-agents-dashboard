@@ -157,6 +157,11 @@ export function run(): number {
     assert.deepStrictEqual(neither, { mode: 'cwd', picks: [], cwd: '' });
     assert.deepStrictEqual(r.summary({ mode: 'cwd', picks: [], cwd: '' }, ctx), { text: "Routines folder's parent", tone: 'dim' });
     assert.strictEqual(r.read('---\nforeach: everything\n---\n'), UNREADABLE);
+    // A value holding ` #` would read back cut at the comment, so it is written quoted and reads back whole.
+    const hashed = r.write('---\nrun: shell\n---\n', { mode: 'cwd', picks: [], cwd: '~/a #b' });
+    assert.strictEqual(hashed, '---\nrun: shell\ncwd: "~/a #b"\n---\n');
+    assert.deepStrictEqual(r.read(hashed), { mode: 'cwd', picks: [], cwd: '~/a #b' });
+    assert.strictEqual(r.write(hashed, { mode: 'cwd', picks: [], cwd: '~/a #b' }), hashed);
   });
 
   t('repos: One folder drops foreach and writes cwd; empty cwd removes it', () => {

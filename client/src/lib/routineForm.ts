@@ -147,12 +147,12 @@ function inlineList(text: string, key: string): Read<string[] | null> {
   return m[1].trim() === '' ? [] : m[1].split(',').map(x => unquote(x.trim()));
 }
 
-/** Write each key whose value changed; a null or blank value removes the line. */
+/** Write each key whose value changed; a null or blank value removes the line, and one holding a `#` comment start is quoted so it reads back whole. */
 function writeKeys(text: string, now: Record<string, string | null>, next: Record<string, string | null>): string {
   let out = text;
   for (const key of Object.keys(next)) {
     const v = next[key]?.trim() || null;
-    if (v !== (now[key] ?? null)) out = setKey(out, key, v);
+    if (v !== (now[key] ?? null)) out = setKey(out, key, v !== null && /(^|\s)#/.test(v) ? quoted(v) : v);
   }
   return out;
 }

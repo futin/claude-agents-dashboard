@@ -327,7 +327,8 @@ client/src/
                   sessions), useBackClose, useHideOnScroll (the phone top bar's
                   auto-hide), useNarrow (the one JS read of the `md` breakpoint),
                   useStuckStrip (when the phone's aside strip pins)
-  lib/            routines (the Routines page's pure helpers: pills, run folding, the Repos helper, write-failure text), filterSort, analyticsFilterSort, chatFilter, heldBody (which timeline body a pinned panel folds), markdown, configsEntries,
+  lib/            routines (the Routines page's pure helpers: pills, run folding, the Repos helper, write-failure text), routineForm (the job drawer's
+                  Form view: one read/write/summary per row over the file text), filterSort, analyticsFilterSort, chatFilter, heldBody (which timeline body a pinned panel folds), markdown, configsEntries,
                   format, settings,
                   sections, deepLink, dictation, spawnOptions, pins, resume, pace, usageProfile,
                   usageRatesFormat, usageHistory (the History tab's step path, ticks and figures), panelCollapse, surface, walkChart (the headroom

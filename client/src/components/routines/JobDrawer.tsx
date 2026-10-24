@@ -191,7 +191,7 @@ export default function JobDrawer({ mode, row, confirmDelete, existing, ctl, sen
             )}
             {view === 'form' ? (
               <div className="rtn-field">
-                {reading ?? <JobRows key={kind} text={text} onText={edit} errors={errors} readOnly={readOnly} ctl={ctl} onFile={() => setView('file')} />}
+                {reading ?? <JobRows key={`${kind}:${loaded?.mtimeMs ?? ''}`} text={text} onText={edit} errors={errors} readOnly={readOnly} ctl={ctl} onFile={() => setView('file')} />}
                 {errors.length === 0 && check?.summary && <span className="rtn-vmsg ok">Valid · {check.summary}</span>}
               </div>
             ) : (
