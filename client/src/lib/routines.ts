@@ -86,7 +86,7 @@ function whenText(at: Date, now: Date): string {
 }
 
 /** When the next fire is: `today 22:00`, `tomorrow 07:00`, `Nov 1 09:30` (a stack of two short lines in the mock, one ellipsizable line here). */
-function nextText(at: Date, now: Date): string {
+export function nextText(at: Date, now: Date): string {
   const ahead = dayDiff(now, at);
   const time = `${String(at.getHours()).padStart(2, '0')}:${String(at.getMinutes()).padStart(2, '0')}`;
   if (ahead <= 0) return `today ${time}`;

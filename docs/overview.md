@@ -306,7 +306,8 @@ client/src/
                   chrome the tabs draw, and
                   ReadingAids — the ⓘ button they both render), settings/
   components/routines/  the Routines section (Jobs | Runs, picked in the rail), its own lazy chunk: RoutinesView (owns the poll, the write helper, the
-                  drawer and the ChatDrawer), StatsBand, JobLedger / JobFold / JobMenu, JobDrawer (the editor), RunNowPopover, RunsList, SessionLink,
+                  drawer and the ChatDrawer), StatsBand, JobLedger / JobFold / JobMenu, JobDrawer (the editor) with JobRows / ScheduleControl (its Form
+                  view), RunNowPopover, RunsList, SessionLink,
                   and `ctl.ts`, the one object of state and callbacks every part reads (see subsystems/routines.md)
   hooks/          useSessions (the main poll), useSessionDetail, useSessionChat,
                   useConfigs, useConfigsScope (the scope + the one index
@@ -319,6 +320,7 @@ client/src/
                   useRoutines / useRoutineRuns (the Routines sub-view's 3s polls, one `createPollSeq` each) and useRoutineWrite (its one write helper),
                   useGitStats (the Git sub-view's 30s visible-only poll), useGitSync (its
                   Sync button: runs per device, a sessions poll only while one is live),
+                  useDraft (an input's typed text, kept local until it is whole),
                   usePersistedState, useAnswerToken (the page's one Answer token copy), useSettings, useServerSettings, useDictation, useFloatingTip
                   (the one hover/pin explanation panel, shared by both Usage tabs),
                   useTranscribeAvailable, useWebNotify (browser banners for headless
