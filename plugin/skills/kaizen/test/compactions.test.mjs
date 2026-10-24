@@ -96,6 +96,11 @@ test('a compact summary quoting correction words is not counted as a user correc
   assert.equal(a.errorSignals.userCorrections, 1)
 })
 
+test('a subagent hand-back delivered as an <agent-message> user turn is not counted as a user correction', () => {
+  const a = analyze([turn(0, 0, 100), said(1, 'Another Claude session sent a message: <agent-message from="a1">No findings, the claim is wrong</agent-message>'), said(2, 'no, wrong file')])
+  assert.equal(a.errorSignals.userCorrections, 1)
+})
+
 // A compaction replays earlier records verbatim. Tool calls, their results and Agent launches must be counted once per id (#174).
 const call = (n, msgId, id, name, input = {}) => ({
   type: 'assistant', isSidechain: false, timestamp: ts(n),

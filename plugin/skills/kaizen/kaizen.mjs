@@ -428,7 +428,8 @@ export function analyzeSession(filePath, id) {
         }
       }
       const t = userText(msg);
-      if (t && !t.includes('<task-notification>') && CORRECTION_RE.test(t)) userCorrections++;
+      // <agent-message> is a subagent's hand-back delivered as a user turn — its prose is not the user correcting anything.
+      if (t && !t.includes('<task-notification>') && !t.includes('<agent-message') && CORRECTION_RE.test(t)) userCorrections++;
     }
   }
 

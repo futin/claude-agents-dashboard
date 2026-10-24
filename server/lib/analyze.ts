@@ -240,9 +240,9 @@ export function analyzeSession(filePath: string, id?: string): SessionAnalysis |
           }
         }
       }
-      // Correction heuristic — only on human-typed turns, never task-notifications.
+      // Correction heuristic — only on human-typed turns, never task-notifications or <agent-message> hand-backs (a subagent's report, not the user).
       const t = userText(msg);
-      if (t && !t.includes('<task-notification>') && CORRECTION_RE.test(t)) userCorrections++;
+      if (t && !t.includes('<task-notification>') && !t.includes('<agent-message') && CORRECTION_RE.test(t)) userCorrections++;
     }
   }
 

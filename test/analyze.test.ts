@@ -270,13 +270,14 @@ export function run(): number {
     assert.strictEqual(a.errorSignals.retries, 1);
   })) p++; else f++;
 
-  if (test('userCorrections counts human turns, ignores tool_result + task-notification', () => {
+  if (test('userCorrections counts human turns, ignores tool_result + task-notification + agent-message', () => {
     const file = fixture([
       toolUseRec([tu('b1', 'Bash')], '2026-07-01T10:00:00Z'),
       resultRec('b1', '2026-07-01T10:00:01Z'),                                 // tool_result-only user turn
       humanRec('No, that is wrong — revert it', '2026-07-01T10:00:02Z'),       // correction
       humanRec('<task-notification><status>completed</status> no</task-notification>', '2026-07-01T10:00:03Z'), // ignored
-      humanRec('great, continue', '2026-07-01T10:00:04Z')                      // not a correction
+      humanRec('Another Claude session sent a message: <agent-message from="a1">No findings — the claim is wrong, revert</agent-message>', '2026-07-01T10:00:04Z'), // ignored
+      humanRec('great, continue', '2026-07-01T10:00:05Z')                      // not a correction
     ]);
     const a = analyzeSession(file)!;
     assert.strictEqual(a.errorSignals.userCorrections, 1);
