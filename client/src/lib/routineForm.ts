@@ -203,7 +203,7 @@ const machines: FieldDef<Machines> = {
   },
   write(text, v) {
     const now = machines.read(text);
-    if (now !== UNREADABLE && now.mac === v.mac && now.wsl === v.wsl) return text;
+    if (now === UNREADABLE || (now.mac === v.mac && now.wsl === v.wsl)) return text;
     const list = [v.mac ? 'mac' : null, v.wsl ? 'wsl' : null].filter(x => x !== null);
     return setKey(text, 'machines', `[${list.join(', ')}]`);
   },
@@ -227,7 +227,8 @@ const repos: FieldDef<Repos> = {
   },
   write(text, v) {
     const now = repos.read(text);
-    if (now !== UNREADABLE && now.mode === v.mode) {
+    if (now === UNREADABLE) return text;
+    if (now.mode === v.mode) {
       if (v.mode === 'all') return text;
       if (v.mode === 'pick' && sameList(now.picks, v.picks)) return text;
       if (v.mode === 'cwd' && now.cwd === v.cwd.trim()) return text;

@@ -129,7 +129,18 @@ export function run(): number {
     assert.strictEqual(m.write(crlf(SKILL), { mac: true, wsl: false }), crlf(out));
   });
 
+  t('machines: a write over an unreadable line leaves the text unchanged', () => {
+    const odd = '---\nmachines: [mac, linux]\nrun: shell\n---\n';
+    assert.strictEqual(FIELDS.machines.write(odd, { mac: true, wsl: false }), odd);
+  });
+
   // --- repos ---
+
+  t('repos: a write over an unreadable line leaves the text unchanged', () => {
+    const block = '---\nforeach:\n  - a\n---\n';
+    assert.strictEqual(FIELDS.repos.write(block, { mode: 'all', picks: [], cwd: '' }), block);
+    assert.strictEqual(FIELDS.repos.write(block, { mode: 'cwd', picks: [], cwd: '~/y' }), block);
+  });
 
   t('repos: read and summaries', () => {
     const r = FIELDS.repos;
