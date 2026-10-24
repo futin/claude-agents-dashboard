@@ -330,7 +330,7 @@ client/src/
                   sections, deepLink, dictation, spawnOptions, pins, resume, pace, usageProfile,
                   usageRatesFormat, usageHistory (the History tab's step path, ticks and figures), panelCollapse, surface, walkChart (the headroom
                   chart's geometry), walkRows (the same walk as day rows), holds,
-                  webNotify, backClose, stopControl, triage (the board/triage piles), answerToken (the token store + authHeaders),
+                  webNotify, backClose, clipboard (copyText with the execCommand fallback), stopControl, triage (the board/triage piles), answerToken (the token store + authHeaders),
                   stickyStrip, agentLabel (a subagent's type only when informative),
                   tasks (taskProgress — the one count the row pill and the Tasks card share),
                   gitLayouts / gitLevels / gitLinks / gitStatsText (the Git sub-view's switcher rules,

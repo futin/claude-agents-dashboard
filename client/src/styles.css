@@ -1620,6 +1620,9 @@ code,kbd,samp,pre{font-family:inherit}
 .chat-facts{display:grid;gap:10px;font-size:12px;color:var(--ink2)}
 .chat-facts .f{display:flex;justify-content:space-between;align-items:baseline;gap:12px;min-width:0}
 .chat-facts .f b{min-width:0;color:var(--ink);font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* the Session value is its own copy button: dressed as the `b` beside it, no chrome; focus ring from the global :focus-visible rule */
+.chat-facts .f .sid{min-width:0;padding:0;border:0;background:none;color:var(--ink);font:inherit;font-weight:600;cursor:pointer;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.chat-facts .f .sid:hover{color:var(--accent)}
 .chat-col{display:flex;flex-direction:column;min-width:0;min-height:0}
 
 /* The transcript and the pinned layer are SIBLINGS in a relative stack that
