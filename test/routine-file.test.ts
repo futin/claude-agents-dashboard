@@ -245,6 +245,29 @@ export function run(): number {
     assert.strictEqual(must('a', mk('[wsl]')).cron, '0 9 1-5 * 1');
   })) p++; else f++;
 
+  if (test('cron: manual is valid (bare or quoted) and keeps the literal as job.cron', () => {
+    const bare = shell().replace('cron: "0 9 * * *"', 'cron: manual').replace('machines: [mac]', 'machines: [mac, wsl]');
+    assert.deepStrictEqual(errs('a', bare), []);
+    assert.strictEqual(must('a', bare).cron, 'manual');
+    const quoted = shell().replace('cron: "0 9 * * *"', 'cron: "manual"');
+    assert.strictEqual(must('a', quoted).cron, 'manual');
+  })) p++; else f++;
+
+  if (test('cron: manual with machines: [mac] gets no launchd error', () => {
+    assert.deepStrictEqual(errs('a', claude().replace('cron: "0 9 * * *"', 'cron: manual')), []);
+  })) p++; else f++;
+
+  if (test('an absent cron line is still "cron is required", so a forgotten line does not become Manual', () => {
+    const text = ['---', 'machines: [mac]', 'run: claude', '---', 'x'].join('\n');
+    assert.deepStrictEqual(errs('a', text), [{ line: 0, message: 'cron is required' }]);
+  })) p++; else f++;
+
+  if (test('cron: Manual is not manual: five-fields error at the cron line', () => {
+    const text = claude().replace('cron: "0 9 * * *"', 'cron: Manual');
+    assert.deepStrictEqual(errs('a', text), [{ line: 2, message: 'cron needs five fields (minute hour day month weekday); got 1' }]);
+    assert.strictEqual(parseJob('a', text).job, null);
+  })) p++; else f++;
+
   if (test('several errors are all reported, in file order', () => {
     const text = ['---', 'cron: "0 22 * *"', 'machines: [linux]', 'run: python', 'zzz: 1', '---', 'x'].join('\n');
     assert.deepStrictEqual(errs('a', text).map((e) => e.line), [2, 3, 4, 5]);

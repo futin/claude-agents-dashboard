@@ -1,6 +1,6 @@
 import assert from 'node:assert';
 
-import { describeCron, lastBefore, nextAfter, parseCron, toCalendarIntervals } from '../shared/cron.js';
+import { describeCron, isManualCron, lastBefore, nextAfter, parseCron, toCalendarIntervals } from '../shared/cron.js';
 import type { Cron } from '../shared/cron.js';
 
 function test(name: string, fn: () => void): boolean {
@@ -34,6 +34,13 @@ const iso = (d: Date | null): string | null => (d === null ? null : d.toISOStrin
 export function run(): number {
   console.log('\n=== cron.ts ===\n');
   let p = 0, f = 0;
+
+  if (test('isManualCron: true only for the literal "manual" after trimming; case-sensitive, and a cron is not manual', () => {
+    assert.strictEqual(isManualCron('manual'), true);
+    assert.strictEqual(isManualCron(' manual '), true);
+    assert.strictEqual(isManualCron('Manual'), false);
+    assert.strictEqual(isManualCron('0 9 * * *'), false);
+  })) p++; else f++;
 
   if (test('parseCron: "0 22 * * *" is ok with single minute and hour', () => {
     const c = must('0 22 * * *');

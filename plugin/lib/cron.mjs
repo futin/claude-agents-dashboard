@@ -55,6 +55,10 @@ function parseField(text, f) {
     }
     return { set };
 }
+/** The file's schedule value for a routine that never installs and runs only through Run now. Case-sensitive on purpose: `Manual` stays a broken cron. */
+export function isManualCron(cron) {
+    return cron.trim() === 'manual';
+}
 export function parseCron(expr) {
     const parts = expr.trim().split(/\s+/).filter((s) => s !== '');
     if (parts.length !== 5)

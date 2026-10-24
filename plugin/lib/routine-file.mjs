@@ -4,7 +4,7 @@
  * empty value, a duplicate key or an unknown key must each be an error naming its line. `import type` from types.ts only: the transpiled copy has
  * no types module to load.
  */
-import { parseCron, toCalendarIntervals } from './cron.mjs';
+import { isManualCron, parseCron, toCalendarIntervals } from './cron.mjs';
 import { scalarEnd, writeFrontmatterLine } from './frontmatter.mjs';
 const NAME_RE = /^[a-z0-9-]+$/;
 const RESERVED = new Set(['runs', 'validate', 'reconcile', 'reveal']);
@@ -131,11 +131,15 @@ export function parseJob(name, text) {
     let cron = null;
     const cronE = requireValue('cron');
     if (cronE) {
-        const r = parseCron(cronE.value);
-        if (!r.ok)
-            push(cronE.line, r.error);
-        else
+        if (isManualCron(cronE.value))
             cron = cronE.value;
+        else {
+            const r = parseCron(cronE.value);
+            if (!r.ok)
+                push(cronE.line, r.error);
+            else
+                cron = cronE.value;
+        }
     }
     else if (!seen.has('cron'))
         push(0, 'cron is required');
@@ -168,7 +172,7 @@ export function parseJob(name, text) {
     else if (!seen.has('run'))
         push(0, 'run is required');
     // mac can only express what launchd's StartCalendarInterval can
-    if (cron !== null && cronE && machines?.includes('mac')) {
+    if (cron !== null && !isManualCron(cron) && cronE && machines?.includes('mac')) {
         const parsed = parseCron(cron);
         if (parsed.ok && toCalendarIntervals(parsed.cron) === null)
             push(cronE.line, 'cron: launchd cannot combine day-of-month and weekday; use one');

@@ -71,6 +71,11 @@ function parseField(text: string, f: (typeof FIELDS)[number]): { set: Set<number
   return { set };
 }
 
+/** The file's schedule value for a routine that never installs and runs only through Run now. Case-sensitive on purpose: `Manual` stays a broken cron. */
+export function isManualCron(cron: string): boolean {
+  return cron.trim() === 'manual';
+}
+
 export function parseCron(expr: string): CronParse {
   const parts = expr.trim().split(/\s+/).filter((s) => s !== '');
   if (parts.length !== 5) return { ok: false, error: `cron needs five fields (minute hour day month weekday); got ${parts.length}` };
