@@ -12,7 +12,7 @@ import path from 'node:path';
 import type { Config } from '../server/lib/config.js';
 import {
   applyReconcile, CRON_END, CRON_LINE_MAX, CRON_START, LABEL_PREFIX, PLUGIN_ID, lastReconcile, planReconcile, renderCronEnv, renderCronLine, renderPlist,
-  scheduled, setReconcileHost, setRoutineRunner, LEGACY_CRON_END, LEGACY_CRON_START, LEGACY_LABEL_PREFIX
+  realRunner, scheduled, setReconcileHost, setRoutineRunner, LEGACY_CRON_END, LEGACY_CRON_START, LEGACY_LABEL_PREFIX
 } from '../server/lib/routine-reconcile.js';
 import type { ReconcilePaths, ReconcileReport } from '../server/lib/routine-reconcile.js';
 import { claimOwner, releaseOwner } from '../server/lib/routine-store.js';
@@ -724,6 +724,23 @@ export async function run(): Promise<number> {
       await applyReconcile(w.cfg);
       assert.strictEqual(w.fake.verbs().length, 4, 'after both settle, a new call starts a fresh run');
     });
+  }));
+
+  // `crontab -` on WSL can exit before reading its stdin; the write then fails with an async EPIPE on the child's stdin stream, which is
+  // an EventEmitter of its own that the child's 'error' listener does not cover. Unheard, it is an uncaught exception and ends the server.
+  // A megabyte outruns the pipe buffer, so the write is still in flight when the child closes its end.
+  check(await test('the real runner survives a child that closes stdin before reading it', async () => {
+    const uncaught: unknown[] = [];
+    const onUncaught = (e: unknown): void => { uncaught.push(e); };
+    process.on('uncaughtException', onUncaught);
+    try {
+      const r = await realRunner()('sh', ['-c', 'exec 0<&-; exit 3'], 'x'.repeat(1 << 20));
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      assert.deepStrictEqual(uncaught.map((e) => (e as NodeJS.ErrnoException).code), []);
+      assert.strictEqual(r.code, 3, 'the exit code still settles the run');
+    } finally {
+      process.off('uncaughtException', onUncaught);
+    }
   }));
 
   console.log(`\nroutine-reconcile: ${ok_}/${total} passed`);

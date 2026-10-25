@@ -40,8 +40,8 @@ export type RoutineRunner = (cmd: string, args: string[], input?: string) => Pro
 
 const RUN_TIMEOUT_MS = 15_000;
 
-/** The real runner: no shell, `input` on stdin, a spawn failure answered as exit 127 rather than thrown. */
-function realRunner(): RoutineRunner {
+/** The real runner: no shell, `input` on stdin, a spawn failure answered as exit 127 rather than thrown. Exported for its own test only. */
+export function realRunner(): RoutineRunner {
   return (cmd, args, input) => new Promise((resolve) => {
     let stdout = '';
     let stderr = '';
@@ -53,6 +53,9 @@ function realRunner(): RoutineRunner {
     child.stderr?.setEncoding('utf8').on('data', (d: string) => { stderr += d; });
     child.on('error', (e) => { stderr += e.message; done(127); });
     child.on('close', (code) => done(code ?? 1));
+    // stdin is a stream with its own 'error', which the child's listener above does not hear: a `crontab -` that exits before reading
+    // its input fails the write with an async EPIPE, and unheard that ends the server (spawn.ts guards the same case). 'close' settles.
+    child.stdin?.on('error', (e) => { stderr += e.message; });
     if (input !== undefined) child.stdin?.end(input);
   });
 }

@@ -132,12 +132,22 @@ export function resolveStaticPath(urlPath: string, root: string = clientDist): s
   return filePath;
 }
 
-/** Serve a file from client/dist, falling back to index.html (SPA-style). */
-function serveStatic(urlPath: string, res: http.ServerResponse): void {
-  let filePath = resolveStaticPath(urlPath);
-  if (!fs.existsSync(filePath) || !fs.statSync(filePath).isFile()) {
-    filePath = path.join(clientDist, 'index.html');
+/**
+ * Serve a file from client/dist, falling back to index.html (SPA-style).
+ *
+ * One stat, never an `existsSync` then a `statSync`: a `pnpm build` under a running `pnpm start` deletes assets between the two, and a stat that
+ * throws here is synchronous inside the request listener, where nothing catches it (there is no `uncaughtException` handler, see above). A file
+ * that vanishes after the stat is `readFile`'s error, answered 404 below.
+ */
+export function serveStatic(urlPath: string, res: http.ServerResponse, root: string = clientDist): void {
+  let filePath = resolveStaticPath(urlPath, root);
+  let isFile = false;
+  try {
+    isFile = fs.statSync(filePath, { throwIfNoEntry: false })?.isFile() ?? false;
+  } catch {
+    // EACCES, ENOTDIR, ELOOP — none of them a file this server can serve.
   }
+  if (!isFile) filePath = path.join(root, 'index.html');
   fs.readFile(filePath, (err, buf) => {
     if (err) {
       res.writeHead(404, { 'Content-Type': 'text/plain' });
