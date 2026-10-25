@@ -206,6 +206,11 @@ same permission ladder and ceiling, prompt still stdin-only — with these diffe
   account-registering a *resumed* session are unverified CLI combos, so they are never
   sent. `oneShot` is forced off too, so a resumed turn holds for a reply ([§Close when done](#close-when-done-oneshot)).
   `model`/`effort`/`permissionMode` pass through as usual.
+- **An unnamed `effort` falls back to the session's own, not the CLI's.** `claude -p --resume` with no `--effort` runs at the CLI default, medium on
+  2.1.295 and 2.1.303 (read off this machine's transcripts 2026-10-25: six sessions launched at high dropped to medium at the first resume). The
+  composer sends no effort, so the server reads the newest main-chain assistant record's `effort` (`lastSessionEffort`, `server/lib/transcript.ts`)
+  and passes it when it is one of `EFFORTS`. A request that names an effort wins; a transcript whose 256KB tail holds no such record gets no flag,
+  as before. `model` gets no such fallback; whether a bare `--resume` keeps the session's model is unmeasured.
 
 **The store treats a resume entry specially.** Its id names a transcript that already
 exists, so `adoptLaunched` skips it — adoption-on-scan would delete the entry on the first
