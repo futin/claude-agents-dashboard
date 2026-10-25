@@ -51,11 +51,12 @@ export function useSessionChat(id: string): ChatState {
     setMessages([]);
     setHasMore(false);
     setLoading(true);
-    setLoadingOlder(false);
     setError(false);
 
     async function tail(): Promise<void> {
       const epoch = paging.retail();
+      // Every re-tail — a reset poll's too — strands a "load older" in flight as stale, and only this can clear its spinner.
+      setLoadingOlder(false);
       const page = await get('');
       if (!live) return;
       if (!page) {
