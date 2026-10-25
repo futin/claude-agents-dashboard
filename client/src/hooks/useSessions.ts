@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 
 import { useSettings } from './useSettings';
+import { createPollSeq } from '../lib/pollSeq';
 import { scanQuery } from '../lib/settings';
 import type { SessionsResponse } from '../../../shared/types';
 
@@ -33,14 +34,18 @@ export function useSessions(opts: { enabled?: boolean; limit?: number; projects?
       return;
     }
     let alive = true;
+    // A tick while a scan is still out is skipped, so a slow answer can never land after a newer one and step the board backwards.
+    const seq = createPollSeq();
 
     async function poll() {
+      const n = seq.next(false);
+      if (n === null) return;
       try {
         const res = await fetch(`/api/sessions${query}`);
         const data: SessionsResponse = await res.json();
-        if (alive) setState({ data, connected: true });
+        if (seq.settle(n) && alive) setState({ data, connected: true });
       } catch {
-        if (alive) setState(prev => ({ data: prev.data, connected: false }));
+        if (seq.settle(n) && alive) setState(prev => ({ data: prev.data, connected: false }));
       }
     }
 

@@ -16,7 +16,7 @@ import {
 } from './lib/scan.js';
 import { readSessionAnalyticsLog } from './lib/sessionAnalyticsLog.js';
 import { archivedSessionIds } from './lib/archived.js';
-import { readTranscript } from './lib/transcript.js';
+import { lastSessionEffort, readTranscript } from './lib/transcript.js';
 import { readAgentsCached } from './lib/agents-cache.js';
 import { getCachedUsageState } from './lib/usage.js';
 import { isRefreshSession } from './lib/token-refresh.js';
@@ -70,7 +70,7 @@ import { classifyOrigin, resolvePeer } from './lib/origin.js';
 import { releasesPayload } from './lib/releases.js';
 import { extForMime, isTranscribing, probeTranscribe, transcribe } from './lib/transcribe.js';
 import {
-  MAX_LAUNCHING, adoptLaunched, clampPermission, forceStopSession, hasLiveChild, launch, listLaunching, parseSpawnRequest,
+  EFFORTS, MAX_LAUNCHING, adoptLaunched, clampPermission, forceStopSession, hasLiveChild, launch, listLaunching, parseSpawnRequest,
   probeSpawn, stopSession, stopStates
 } from './lib/spawn.js';
 import { staleEnvKeys, toPosInt, type Config } from './lib/config.js';
@@ -1557,7 +1557,12 @@ export async function serveSpawn(config: Config, req: IncomingMessage, res: Serv
         return sendJson(res, 409, { error: 'already resuming' });
       }
       const ref = { dirName: t.dirName, name: nodePath.basename(tr.cwd), path: tr.cwd, lastActiveMs: t.mtimeMs };
-      sessionId = launch(config, ref, parsed.input, rid);
+      // `claude -p --resume` with no `--effort` runs at the CLI's own default (medium on 2.1.295 and 2.1.303, read off this machine's transcripts 2026-10-25), not the effort the session ran at, so a
+      // follow-up from the resume composer used to drop a high-effort session to medium mid-task. Carry the transcript's own value unless the
+      // request named one.
+      const recorded = parsed.input.effort ? null : lastSessionEffort(t.file);
+      const effort = recorded && (EFFORTS as readonly string[]).includes(recorded) ? recorded : parsed.input.effort;
+      sessionId = launch(config, ref, { ...parsed.input, effort }, rid);
     } else {
       const projectName = typeof body.project === 'string' ? body.project : '';
       const ref = resolveProject(config, projectName, pinOptions());
