@@ -515,3 +515,22 @@ export function readTranscript(
     waitingOnQuestion
   };
 }
+
+/**
+ * The effort the session's newest main-chain assistant turn ran at — the record's `effort` field, verbatim — or null when the tail window holds none.
+ * Kept out of `readTranscript` on purpose: only a resume needs it, and that runs once per click, not on every 3s poll. The caller validates the
+ * value; this never interprets it.
+ */
+export function lastSessionEffort(filePath: string): string | null {
+  const tail = readTail(filePath, DEFAULT_TAIL_BYTES);
+  if (!tail) return null;
+  const lines = tail.text.split('\n');
+  for (let i = lines.length - 1; i >= (tail.truncated ? 1 : 0); i--) {
+    // String test first: most lines are tool results, never worth a parse.
+    if (!lines[i].includes('"effort"')) continue;
+    let rec: any;
+    try { rec = JSON.parse(lines[i]); } catch { continue; }
+    if (rec.type === 'assistant' && !rec.isSidechain && typeof rec.effort === 'string') return rec.effort;
+  }
+  return null;
+}
