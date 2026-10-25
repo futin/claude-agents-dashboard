@@ -472,6 +472,60 @@ export async function run(): Promise<number> {
       assert.equal((reply.json as { sessionId?: string })?.sessionId, RES_ID);
       assert.deepEqual(calls[0].args.slice(0, 3), ['-p', '--resume', RES_ID]);
       assert.equal(calls[0].options.cwd, process.cwd(), "child cwd is the session transcript's cwd");
+      assert.ok(!calls[0].args.includes('--effort'), 'a transcript with no recorded effort adds no flag');
+    });
+  }));
+
+  /**
+   * Append assistant records to RES_ID's planted transcript, oldest first, and
+   * resume it with `body` — returning the argv the child was spawned with.
+   */
+  async function resumeArgsAfter(
+    cfg: ReturnType<typeof loadConfig>, records: object[], body: object = {}
+  ): Promise<string[]> {
+    const file = path.join(process.cwd(), '.claude', 'projects', '-fake-proj', `${RES_ID}.jsonl`);
+    for (const r of records) {
+      fs.appendFileSync(file, JSON.stringify({
+        type: 'assistant', entrypoint: 'sdk-cli', cwd: process.cwd(), timestamp: '2026-08-22T10:01:00.000Z',
+        message: { role: 'assistant', content: [{ type: 'text', text: 'ok' }], stop_reason: 'end_turn' }, ...r
+      }) + '\n');
+    }
+    const calls: string[][] = [];
+    setSpawner(((_command: string, args: string[]) => {
+      calls.push(args.slice());
+      return new FakeChild() as unknown as ChildProcess;
+    }) as Spawner);
+    const reply = await post((req, res) => void serveSpawn(cfg, req, res), JSON.stringify({ prompt: 'go on', resume: RES_ID, ...body }));
+    assert.equal(reply.status, 200);
+    return calls[0];
+  }
+  const effortFlag = (args: string[]): string | undefined => {
+    const i = args.indexOf('--effort');
+    return i === -1 ? undefined : args[i + 1];
+  };
+
+  check(await testAsync('a resume with no effort keeps the effort the session last ran at — not the CLI default', async () => {
+    await withResumeHome('CLAUDE_BIN=/bin/echo\n', async cfg => {
+      const args = await resumeArgsAfter(cfg, [{ effort: 'xhigh' }, { effort: 'high' }]);
+      assert.equal(effortFlag(args), 'high', 'the newest record wins over an older one');
+    });
+  }));
+
+  check(await testAsync('an effort the resume request names wins over the transcript', async () => {
+    await withResumeHome('CLAUDE_BIN=/bin/echo\n', async cfg => {
+      const args = await resumeArgsAfter(cfg, [{ effort: 'high' }], { effort: 'low' });
+      assert.equal(effortFlag(args), 'low');
+    });
+  }));
+
+  check(await testAsync('a subagent record or an unknown effort value is ignored, never passed to the CLI', async () => {
+    await withResumeHome('CLAUDE_BIN=/bin/echo\n', async cfg => {
+      const args = await resumeArgsAfter(cfg, [{ effort: 'medium' }, { effort: 'max', isSidechain: true }]);
+      assert.equal(effortFlag(args), 'medium', 'a sidechain record is a subagent turn, not the session');
+    });
+    await withResumeHome('CLAUDE_BIN=/bin/echo\n', async cfg => {
+      const args = await resumeArgsAfter(cfg, [{ effort: 'turbo' }]);
+      assert.equal(effortFlag(args), undefined);
     });
   }));
 
