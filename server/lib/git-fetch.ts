@@ -50,7 +50,7 @@ function killGroup(child: ChildProcess): void {
   }
 }
 
-/** The real runner, with knobs only tests turn: a short timeout, or a `bin` that is not git. Never a shell. */
+/** The real runner. `timeoutMs` and `bin` default to git's; `pr-status.ts` turns both to launch `gh`, tests turn them for a short timeout. Never a shell. */
 export function makeFetchRunner(opts: { timeoutMs?: number; bin?: string } = {}): FetchRunner {
   const timeoutMs = opts.timeoutMs ?? FETCH_TIMEOUT_MS;
   const bin = opts.bin ?? 'git';

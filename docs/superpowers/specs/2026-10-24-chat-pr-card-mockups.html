@@ -1,0 +1,400 @@
+<title>Chat PR Card</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700&display=swap">
+<style>
+/* Layout: the chat modal (DESIGN.md §8.6) drawn once per placement — desktop at 960px beside a 375px phone — then the states of the pick.
+   Tokens: daylight (light) and midnight (dark), copied from client/src/styles.css; class names are the app's real ones where they exist. */
+:root{
+  --board:#f4f4f3;--steel:#ededec;--strip:#ffffff;--strip-hi:#f2f2f1;
+  --hairline:#eaeae8;--hairline2:#dcdcda;
+  --ink:#131313;--ink2:#525252;--ink3:#6b6b6b;
+  --green:#38631a;--mustard:#5f530b;--cyan:#306c0f;--red:#aa3927;--magenta:#6950a5;--accent:#306c0f;
+  --green-solid:#7dc242;--green-tint:#cde8a8;
+  --red-tint:color-mix(in srgb,#aa3927 11%,transparent);--magenta-tint:color-mix(in srgb,#6950a5 12%,transparent);
+  --mustard-tint:color-mix(in srgb,#9a8712 13%,transparent);--mustard-ink:#74660e;
+  --scrim:rgba(19,19,19,.28);--shadow:rgba(0,0,0,.06);--shadow2:rgba(0,0,0,.1);
+  --font:'Hanken Grotesk',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+  --mono:ui-monospace,SFMono-Regular,Menlo,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --board:#0c1220;--steel:#131a2b;--strip:#182238;--strip-hi:#1e2a44;--hairline:#2a3752;--hairline2:#354463;
+  --ink:#dde6f4;--ink2:#9fadc6;--ink3:#66738c;--green:#46d48c;--mustard:#d1ba52;--cyan:#55d0dd;--red:#ff8a78;--magenta:#b9a1f0;--accent:#55d0dd;
+  --green-solid:#46d48c;--green-tint:color-mix(in srgb,#46d48c 18%,transparent);
+  --red-tint:color-mix(in srgb,#ff8a78 15%,transparent);--magenta-tint:color-mix(in srgb,#b9a1f0 16%,transparent);
+  --mustard-tint:color-mix(in srgb,#d1ba52 14%,transparent);--mustard-ink:#e0cc70;
+  --scrim:rgba(0,0,0,.5);--shadow:rgba(0,0,0,.3);--shadow2:rgba(0,0,0,.5);color-scheme:dark}}
+:root[data-theme="dark"]{
+  --board:#0c1220;--steel:#131a2b;--strip:#182238;--strip-hi:#1e2a44;--hairline:#2a3752;--hairline2:#354463;
+  --ink:#dde6f4;--ink2:#9fadc6;--ink3:#66738c;--green:#46d48c;--mustard:#d1ba52;--cyan:#55d0dd;--red:#ff8a78;--magenta:#b9a1f0;--accent:#55d0dd;
+  --green-solid:#46d48c;--green-tint:color-mix(in srgb,#46d48c 18%,transparent);
+  --red-tint:color-mix(in srgb,#ff8a78 15%,transparent);--magenta-tint:color-mix(in srgb,#b9a1f0 16%,transparent);
+  --mustard-tint:color-mix(in srgb,#d1ba52 14%,transparent);--mustard-ink:#e0cc70;
+  --scrim:rgba(0,0,0,.5);--shadow:rgba(0,0,0,.3);--shadow2:rgba(0,0,0,.5);color-scheme:dark}
+
+*{box-sizing:border-box}
+body{background:var(--board);color:var(--ink);font-family:var(--font);font-size:14px;line-height:1.45;font-variant-numeric:tabular-nums;-webkit-font-smoothing:antialiased}
+.page{max-width:1400px;margin:0 auto;padding-block:32px 64px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:grid;gap:48px}
+h1{font-size:26px;font-weight:600;letter-spacing:-.02em;margin:0;text-wrap:balance}
+h2{font-size:18px;font-weight:600;letter-spacing:-.01em;margin:0;text-wrap:balance}
+p{margin:0;max-width:72ch;color:var(--ink2)}
+code{font-family:var(--mono);font-size:12px;background:var(--steel);padding:1px 5px;border-radius:5px;color:var(--ink)}
+.lead{display:grid;gap:10px}
+.sec{display:grid;gap:16px}
+.sec-head{display:flex;flex-wrap:wrap;align-items:baseline;gap:8px 14px}
+.tag{font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--ink3)}
+.tag.rec{color:var(--green)}
+.pros{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px 28px}
+.pros div{display:grid;gap:4px;min-width:0}
+.pros ul{margin:0;padding-left:18px;color:var(--ink2);display:grid;gap:3px}
+.boards{display:flex;flex-wrap:wrap;gap:24px;align-items:flex-start}
+.frame{overflow-x:auto;max-width:100%;padding:24px;background:var(--scrim);border-radius:20px}
+.frame.phone{padding:0;border-radius:28px;background:none}
+.cap{font-size:12px;color:var(--ink3);margin-top:8px}
+
+/* ── real app classes (styles.css §chat) ── */
+.chat{width:960px;height:600px;display:flex;flex-direction:column;background:var(--strip);border-radius:24px;box-shadow:0 24px 64px var(--shadow2);overflow:hidden}
+.phone .chat{width:375px;height:740px;border-radius:28px;border:1px solid var(--hairline2);box-shadow:none}
+.chat-head{display:flex;align-items:center;gap:10px;padding:20px 24px;border-bottom:1px solid var(--hairline);flex:none;min-width:0}
+.phone .chat-head{padding:13px 14px;gap:8px}
+.chat-title{flex:0 1 auto;min-width:0;font-size:17px;font-weight:600;letter-spacing:-.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.phone .chat-title{font-size:15px}
+.proj-pill{font-size:11px;font-weight:500;padding:3px 9px;border-radius:12px;background:var(--strip-hi);color:var(--ink2);white-space:nowrap;flex-shrink:1;min-width:0;max-width:38%;overflow:hidden;text-overflow:ellipsis}
+.chat-x{width:32px;height:32px;margin-left:auto;flex:none;display:grid;place-items:center;font-size:12px;color:var(--ink2);background:var(--strip);border:1px solid var(--hairline2);border-radius:12px}
+.phone .chat-x{width:40px;height:40px}
+.chat-split{display:grid;grid-template-columns:290px minmax(0,1fr);flex:1;min-height:0}
+.phone .chat-split{grid-template-columns:minmax(0,1fr);grid-template-rows:auto minmax(0,1fr)}
+.chat-side{display:flex;flex-direction:column;gap:18px;padding:22px;min-width:0;overflow:hidden;background:var(--strip-hi);border-right:1px solid var(--hairline)}
+.phone .chat-side{gap:10px;padding:10px 14px;background:var(--strip);border-right:0;border-bottom:1px solid var(--hairline)}
+.kv{background:var(--strip);border-radius:12px;padding:14px 16px;min-width:0}
+.kv .k{font-size:12px;color:var(--ink2)}
+.kv .v{display:flex;align-items:baseline;gap:8px;margin-top:4px}
+.metric{font-size:24px;font-weight:700;letter-spacing:-.02em;line-height:1.1}
+.u{font-size:12px;color:var(--ink3)}
+.track{height:6px;border-radius:999px;background:var(--steel);margin-top:12px;overflow:hidden}
+.fill{height:100%;background:var(--green-solid);border-radius:inherit}
+.phone .kv{display:flex;flex-wrap:wrap;align-items:baseline;gap:0 8px;padding:0;background:none;border-radius:0}
+.phone .kv .k{font-size:11px}.phone .kv .v{margin-top:0}.phone .kv .metric{font-size:16px}
+.phone .kv .track{flex-basis:100%;height:4px;margin-top:6px}
+.chat-facts{display:grid;gap:10px;font-size:12px;color:var(--ink2)}
+.chat-facts .f{display:flex;justify-content:space-between;align-items:baseline;gap:12px;min-width:0}
+.chat-facts .f b{min-width:0;color:var(--ink);font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.phone .chat-facts{display:flex;flex-wrap:wrap;gap:3px 14px;font-size:11px}
+.phone .chat-facts .f{justify-content:flex-start;gap:6px}
+.chat-col{display:flex;flex-direction:column;min-width:0;min-height:0}
+.chat-body{flex:1;min-height:0;overflow:hidden;display:flex;flex-direction:column;gap:20px;padding:20px 24px 40px}
+.phone .chat-body{padding:14px 14px 40px;gap:16px}
+.cmsg{min-width:0}
+.cmsg-head{display:flex;align-items:baseline;gap:8px}
+.cmsg-role{font-size:11px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:var(--ink2)}
+.cmsg.user .cmsg-role{color:var(--green)}
+.cmsg-ts{font-size:11px;color:var(--ink3)}
+.cmsg-text{font-size:14px;line-height:1.6;color:var(--ink);overflow-wrap:anywhere;margin-top:7px}
+.cmsg.user .cmsg-text{border:1px solid var(--hairline);border-radius:12px;padding:13px 15px}
+.cmsg-text a{color:var(--accent)}
+.cmsg-tool{font-size:12px;color:var(--ink2);margin-top:7px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cmsg-tool .tool{font-weight:500;color:var(--ink)}
+.chat-foot{display:flex;align-items:center;gap:12px;padding:10px 24px;border-top:1px solid var(--hairline);font-size:12px;color:var(--ink2);flex:none}
+.phone .chat-foot{padding:9px 14px}
+.chat-live{display:flex;align-items:center;gap:8px}
+.chat-live i{width:7px;height:7px;border-radius:999px;background:var(--green-solid)}
+.chat-count{margin-left:auto}
+
+/* ── new: the PR card (names proposed, `pr-` prefix) ── */
+.pr-glyph{width:14px;height:14px;flex:none;stroke:currentColor;fill:none;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+.pr-state{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:600;padding:2px 8px;border-radius:12px;white-space:nowrap}
+.pr-state.open{color:var(--green);background:var(--green-tint)}
+.pr-state.draft{color:var(--ink2);background:var(--steel)}
+.pr-state.merged{color:var(--magenta);background:var(--magenta-tint)}
+.pr-state.closed{color:var(--red);background:var(--red-tint)}
+.pr-kv .pr-top{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.pr-title{display:block;margin-top:8px;font-size:13px;font-weight:600;line-height:1.35;color:var(--ink);text-decoration:none;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.pr-title:hover{color:var(--accent)}
+.pr-title .n{color:var(--ink3);font-weight:500}
+.pr-ref{margin-top:4px;font-family:var(--mono);font-size:11px;color:var(--ink3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pr-rows{display:grid;gap:7px;margin-top:12px;padding-top:12px;border-top:1px solid var(--hairline);font-size:12px}
+.pr-row{display:flex;justify-content:space-between;align-items:baseline;gap:10px;color:var(--ink2)}
+.pr-row b{font-weight:600;color:var(--ink);white-space:nowrap}
+.pr-row b.ok{color:var(--green)}.pr-row b.bad{color:var(--red)}.pr-row b.run{color:var(--mustard-ink)}.pr-row b.dim{color:var(--ink3);font-weight:500}
+.pr-checks{display:flex;gap:2px;height:4px;margin-top:2px;border-radius:999px;overflow:hidden}
+.pr-checks i{flex:1;background:var(--green-solid)}.pr-checks i.run{background:var(--mustard)}.pr-checks i.bad{background:var(--red)}
+.pr-open{display:inline-flex;align-items:center;gap:6px;margin-top:12px;font-size:12px;font-weight:500;color:var(--ink2);text-decoration:none}
+.pr-open:hover{color:var(--ink)}
+/* phone band: one line, like the Tasks fold */
+.pr-band{display:flex;align-items:baseline;gap:8px;min-width:0;font-size:13px}
+.pr-band .k{flex:none;font-size:11px;color:var(--ink2)}
+.pr-band .n{flex:none;font-weight:700;font-size:15px}
+.pr-band .line{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--ink2)}
+.pr-band .cue{flex:none;font-size:11px;color:var(--ink3)}
+/* B: inline card in the transcript */
+.pr-inline{margin-top:9px;border:1px solid var(--hairline);border-radius:12px;padding:12px 14px;display:grid;gap:8px;max-width:560px}
+.pr-inline .pr-top{display:flex;align-items:center;gap:8px;min-width:0}
+.pr-inline .pr-title{margin-top:0;-webkit-line-clamp:1;flex:1;min-width:0}
+.pr-inline .pr-meta{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:12px;color:var(--ink2)}
+.pr-inline .pr-meta b{font-weight:600}
+.pr-inline .pr-meta b.ok{color:var(--green)}.pr-inline .pr-meta b.run{color:var(--mustard-ink)}
+/* C: head chip + popover */
+.pr-chip{display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 10px;font-size:12px;font-weight:500;color:var(--ink);background:var(--strip-hi);border:1px solid var(--hairline2);border-radius:999px;white-space:nowrap;flex:none}
+.pr-chip .dot{width:7px;height:7px;border-radius:999px;background:var(--mustard)}
+.pr-chip .dot.ok{background:var(--green-solid)}
+.pr-pop{position:absolute;top:58px;right:66px;width:300px;z-index:3;background:var(--strip);border:1px solid var(--hairline2);border-radius:14px;box-shadow:0 12px 32px var(--shadow2);padding:14px 16px}
+.rel{position:relative}
+/* D: actions, YAGNI */
+.pr-acts{display:flex;flex-wrap:wrap;gap:6px;margin-top:12px}
+.pr-btn{height:26px;padding:0 10px;font-family:var(--font);font-size:12px;font-weight:500;color:var(--ink2);background:var(--strip-hi);border:0;border-radius:8px}
+.pr-btn.primary{color:var(--strip);background:var(--ink)}
+.pr-more{margin-top:10px;font-size:12px;color:var(--ink3)}
+/* state strip */
+.states{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:16px}
+.states .cell{background:var(--strip-hi);border-radius:16px;padding:16px;display:grid;gap:10px;align-content:start}
+.states .cell .tag{color:var(--ink2)}
+.note{font-size:12px;color:var(--ink3);line-height:1.5}
+</style>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="pr" viewBox="0 0 16 16"><circle cx="4" cy="3.5" r="1.8"/><circle cx="4" cy="12.5" r="1.8"/><circle cx="12" cy="12.5" r="1.8"/><path d="M4 5.3v5.4M12 10.7V6.5a2 2 0 0 0-2-2H7.5M9 3l-1.5 1.5L9 6"/></symbol>
+  <symbol id="ext" viewBox="0 0 16 16"><path d="M9 3h4v4M13 3 7.5 8.5M11 9.5V13H3V5h3.5"/></symbol>
+</svg>
+
+<template id="ctx-desk">
+  <div class="kv"><div class="k">Context</div><div class="v"><span class="metric">41%</span><span class="u">82k / 200k</span></div><div class="track"><div class="fill" style="width:41%"></div></div></div>
+</template>
+
+<div class="page">
+  <div class="lead">
+    <h1>A session's pull request, in the chat modal</h1>
+    <p>When a session runs <code>gh pr create</code>, the server spots the PR URL in the transcript, then asks <code>gh pr view --json</code> for its title, state, checks, review
+      and merge status, cached and refreshed on the modal's 3s poll at a slower cadence. Three placements below, each at desktop and phone width, then the dropped
+      everything-version, then every state of the recommended card. Session in every board: this one, building this feature.</p>
+  </div>
+
+  <!-- ── NOW ─────────────────────────────────────────── -->
+  <section class="sec">
+    <div class="sec-head"><span class="tag">Now</span><h2>What the modal shows today</h2></div>
+    <p>The PR exists only as a Bash tool line and a bare URL in the assistant's reply. Scroll past it and it is gone; its CI and review state never appear.</p>
+    <div class="boards">
+      <div class="frame"><div class="chat">
+        <div class="chat-head"><span class="chat-title">chat-pr-card</span><span class="proj-pill">claude-agents-dashboard</span><span class="chat-x">✕</span></div>
+        <div class="chat-split">
+          <aside class="chat-side">
+            <div class="kv"><div class="k">Context</div><div class="v"><span class="metric">41%</span><span class="u">82k / 200k</span></div><div class="track"><div class="fill" style="width:41%"></div></div></div>
+            <div class="chat-facts"><div class="f">Project <b>claude-agents-dashboard</b></div><div class="f">Branch <b>feat/chat-pr-card</b></div><div class="f">Model <b>opus-5.5</b></div><div class="f">Session <b>6ec66a8d…</b></div><div class="f">Surface <b>desktop</b></div></div>
+          </aside>
+          <div class="chat-col"><div class="chat-body">
+            <div class="cmsg user"><div class="cmsg-head"><span class="cmsg-role">You</span><span class="cmsg-ts">14:02</span></div><div class="cmsg-text">Looks good, open the PR.</div></div>
+            <div class="cmsg"><div class="cmsg-head"><span class="cmsg-role">Claude</span><span class="cmsg-ts">14:03</span></div>
+              <div class="cmsg-tool"><span class="tool">Bash</span> git push -u origin feat/chat-pr-card</div>
+              <div class="cmsg-tool"><span class="tool">Bash</span> gh pr create --title "feat(chat): show the session's PR in the chat modal" --body-file …</div>
+              <div class="cmsg-text">Opened <a href="#">https://github.com/futin/claude-agents-dashboard/pull/304</a>. CI is running.</div></div>
+            <div class="cmsg user"><div class="cmsg-head"><span class="cmsg-role">You</span><span class="cmsg-ts">14:20</span></div><div class="cmsg-text">Also tighten the phone band spacing.</div></div>
+            <div class="cmsg"><div class="cmsg-head"><span class="cmsg-role">Claude</span><span class="cmsg-ts">14:21</span></div><div class="cmsg-tool"><span class="tool">Edit</span> client/src/styles.css</div></div>
+          </div><div class="chat-foot"><span class="chat-live"><i></i>live</span><span class="chat-count">48 of 48 shown</span></div></div>
+        </div>
+      </div></div>
+    </div>
+  </section>
+
+  <!-- ── A: SIDECAR ───────────────────────────────────── -->
+  <section class="sec">
+    <div class="sec-head"><span class="tag rec">A · Recommended</span><h2>Sidecar card</h2></div>
+    <p>A <code>Pull request</code> card in the 290px column, under Context and Tasks, above the facts. Always in view while the modal is open, whatever you are reading.
+      On a phone it folds to one band line like the Tasks fold; tap unfolds the rows.</p>
+    <div class="boards">
+      <div class="frame"><div class="chat">
+        <div class="chat-head"><span class="chat-title">chat-pr-card</span><span class="proj-pill">claude-agents-dashboard</span><span class="chat-x">✕</span></div>
+        <div class="chat-split">
+          <aside class="chat-side">
+            <div class="kv"><div class="k">Context</div><div class="v"><span class="metric">41%</span><span class="u">82k / 200k</span></div><div class="track"><div class="fill" style="width:41%"></div></div></div>
+            <div class="kv pr-kv">
+              <div class="pr-top"><span class="k">Pull request</span><span class="pr-state open"><svg class="pr-glyph"><use href="#pr"/></svg>Open</span></div>
+              <a class="pr-title" href="#"><span class="n">#304</span> feat(chat): show the session's PR in the chat modal</a>
+              <div class="pr-ref">feat/chat-pr-card → main</div>
+              <div class="pr-rows">
+                <div class="pr-row">Checks <b class="run">3 of 4 passed · 1 running</b></div>
+                <div class="pr-checks"><i></i><i></i><i></i><i class="run"></i></div>
+                <div class="pr-row">Review <b class="dim">Required</b></div>
+                <div class="pr-row">Merge <b class="ok">No conflicts</b></div>
+              </div>
+            </div>
+            <div class="chat-facts"><div class="f">Branch <b>feat/chat-pr-card</b></div><div class="f">Model <b>opus-5.5</b></div><div class="f">Session <b>6ec66a8d…</b></div></div>
+          </aside>
+          <div class="chat-col"><div class="chat-body">
+            <div class="cmsg user"><div class="cmsg-head"><span class="cmsg-role">You</span><span class="cmsg-ts">14:20</span></div><div class="cmsg-text">Also tighten the phone band spacing.</div></div>
+            <div class="cmsg"><div class="cmsg-head"><span class="cmsg-role">Claude</span><span class="cmsg-ts">14:21</span></div><div class="cmsg-tool"><span class="tool">Edit</span> client/src/styles.css</div><div class="cmsg-tool"><span class="tool">Bash</span> git push origin HEAD:feat/chat-pr-card</div><div class="cmsg-text">Pushed. The band now matches the Tasks fold's 8px gap.</div></div>
+          </div><div class="chat-foot"><span class="chat-live"><i></i>live</span><span class="chat-count">52 of 52 shown</span></div></div>
+        </div>
+      </div></div>
+      <div>
+        <div class="frame phone"><div class="chat">
+          <div class="chat-head"><span class="chat-title">chat-pr-card</span><span class="proj-pill">claude-agents…</span><span class="chat-x">✕</span></div>
+          <div class="chat-split">
+            <aside class="chat-side">
+              <div class="kv"><span class="k">Context</span><span class="v"><span class="metric">41%</span><span class="u">82k / 200k</span></span><div class="track"><div class="fill" style="width:41%"></div></div></div>
+              <div class="pr-band"><span class="k">PR</span><span class="n">#304</span><span class="pr-state open">Open</span><span class="line">3/4 checks · review required</span><span class="cue">▾</span></div>
+              <div class="chat-facts"><div class="f">Branch <b>feat/chat-pr-card</b></div><div class="f">Model <b>opus-5.5</b></div></div>
+            </aside>
+            <div class="chat-col"><div class="chat-body">
+              <div class="cmsg user"><div class="cmsg-head"><span class="cmsg-role">You</span><span class="cmsg-ts">14:20</span></div><div class="cmsg-text">Also tighten the phone band spacing.</div></div>
+              <div class="cmsg"><div class="cmsg-head"><span class="cmsg-role">Claude</span><span class="cmsg-ts">14:21</span></div><div class="cmsg-tool"><span class="tool">Edit</span> client/src/styles.css</div><div class="cmsg-text">Pushed. The band now matches the Tasks fold's 8px gap.</div></div>
+            </div><div class="chat-foot"><span class="chat-live"><i></i>live</span><span class="chat-count">52 of 52</span></div></div>
+          </div>
+        </div></div>
+        <div class="cap">375px · folded band, tap ▾ for the rows</div>
+      </div>
+    </div>
+    <div class="pros">
+      <div><span class="tag">For</span><ul><li>Always visible, at the place the session's other live facts already live.</li><li>Same card shape as Context and Tasks; ports straight into <code>.chat-side</code>.</li><li>Phone band reuses the Tasks fold pattern, nothing new to learn.</li></ul></div>
+      <div><span class="tag">Against</span><ul><li>Sidecar gets taller; with a long task list, Tasks scrolls inside a shorter box.</li><li>Shows only the newest PR when a session opened several.</li></ul></div>
+    </div>
+  </section>
+
+  <!-- ── B: INLINE ────────────────────────────────────── -->
+  <section class="sec">
+    <div class="sec-head"><span class="tag">B</span><h2>Inline in the transcript</h2></div>
+    <p>The <code>gh pr create</code> tool line becomes a card at the moment the PR was opened, with live status inside it. Reads like Claude Code Desktop's in-thread card.</p>
+    <div class="boards">
+      <div class="frame"><div class="chat">
+        <div class="chat-head"><span class="chat-title">chat-pr-card</span><span class="proj-pill">claude-agents-dashboard</span><span class="chat-x">✕</span></div>
+        <div class="chat-split">
+          <aside class="chat-side">
+            <div class="kv"><div class="k">Context</div><div class="v"><span class="metric">41%</span><span class="u">82k / 200k</span></div><div class="track"><div class="fill" style="width:41%"></div></div></div>
+            <div class="chat-facts"><div class="f">Project <b>claude-agents-dashboard</b></div><div class="f">Branch <b>feat/chat-pr-card</b></div><div class="f">Model <b>opus-5.5</b></div><div class="f">Session <b>6ec66a8d…</b></div></div>
+          </aside>
+          <div class="chat-col"><div class="chat-body">
+            <div class="cmsg user"><div class="cmsg-head"><span class="cmsg-role">You</span><span class="cmsg-ts">14:02</span></div><div class="cmsg-text">Looks good, open the PR.</div></div>
+            <div class="cmsg"><div class="cmsg-head"><span class="cmsg-role">Claude</span><span class="cmsg-ts">14:03</span></div>
+              <div class="cmsg-tool"><span class="tool">Bash</span> git push -u origin feat/chat-pr-card</div>
+              <div class="pr-inline">
+                <div class="pr-top"><svg class="pr-glyph"><use href="#pr"/></svg><a class="pr-title" href="#"><span class="n">#304</span> feat(chat): show the session's PR in the chat modal</a><span class="pr-state open">Open</span></div>
+                <div class="pr-meta"><span>feat/chat-pr-card → main</span><span>Checks <b class="run">3/4 · 1 running</b></span><span>Review <b>required</b></span><span>Merge <b class="ok">clean</b></span></div>
+              </div>
+              <div class="cmsg-text">Opened the PR. CI is running.</div></div>
+            <div class="cmsg user"><div class="cmsg-head"><span class="cmsg-role">You</span><span class="cmsg-ts">14:20</span></div><div class="cmsg-text">Also tighten the phone band spacing.</div></div>
+          </div><div class="chat-foot"><span class="chat-live"><i></i>live</span><span class="chat-count">48 of 48 shown</span></div></div>
+        </div>
+      </div></div>
+      <div>
+        <div class="frame phone"><div class="chat">
+          <div class="chat-head"><span class="chat-title">chat-pr-card</span><span class="proj-pill">claude-agents…</span><span class="chat-x">✕</span></div>
+          <div class="chat-split">
+            <aside class="chat-side"><div class="kv"><span class="k">Context</span><span class="v"><span class="metric">41%</span><span class="u">82k / 200k</span></span><div class="track"><div class="fill" style="width:41%"></div></div></div></aside>
+            <div class="chat-col"><div class="chat-body">
+              <div class="cmsg"><div class="cmsg-head"><span class="cmsg-role">Claude</span><span class="cmsg-ts">14:03</span></div>
+                <div class="pr-inline">
+                  <div class="pr-top"><svg class="pr-glyph"><use href="#pr"/></svg><a class="pr-title" href="#"><span class="n">#304</span> feat(chat): show the session's PR…</a></div>
+                  <div class="pr-meta"><span class="pr-state open">Open</span><span>Checks <b class="run">3/4</b></span><span>Review <b>required</b></span></div>
+                </div>
+                <div class="cmsg-text">Opened the PR. CI is running.</div></div>
+              <div class="cmsg user"><div class="cmsg-head"><span class="cmsg-role">You</span><span class="cmsg-ts">14:20</span></div><div class="cmsg-text">Also tighten the phone band spacing.</div></div>
+            </div><div class="chat-foot"><span class="chat-live"><i></i>live</span><span class="chat-count">48 of 48</span></div></div>
+          </div>
+        </div></div>
+        <div class="cap">375px · card in the thread</div>
+      </div>
+    </div>
+    <div class="pros">
+      <div><span class="tag">For</span><ul><li>Shows the PR in context: you see what led to it.</li><li>Handles several PRs in one session naturally, one card each.</li><li>Sidecar untouched.</li></ul></div>
+      <div><span class="tag">Against</span><ul><li>Scrolls away. Live CI state sits next to a 2-hour-old message, and on a long session it is pages up or not loaded at all.</li><li>Needs a new message part in <code>ChatMessage</code> and a chat-parser change, not just a field on <code>Session</code>.</li></ul></div>
+    </div>
+  </section>
+
+  <!-- ── C: HEAD CHIP ─────────────────────────────────── -->
+  <section class="sec">
+    <div class="sec-head"><span class="tag">C</span><h2>Chip in the modal head</h2></div>
+    <p>A compact <code>PR #304</code> chip beside the project pill, with a status dot. Click opens a popover with the full card.</p>
+    <div class="boards">
+      <div class="frame"><div class="chat rel">
+        <div class="chat-head"><span class="chat-title">chat-pr-card</span><span class="proj-pill">claude-agents-dashboard</span><span class="pr-chip"><svg class="pr-glyph"><use href="#pr"/></svg>#304<span class="dot"></span></span><span class="chat-x">✕</span></div>
+        <div class="pr-pop">
+          <div class="pr-kv"><div class="pr-top"><span class="tag">Pull request</span><span class="pr-state open">Open</span></div>
+            <a class="pr-title" href="#"><span class="n">#304</span> feat(chat): show the session's PR in the chat modal</a>
+            <div class="pr-ref">feat/chat-pr-card → main</div>
+            <div class="pr-rows"><div class="pr-row">Checks <b class="run">3 of 4 · 1 running</b></div><div class="pr-row">Review <b class="dim">Required</b></div><div class="pr-row">Merge <b class="ok">No conflicts</b></div></div>
+            <a class="pr-open" href="#"><svg class="pr-glyph"><use href="#ext"/></svg>Open on GitHub</a></div>
+        </div>
+        <div class="chat-split">
+          <aside class="chat-side">
+            <div class="kv"><div class="k">Context</div><div class="v"><span class="metric">41%</span><span class="u">82k / 200k</span></div><div class="track"><div class="fill" style="width:41%"></div></div></div>
+            <div class="chat-facts"><div class="f">Project <b>claude-agents-dashboard</b></div><div class="f">Branch <b>feat/chat-pr-card</b></div><div class="f">Model <b>opus-5.5</b></div></div>
+          </aside>
+          <div class="chat-col"><div class="chat-body">
+            <div class="cmsg user"><div class="cmsg-head"><span class="cmsg-role">You</span><span class="cmsg-ts">14:20</span></div><div class="cmsg-text">Also tighten the phone band spacing.</div></div>
+            <div class="cmsg"><div class="cmsg-head"><span class="cmsg-role">Claude</span><span class="cmsg-ts">14:21</span></div><div class="cmsg-tool"><span class="tool">Edit</span> client/src/styles.css</div></div>
+          </div><div class="chat-foot"><span class="chat-live"><i></i>live</span><span class="chat-count">52 of 52 shown</span></div></div>
+        </div>
+      </div></div>
+      <div>
+        <div class="frame phone"><div class="chat">
+          <div class="chat-head"><span class="chat-title">chat-pr-card</span><span class="proj-pill">claude-…</span><span class="pr-chip"><svg class="pr-glyph"><use href="#pr"/></svg>#304<span class="dot"></span></span><span class="chat-x">✕</span></div>
+          <div class="chat-split">
+            <aside class="chat-side"><div class="kv"><span class="k">Context</span><span class="v"><span class="metric">41%</span><span class="u">82k / 200k</span></span><div class="track"><div class="fill" style="width:41%"></div></div></div></aside>
+            <div class="chat-col"><div class="chat-body">
+              <div class="cmsg user"><div class="cmsg-head"><span class="cmsg-role">You</span><span class="cmsg-ts">14:20</span></div><div class="cmsg-text">Also tighten the phone band spacing.</div></div>
+            </div><div class="chat-foot"><span class="chat-live"><i></i>live</span><span class="chat-count">52 of 52</span></div></div>
+          </div>
+        </div></div>
+        <div class="cap">375px · title squeezed to "chat-pr-card", pill to "claude-…"</div>
+      </div>
+    </div>
+    <div class="pros">
+      <div><span class="tag">For</span><ul><li>Smallest footprint; transcript and sidecar unchanged.</li><li>Popover can carry an Open-on-GitHub link without crowding.</li></ul></div>
+      <div><span class="tag">Against</span><ul><li>State hides behind a click; a dot is the only always-on signal.</li><li>At 375px the head already fights for width (the ✕ reachability rule in <code>styles.css</code>); the chip squeezes the title further.</li><li>A popover is a third floating thing; §5 allows two.</li></ul></div>
+    </div>
+  </section>
+
+  <!-- ── D: YAGNI ─────────────────────────────────────── -->
+  <section class="sec">
+    <div class="sec-head"><span class="tag">D · Dropped (YAGNI)</span><h2>Everything: sidecar + inline + actions</h2></div>
+    <p>A plus B, with Merge, Re-run checks and Ready-for-review buttons, and a list of every PR the session opened. Drawn so it can be rejected on sight.</p>
+    <div class="boards">
+      <div class="frame" style="padding:20px"><div class="kv pr-kv" style="width:290px">
+        <div class="pr-top"><span class="k">Pull requests · 2</span><span class="pr-state open">Open</span></div>
+        <a class="pr-title" href="#"><span class="n">#304</span> feat(chat): show the session's PR in the chat modal</a>
+        <div class="pr-ref">feat/chat-pr-card → main</div>
+        <div class="pr-rows"><div class="pr-row">Checks <b class="ok">4 of 4 passed</b></div><div class="pr-row">Review <b class="ok">Approved</b></div><div class="pr-row">Merge <b class="ok">No conflicts</b></div></div>
+        <div class="pr-acts"><button class="pr-btn primary" type="button">Squash and merge</button><button class="pr-btn" type="button">Re-run checks</button></div>
+        <div class="pr-more">+ #301 fix(configs): keep symlinks out… · Merged</div>
+      </div></div>
+    </div>
+    <div class="pros">
+      <div><span class="tag">Why dropped</span><ul><li>Merge and re-run are writes to GitHub from the dashboard: a new outbound kind (CLAUDE.md "a third needs a reason") and a token surface on the remote-answer path.</li><li><code>main</code> is PR-only and the session that opened the PR is already the one that merges; a second merge button races it.</li><li>Two places showing the same live state can disagree for a poll tick.</li></ul></div>
+    </div>
+  </section>
+
+  <!-- ── STATES ───────────────────────────────────────── -->
+  <section class="sec">
+    <div class="sec-head"><span class="tag">States of A</span><h2>Every state the card can be in</h2></div>
+    <div class="states">
+      <div class="cell"><span class="tag">Draft, checks failing</span>
+        <div class="kv pr-kv"><div class="pr-top"><span class="k">Pull request</span><span class="pr-state draft">Draft</span></div>
+          <a class="pr-title" href="#"><span class="n">#305</span> feat(routines): structured form for the job drawer</a>
+          <div class="pr-rows"><div class="pr-row">Checks <b class="bad">1 failed · 3 passed</b></div><div class="pr-checks"><i class="bad"></i><i></i><i></i><i></i></div><div class="pr-row">Review <b class="dim">Not requested</b></div></div></div></div>
+      <div class="cell"><span class="tag">Ready to merge</span>
+        <div class="kv pr-kv"><div class="pr-top"><span class="k">Pull request</span><span class="pr-state open">Open</span></div>
+          <a class="pr-title" href="#"><span class="n">#304</span> feat(chat): show the session's PR in the chat modal</a>
+          <div class="pr-rows"><div class="pr-row">Checks <b class="ok">4 of 4 passed</b></div><div class="pr-checks"><i></i><i></i><i></i><i></i></div><div class="pr-row">Review <b class="ok">Approved</b></div><div class="pr-row">Merge <b class="ok">No conflicts</b></div></div></div></div>
+      <div class="cell"><span class="tag">Conflicts</span>
+        <div class="kv pr-kv"><div class="pr-top"><span class="k">Pull request</span><span class="pr-state open">Open</span></div>
+          <a class="pr-title" href="#"><span class="n">#304</span> feat(chat): show the session's PR in the chat modal</a>
+          <div class="pr-rows"><div class="pr-row">Checks <b class="ok">4 of 4 passed</b></div><div class="pr-row">Review <b class="bad">Changes requested</b></div><div class="pr-row">Merge <b class="bad">Conflicts with main</b></div></div></div></div>
+      <div class="cell"><span class="tag">Mergeability still computing</span>
+        <div class="kv pr-kv"><div class="pr-top"><span class="k">Pull request</span><span class="pr-state open">Open</span></div>
+          <a class="pr-title" href="#"><span class="n">#304</span> feat(chat): show the session's PR in the chat modal</a>
+          <div class="pr-rows"><div class="pr-row">Checks <b class="ok">4 of 4 passed</b></div><div class="pr-checks"><i></i><i></i><i></i><i></i></div><div class="pr-row">Review <b class="dim">Not requested</b></div><div class="pr-row">Merge <b class="dim">Checking…</b></div></div></div></div>
+      <div class="cell"><span class="tag">Merged</span>
+        <div class="kv pr-kv"><div class="pr-top"><span class="k">Pull request</span><span class="pr-state merged"><svg class="pr-glyph"><use href="#pr"/></svg>Merged</span></div>
+          <a class="pr-title" href="#"><span class="n">#302</span> fix(kaizen): stop counting subagent hand-backs as user corrections</a>
+          <div class="pr-ref">into main · 2h ago</div></div>
+        <span class="note">Rows drop once merged or closed: nothing left to act on.</span></div>
+      <div class="cell"><span class="tag">Closed</span>
+        <div class="kv pr-kv"><div class="pr-top"><span class="k">Pull request</span><span class="pr-state closed">Closed</span></div>
+          <a class="pr-title" href="#"><span class="n">#299</span> feat(usage): pace strip spike</a>
+          <div class="pr-ref">not merged · yesterday</div></div></div>
+      <div class="cell"><span class="tag">gh missing or signed out</span>
+        <div class="kv pr-kv"><div class="pr-top"><span class="k">Pull request</span></div>
+          <a class="pr-title" href="#"><span class="n">#304</span> feat(chat): show the session's PR in the chat modal</a>
+          <div class="pr-ref">futin/claude-agents-dashboard</div>
+          <div class="pr-rows"><div class="pr-row">Status <b class="dim">unavailable · gh not signed in</b></div></div></div>
+        <span class="note">Number and title come from the transcript alone; the card still links out.</span></div>
+    </div>
+  </section>
+</div>

@@ -59,6 +59,8 @@
      amber light enough to look like amber clears 4.5:1 on white and the darkened one reads as brown. The pill text stays `--amber-ink` on `--amber-tint`. */
   --amber-solid:var(--amber);--amber-text:var(--amber);
   --mustard-tint:color-mix(in srgb,var(--mustard) 13%,transparent);--mustard-ink:var(--mustard);
+  /* the PR card's closed and merged pills: the accent as text on its own 14% fill, daylight mixing the same share of its own hex */
+  --red-tint:color-mix(in srgb,var(--red) 14%,transparent);--magenta-tint:color-mix(in srgb,var(--magenta) 14%,transparent);
 }
 /* Graphite — the same board with the blue cast taken out. For anyone who finds
    the navy too warm-shifted on a wide-gamut display. */
@@ -135,6 +137,7 @@
   --amber-solid:#c4761f;--amber-text:var(--ink);  /* mock --amber: the fill; text is the ink (see the root block) */
   --amber-tint:color-mix(in srgb,#c4761f 11%,transparent);--amber-ink:#945917;
   --mustard-tint:color-mix(in srgb,#9a8712 13%,transparent);--mustard-ink:#74660e;
+  --red-tint:color-mix(in srgb,#aa3927 14%,transparent);--magenta-tint:color-mix(in srgb,#6950a5 14%,transparent);
   --on-accent:#ffffff;--scrim:rgba(19,19,19,.28);
   --shadow:rgba(0,0,0,.06);--shadow2:rgba(0,0,0,.1);
 }
@@ -2080,6 +2083,37 @@ body.pj-dragging,body.pj-dragging *{cursor:grabbing!important;user-select:none}
 .tasks-kv .fill.done{background:var(--ink3)}
 .task-list{position:relative;display:flex;flex:1 1 100%;flex-direction:column;gap:1px;min-width:0;max-height:40vh;margin:8px 0 0;padding:0;overflow:auto;list-style:none;font-size:12.5px}
 .chat-side .tasks-kv.folded .task-list{display:none}
+/* The PR card, built like the Tasks card: one DOM for both widths. On a phone the band is its only line and the rows open under it; the head, title
+   and branch line are the desktop card's. */
+.pr-glyph{width:14px;height:14px;flex:none;stroke:currentColor;fill:none;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+.pr-state{display:inline-flex;align-items:center;flex:none;padding:2px 8px;border-radius:12px;font-size:11px;font-weight:600;white-space:nowrap}
+.pr-state.open{color:var(--green);background:var(--green-tint)}
+.pr-state.draft{color:var(--ink2);background:var(--steel)}
+.pr-state.merged{color:var(--magenta);background:var(--magenta-tint)}
+.pr-state.closed{color:var(--red);background:var(--red-tint)}
+.pr-top{display:none;align-items:center;justify-content:space-between;gap:8px}
+.pr-top .k{display:inline-flex;align-items:center;gap:6px;min-width:0}
+.pr-title{display:none;margin-top:8px;font-size:13px;font-weight:600;line-height:1.35;color:var(--ink);text-decoration:none;overflow:hidden;overflow-wrap:anywhere;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.pr-title:hover{text-decoration:underline}
+.pr-ref{display:none;margin-top:4px;font-size:11px;color:var(--ink3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pr-band{display:flex;flex:1 1 100%;min-width:0;align-items:baseline;gap:8px;padding:0;background:none;border:0;font:inherit;color:inherit;text-align:left;cursor:pointer}
+.pr-band .k{flex:none;font-size:11px;color:var(--ink2)}
+.pr-band .n{flex:none;font-size:15px;font-weight:700;line-height:1.1;color:var(--ink);font-variant-numeric:tabular-nums}
+.pr-band .pr-state{align-self:center}
+.pr-band .line{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px;color:var(--ink2)}
+.pr-band .cue{flex:none;font-size:11px;color:var(--ink3)}
+.pr-rows{display:grid;flex:1 1 100%;gap:7px;min-width:0;margin-top:8px;padding-top:8px;border-top:1px solid var(--hairline);font-size:12px}
+.chat-side .pr-kv.folded .pr-rows{display:none}
+.pr-row{display:flex;justify-content:space-between;align-items:baseline;gap:10px;color:var(--ink2)}
+.pr-row b{min-width:0;font-weight:600;color:var(--ink);text-align:right;overflow-wrap:anywhere}
+.pr-row b.ok{color:var(--green)}
+.pr-row b.bad{color:var(--red)}
+.pr-row b.run{color:var(--mustard)}
+.pr-row b.dim{font-weight:500;color:var(--ink3)}
+.pr-checks{display:flex;gap:2px;height:4px;border-radius:999px;overflow:hidden}
+.pr-checks i{flex:1;background:var(--green-solid)}
+.pr-checks i.run{background:var(--mustard)}
+.pr-checks i.bad{background:var(--red)}
 .task-list li{display:flex;align-items:flex-start;gap:8px;padding:5px 6px;border-radius:8px;line-height:1.35}
 /* a 200-character subject with no spaces must wrap, not widen a 290px column */
 .task-list .tsub{min-width:0;overflow-wrap:anywhere}
@@ -2168,6 +2202,13 @@ body.pj-dragging,body.pj-dragging *{cursor:grabbing!important;user-select:none}
   .task-status.idle{color:var(--ink3)}
   .task-list{flex:1;min-height:0;max-height:none;margin:12px -6px 0}
   .chat-side .tasks-kv.folded .task-list{display:flex}
+  /* the PR card's desktop face: head, title and branch line, the rows always open; the band is the phone's */
+  .pr-top{display:flex}
+  .pr-title{display:-webkit-box}
+  .pr-ref{display:block}
+  .pr-band{display:none}
+  .pr-rows{margin-top:12px;padding-top:12px}
+  .chat-side .pr-kv.folded .pr-rows{display:grid}
   .chat-facts{display:grid;gap:10px;font-size:12px}
   .chat-facts .f{justify-content:space-between;gap:12px;max-width:none}
   .chat-facts .f.wide{display:flex}

@@ -8,11 +8,13 @@ import PlanPanel from './PlanPanel';
 import MessagePanel from './MessagePanel';
 import ResumePanel from './ResumePanel';
 import { TasksCard } from './TasksCard';
+import { PrCard } from './PrCard';
 import { SessionStopControl } from './sessions/SessionStopControl';
 import { useBackClose } from '../hooks/useBackClose';
 import { useSessionChat } from '../hooks/useSessionChat';
 import { usePendingQuestion } from '../hooks/usePendingQuestion';
 import { usePendingPlan } from '../hooks/usePendingPlan';
+import { usePullRequest } from '../hooks/usePullRequest';
 import { usePendingMessage } from '../hooks/usePendingMessage';
 import { usePersistedState } from '../hooks/usePersistedState';
 import { useSettings } from '../hooks/useSettings';
@@ -133,6 +135,7 @@ export default function ChatDrawer({ session, onClose, spawnAvailable }: {
   const { messages, hasMore, loading, loadingOlder, error, loadOlder } = useSessionChat(session.id);
   const question = usePendingQuestion(session.id);
   const plan = usePendingPlan(session.id);
+  const pullRequest = usePullRequest(session.id);
   const message = usePendingMessage(session.id);
   const holds = { question: !!question.pending, plan: !!plan.pending, message: !!message.pending };
   const canResume = resumeEligible(session, holds, spawnAvailable);
@@ -208,6 +211,9 @@ export default function ChatDrawer({ session, onClose, spawnAvailable }: {
     measure();
     const ro = new ResizeObserver(measure);
     ro.observe(pinned);
+    // The transcript itself shrinks when a card lands in the phone's band above it (the PR card answers after the first page); no scroll event fires, so
+    // without this the tail slips under the foot.
+    ro.observe(body);
     return () => ro.disconnect();
   }, []);
 
@@ -263,6 +269,7 @@ export default function ChatDrawer({ session, onClose, spawnAvailable }: {
             <SessionStopControl sessionId={session.id} stopState={session.stopState} showBadge />
 
             <TasksCard tasks={session.tasks} plan={session.taskPlan} />
+            <PrCard pr={pullRequest} />
 
             {/* Three of these are phone-hidden (`.f.wide`): Project repeats the
                 head's pill, Messages and Now are already on screen — the count

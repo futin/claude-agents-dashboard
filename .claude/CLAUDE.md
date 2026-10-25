@@ -78,7 +78,8 @@ config; a public tunnel's hostname needs `ALLOWED_HOSTS` (the DNS-rebinding guar
   and `test/ui-kit-guard.test.ts` (ui-kit's `checkHostCss`) fails on any other rule. The chip's place is the `.rel-chip` wrapper, nothing more.
 - **Keep new deps out of `server/`.** It reads disk and makes exactly two kinds of outbound call itself — the ntfy push in `lib/notify.ts` and the usage
   read in `lib/usage.ts`. A third needs a reason. Launching a local program is not a third kind, even when that program makes network calls of its own:
-  `lib/token-refresh.ts` and `lib/spawn.ts` launch `claude`; `lib/git-fetch.ts` launches `git fetch`; `lib/git-quick.ts` launches `git fetch`,
+  `lib/token-refresh.ts` and `lib/spawn.ts` launch `claude`; `lib/git-fetch.ts` launches `git fetch`; `lib/pr-status.ts` launches `gh pr view` with `GH_NO_UPDATE_NOTIFIER=1` and
+  `GH_PROMPT_DISABLED=1` set; `lib/git-quick.ts` launches `git fetch`,
   `git merge --ff-only` and `git push` for the Sync menu; `lib/codegraph.ts` launches `codegraph` with `CODEGRAPH_NO_UPDATE_CHECK=1` and
   `CODEGRAPH_NO_DOWNLOAD=1` set, which switch off its update check and bundle download; `lib/routine-reconcile.ts` launches `launchctl`, `crontab` and
   `pgrep`; `lib/routine-store.ts` launches `ps` and `sysctl`; `lib/open-folder.ts` launches `open` and `open -R`; `lib/routine-run.ts` spawns the

@@ -62,6 +62,8 @@ import { getPinnedProjects, getSettings, setPinOrder, setPinned, setSettings } f
 import { fetchAll, markGitWatched } from './lib/git-fetch.js';
 import { openFolder, openFolderPlatform, revealFile } from './lib/open-folder.js';
 import { runQuickOp } from './lib/git-quick.js';
+import { readSessionPr } from './lib/pr-detect.js';
+import { GH_PR_RE, readPrStatus } from './lib/pr-status.js';
 import { readGitStats } from './lib/git-stats.js';
 import { readCodegraph, startCodegraphRun } from './lib/codegraph-store.js';
 import { classifyOrigin, resolvePeer } from './lib/origin.js';
@@ -83,7 +85,7 @@ import { runJob, stopJob } from './lib/routine-run.js';
 import { RoutineStoreError, deleteJob, isOwner, readJobs, writeJob, writePinsSnapshot } from './lib/routine-store.js';
 import type {
   AnalyticsResponse, GitQuickRequest, ManagementIndex, MessageWaitResult, OpenFolderResponse, PinsResponse, PlanWaitResult, ScopeConfig,
-  SessionMessage, SessionPlan, SessionQuestion, SessionsResponse, SessionChat, SessionDetail, SpawnRequest,
+  SessionMessage, SessionPlan, SessionPrInfo, SessionPrResponse, SessionQuestion, SessionsResponse, SessionChat, SessionDetail, SpawnRequest,
   ModelRateRow, RateLimit, ServerSettings, SpawnResponse, UsageCoverage, UsageProfileCell,
   UsageHistoryResponse, UsageProfileResponse, UsageRatesResponse, WaitResult, ConnectionOrigin, WriteAccess,
   ReconcileReport, RoutineFile, RoutineJob, RoutineJobRow, RoutineRunsResponse, RoutinesResponse, RoutineValidateResponse, Session
@@ -1222,6 +1224,29 @@ export function serveSessionPlan(id: string, res: ServerResponse): void {
     return sendJson(res, 400, body);
   }
   sendJson(res, 200, { id, pending: getPendingPlan(id) } satisfies SessionPlan);
+}
+
+/** `owner/repo` of a PR URL on any host; null when the URL has no `/<owner>/<repo>/pull/<n>` shape. */
+const ANY_PR_RE = /^https:\/\/[^/]+\/([^/]+\/[^/]+)\/pull\/\d+/;
+
+/** `GET /api/sessions/:id/pr` — the newest PR this session created, with its live `gh` state or the reason there is none. */
+export async function serveSessionPr(id: string, res: ServerResponse): Promise<void> {
+  const fail = (code: number): void => sendJson(res, code, { id, pr: null, error: true } satisfies SessionPrResponse);
+  if (!ID_RE.test(id)) return fail(400);
+
+  try {
+    const ref = findTranscript(projectsRoot(), id);
+    const detected = ref ? readSessionPr(ref.file) : null;
+    if (!detected) return sendJson(res, 200, { id, pr: null } satisfies SessionPrResponse);
+
+    const { live, unavailable } = await readPrStatus(detected.url, detected.cwd);
+    const repo = GH_PR_RE.exec(detected.url)?.[1] ?? ANY_PR_RE.exec(detected.url)?.[1] ?? null;
+    const pr: SessionPrInfo = { url: detected.url, number: detected.number, repo, title: live?.title ?? detected.title, live, unavailable };
+    sendJson(res, 200, { id, pr } satisfies SessionPrResponse);
+  } catch (e) {
+    console.error('[dashboard] session pr failed:', (e as Error).message);
+    fail(500);
+  }
 }
 
 /**

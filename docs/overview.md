@@ -84,6 +84,7 @@ remote-answer switch on, a **gate-only write** needs the gate alone ([who may wr
 | `POST /api/sessions/:id/answer` | deliver a remote answer (session write path — answer) |
 | `POST /api/questions/wait` | the hook's held-open wait (session write path — answer) |
 | `GET /api/sessions/:id/plan` | pending proposed plan, if any |
+| `GET /api/sessions/:id/pr` | the PR this session created, with live `gh` status |
 | `POST /api/sessions/:id/plan-answer` | send a plan back for revision (session write path — plan) |
 | `POST /api/plans/wait` | the plan hook's held-open wait (session write path — plan) |
 | `GET /api/sessions/:id/message` | pending reply window, if any |
@@ -203,6 +204,8 @@ server/
   lib/agents.ts   whole-file subagent parser → AgentJob[]
   lib/agents-cache.ts  incremental byte-offset cache over agents.ts
   lib/tasks.ts    whole-file fold of the plan signals and TaskCreate/TaskUpdate → Session.tasks / taskPlan (plan wins), incremental by byte offset (the creates sit below the 256 KB tail)
+  lib/pr-detect.ts    the newest PR a session created: Claude Code's `gitOperation.pr` create, else a `gh pr create` result's last PR URL; never `pr-link`; incremental by byte offset
+  lib/pr-status.ts    a PR's live state for the chat PR card: launches `gh pr view --json`, folds checks/review/merge, caches per URL (20s busy or failed, 60s settled, forever once ended)
   lib/plan-progress.ts  pure half of plan progress: signals from one tool_use input, the plan file's `Task N:` headings, the composed rows
   lib/chat.ts     byte-offset paged chat history
   lib/usage.ts    account 5h/weekly limits from Anthropic (OAuth) — the other

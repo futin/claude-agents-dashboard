@@ -444,6 +444,9 @@ Two rules the losers are not around to argue with:
   `.07em` tracking; message text is `--ink`, not `--ink2`; inline code is `--ink` on
   `--steel` at a 4 px corner — the accent is for links, not for every backtick.
 
+The PR card under the Tasks card is variant A of `docs/superpowers/specs/2026-10-24-chat-pr-card-mockups.html`: a sidecar card on desktop, a folded
+band on a phone; its pills are the accent on its own 14% tint (`--red-tint`, `--magenta-tint`), draft `--ink2` on `--steel`.
+
 Mock: `docs/guides/mockups/redesign-mock.html` `#chat`.
 Reference: `docs/subsystems/chat.md`.
 

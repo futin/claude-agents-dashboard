@@ -1251,6 +1251,52 @@ export interface SessionPlan {
   error?: boolean;
 }
 
+/** A PR's CI rollup folded into counts; `total` = passed + failed + running (skipped and neutral checks never count). */
+export interface PrChecks {
+  passed: number;
+  failed: number;
+  running: number;
+  total: number;
+}
+
+/** What `gh pr view` said about a PR, folded for the chat card. */
+export interface SessionPrLive {
+  state: 'open' | 'draft' | 'merged' | 'closed';
+  title: string;
+  head: string;
+  base: string;
+  /** Null when the PR has no counted checks at all. */
+  checks: PrChecks | null;
+  review: 'approved' | 'changes' | 'required' | 'none';
+  /** `unknown` while GitHub is still computing mergeability. */
+  merge: 'clean' | 'conflicts' | 'unknown';
+  /** When it merged or closed; null while open or draft. */
+  endedAt: string | null;
+}
+
+/** The newest PR a session created: transcript facts always, live facts when `gh` answered, a reason when it didn't. */
+export interface SessionPrInfo {
+  url: string;
+  number: number;
+  /** `owner/repo`, from the URL; null when the URL does not have that shape. */
+  repo: string | null;
+  /** `gh`'s title when it answered, else the `--title` the create carried, else null. */
+  title: string | null;
+  /** Null when `gh` could not be read; `unavailable` then says why. */
+  live: SessionPrLive | null;
+  unavailable: string | null;
+}
+
+/** Null = the session created no PR, and the card renders nothing. */
+export type SessionPr = SessionPrInfo | null;
+
+/** Payload of `GET /api/sessions/:id/pr`. `error` = the read failed; keep the last card. */
+export interface SessionPrResponse {
+  id: string;
+  pr: SessionPr;
+  error?: boolean;
+}
+
 /**
  * Body of `POST /api/sessions/:id/plan-answer`.
  *
