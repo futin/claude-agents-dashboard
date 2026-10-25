@@ -3,7 +3,8 @@
 The default section: every Claude Code session, refreshed on the interval the Settings
 page sets (3s by default), sorted most-recent-first. Everything is derived from the
 transcript files on disk. `useSessions` also carries the per-device scan knobs as query
-params, so a changed row count or window takes effect on the next tick.
+params, so a changed row count or window takes effect on the next tick. A tick that finds the previous scan still out is
+skipped (`createPollSeq`, `client/src/lib/pollSeq.ts`), so a slow scan can never land after a newer one and step the board backwards.
 
 ## The page
 
