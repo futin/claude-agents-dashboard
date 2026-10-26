@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 
 import {
-  atDesk, AUTO_MODES, maybeSend, resetNotify, resolveLabel, routineClickUrl, sendRoutineEvent, sendTest, sendUsageEvent,
+  atDesk, AUTO_MODES, maybeSend, ntfyHeaders, resetNotify, resolveLabel, routineClickUrl, sendRoutineEvent, sendTest, sendUsageEvent,
   setIdleSource, setLabelResolver, setSender, shouldNotify, usageCanSend, usageClickUrl
 } from '../server/lib/notify.js';
 import { DEFAULT_NOTIFY, NOTIFY_EVENTS, resetSettings, setSettings } from '../server/lib/settings.js';
@@ -558,6 +558,22 @@ export async function run(): Promise<number> {
     setSender(() => { throw new Error('socket'); });
     assert.strictEqual(sendRoutineEvent(SCHED, conf()), false);
   }))) p++; else f++;
+
+  if (test('ntfyHeaders: an ASCII title goes out as is', () => {
+    const h = ntfyHeaders({ title: 'Claude Code', body: 'b', tags: 'bell', click: '' });
+    assert.strictEqual(h.Title, 'Claude Code');
+    assert.strictEqual(h.Tags, 'bell');
+    assert.strictEqual(h.Click, undefined);
+  })) p++; else f++;
+
+  if (test('ntfyHeaders: a non-ASCII title is RFC 2047 encoded, so every byte on the wire is ASCII', () => {
+    const title = 'nightly \u00b7 lost';
+    const h = ntfyHeaders({ title, body: 'b', tags: 'x', click: 'https://h/?r=1' });
+    assert.strictEqual(h.Title, '=?UTF-8?B?' + Buffer.from(title, 'utf8').toString('base64') + '?=');
+    assert.ok(/^[\x20-\x7e]*$/.test(h.Title));
+    assert.strictEqual(Buffer.from(h.Title.slice(10, -2), 'base64').toString('utf8'), title);
+    assert.strictEqual(h.Click, 'https://h/?r=1');
+  })) p++; else f++;
 
   console.log(`\n  ${p} passed, ${f} failed`);
   return f;

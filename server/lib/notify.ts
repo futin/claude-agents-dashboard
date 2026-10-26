@@ -323,6 +323,24 @@ function routeTo(
 }
 
 /**
+ * The request headers for one ntfy publish.
+ *
+ * Node writes a header value as latin1, so a title with any non-ASCII char (a routine title's `·`) would reach ntfy as invalid UTF-8 and show a
+ * replacement char on the phone. Such a title goes out RFC 2047 encoded (`=?UTF-8?B?…?=`), which ntfy decodes; an ASCII one goes out as is.
+ */
+export function ntfyHeaders(payload: NotifyPayload): Record<string, string> {
+  const headers: Record<string, string> = {
+    Title: /^[\x20-\x7e]*$/.test(payload.title) ? payload.title : `=?UTF-8?B?${Buffer.from(payload.title, 'utf8').toString('base64')}?=`,
+    Tags: payload.tags,
+    'Content-Type': 'text/plain'
+  };
+  // ntfy opens this when the notification is tapped. Omitted rather than sent
+  // empty: an empty Click is a malformed header, not a no-op.
+  if (payload.click) headers.Click = payload.click;
+  return headers;
+}
+
+/**
  * The default transport. Resolves with what ntfy actually said and **never
  * rejects**, so fire-and-forget callers stay unable to fail while `sendTest` can
  * still tell a dropped packet from a delivered one.
@@ -331,14 +349,7 @@ function httpsSend(payload: NotifyPayload, config: Config): Promise<SendResult> 
   return new Promise<SendResult>(resolve => {
     try {
       const url = new URL(`${config.ntfyServer}/${payload.topic || config.ntfyTopic}`);
-      const headers: Record<string, string> = {
-        Title: payload.title,
-        Tags: payload.tags,
-        'Content-Type': 'text/plain'
-      };
-      // ntfy opens this when the notification is tapped. Omitted rather than sent
-      // empty: an empty Click is a malformed header, not a no-op.
-      if (payload.click) headers.Click = payload.click;
+      const headers = ntfyHeaders(payload);
 
       const req = https.request(url, { method: 'POST', timeout: 2000, headers }, res => {
         const status = res.statusCode ?? 0;

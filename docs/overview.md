@@ -341,7 +341,7 @@ client/src/
                   Form view: one read/write/summary per row over the file text), filterSort, analyticsFilterSort, chatFilter, chatPaging (the chat drawer's byte offsets: one
                   tail poll at a time, an epoch per re-tail), pollSeq (`createPollSeq`, the skip-while-in-flight rule useSessions and the Routines polls share),
                   heldBody (which timeline body a pinned panel folds), markdown, configsEntries,
-                  format, settings,
+                  format, settings, persistedReset (Settings › Reset's reach into mounted usePersistedState holders),
                   sections, deepLink, dictation, spawnOptions, pins, resume, pace, usageProfile,
                   usageRatesFormat, usageHistory (the History tab's step path, ticks and figures), panelCollapse, surface, walkChart (the headroom
                   chart's geometry), walkRows (the same walk as day rows), holds,
