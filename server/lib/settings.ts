@@ -93,8 +93,8 @@ interface Stored {
   trustTailnet: boolean;
   /**
    * Encoded project dir names that stay listed past `LOOKBACK_HOURS` (#161).
-   * Still only this store and `remoteState` write to disk — this key rides in
-   * the same file, it is not a third one.
+   * This key rides in the same file as the rest of this store, it is not a
+   * file of its own.
    */
   pinnedProjects: string[];
 }
