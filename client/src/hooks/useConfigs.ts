@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 
+import { projectScopeOf } from '../lib/configsEntries';
 import type { FileContent, ManagementIndex, ScopeConfig } from '../../../shared/types';
 
 /**
@@ -51,14 +52,14 @@ export function useProjectScope(dirName: string | null, refreshKey: number): Sco
   useEffect(() => {
     if (key === null || dirName === null || cache.current.has(key)) return;
     let alive = true;
+    // A failure is cached like a scope, flagged `error`, so the view says so instead of "loading scope…" forever; ↻ changes the key and retries.
     fetch(`/api/configs/project?dir=${encodeURIComponent(dirName)}`)
-      .then(res => res.json() as Promise<ScopeConfig>)
+      .then(async res => projectScopeOf(res.ok, await res.json().catch(() => undefined)), () => projectScopeOf(false, undefined))
       .then(scope => {
         if (!alive) return;
         cache.current.set(key, scope);
         force(n => n + 1);
-      })
-      .catch(() => { /* leave uncached; refresh retries */ });
+      });
     return () => { alive = false; };
   }, [key, dirName]);
 

@@ -55,7 +55,8 @@ control (the type is a column now, not a collapsible header) and the
 ## Mechanism
 
 - **Endpoints:** `GET /api/configs` (ManagementIndex: global ScopeConfig + recent
-  ProjectRefs), `GET /api/configs/project?dir=<dirName>` (one project's ScopeConfig),
+  ProjectRefs), `GET /api/configs/project?dir=<dirName>` (one project's ScopeConfig; its 400/404/500 carry an empty scope flagged `error`, which
+  `projectScopeOf` keeps apart from a project with no config, so the item column says the load failed),
   `GET /api/configs/file?path=<abs>` (FileContent). Handlers in `api.ts`, scanner in
   `lib/management.ts`, frontmatter metadata via `shared/frontmatter.ts`.
 - **Scopes:** global = `~/.claude/{skills,agents,commands,rules,hooks,CLAUDE.md,settings*}`

@@ -7,6 +7,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
+import type { RoutineRunConflict } from '../../shared/types.js';
 import type { Config } from './config.js';
 import { machineName, routineDirs, routineEnv } from './routine-config.js';
 import { installedWrapper } from './routine-reconcile.js';
@@ -18,7 +19,7 @@ export type RunResult =
   | { status: 202; run: string | null }
   | { status: 400; error: 'bad-only' }
   | { status: 404 }
-  | { status: 409; error: 'already-running' | 'no-plugin' | 'invalid' | 'not-this-machine' }
+  | { status: 409; error: RoutineRunConflict }
   | { status: 500; error: 'spawn-failed' };
 
 export type StopResult = { status: 204 } | { status: 409; error: 'not-running' };

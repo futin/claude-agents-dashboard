@@ -1079,7 +1079,9 @@ export async function serveSettingsWrite(
   const body = await readJsonBody(req);
   const next = setSettings(body);
   if (!next) {
-    return sendBadBody(res, { error: 'expected {idleSecs?: number, answerSecs?: number, notify?: NotifyPolicy, gitFetchSecs?: 0|30|60|120|300|600}' });
+    return sendBadBody(res, {
+      error: 'expected {idleSecs?: number, answerSecs?: number, notify?: NotifyPolicy, recordUsageHistory?: boolean, gitFetchSecs?: 0|30|60|120|300|600, trustTailnet?: boolean}'
+    });
   }
   sendJson(res, 200, settingsBody(config, next));
 }

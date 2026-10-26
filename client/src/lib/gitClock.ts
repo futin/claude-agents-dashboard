@@ -6,7 +6,7 @@
  * with a test. The segment labels sit beside their values because the Settings card is their only reader.
  */
 import type { FetchClock, WriteAccess } from '../../../shared/types';
-import { READ_ONLY_TEXT } from './writeRefusal';
+import { READ_ONLY_TEXT, refusalKind } from './writeRefusal';
 import { GIT_POLL_MS } from './gitPoll';
 import {
   FETCH_NEEDS_TOKEN, FETCH_REFUSED, FETCH_START_FAILED, KEY_NOW, READ_FAILED, READ_FETCHING, READ_OFF, READ_OVERDUE, READ_PENDING, READ_SYNCING, fetchRowSub,
@@ -121,9 +121,17 @@ export function createPollGate(): { request(): 'run' | 'queued' | 'dropped'; end
   };
 }
 
-/** A 403 is the server saying the Answer token is wrong; any other status, or no answer at all, is a launch that did not happen. */
-export function fetchFailureOf(status: number | 'network'): 'refused' | 'failed' {
-  return status === 403 ? 'refused' : 'failed';
+/** Why a Fetch all press launched nothing. */
+export type FetchFailure = 'refused' | 'read-only' | 'failed';
+
+/**
+ * A 403 is the server refusing the write: `read-only` when its body says no token could help (`refusalKind`), else the Answer token was wrong. Any other
+ * status, or no answer at all, is a launch that did not happen.
+ */
+export function fetchFailureOf(status: number | 'network', body?: unknown): FetchFailure {
+  if (status === 'network') return 'failed';
+  const kind = refusalKind(status, body);
+  return kind === 'read-only' ? 'read-only' : kind === 'token' ? 'refused' : 'failed';
 }
 
 /**
@@ -132,10 +140,10 @@ export function fetchFailureOf(status: number | 'network'): 'refused' | 'failed'
  * auto-fetch to be off — so the sub is the bare command and never amber.
  */
 export function fetchKeyState(s: {
-  tokenRequired: boolean | undefined; writeAccess: WriteAccess | undefined; tokenStored: boolean; failure: 'refused' | 'failed' | null; pending: boolean; running: boolean; intervalSecs: number | undefined;
+  tokenRequired: boolean | undefined; writeAccess: WriteAccess | undefined; tokenStored: boolean; failure: FetchFailure | null; pending: boolean; running: boolean; intervalSecs: number | undefined;
 }): { disabled: boolean; label: string; sub: string; subTone: 'amber' | null } {
   const offTone = s.intervalSecs === 0 ? 'amber' : null;
-  if (s.writeAccess === 'none') return { disabled: true, label: KEY_NOW, sub: READ_ONLY_TEXT, subTone: 'amber' };
+  if (s.writeAccess === 'none' || s.failure === 'read-only') return { disabled: true, label: KEY_NOW, sub: READ_ONLY_TEXT, subTone: 'amber' };
   if (s.tokenRequired === true && !s.tokenStored) return { disabled: true, label: KEY_NOW, sub: FETCH_NEEDS_TOKEN, subTone: 'amber' };
   if (s.failure === 'refused') return { disabled: true, label: KEY_NOW, sub: FETCH_REFUSED, subTone: 'amber' };
   if (s.running || s.pending) return { disabled: true, label: READ_FETCHING, sub: fetchRowSub(s.intervalSecs), subTone: offTone };

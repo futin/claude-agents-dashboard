@@ -400,6 +400,12 @@ export default function SettingsView() {
                       <span>{READ_ONLY_TEXT}</span>
                     </div>
                   )}
+                  {server.saveError !== null && (
+                    <div className="set-warn">
+                      <span>⚠</span>
+                      <span>{server.saveError}</span>
+                    </div>
+                  )}
                   {server.needsToken && (
                     <div className="set-warn">
                       <span>⚠</span>

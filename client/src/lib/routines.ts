@@ -7,7 +7,9 @@
  */
 import { isManualCron } from '../../../shared/cron';
 import { scalarEnd, writeFrontmatterLine } from '../../../shared/frontmatter';
-import type { ReconcileChange, RoutineJob, RoutineJobRow, RoutineRun, RoutineStats, RoutineStep, RoutinesResponse } from '../../../shared/types';
+import type {
+  ReconcileChange, RoutineJob, RoutineJobRow, RoutineRun, RoutineRunConflict, RoutineStats, RoutineStep, RoutinesResponse,
+} from '../../../shared/types';
 import { READ_ONLY_TEXT, refusalKind } from './writeRefusal';
 
 /** The chip colours a pill may take; `run` is the cyan "in flight" one the mock draws, `dim` the dashed one. */
@@ -316,6 +318,14 @@ export function withLate(line: string, late: boolean): string {
   return [parts[0], 'late', ...parts.slice(1)].join(' · ');
 }
 
+/** Run now's 409s, keyed by the shared union so a code the server adds fails the typecheck here. */
+const RUN_CONFLICT_TEXT: Record<RoutineRunConflict, (what: string) => string> = {
+  'already-running': what => `${what}: the job is already running.`,
+  invalid: what => `${what}: the job file has errors — fix them before running it.`,
+  'not-this-machine': what => `${what}: the job is not set to run on this machine (its machines: line).`,
+  'no-plugin': what => `${what} needs the dashboard plugin installed on this machine.`,
+};
+
 /** The one line a refused write leaves under the toolbar. `what` names the action (`Run now`, `Save`); `status` 0 is a fetch that never answered. */
 export function writeFailureText(what: string, status: number, body: unknown): string {
   const kind = refusalKind(status, body);
@@ -324,11 +334,13 @@ export function writeFailureText(what: string, status: number, body: unknown): s
   if (status === 0) return `${what} failed: the server did not answer.`;
   const error = body !== null && typeof body === 'object' ? (body as { error?: unknown }).error : undefined;
   if (status === 409 && error === 'not-owner') return 'Another server owns the routines on this machine; this one only reads.';
-  if (status === 409 && error === 'already-running') return `${what}: the job is already running.`;
+  if (status === 409 && typeof error === 'string' && Object.hasOwn(RUN_CONFLICT_TEXT, error)) return RUN_CONFLICT_TEXT[error as RoutineRunConflict](what);
   if (status === 409 && error === 'not-running') return `${what}: the job is not running.`;
   if (status === 409 && error === 'exists') return `${what}: a job with that name already exists.`;
   if (status === 404) return `${what}: no such job.`;
   if (status === 422) return `${what}: the file has errors.`;
+  if (status === 400 && error === 'bad-only') return `${what}: the steps picked to run were not valid.`;
+  if (status === 500 && error === 'spawn-failed') return `${what} failed: the job could not be launched.`;
   if (status === 501) return `${what} needs macOS.`;
   return `${what} failed (HTTP ${status}).`;
 }
