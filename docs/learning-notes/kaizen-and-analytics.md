@@ -16,7 +16,7 @@ built the way it was, contrasting each choice with the naive alternative.
 
 ## 1. The skill is two files with two responsibilities
 
-`.claude/skills/kaizen/` is:
+`plugin/skills/kaizen/` is:
 
 - **`SKILL.md`** — instructions *to Claude*: the 7-step loop, how to read the
   numbers honestly, when to promote a lesson to global config.
@@ -27,13 +27,13 @@ built the way it was, contrasting each choice with the naive alternative.
 transcript and estimate "this cost about a million tokens." That hallucinates
 figures and is never reproducible run-to-run. Pushing all arithmetic into
 `kaizen.mjs` makes the numbers exact and deterministic; the skill explicitly
-forbids the model from inventing them (`.claude/skills/kaizen/SKILL.md:19`). The
+forbids the model from inventing them (`plugin/skills/kaizen/SKILL.md:17`). The
 model only does what math can't — judge whether the work was any good.
 
 The `.mjs` is deliberately zero-dep pure Node (not `tsx`, no repo) so the *global*
 skill runs in **any** project. It is a hand-port of `server/lib/{analyze,agents,
-scan}.ts`, which the header names as the unit-tested source of truth
-(`.claude/skills/kaizen/kaizen.mjs:12`).
+subagent-usage,scan}.ts`, which the header names as the unit-tested source of truth
+(`plugin/skills/kaizen/kaizen.mjs:13`).
 
 - **Bad alternative:** `import`-ing the repo's TypeScript directly. Con: the skill
   would only work inside this repo, with `tsx` installed. **Chosen:** duplicate the
@@ -43,7 +43,7 @@ scan}.ts`, which the header names as the unit-tested source of truth
 
 ## 2. Reading tokens honestly — two totals, not one
 
-`analyzeSession()` (`.claude/skills/kaizen/kaizen.mjs:188`) streams the `.jsonl`
+`analyzeSession()` (`plugin/skills/kaizen/kaizen.mjs:285`) streams the `.jsonl`
 line by line and, for each **assistant** message, sums
 `usage.{input, output, cache_creation, cache_read}_tokens`. It derives two
 headline totals (`kaizen.mjs:297`):
@@ -112,7 +112,7 @@ one lesson** → (7) offer to codify it.
 
 Step 6 is the one that feeds Analytics. It appends exactly one line to
 `~/.claude/session-analytics-log.md` in this **contract format**
-(`.claude/skills/kaizen/SKILL.md:90`):
+(`plugin/skills/kaizen/SKILL.md:128`):
 
 ```
 - 2026-07-12 [claude-agents-dashboard] d04e9b52: 1.0M billable (12.1M ctx), top cost 4 subagents (233k)... Lesson: <one concrete takeaway>.
@@ -299,8 +299,8 @@ figures.
 
 **Relevant files**
 
-- `.claude/skills/kaizen/SKILL.md` — the LLM instructions: 7-step loop, token-honesty rules, promotion policy, the status/review/capture modes.
-- `.claude/skills/kaizen/kaizen.mjs` — the zero-dep deterministic analyzer (`analyzeSession`, `readAgents`); vendored port of the server libs.
+- `plugin/skills/kaizen/SKILL.md` — the LLM instructions: 7-step loop, token-honesty rules, promotion policy, the status/review/capture modes.
+- `plugin/skills/kaizen/kaizen.mjs` — the zero-dep deterministic analyzer (`analyzeSession`, `readAgents`); vendored port of the server libs.
 - `~/.claude/session-analytics-log.md` — the single append-only wire between producer and consumer (global; lesson, status and review lines).
 - `server/lib/sessionAnalyticsLog.ts` — parses the log (`LINE_RE`/`STATUS_RE`/`REVIEW_RE`, `parseLogEvents`, `recentLessons`, `statusForSession`); fail-open.
 - `server/lib/analytics.ts` — `listReports`: prefix-resolve transcript, re-analyze live, build `AnalyticsReport`; `reviewStatus`: the 7-day sweep clock.

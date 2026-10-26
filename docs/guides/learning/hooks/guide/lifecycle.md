@@ -105,7 +105,7 @@ This is why `plan-remote-hook.sh` re-checks the tool name even though its matche
 narrows it:
 
 ```bash
-# scripts/plan-remote-hook.sh:42-45
+# scripts/plan-remote-hook.sh:45-48
 # A matcher is configuration, so never trust it alone: this hook must be inert
 # for anything but a plan, whatever it ends up registered against.
 TOOL=$(printf '%s' "$INPUT" | jq -r '.tool_name // empty' 2>/dev/null)
@@ -140,7 +140,7 @@ reason text, which is why [`messages.ts`](../../../../../server/lib/messages.ts)
 that carries both your follow-up *and* a re-statement of the rules:
 
 ```ts
-// server/lib/messages.ts:44-48
+// server/lib/messages.ts:51-55
 /**
  * The prose the hook prints as the Stop block's `reason`. Two jobs: carry the
  * text, and carry the away-mode instructions — `UserPromptSubmit` hooks (the

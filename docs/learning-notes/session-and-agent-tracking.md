@@ -83,9 +83,9 @@ end/duration. Results are returned newest-first.
 can finish late (via a downstream notification) *after* a later job has already
 completed. This is exactly why `agents.ts` walks the whole file rather than
 stopping at the last finished job. See
-`backlog/ideas/done/idea-1-incremental-cache-for-subagent-tracking.md` for how
-the incremental cache built on top (`server/lib/agents-cache.ts`) respects
-this.
+[`docs/subsystems/sessions.md` §Expandable subagent detail](../subsystems/sessions.md#expandable-subagent-detail) for the incremental cache built on top
+(`server/lib/agents-cache.ts`). The idea that designed it, `backlog/ideas/done/idea-1-incremental-cache-for-subagent-tracking.md`, left the tree when the
+backlog moved to GitHub; read it with `git show 31088b8^:backlog/ideas/done/idea-1-incremental-cache-for-subagent-tracking.md`.
 
 Note there is **no separate process** for a subagent: a `Task`/`Agent` subagent
 runs inside the parent session's `claude` process and writes into the parent's

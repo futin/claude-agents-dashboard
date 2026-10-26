@@ -1,6 +1,6 @@
 # Fail-open, hook by hook
 
-Twelve bail-outs, one success path — and three call sites that fail deliberately opposite ways
+Fourteen bail-outs, one success path — and three call sites that fail deliberately opposite ways
 on the very same signal.
 
 > Mental model: **the hook's exit is what lets the terminal UI render.** So every guard has
@@ -50,7 +50,9 @@ live.
 | Guard | Fails to | Reasoning |
 |---|---|---|
 | `CLAUDECODE != 1` | terminal | Script may be invoked outside the CLI; nothing to hook |
+| routine run (`CLAUDE_DASHBOARD_ROUTINE` set) | terminal | Unattended child: no hold, no push |
 | no `jq` | terminal | Can't parse the payload at all |
+| `autopilot` run `running` for this session | terminal | The run must not ask; checked before any network call |
 | `tool_name != ExitPlanMode` | terminal | *"A matcher is configuration, so never trust it alone"* |
 | `/api/health` unreachable (1s) | terminal | Dashboard down — nobody could answer anyway |
 | `remoteAnswer != true` | terminal | Env gate or toggle says no |
@@ -59,16 +61,17 @@ live.
 | idle < threshold | terminal | You are at the desk |
 | no `session_id` | terminal | Can't register a wait without it |
 | no `tool_input` | terminal | Nothing to show on the phone |
+| request body won't build (`jq -n` fails) | terminal | Malformed `tool_input` can't be sent |
 | POST non-2xx / reset / timeout | terminal | Server restarted, or feature flipped off mid-flight |
 | `status != answered` | terminal | timeout, dismissed, superseded, released — all mean "use the terminal" |
 | empty `reason` | terminal | Never emit a deny with no explanation |
 
 That table spans the set — the `tool_name` row is `plan-remote-hook.sh`'s alone, and the
 non-numeric `idleSecs` row is a default rather than a bail-out.
-[`ask-remote-hook.sh`](../../../../../scripts/ask-remote-hook.sh) itself contains **thirteen**
-`exit 0` statements: twelve bail-outs and one success exit after the decision is printed.
-`grep -c 'exit 0' scripts/*-hook.sh` gives 13 / 14 / 12 / 8 / 8 across the five. One path
-through to a decision, a dozen out. The asymmetry *is* the design.
+[`ask-remote-hook.sh`](../../../../../scripts/ask-remote-hook.sh) itself contains **fifteen**
+`exit 0` statements: fourteen bail-outs and one success exit after the decision is printed.
+`grep -c 'exit 0' scripts/*-hook.sh` gives ask-remote 15, plan-remote 16, stop-notify 16, remote-decision 10 and permission-notify 9 across the five
+(`kill-guard-hook.sh`, the sixth script and outside this guide, adds 7). One path through to a decision, more than a dozen out. The asymmetry *is* the design.
 
 ## 4. `INPUT=$(cat)` comes first, always
 
@@ -94,7 +97,7 @@ an optimization and buys nothing: the payload is a few kilobytes already buffere
 Two `case` statements, identical syntax, opposite conclusions:
 
 ```bash
-# scripts/ask-remote-hook.sh:66-69
+# scripts/ask-remote-hook.sh:86-89
   case "$IDLE_S" in
     ''|*[!0-9]*) exit 0 ;;                          # unreadable → treat as at-desk
     *) [ "$IDLE_S" -lt "$IDLE_MIN_S" ] && exit 0 ;; # at the desk → terminal dialog
@@ -102,7 +105,7 @@ Two `case` statements, identical syntax, opposite conclusions:
 ```
 
 ```bash
-# scripts/ask-remote-hook.sh:49
+# scripts/ask-remote-hook.sh:69
 case "$IDLE_MIN_S" in ''|*[!0-9]*) IDLE_MIN_S=60 ;; esac
 ```
 
@@ -124,7 +127,7 @@ blast radius.
 **a) `ask-remote-hook.sh` — unknown idle → do NOT intercept.**
 
 ```bash
-# scripts/ask-remote-hook.sh:59-62
+# scripts/ask-remote-hook.sh:79-82
 # 2. Are you at the keyboard? If so the terminal dialog wins — remote answering
 #    only kicks in once you've stepped away. macOS reports idle nanoseconds via
 #    IOHIDSystem (~40ms to read). If it can't be read (non-macOS, ioreg missing)
@@ -137,7 +140,7 @@ hung for up to ten minutes.**
 **b) `notify.ts` — unknown idle → DO push.**
 
 ```ts
-// server/lib/notify.ts:71-78
+// server/lib/notify.ts:79-86
   if (policy.requireAfk) {
     const idle = ctx.readIdle();
     // Unreadable (Docker, non-macOS) → push anyway. Failing silent here would
@@ -152,7 +155,7 @@ Cost of guessing wrong: **one unnecessary buzz.** The comment names the other ca
 explicitly and explains the inversion — this is the clearest example in the repo of a fail
 direction being derived rather than inherited from a house rule.
 
-**c) `messages.ts` `sweepIdle` — unknown idle → do NOT release.**
+**c) `idle.ts` `backAtDesk` (every store's `sweepIdle`) — unknown idle → do NOT release.**
 
 Cost of guessing wrong: **a turn ends that you were about to reply to.** So the deadline timer
 stays the reaper of last resort.
@@ -161,7 +164,7 @@ stays the reaper of last resort.
 flowchart LR
     S["ioreg unreadable"] --> A["ask-remote.sh<br/>don't intercept"]
     S --> B["notify.ts<br/>push anyway"]
-    S --> C["sweepIdle<br/>don't release"]
+    S --> C["backAtDesk<br/>don't release"]
     A --> A2["worst case:<br/>no phone option"]
     B --> B2["worst case:<br/>one extra buzz"]
     C --> C2["worst case:<br/>hold runs to deadline"]

@@ -17,7 +17,7 @@ stateDiagram-v2
     Gates --> Held: away + remoteAnswer on
     Held --> Blocked: you type a follow-up
     Held --> [*]: timeout or dismiss
-    Held --> [*]: released — keyboard touched
+    Held --> [*]: released — keyboard touched (terminal sessions only)
     Blocked --> TurnEnds: model continues
     Blocked --> [*]: CLI 8-block cap → force-end
 ```
@@ -28,7 +28,7 @@ Conventionally a `Stop` hook checks `stop_hook_active` and bails, to avoid an in
 This one can't:
 
 ```bash
-# scripts/stop-notify-hook.sh:14-18
+# scripts/stop-notify-hook.sh:17-21
 # The CLI caps consecutive Stop blocks at 8 (CLAUDE_CODE_STOP_HOOK_BLOCK_CAP),
 # then force-ends the turn — so a phone conversation is at most 8 replies per
 # stretch. stop_hook_active no longer short-circuits: mid-conversation stops
@@ -42,7 +42,7 @@ turn-end is by definition a mid-hook-conversation stop.
 So the flag changed jobs. It is no longer control flow; it is data:
 
 ```bash
-# scripts/stop-notify-hook.sh:90-95
+# scripts/stop-notify-hook.sh:196-201
 BODY=$(jq -cn \
   --arg sid "$SESSION_ID" \
   --arg pm "$PERM_MODE" \
@@ -74,7 +74,7 @@ platform is strictly better here.
 `notify_fallback` is a shell function used as a jump target:
 
 ```bash
-# scripts/stop-notify-hook.sh:58-65
+# scripts/stop-notify-hook.sh:122-129
 notify_fallback() {
   [ "$SHA" = "true" ] && exit 0
   BODY=$(jq -cn --arg sid "$SESSION_ID" --arg pm "$PERM_MODE" \
@@ -111,7 +111,7 @@ suppression is a preserved behaviour, not a new one.
 This runs before the health probe — before any network call at all:
 
 ```bash
-# scripts/stop-notify-hook.sh:41-44
+# scripts/stop-notify-hook.sh:53-56
 # Count in-flight background work. Missing keys -> [] -> 0 (safe fallback).
 # Only the hook payload carries this, which is why the guard stays here.
 bg=$(printf '%s' "$INPUT" | jq '((.background_tasks // []) | length) + ((.session_crons // []) | length)' 2>/dev/null || echo 0)
@@ -134,36 +134,31 @@ the 8 available blocks doing it.
 `composeReason` carries your follow-up **and** re-injects the away-mode instructions:
 
 ```ts
-// server/lib/messages.ts:55-62
-export function composeReason(text: string): string {
-  const trimmed = text.trim();
-  return 'The user is away from the terminal and sent this follow-up from the dashboard; '
-    + `treat it as their next message:\n${trimmed}\n\n`
-    + 'Continue working on it now. The user is still away: put any decision through the '
-    + 'AskUserQuestion tool, never end the turn on a prose question, and prefer '
-    + 'already-permitted tools — a permission dialog would park the session until they return.';
-}
+// server/lib/remote-message-prose.ts:9-14
+export const REMOTE_MESSAGE_HEAD =
+  'The user is away from the terminal and sent this follow-up from the dashboard; treat it as their next message:\n';
+
+export const REMOTE_MESSAGE_TAIL =
+  '\n\nContinue working on it now. The user is still away: put any decision through the AskUserQuestion tool, never end the turn on a prose '
+  + 'question, and prefer already-permitted tools — a permission dialog would park the session until they return.';
 ```
+
+`messages.ts`'s `composeReason` is now a one-line call to `wrapRemoteMessage`, which puts your trimmed text between those two constants.
 
 **Why the instructions ride here:** as [the lifecycle chapter](./lifecycle.md) covers,
 `UserPromptSubmit` does not fire on a hook-continued turn. There was no user prompt. So
 `remote-decision-hook.sh` never runs and its injection never happens — this reason string is
 the only vehicle left.
 
-Then [`chat.ts`](../../../../../server/lib/chat.ts) mirrors that exact prose in a regex, to unwrap
-the record back into a plain drawer message:
+The same wording has to come back out. The CLI records the Stop block in the transcript, and
+[`chat.ts`](../../../../../server/lib/chat.ts) unwraps that record back into a plain drawer message with `unwrapRemoteMessage`, whose matcher is
+built from the very same two constants:
 
 ```ts
-// server/lib/chat.ts:74-83
-const REMOTE_MESSAGE_RE = new RegExp(
-  '^(?:Stop hook feedback:\\n)?'
-  + 'The user is away from the terminal and sent this follow-up from the dashboard; '
-  + 'treat it as their next message:\\n'
-  + '([\\s\\S]*)'
-  + '\\n\\nContinue working on it now\\. The user is still away: put any decision through the '
-  + 'AskUserQuestion tool, never end the turn on a prose question, and prefer '
-  + 'already-permitted tools — a permission dialog would park the session until they return\\.'
-  + '\\s*$'
+// server/lib/remote-message-prose.ts:20-23
+// The CLI records the Stop block under a `Stop hook feedback:` line; both ends are anchored so a near-miss fails closed.
+const MATCHER = new RegExp(
+  '^(?:Stop hook feedback:\\n)?' + escapeRegExp(REMOTE_MESSAGE_HEAD) + '([\\s\\S]*)' + escapeRegExp(REMOTE_MESSAGE_TAIL) + '\\s*$'
 );
 ```
 
@@ -173,56 +168,62 @@ wrapper, instructions and all.
 **The bad alternative** is a sentinel marker (`<!--remote-msg-->`) or a JSON envelope —
 trivially parseable, no duplicated prose:
 
-| | mirrored prose (chosen) | sentinel / envelope |
+| | shared prose constants (chosen) | sentinel / envelope |
 |---|---|---|
 | What the model reads | Clean natural-language instruction | A marker it must be told to ignore |
-| Parse robustness | Brittle — two copies must stay identical | Exact |
-| Drift protection | `chat.test.ts` imports `composeReason` and pins both ends | Not needed |
-| Failure mode | Record silently not unwrapped (cosmetic) | — |
+| Parse robustness | Exact — wrap and unwrap derive from one pair of constants | Exact |
+| Drift protection | Structural: one owner module, nothing to keep in step | Not needed |
+| Failure mode | A record that doesn't match is dropped (fails closed) | — |
 
-They chose the *model's* reading experience over the parser's, and paid for it with a pinning
-test. The comment is explicit that this is a deliberate fail-closed design:
+They chose the *model's* reading experience over the parser's. The first version paid for that with two hand-kept copies of the prose — the wrapper in
+`messages.ts` and a hand-written `REMOTE_MESSAGE_RE` regex in `chat.ts` — and a test pinning them together. That copy is gone: both directions now derive
+from [`remote-message-prose.ts`](../../../../../server/lib/remote-message-prose.ts), so they cannot drift apart. One constraint survives the refactor, and
+the module's header names it: every transcript already on disk carries the old wording, so changing the constants would stop past follow-ups unwrapping.
 
-```ts
-// server/lib/messages.ts:50-53
- * ⚠️ `chat.ts` `REMOTE_MESSAGE_RE` mirrors this exact prose to unwrap the record
- * back into a plain drawer message. Editing the wording here without editing it
- * there breaks `chat.test.ts` — which is the point; it fails closed, and the
- * follow-up just stops showing in the drawer.
-```
-
-Each end carries a pointer to the other — `messages.ts` warns about the regex,
-[`chat.ts:70-71`](../../../../../server/lib/chat.ts) notes that *"Both ends are anchored, so any
-drift in that prose fails closed."* Both anchored, drift caught by a test, worst case
-cosmetic. That is what makes an otherwise-fragile duplication affordable.
-
-## 6. The reaper only `messages.ts` needs
+## 6. Three stores, one reaper policy
 
 `pending.ts` and `plans.ts` wait for you to *answer something*. `messages.ts` waits for you to
-*maybe say something*. That difference earns it a reaper:
+*maybe say something*. All three release a hold when you walk back to your desk, and all three
+ask the same question to decide it:
 
 ```ts
-// server/lib/messages.ts:189-198
-export function sweepIdle(): number {
-  if (entries.size === 0) return 0;
+// server/lib/idle.ts:45-53
+export function backAtDesk(): boolean {
   const thresholdSecs = getSettings().idleSecs;
-  if (thresholdSecs === 0) return 0;
-  const idle = (idleReader ?? readIdleSecs)();
-  if (idle === null || idle >= thresholdSecs) return 0;
-  const waiting = [...entries.values()];
-  for (const entry of waiting) settle(entry, { status: 'released' });
-  return waiting.length;
+  // Checked before the read, not inside `atDesk`: the reading costs an `ioreg`
+  // spawn and a zero threshold makes the answer false regardless, so asking
+  // would be ~40ms spent on a foregone conclusion. `atDesk` re-checks it anyway
+  // for callers that already hold a reading.
+  if (thresholdSecs === 0) return false;
+  return atDesk((idleReader ?? readIdleSecs)(), thresholdSecs);
 }
 ```
 
-**Why:** when you walk back to your desk, the right behaviour is for the session to stop
-immediately — not to make you find a phone panel and dismiss it. Hence the extra verdict,
-`released`, which exists in no other store.
+**Why:** when you walk back to your desk, the right behaviour is for the session to go back to the terminal
+immediately — not to make you find a phone panel and dismiss it. Each store settles such a hold as `released`.
 
-And the reaper self-terminates:
+This policy first lived only in `messages.ts`, which is why held questions and plans used to sit parked until their deadlines. `idle.ts` now owns
+it; each store keeps its own `sweepIdle()` only for what differs per store. `messages.ts` is the one that differs, because it skips headless holds:
 
 ```ts
-// server/lib/messages.ts:205-212
+// server/lib/messages.ts:188-195
+export function sweepIdle(): number {
+  if (entries.size === 0) return 0;
+  const releasable = [...entries.values()].filter(e => !e.headless);
+  if (releasable.length === 0) return 0; // nothing to release — don't spawn ioreg
+  if (!backAtDesk()) return 0;
+  for (const entry of releasable) settle(entry, { status: 'released' });
+  return releasable.length;
+}
+```
+
+A dashboard-spawned `claude -p` session has no terminal, so coming back to the desk gives you no other way to reply. Its hold stays open until you
+answer, dismiss it or it times out.
+
+And each reaper self-terminates. The three `ensureReaper()` functions are identical:
+
+```ts
+// server/lib/messages.ts:202-209
 function ensureReaper(): void {
   if (reaper) return;
   reaper = setInterval(() => {
@@ -237,20 +238,23 @@ function ensureReaper(): void {
 
 | | on-demand reaper (chosen) | always-on interval |
 |---|---|---|
-| `ioreg` spawns when idle | Zero — *"an idle server never spawns `ioreg`"* | 17,280/day to serve an empty store |
+| `ioreg` spawns when idle | Zero — *"an idle server never spawns `ioreg`"* | 17,280/day per store to serve an empty store |
 | Holds the process open | No — `unref()` | Needs `unref()` anyway |
 | Complexity | `ensureReaper` + the self-clear check | One line at boot |
 
-The store is empty the overwhelming majority of the time, and each sweep shells out to
-`ioreg`. Six extra lines to spawn no subprocesses when there is nothing to reap.
+The stores are empty the overwhelming majority of the time, and each sweep shells out to
+`ioreg`. Six extra lines per store to spawn no subprocesses when there is nothing to reap.
 
 Note the fail direction, which is the *opposite* of the hook's:
 
 ```ts
-// server/lib/messages.ts:185-187
- * Fail directions: unreadable idle (Docker, non-macOS) → never release — the
- * deadline timer is the reaper of last resort. `idleSecs === 0` means the idle
- * gate is disabled everywhere else, so it disables auto-release too.
+// server/lib/idle.ts:35-40
+ * Fail directions, both deliberately "stay held":
+ *  - unreadable idle (Docker, non-macOS) → false. Never end a wait on a guess;
+ *    the deadline timer is the reaper of last resort. Same direction
+ *    `ask-remote-hook.sh` takes for the same reason.
+ *  - `idleSecs === 0` → false. Zero disables the idle gate everywhere else
+ *    (the hooks skip the check entirely), so it disables auto-release too.
 ```
 
 Auto-releasing on a guess would end a turn you were about to reply to. See

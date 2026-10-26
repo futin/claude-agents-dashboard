@@ -2,7 +2,7 @@
 
 # Claude Code hooks in this project — a learning walkthrough
 
-This guide teaches the five Claude Code lifecycle hooks this repo ships: what each one is,
+This guide teaches the five Claude Code remote-answer hooks this repo ships: what each one is,
 where it is wired, what order they fire in, and — the part reference docs skip — **why each
 piece is shaped the way it is**, by contrasting it with the naive approach and laying out
 what that trade cost.
@@ -19,7 +19,7 @@ what that trade cost.
 > and re-run `node docs/guides/learning/hooks/tools/build.mjs`; never edit `index.html` by hand.
 
 > Baseline: written against `scripts/` + the hook-facing `server/lib/` stores at commit
-> `092484b` (2026-08-17).
+> `092484b` (2026-08-17). Citations and the passages that had drifted refreshed against `8d0f7f2` on 2026-10-26.
 
 ---
 
@@ -51,7 +51,11 @@ are the same mechanism three times.
 
 ## The five scripts
 
-All five live in [`scripts/`](../../../../scripts), are symlinked into `~/.claude/hooks/`, and are
+`scripts/install-hooks.sh` installs **six** hook scripts. Five of them make a session answerable from your phone, and they are what this guide teaches.
+The sixth, [`kill-guard-hook.sh`](../../../../scripts/kill-guard-hook.sh), is a `PreToolUse`/`Bash` guard that refuses `pkill` and `killall` unless the
+pattern is anchored under the session's own directory. It asks nobody anything, so it sits outside this guide; its own header explains why it exists.
+
+All six live in [`scripts/`](../../../../scripts), are symlinked into `~/.claude/hooks/`, and are
 registered in `~/.claude/settings.json` — **not** in the repo. See
 [Fail-open](./guide/fail-open.md) for why the install deliberately lives outside version
 control.
@@ -82,7 +86,7 @@ fifteen.
 4. **[The Stop-hook chat loop](./guide/stop-loop.md)** — how a lifecycle hook becomes a
    conversation, why `stop_hook_active` was demoted from a guard to a payload field, and the
    prose contract between two modules.
-5. **[Fail-open, hook by hook](./guide/fail-open.md)** — twelve bail-outs, one success path,
+5. **[Fail-open, hook by hook](./guide/fail-open.md)** — fourteen bail-outs, one success path,
    and the three call sites that fail deliberately opposite ways on the very same signal.
 6. **[Timeouts, gates, and config precedence](./guide/config.md)** — the four-layer timeout
    ladder, the three-source precedence chain, and the four independent gate stacks people
@@ -96,8 +100,8 @@ These are the questions actually raised while this guide was written.
 
 Both exist in this repo and the words collide, so it is worth naming the difference once.
 `client/src/hooks/` holds fifteen React hooks (`useSessions`, `usePendingQuestion`,
-`useDictation`, …) — browser-side state and polling. This guide is about the **five shell
-scripts in `scripts/`** that Claude Code executes at lifecycle events.
+`useDictation`, …) — browser-side state and polling. This guide is about the **five remote-answer
+shell scripts in `scripts/`** that Claude Code executes at lifecycle events (a sixth, `kill-guard-hook.sh`, is out of scope).
 
 The tell is "order of execution": React hooks run in render order within one component, which
 is a React question. Claude Code hooks fire at named moments in a turn, across process
@@ -107,8 +111,9 @@ on — but they are separate systems with separate failure modes.
 
 ### "What hooks are used, and where are they wired?"
 
-Five scripts in [`scripts/`](../../../../scripts), symlinked into `~/.claude/hooks/`, registered in
-`~/.claude/settings.json`. The table above lists all five with their events and matchers. The
+Six scripts in [`scripts/`](../../../../scripts), symlinked into `~/.claude/hooks/`, registered in
+`~/.claude/settings.json`. The table above lists the five remote-answer hooks with their events and matchers; the sixth is `kill-guard-hook.sh`
+(`PreToolUse`, matcher `Bash`). The
 registration deliberately is **not** in the repo — see
 [Fail-open §7](./guide/fail-open.md#7-the-install-lives-outside-version-control)
 for why committing it would install blocking hooks into every session that opens this project.
@@ -181,7 +186,7 @@ markdown, no external assets.
 
 ## The one-sentence summary
 
-**Five scripts, one trick (`deny` + reason), three gates, twelve fail-open guards, and a
+**Five scripts, one trick (`deny` + reason), three gates, fourteen fail-open guards, and a
 state machine that knows nothing about HTTP.**
 
 ---

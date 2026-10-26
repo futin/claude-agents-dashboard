@@ -21,9 +21,8 @@ It also uploads your audio to Apple or Google to do that.
 That is disqualifying **here specifically**, and the reason is structural rather than
 ideological. From [`.claude/CLAUDE.md`](../../../../../.claude/CLAUDE.md):
 
-> Backend is zero-runtime-dep by design (only Node built-ins). Keep new deps out of
-> `server/`. It reads from disk and makes exactly **one** kind of outbound call: the ntfy
-> push in `lib/notify.ts`. Adding a second needs a reason.
+> **Keep new deps out of `server/`.** It reads disk and makes exactly **two** kinds of outbound call itself — the ntfy push in `lib/notify.ts` and the
+> usage read in `lib/usage.ts`. A third needs a reason.
 
 The whole pitch of this dashboard is that it reads your Claude Code transcripts — your
 code, your prompts, your project names, your branch names — off disk and never ships them

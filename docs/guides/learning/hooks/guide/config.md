@@ -28,7 +28,7 @@ flowchart LR
 **Why the server owns the deadline rather than curl:**
 
 ```bash
-# scripts/ask-remote-hook.sh:94-96
+# scripts/ask-remote-hook.sh:113-115
 # 3. Register and wait. The server resolves this itself at the deadline, so
 #    curl's own cap is only a backstop for a hung server. A non-2xx, a reset
 #    (server restarted), or a timeout all mean: use the terminal dialog.
@@ -68,7 +68,7 @@ degrades to the terminal dialog. Even a misconfigured ladder fails safe.
 The UI enforces it from the other end, twice. First the field simply won't go higher:
 
 ```tsx
-// client/src/components/settings/SettingsView.tsx:268-274
+// client/src/components/settings/SettingsView.tsx:358-364
 <NumberField
   value={server.state.answerSecs}
   min={5}
@@ -94,7 +94,7 @@ And if a value above 600 arrives some other way, it names the exact number you w
 Meanwhile the server clamps to a *wider* bound:
 
 ```ts
-// server/lib/settings.ts:42-45
+// server/lib/settings.ts:47-50
 export const DEFAULT_ANSWER_SECS = 600;
 /** Mirrors `MIN_TIMEOUT_MS` / `MAX_TIMEOUT_MS` in `pending.ts` — the same window. */
 export const MIN_ANSWER_SECS = 5;
@@ -121,7 +121,7 @@ dialog. That is the same outcome as every other failure in this subsystem.
 ## 3. Precedence: three sources, resolved in one line of shell
 
 ```bash
-# scripts/ask-remote-hook.sh:48
+# scripts/ask-remote-hook.sh:68
 IDLE_MIN_S="${CLAUDE_DASHBOARD_IDLE_SECS:-$(printf '%s' "$HEALTH" | jq -r '.idleSecs // 60')}"
 ```
 
@@ -131,7 +131,7 @@ probe) → hardcoded default.** The same one-liner shape resolves `answerSecs`.
 **Why Settings rides on the health probe** rather than having its own endpoint:
 
 ```bash
-# scripts/ask-remote-hook.sh:43-47
+# scripts/ask-remote-hook.sh:63-67
 # Seconds without keyboard/mouse input before you count as away. 0 disables the
 # check (always wait — the pre-idle-arbiter behaviour). An explicitly exported
 # env var wins; otherwise the dashboard's Settings page owns it, carried on the
@@ -151,7 +151,7 @@ Docker, CI, a second dashboard on another port. But a silently-losing UI control
 experience, so the server *detects* the override and the UI says so:
 
 ```ts
-// server/lib/settings.ts:157
+// server/lib/settings.ts:230
 export function detectEnvOverride(name: string, homeDir?: string): EnvOverride | null {
 ```
 
@@ -197,27 +197,30 @@ need to — every answer is the same `exit 0`.
 `setEnabled` returns `null` when the env gate is off, so **the toggle cannot turn the feature
 on.** Env is a hard kill switch; the toggle only operates inside what env permits.
 
-**Why the toggle is persisted** — the only thing this app writes to disk:
+**Why the toggle is persisted:**
 
 ```ts
 // server/lib/remoteState.ts:14-17
  * The toggle is persisted because `tsx watch` restarts the server on every edit
- * and a switch you flipped before walking away must survive that. It is the only
- * thing this app writes to disk, and it fails open: an unwritable path keeps the
- * in-memory value and reports `persisted: false` so the UI can say so.
+ * and a switch you flipped before walking away must survive that. The write fails
+ * open: an unwritable path keeps the in-memory value and reports `persisted: false`
+ * so the UI can say so.
 ```
 
-A dev-loop detail drove a persistence decision, and the fail-open path (unwritable disk still
+An earlier version of this comment also called the toggle "the only thing this app writes to disk". That was never true — the server writes settings, routines
+and other state files too — and the comment no longer claims it. A dev-loop detail drove a persistence decision, and the fail-open path (unwritable disk still
 works this run, and says so) means a read-only container doesn't lose the feature.
 
-**Stack 2 — should *this* one wait?** The idle check, in the hook, per invocation. Never on the
-server, because the server can't see your keyboard from inside a container.
+**Stack 2 — should *this* one wait?** The idle check, in the hook, per invocation. The server never makes this call, because the server can't
+see your keyboard from inside a container. It does read the same idle value for a different job: once a hold is open,
+[`idle.ts`](../../../../../server/lib/idle.ts)'s `backAtDesk()` (`idle.ts:45-53`) asks whether you came back, so each store's 5s reaper can release the hold
+early. An unreadable reading there means "stay held", never "release" — see [Fail-open §6](./fail-open.md).
 
 **Stack 3 — should it push?** ([`notify.ts`](../../../../../server/lib/notify.ts)) Orthogonal to the
 other two — it governs *notifications*, not waits:
 
 ```ts
-// server/lib/notify.ts:65-69
+// server/lib/notify.ts:73-77
 export function shouldNotify(event: NotifyEvent, policy: NotifyPolicy, ctx: PredicateContext): boolean {
   if (!policy.enabled) return false;
   if (!policy.events[event]) return false;
@@ -238,7 +241,7 @@ So flipping the toggle off stops *new* waits from registering but does not stran
 held. And the toggle handler releases the held ones deliberately:
 
 ```ts
-// server/lib/pending.ts:256-266
+// server/lib/pending.ts:265-275
 /**
  * Hand every waiting question back to its terminal dialog. Used when the toggle
  * is switched off: "stop accepting remote answers" should release the waits it
@@ -261,16 +264,16 @@ should mean. Turning the switch off releases what it owns; it does not orphan it
 
 | Constant | Value | Where |
 |---|---|---|
-| `DEFAULT_IDLE_SECS` | 60 | [`settings.ts:37`](../../../../../server/lib/settings.ts) |
-| `MAX_IDLE_SECS` | 3600 | `settings.ts:39` |
-| `DEFAULT_ANSWER_SECS` | 600 | `settings.ts:42` |
-| `MIN_ANSWER_SECS` / `MAX_ANSWER_SECS` | 5 / 1800 | `settings.ts:44-45` |
-| `DEFAULT_TIMEOUT_MS` | 600_000 | [`pending.ts:44`](../../../../../server/lib/pending.ts) |
-| `MIN_TIMEOUT_MS` / `MAX_TIMEOUT_MS` | 5_000 / 1_800_000 | `pending.ts:45-46` |
+| `DEFAULT_IDLE_SECS` | 60 | [`settings.ts:42`](../../../../../server/lib/settings.ts) |
+| `MAX_IDLE_SECS` | 3600 | `settings.ts:44` |
+| `DEFAULT_ANSWER_SECS` | 600 | `settings.ts:47` |
+| `MIN_ANSWER_SECS` / `MAX_ANSWER_SECS` | 5 / 1800 | `settings.ts:49-50` |
+| `DEFAULT_TIMEOUT_MS` | 600_000 | [`pending.ts:46`](../../../../../server/lib/pending.ts) |
+| `MIN_TIMEOUT_MS` / `MAX_TIMEOUT_MS` | 5_000 / 1_800_000 | `pending.ts:47-48` |
 | `PERMISSION_TTL_MS` | 30 min | [`permissions.ts:26`](../../../../../server/lib/permissions.ts) |
-| idle reaper interval | 5s | [`messages.ts:210`](../../../../../server/lib/messages.ts) |
+| idle reaper interval | 5s | [`messages.ts:207`](../../../../../server/lib/messages.ts) |
 | `TEXT_CAP` (follow-up) | 4000 | `messages.ts:27` |
-| `QUESTION_CAP` / `LABEL_CAP` / `DESCRIPTION_CAP` | 2000 / 200 / 500 | `pending.ts:37-39` |
+| `QUESTION_CAP` / `LABEL_CAP` / `DESCRIPTION_CAP` | 2000 / 200 / 500 | `pending.ts:39-41` |
 | CLI Stop-block cap | 8 | `CLAUDE_CODE_STOP_HOOK_BLOCK_CAP` |
 | hook `timeout` (blocking) | 630 | `~/.claude/settings.json` |
 | hook `timeout` (display-only) | 5 | `~/.claude/settings.json` |
