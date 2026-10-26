@@ -18,7 +18,7 @@ Pull and Push when you press them.
 
 ## Quick start
 
-Requires **Node.js >= 18** and **pnpm**.
+Requires **Node.js >= 20.11** (the server reads `import.meta.dirname`) and **pnpm**.
 
 ```bash
 pnpm install

@@ -153,7 +153,7 @@ and this sweep, from the one number.
 in its `env` block — and then changing the number here does nothing, silently. `detectEnvOverride`
 reads that file (and the server's own environment) on every `getSettings()` and reports what it
 finds as `idleOverride` / `answerOverride`; the page shows a warning naming the exact file.
-Detection only — the app never edits `~/.claude`.
+Detection only — the app never edits `settings.json`.
 
 ⚠️ **A second trap is specific to the window:** the CLI kills a hook at the `timeout` on its
 `settings.json` entry (installed as `630`). A window above ~615s means the hook dies mid-wait,

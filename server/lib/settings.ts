@@ -93,8 +93,8 @@ interface Stored {
   trustTailnet: boolean;
   /**
    * Encoded project dir names that stay listed past `LOOKBACK_HOURS` (#161).
-   * Still only this store and `remoteState` write to disk — this key rides in
-   * the same file, it is not a third one.
+   * This key rides in the same file as the rest of this store, it is not a
+   * file of its own.
    */
   pinnedProjects: string[];
 }
@@ -223,7 +223,7 @@ function readStored(): Stored {
  * `~/.claude/settings.json` (which the CLI injects into every hook), and this
  * server's own shell, which in practice comes from the same profile.
  *
- * Detection only. The app never edits `~/.claude` — the UI just names the file
+ * Detection only. The app never edits `settings.json` — the UI just names the file
  * so the fix is one line away. Read fresh each call, not cached: the point is to
  * stop warning the moment the user removes it.
  */

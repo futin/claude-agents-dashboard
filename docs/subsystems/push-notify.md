@@ -237,7 +237,7 @@ the phone.
 
 Title `Claude Code`, body `<session label> — <event phrase>`. Never question text, plan
 markdown, tool names, or any transcript content — the dashboard is where content is read.
-`NotifyContext` deliberately has no field that could carry it, and a test asserts the
+`PredicateContext` deliberately has no field that could carry it, and a test asserts the
 visible payload stays clean.
 
 | Event | Body |

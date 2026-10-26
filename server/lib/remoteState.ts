@@ -12,9 +12,9 @@
  *                               always goes straight to the terminal dialog.
  *
  * The toggle is persisted because `tsx watch` restarts the server on every edit
- * and a switch you flipped before walking away must survive that. It is the only
- * thing this app writes to disk, and it fails open: an unwritable path keeps the
- * in-memory value and reports `persisted: false` so the UI can say so.
+ * and a switch you flipped before walking away must survive that. The write fails
+ * open: an unwritable path keeps the in-memory value and reports `persisted: false`
+ * so the UI can say so.
  *
  * See `docs/subsystems/remote-answer.md`.
  */
