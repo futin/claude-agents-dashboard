@@ -272,8 +272,7 @@ cron: "0 7 * * 1-5"
 # Which machines install it: mac, wsl, or both.
 machines: [mac, wsl]
 run: shell
-# pinned = every pinned repo; a list = only these, by folder name.
-foreach: pinned
+foreach: pinned   # pinned = every pinned repo; a list = only these, by folder name
 enabled: true
 ---
 \`\`\`bash

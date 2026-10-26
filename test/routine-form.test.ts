@@ -176,6 +176,22 @@ export function run(): number {
     assert.strictEqual(cleared, SKILL.split('\n').filter(l => !l.startsWith('foreach:')).join('\n'));
   });
 
+  // The shell template's foreach explanation rides on the foreach line, so it leaves with it (#285).
+  t('repos: One folder on the shell template leaves no foreach comment behind', () => {
+    const out = FIELDS.repos.write(SHELL, { mode: 'cwd', picks: [], cwd: '~/x' });
+    assert.ok(!/pinned = every pinned repo/.test(out), out);
+    assert.ok(!/foreach/.test(out.split('\n---\n')[0]), out);
+    assert.strictEqual(fmValue(out, 'cwd')?.value, '~/x');
+  });
+
+  t('repos: Pick on the shell template keeps the trailing explanation; Pick then All round-trips', () => {
+    const r = FIELDS.repos;
+    const picked = r.write(SHELL, { mode: 'pick', picks: ['a'], cwd: '' });
+    const line = picked.split('\n').find(l => l.startsWith('foreach:'));
+    assert.match(line ?? '', /^foreach: \[a\]\s+# pinned = every pinned repo; a list = only these, by folder name$/);
+    assert.strictEqual(r.write(picked, { mode: 'all', picks: [], cwd: '' }), SHELL);
+  });
+
   t('repos: All and Pick writes are setRepos', () => {
     const r = FIELDS.repos;
     assert.strictEqual(r.write(SKILL, { mode: 'pick', picks: ['a', 'b'], cwd: '' }), setRepos(SKILL, 'pick', ['a', 'b']));
