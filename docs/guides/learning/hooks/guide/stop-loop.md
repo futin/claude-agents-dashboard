@@ -245,7 +245,8 @@ function ensureReaper(): void {
 The stores are empty the overwhelming majority of the time, and each sweep shells out to
 `ioreg`. Six extra lines per store to spawn no subprocesses when there is nothing to reap.
 
-Note the fail direction, which is the *opposite* of the hook's:
+Note the fail direction. It is the *same* as the hook's, never act on a guess. Here that keeps the hold open, where the hook's guess keeps the dialog in
+the terminal:
 
 ```ts
 // server/lib/idle.ts:35-40

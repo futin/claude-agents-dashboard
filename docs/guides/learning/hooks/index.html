@@ -637,7 +637,7 @@ function ensureReaper(): void {
 <p><strong>The bad alternative</strong> is a permanent 5-second interval started at boot:</p>
 <div class="tablewrap"><table><thead><tr><th></th><th>on-demand reaper (chosen)</th><th>always-on interval</th></tr></thead><tbody><tr><td><code>ioreg</code> spawns when idle</td><td>Zero — <em>"an idle server never spawns <code>ioreg</code>"</em></td><td>17,280/day per store to serve an empty store</td></tr><tr><td>Holds the process open</td><td>No — <code>unref()</code></td><td>Needs <code>unref()</code> anyway</td></tr><tr><td>Complexity</td><td><code>ensureReaper</code> + the self-clear check</td><td>One line at boot</td></tr></tbody></table></div>
 <p>The stores are empty the overwhelming majority of the time, and each sweep shells out to <code>ioreg</code>. Six extra lines per store to spawn no subprocesses when there is nothing to reap.</p>
-<p>Note the fail direction, which is the <em>opposite</em> of the hook's:</p>
+<p>Note the fail direction. It is the <em>same</em> as the hook's, never act on a guess. Here that keeps the hold open, where the hook's guess keeps the dialog in the terminal:</p>
 <pre><code>// server/lib/idle.ts:35-40
  * Fail directions, both deliberately "stay held":
  *  - unreadable idle (Docker, non-macOS) → false. Never end a wait on a guess;
