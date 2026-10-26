@@ -31,11 +31,22 @@ interface ShotCase extends StageOpts {
 const AA_NOISE = 0.01;
 
 /**
+ * Two shots see wider noise from the same quirk, depending on what the shared browser drew before them: the Git Matrix at 1280 (rounded corners and status
+ * dots) and Configs daylight 1921 (the `↻` refresh glyph, drawn in a system fallback face). Channel differences reach 8, which needs a pixelmatch threshold of
+ * 0.0227 (measured 2026-10-26 from the 2026-10-24 git-matrix failure); 0.03 leaves headroom and still fails a real token change (#282).
+ */
+const AA_NOISE_WIDE = 0.03;
+
+/**
  * Routines hits the same quirk: its stats band (`.rtn-stats`, rounded and `overflow: hidden`, at a fractional y) shows one-step noise on its corners in
  * some runs, so every Routines shot takes `AA_NOISE`. The phone Runs shot also masks the native job `<select>`: at y 184.69 Chromium draws its label a whole
  * pixel lower in about half the runs, a shift no colour tolerance absorbs. The 1280 Runs shot still pins the select.
  */
 const ROUTINES = (c: ShotCase): ShotCase => (c.section === 'routines' ? { ...c, threshold: AA_NOISE } : c);
+
+/** Only the one Configs shot whose refresh glyph flakes takes `AA_NOISE_WIDE`; every other Configs shot stays at zero tolerance. */
+const CONFIGS_1921 = (c: ShotCase): ShotCase =>
+  c.section === 'configs' && c.theme === 'daylight' && c.width === 1921 && c.kind === 'shot' ? { ...c, threshold: AA_NOISE_WIDE } : c;
 
 const OTHER_THEMES: ThemeId[] = ['midnight', 'amber', 'graphite', 'nightshift'];
 
@@ -67,7 +78,7 @@ const PROJ = {
 };
 
 const CASES: ShotCase[] = [
-  ...SECTIONS.flatMap((s) => casesFor(s.id)).map(ROUTINES),
+  ...SECTIONS.flatMap((s) => casesFor(s.id)).map(ROUTINES).map(CONFIGS_1921),
   { section: 'sessions', theme: 'daylight', width: 1280, contentWidth: 'fixed', query: '?session=' + FIXTURE_SESSION_ID, kind: 'detail' },
   // The phone drawer folds the fixture plan's card to one `Plan 7/13 · …` line; the 1280 detail above pins its ellipsised `Plan · …` head.
   { section: 'sessions', theme: 'daylight', width: 375, contentWidth: 'fixed', query: '?session=' + FIXTURE_SESSION_ID, kind: 'detail' },
@@ -76,7 +87,7 @@ const CASES: ShotCase[] = [
   { section: 'sessions', theme: 'daylight', width: 1280, contentWidth: 'fixed', layout: 'triage', kind: 'triage' },
   // Git's default layout (Inbox) is what the management shots above show; the other layouts are seeded through the persisted key. The sessions fixture adds
   // an idle session on lumen-cli so the join draws all three chips.
-  { ...GIT, width: 1280, storage: { 'management.gitLayout': 'matrix' }, kind: 'git-matrix' },
+  { ...GIT, width: 1280, storage: { 'management.gitLayout': 'matrix' }, kind: 'git-matrix', threshold: AA_NOISE_WIDE },
   { ...GIT, width: 375, storage: { 'management.gitLayout': 'inspector' }, kind: 'git-inspector' },
   { ...GIT, width: 1280, storage: { 'management.gitLayout': 'inspector' }, kind: 'git-inspector' },
   { ...GIT, width: 375, storage: { 'management.gitLayout': 'branches' }, kind: 'git-branches' },
