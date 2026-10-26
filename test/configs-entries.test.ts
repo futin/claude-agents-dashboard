@@ -1,6 +1,6 @@
 import assert from 'node:assert';
 
-import { buildEntries, filterEntries, railRows } from '../client/src/lib/configsEntries.js';
+import { buildEntries, filterEntries, projectScopeOf, railRows } from '../client/src/lib/configsEntries.js';
 import type { McpServerInfo, ScopeConfig } from '../shared/types.js';
 
 function test(name: string, fn: () => void): boolean {
@@ -228,6 +228,19 @@ export function run(): number {
     ] }));
     const entries = g.find(x => x.title === 'MCP servers')!.entries;
     assert.deepStrictEqual(entries.map(e => e.subgroup), ['local', 'user', 'alpha']);
+  })) p++; else f++;
+
+  if (test('projectScopeOf: a good reply passes through; 404/500, an error body, a non-scope body and no reply read as a failed scope', () => {
+    const good = scope({ scope: 'project', root: '/p', skills: [] });
+    assert.strictEqual(projectScopeOf(true, good), good);
+    const failed = (s: ScopeConfig) => s.error === true && s.scope === 'project' && s.skills.length === 0 && s.mcpServers.length === 0;
+    // The server answers its 400/404/500 with an empty scope flagged error — without the flag, an empty scope reads as "no config".
+    assert.ok(failed(projectScopeOf(false, { ...scope({ scope: 'project', root: '' }), error: true })), '404 with the error body');
+    assert.ok(failed(projectScopeOf(false, good)), 'a non-2xx is a failure whatever its body says');
+    assert.ok(failed(projectScopeOf(true, { ...good, error: true })), 'a 200 flagged error');
+    assert.ok(failed(projectScopeOf(true, { message: 'proxy page' })), 'a 2xx that is not a scope');
+    assert.ok(failed(projectScopeOf(true, null)), 'null body');
+    assert.ok(failed(projectScopeOf(false, undefined)), 'no reply at all');
   })) p++; else f++;
 
   console.log(`\nconfigsEntries: ${p} passed, ${f} failed`);

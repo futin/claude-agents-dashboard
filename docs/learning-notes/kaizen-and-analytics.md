@@ -16,7 +16,7 @@ built the way it was, contrasting each choice with the naive alternative.
 
 ## 1. The skill is two files with two responsibilities
 
-`.claude/skills/kaizen/` is:
+`plugin/skills/kaizen/` is:
 
 - **`SKILL.md`** — instructions *to Claude*: the 7-step loop, how to read the
   numbers honestly, when to promote a lesson to global config.
@@ -27,13 +27,13 @@ built the way it was, contrasting each choice with the naive alternative.
 transcript and estimate "this cost about a million tokens." That hallucinates
 figures and is never reproducible run-to-run. Pushing all arithmetic into
 `kaizen.mjs` makes the numbers exact and deterministic; the skill explicitly
-forbids the model from inventing them (`.claude/skills/kaizen/SKILL.md:19`). The
+forbids the model from inventing them (`plugin/skills/kaizen/SKILL.md:17`). The
 model only does what math can't — judge whether the work was any good.
 
 The `.mjs` is deliberately zero-dep pure Node (not `tsx`, no repo) so the *global*
 skill runs in **any** project. It is a hand-port of `server/lib/{analyze,agents,
-scan}.ts`, which the header names as the unit-tested source of truth
-(`.claude/skills/kaizen/kaizen.mjs:12`).
+subagent-usage,scan}.ts`, which the header names as the unit-tested source of truth
+(`plugin/skills/kaizen/kaizen.mjs:13`).
 
 - **Bad alternative:** `import`-ing the repo's TypeScript directly. Con: the skill
   would only work inside this repo, with `tsx` installed. **Chosen:** duplicate the
@@ -43,10 +43,10 @@ scan}.ts`, which the header names as the unit-tested source of truth
 
 ## 2. Reading tokens honestly — two totals, not one
 
-`analyzeSession()` (`.claude/skills/kaizen/kaizen.mjs:188`) streams the `.jsonl`
+`analyzeSession()` (`plugin/skills/kaizen/kaizen.mjs:285`) streams the `.jsonl`
 line by line and, for each **assistant** message, sums
 `usage.{input, output, cache_creation, cache_read}_tokens`. It derives two
-headline totals (`kaizen.mjs:297`):
+headline totals (`kaizen.mjs:491`):
 
 - `billableApprox` = `input + output + cacheCreation` — **real cost**; lead with it.
 - `combined` = that **plus** `cacheRead`.
@@ -55,7 +55,7 @@ headline totals (`kaizen.mjs:297`):
 only ~10%. Reporting `combined` as "the cost" makes a long session look ~10× more
 expensive than it was. So `combined` is only a *context-pressure* signal, never
 "what this cost." The `notes[]` array bakes this caveat into the payload itself
-(`kaizen.mjs:283`) so no downstream consumer can forget it.
+(`kaizen.mjs:473`) so no downstream consumer can forget it.
 
 - **Bad alternative:** report a single `total = everything`. Con: conflates real
   spend with cheap replayed cache; every retrospective over-reports cost.
@@ -64,7 +64,7 @@ expensive than it was. So `combined` is only a *context-pressure* signal, never
 
 The transcript has **no per-tool token field**. So the analyzer takes each turn's
 total output tokens and splits it *evenly* across the tool calls in that turn
-(`kaizen.mjs:243`). That is why `approxOutputTokens` is labeled "approx"
+(`kaizen.mjs:440`). That is why `approxOutputTokens` is labeled "approx"
 everywhere. What *is* exact: `count`, `errors`, and `durationMs` — so firm claims
 lean on those.
 
@@ -73,11 +73,11 @@ lean on those.
 
 ### Subagents: counted separately, and exactly
 
-`readAgents()` (`kaizen.mjs:131`) is a small event-parser/reducer that pulls exact
+`readAgents()` (`kaizen.mjs:145`) is a small event-parser/reducer that pulls exact
 subagent `tokens`/`toolUses`/`durationMs` from two places: the `toolUseResult` on a
 sync result block, and the `<subagent_tokens>` / `<tool_uses>` / `<duration_ms>`
 tags inside async `<task-notification>` blocks. These are kept **out** of `totals`
-and reported in `subagentTotals` instead (`kaizen.mjs:277`).
+and reported in `subagentTotals` instead (`kaizen.mjs:493`).
 
 **Why separate?** This threads between two bad alternatives. Subagent turns used
 to be replayed into the parent transcript carrying `isSidechain: true` (as of
@@ -89,13 +89,13 @@ and `subagentTotals` is the only path subagent tokens have into this report):
   back into the parent turn).
 - Drop them entirely → **undercount** the session's true work.
 
-So the analyzer skips sidechain lines for the main total (`kaizen.mjs:217`) *and*
+So the analyzer skips sidechain lines for the main total (`kaizen.mjs:340`) *and*
 re-adds exact subagent numbers as their own bucket. Hence the rule the skill
-states: whole-session ≈ `combined` + `subagentTotals.tokens` (`kaizen.mjs:288`).
+states: whole-session ≈ `combined` + `subagentTotals.tokens` (`kaizen.mjs:480`).
 
 ### Error signals are heuristics, and say so
 
-`errorSignals` (`kaizen.mjs:301`) carries `toolErrors` (exact: `is_error` or
+`errorSignals` (`kaizen.mjs:495`) carries `toolErrors` (exact: `is_error` or
 `<tool_use_error>`), `retries` (a tool re-run after it errored — a rework signal),
 and `userCorrections` (a keyword regex like *no/wrong/actually/revert*). The last
 is explicitly a "noisy lower bound, not a score." The skill therefore requires the
@@ -112,7 +112,7 @@ one lesson** → (7) offer to codify it.
 
 Step 6 is the one that feeds Analytics. It appends exactly one line to
 `~/.claude/session-analytics-log.md` in this **contract format**
-(`.claude/skills/kaizen/SKILL.md:90`):
+(`plugin/skills/kaizen/SKILL.md:128`):
 
 ```
 - 2026-07-12 [claude-agents-dashboard] d04e9b52: 1.0M billable (12.1M ctx), top cost 4 subagents (233k)... Lesson: <one concrete takeaway>.
@@ -216,13 +216,13 @@ still finds its lesson.
 
 ### 4c. The endpoint and the contract type
 
-`serveAnalytics()` (`server/api.ts:369`) is `GET /api/analytics` →
+`serveAnalytics()` (`server/api.ts:2284`) is `GET /api/analytics` →
 `AnalyticsResponse {generatedAt, keep, reports, lastReviewAt, reviewDue}`. It is
 **fail-open**: any throw logs and returns an empty list with `error: true`. It is
 *not* polled (config changes only when `/kaizen` runs); it is fetched on section
 mount + manual refresh. Config knobs: `ANALYTICS_KEEP=5`, `SHOW_ANALYTICS`
-(`server/lib/config.ts:115`). The whole FE/BE contract is `SessionAnalysis`,
-`AnalyticsReport` and `LessonStatus` in `shared/types.ts:311` — the single source of
+(`server/lib/config.ts:142`). The whole FE/BE contract is `SessionAnalysis`,
+`AnalyticsReport` and `LessonStatus` in `shared/types.ts:1473` — the single source of
 truth both sides import as `type`.
 
 `reviewStatus()` (`analytics.ts:77`) computes `reviewDue`: lessons exist **and** no
@@ -299,8 +299,8 @@ figures.
 
 **Relevant files**
 
-- `.claude/skills/kaizen/SKILL.md` — the LLM instructions: 7-step loop, token-honesty rules, promotion policy, the status/review/capture modes.
-- `.claude/skills/kaizen/kaizen.mjs` — the zero-dep deterministic analyzer (`analyzeSession`, `readAgents`); vendored port of the server libs.
+- `plugin/skills/kaizen/SKILL.md` — the LLM instructions: 7-step loop, token-honesty rules, promotion policy, the status/review/capture modes.
+- `plugin/skills/kaizen/kaizen.mjs` — the zero-dep deterministic analyzer (`analyzeSession`, `readAgents`); vendored port of the server libs.
 - `~/.claude/session-analytics-log.md` — the single append-only wire between producer and consumer (global; lesson, status and review lines).
 - `server/lib/sessionAnalyticsLog.ts` — parses the log (`LINE_RE`/`STATUS_RE`/`REVIEW_RE`, `parseLogEvents`, `recentLessons`, `statusForSession`); fail-open.
 - `server/lib/analytics.ts` — `listReports`: prefix-resolve transcript, re-analyze live, build `AnalyticsReport`; `reviewStatus`: the 7-day sweep clock.

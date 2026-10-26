@@ -27,7 +27,7 @@
     "hooks:uninstall": "bash scripts/install-hooks.sh --uninstall"
   },
   "engines": {
-    "node": ">=18"
+    "node": ">=20.11"
   },
   "packageManager": "pnpm@12.6.0",
   "license": "MIT",

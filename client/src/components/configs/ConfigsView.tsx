@@ -115,6 +115,8 @@ export default function ConfigsView() {
         <TypeColumn groups={groups} selected={type} onSelect={setTypeSel} />
         {config === null ? (
           <div className="mgmt-list"><div className="mgmt-empty">loading scope…</div></div>
+        ) : scope !== 'global' && config.error === true ? (
+          <div className="mgmt-list"><div className="mgmt-empty off">couldn't load this project's config — ↻ to retry</div></div>
         ) : (
           <ItemList
             group={group}

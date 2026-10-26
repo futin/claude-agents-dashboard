@@ -385,7 +385,7 @@ const html = `<!doctype html>
   </div>
   <main id="top">
     <h1>Claude Code hooks in this project — the learning guide</h1>
-    <p class="lede">Why the five hook scripts in <code>scripts/</code> are shaped the way they
+    <p class="lede">Why the five remote-answer hook scripts in <code>scripts/</code> are shaped the way they
     are. Generated from the markdown in <code>docs/guides/learning/hooks/README.md</code> +
     <code>docs/guides/learning/hooks/guide/</code> by <code>docs/guides/learning/hooks/tools/build.mjs</code>
     — edit the markdown, not this file.</p>

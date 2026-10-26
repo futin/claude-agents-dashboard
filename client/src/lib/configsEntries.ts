@@ -133,6 +133,19 @@ function fromMcpServers(servers: McpServerInfo[]): Entry[] {
 }
 
 /**
+ * What `GET /api/configs/project` answered, as the scope the view draws. A non-2xx reply, a body flagged `error`, or one without the scope's lists (or no
+ * reply at all: `ok` false, `body` undefined) all come back as an empty scope flagged `error`, so the view can tell "this project has no config" apart
+ * from "this project's config could not be read" — the server sends an empty scope on its 400/404/500 too.
+ */
+export function projectScopeOf(ok: boolean, body: unknown): ScopeConfig {
+  const scope = body as Partial<ScopeConfig> | null | undefined;
+  if (ok && scope != null && typeof scope === 'object' && scope.error !== true && Array.isArray(scope.skills)) return scope as ScopeConfig;
+  return {
+    scope: 'project', root: '', skills: [], agents: [], commands: [], rules: [], hooks: [], memory: [], settings: [], plugins: [], mcpServers: [], error: true,
+  };
+}
+
+/**
  * Group order is fixed; Plugins appears for the global scope only. MCP servers sits beside Plugins (first in a
  * project scope) and is left out when the scope declares none.
  */

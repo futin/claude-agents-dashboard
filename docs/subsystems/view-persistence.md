@@ -148,7 +148,8 @@ override it (see `dashboard.section` below).
   drawers would mostly be stale.
 - **Clearing them all** — Settings → Local › Reset this browser removes every key listed above
   (`OWNED_KEYS` in `hooks/useSettings.tsx`) **except `dashboard.answerToken`** and `management.syncRuns`, and restores the
-  defaults. The token is kept on purpose: it is a credential
+  defaults — in a mounted `usePersistedState` holder too (`lib/persistedReset.ts`), so the always-mounted Configs scope reads Global at once rather than
+  after a reload. The token is kept on purpose: it is a credential
   rather than view state, and Reset is not a sign-out, so clearing it would silently disarm every route behind the write gate for a browser that needs the token (see [remote-access](remote-access.md#who-may-write)). It
   touches nothing on the server and nothing in `~/.claude`. Add a view-state key here and it belongs in that list too; the test in
   `test/client-settings.test.ts` fails if it is missing. It finds keys by scanning for `usePersistedState('<key>'` calls, and also the first argument of every

@@ -77,7 +77,7 @@ dashboard's `.env`. Both `ask-remote-hook.sh` (`AskUserQuestion`) and `plan-remo
 
 ⚠️ If you set `CLAUDE_DASHBOARD_IDLE_SECS` or `CLAUDE_DASHBOARD_ANSWER_TIMEOUT` in the `env`
 block of `~/.claude/settings.json`, the Settings page detects each one and says so, but cannot
-change it — the app never edits `~/.claude`. Remove it there to drive that number from the
+change it — the app never edits `settings.json`. Remove it there to drive that number from the
 dashboard. (`detectEnvOverride` in `server/lib/settings.ts` also checks the server's own
 environment, and reports which of the two places it found.)
 

@@ -334,6 +334,13 @@ export function run(): number {
     assert.strictEqual(writeFailureText('Save', 422, { errors: [] }), 'Save: the file has errors.');
     assert.strictEqual(writeFailureText('Reveal', 0, null), 'Reveal failed: the server did not answer.');
     assert.strictEqual(writeFailureText('Reconcile', 500, { error: 'x' }), 'Reconcile failed (HTTP 500).');
+    // Run now's other 409s (server/lib/routine-run.ts RunResult), its 400 and its 500.
+    assert.strictEqual(writeFailureText('Run now', 409, { error: 'invalid' }), 'Run now: the job file has errors — fix them before running it.');
+    assert.strictEqual(writeFailureText('Run now', 409, { error: 'not-this-machine' }), 'Run now: the job is not set to run on this machine (its machines: line).');
+    assert.strictEqual(writeFailureText('Run now', 409, { error: 'no-plugin' }), 'Run now needs the dashboard plugin installed on this machine.');
+    assert.strictEqual(writeFailureText('Run now', 400, { error: 'bad-only' }), 'Run now: the steps picked to run were not valid.');
+    assert.strictEqual(writeFailureText('Run now', 500, { error: 'spawn-failed' }), 'Run now failed: the job could not be launched.');
+    assert.strictEqual(writeFailureText('Run now', 409, { error: 'toString' }), 'Run now failed (HTTP 409).', 'an inherited key is not a code');
   });
 
   const stats = (over: Partial<RoutineStats> = {}): RoutineStats => ({

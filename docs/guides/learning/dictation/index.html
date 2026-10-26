@@ -127,9 +127,9 @@ hr { border: none; border-top: 1px solid var(--line); margin: 2rem 0; }
       <code>docs/guides/learning/dictation/tools/build.mjs</code> — edit the markdown, not this file.</p>
 <section>
 <h2 id="readme">Dictation — a React + Node learning walkthrough</h2>
-<p>This guide teaches the dictation subsystem — the mic button in the reply composer — by explaining <strong>why</strong> each piece is shaped the way it is, contrasting every mechanism with the naive alternative a first draft would have reached for. It is a <em>why</em> layer, not a reference: for the endpoint table, the status codes and the accepted limits, read <a href="../../subsystems/dictation.md"><code>docs/subsystems/dictation.md</code> <span class="ext">↗</span></a> instead.</p>
+<p>This guide teaches the dictation subsystem — the mic button in the reply composer (also mounted in the resume and new-session panels) — by explaining <strong>why</strong> each piece is shaped the way it is, contrasting every mechanism with the naive alternative a first draft would have reached for. It is a <em>why</em> layer, not a reference: for the endpoint table, the status codes and the accepted limits, read <a href="../../../subsystems/dictation.md"><code>docs/subsystems/dictation.md</code> <span class="ext">↗</span></a> instead.</p>
 <blockquote><p>Mental model up front: dictation is a <strong>local subprocess pipeline wearing a browser API on the front</strong>. The browser's job is to capture a blob and hand it over; the server's job is to shell out to two binaries that were never designed to be part of a web app, and to do that without leaking anything, wedging anything, or running twice at once. Almost every decision here descends from one of two constraints: <em>the audio must not leave this machine</em>, and <em>a web request must not be allowed to become a fork bomb</em>.</p></blockquote>
-<blockquote><p>Baseline: written against the dictation sources at commit <code>efea9f0</code> (2026-08-17).</p></blockquote>
+<blockquote><p>Baseline: written against the dictation sources at commit <code>efea9f0</code> (2026-08-17). Citations and the passages that had drifted refreshed against <code>8d0f7f2</code> on 2026-10-26.</p></blockquote>
 <h3 id="readme--the-whole-shape">The whole shape</h3>
 <div class="diagram"><svg viewBox="0 0 884 286" role="img" xmlns="http://www.w3.org/2000/svg">
     <title>Tap the mic, record a blob, POST it, transcode to WAV, transcribe, parse, append to the textarea</title>
@@ -218,19 +218,19 @@ hr { border: none; border-top: 1px solid var(--line); margin: 2rem 0; }
 <li><strong>The wire format</strong> — raw binary body with the recorder's own <code>Content-Type</code>, no multipart, no base64, and the <code>Content-Length</code> pre-check.</li>
 <li><strong>Security posture</strong> — why <code>/api/health</code> publishes <code>transcribe</code> unauthenticated, the check ordering in <code>serveTranscribe</code>, and the four mitigations that stand in for a token.</li>
 </ul>
-<p>For those, <a href="../../subsystems/dictation.md"><code>docs/subsystems/dictation.md</code> <span class="ext">↗</span></a> is the current best source — it covers the <em>what</em> thoroughly, and a fair amount of the <em>why</em>.</p>
+<p>For those, <a href="../../../subsystems/dictation.md"><code>docs/subsystems/dictation.md</code> <span class="ext">↗</span></a> is the current best source — it covers the <em>what</em> thoroughly, and a fair amount of the <em>why</em>.</p>
 <h3 id="readme--faq">FAQ</h3>
 <p>Nothing here yet. This section is meant to hold the real questions raised during the learning session, and the session was recorded before any were asked. Add to it when the guide is next extended.</p>
 <hr>
 <p><strong>Relevant files</strong></p>
 <ul>
-<li><a href="../../../client/src/components/MicButton.tsx"><code>client/src/components/MicButton.tsx</code> <span class="ext">↗</span></a> — the three-way render gate; owns no logic beyond it.</li>
-<li><a href="../../../client/src/hooks/useDictation.ts"><code>client/src/hooks/useDictation.ts</code> <span class="ext">↗</span></a> — the <code>MediaRecorder</code> state machine and both liveness races.</li>
-<li><a href="../../../client/src/lib/dictation.ts"><code>client/src/lib/dictation.ts</code> <span class="ext">↗</span></a> — the pure half: mime pick, error copy, elapsed format, transcript folding.</li>
-<li><a href="../../../client/src/hooks/useTranscribeAvailable.ts"><code>client/src/hooks/useTranscribeAvailable.ts</code> <span class="ext">↗</span></a> — the read-once-then-share engine probe, with eviction on failure.</li>
-<li><a href="../../../server/lib/transcribe.ts"><code>server/lib/transcribe.ts</code> <span class="ext">↗</span></a> — ffmpeg + whisper spawns, temp-dir hygiene, typed failures, the single-flight flag.</li>
-<li><a href="../../../server/api.ts"><code>server/api.ts</code> <span class="ext">↗</span></a> — <code>serveTranscribe</code>: the check ordering and the status-code mapping.</li>
-<li><a href="../../subsystems/dictation.md"><code>docs/subsystems/dictation.md</code> <span class="ext">↗</span></a> — the reference doc this guide deliberately does not restate.</li>
+<li><a href="../../../../client/src/components/MicButton.tsx"><code>client/src/components/MicButton.tsx</code> <span class="ext">↗</span></a> — the three-way render gate; owns no logic beyond it.</li>
+<li><a href="../../../../client/src/hooks/useDictation.ts"><code>client/src/hooks/useDictation.ts</code> <span class="ext">↗</span></a> — the <code>MediaRecorder</code> state machine and both liveness races.</li>
+<li><a href="../../../../client/src/lib/dictation.ts"><code>client/src/lib/dictation.ts</code> <span class="ext">↗</span></a> — the pure half: mime pick, error copy, elapsed format, transcript folding.</li>
+<li><a href="../../../../client/src/hooks/useTranscribeAvailable.ts"><code>client/src/hooks/useTranscribeAvailable.ts</code> <span class="ext">↗</span></a> — the read-once-then-share engine probe, with eviction on failure.</li>
+<li><a href="../../../../server/lib/transcribe.ts"><code>server/lib/transcribe.ts</code> <span class="ext">↗</span></a> — ffmpeg + whisper spawns, temp-dir hygiene, typed failures, the single-flight flag.</li>
+<li><a href="../../../../server/api.ts"><code>server/api.ts</code> <span class="ext">↗</span></a> — <code>serveTranscribe</code>: the check ordering and the status-code mapping.</li>
+<li><a href="../../../subsystems/dictation.md"><code>docs/subsystems/dictation.md</code> <span class="ext">↗</span></a> — the reference doc this guide deliberately does not restate.</li>
 </ul>
 <p class="totop"><a href="#top">↑ back to contents</a></p>
 </section>
@@ -242,8 +242,8 @@ hr { border: none; border-top: 1px solid var(--line); margin: 2rem 0; }
 <h3 id="why-local-whisper--the-bad-alternative">The bad alternative</h3>
 <p><code>webkitSpeechRecognition</code> is sitting right there in every browser, free. Three lines of JavaScript, no install step, no <code>ffmpeg</code>, no model file — and it streams <em>interim results</em>, so words appear on screen as you speak them. On every axis a demo cares about it wins.</p>
 <p>It also uploads your audio to Apple or Google to do that.</p>
-<p>That is disqualifying <strong>here specifically</strong>, and the reason is structural rather than ideological. From <a href="../../../.claude/CLAUDE.md"><code>.claude/CLAUDE.md</code> <span class="ext">↗</span></a>:</p>
-<blockquote><p>Backend is zero-runtime-dep by design (only Node built-ins). Keep new deps out of <code>server/</code>. It reads from disk and makes exactly <strong>one</strong> kind of outbound call: the ntfy push in <code>lib/notify.ts</code>. Adding a second needs a reason.</p></blockquote>
+<p>That is disqualifying <strong>here specifically</strong>, and the reason is structural rather than ideological. From <a href="../../../../.claude/CLAUDE.md"><code>.claude/CLAUDE.md</code> <span class="ext">↗</span></a>:</p>
+<blockquote><p><strong>Keep new deps out of <code>server/</code>.</strong> It reads disk and makes exactly <strong>two</strong> kinds of outbound call itself — the ntfy push in <code>lib/notify.ts</code> and the usage read in <code>lib/usage.ts</code>. A third needs a reason.</p></blockquote>
 <p>The whole pitch of this dashboard is that it reads your Claude Code transcripts — your code, your prompts, your project names, your branch names — off disk and never ships them anywhere. A dictation feature that routed spoken follow-ups through a third party would instantly become the <em>loudest</em> thing the app does, on the single axis it advertises. It would not be a small exception; it would be the exception that makes the rule unstateable.</p>
 <h3 id="why-local-whisper--the-trade-off-stated-plainly">The trade-off, stated plainly</h3>
 <div class="tablewrap"><table><thead><tr><th></th><th>Browser speech API</th><th>Local whisper</th></tr></thead><tbody>
@@ -342,7 +342,7 @@ hr { border: none; border-top: 1px solid var(--line); margin: 2rem 0; }
 <p class="caption">Three outcomes before any audio exists — the middle one is the deliberate part.</p>
 <h3 id="render-gate--why-the-secure-context-check-exists">Why the secure-context check exists</h3>
 <p><code>getUserMedia</code> — the API <code>MediaRecorder</code> is built on — is gated to <a href="https://developer.mozilla.org/en-US/docs/Web/Security/Secure_Contexts" target="_blank" rel="noreferrer">secure contexts <span class="ext">↗</span></a>: HTTPS, or <code>localhost</code>. It does not <em>fail</em> outside one; it does not <strong>exist</strong>.</p>
-<p>Now look at who this feature is for. Someone on their phone, away from the desk, answering a session over a tailnet URL like <code>http://mac.tailnet.ts.net:4173</code>. Plain http. The exact case dictation was built for is the exact case the browser forbids — which is why <code>pnpm tunnel</code> went from a convenience (no port number in the bookmark) to the only route that lets a phone dictate at all. See <a href="../../subsystems/remote-access.md"><code>docs/subsystems/remote-access.md</code> <span class="ext">↗</span></a>.</p>
+<p>Now look at who this feature is for. Someone on their phone, away from the desk, answering a session over a tailnet URL like <code>http://mac.tailnet.ts.net:4173</code>. Plain http. The exact case dictation was built for is the exact case the browser forbids — which is why <code>pnpm tunnel</code> went from a convenience (no port number in the bookmark) to the only route that lets a phone dictate at all. See <a href="../../../subsystems/remote-access.md"><code>docs/subsystems/remote-access.md</code> <span class="ext">↗</span></a>.</p>
 <h3 id="render-gate--the-bad-alternative">The bad alternative</h3>
 <p>Fold it into the availability check: <code>if (!available || !secure) return null</code>. One line shorter, one render branch fewer, and the button simply is not there when it cannot work.</p>
 <div class="tablewrap"><table><thead><tr><th></th><th>Hide it</th><th>Show it disabled, labelled with the fix</th></tr></thead><tbody>
@@ -438,11 +438,11 @@ export function micErrorMessage(err: unknown): string {
   </svg></div>
 <p class="caption">Two of the four transitions out of <code>requesting</code> are failure paths — one of them has no user in it.</p>
 <h3 id="recorder-lifecycle--state-vs-refs">State vs. refs</h3>
-<div class="codewrap"><pre><code>// client/src/hooks/useDictation.ts:28-37  (comment elided)
+<div class="codewrap"><pre><code>// client/src/hooks/useDictation.ts:30-39  (comment elided)
   const [phase, setPhase] = useState&lt;DictationPhase&gt;('idle');
   const [elapsed, setElapsed] = useState(0);
   const [error, setError] = useState('');
-  const [token] = usePersistedState&lt;string&gt;('dashboard.answerToken', '');
+  const [token] = useAnswerToken();
   const recorderRef = useRef&lt;MediaRecorder | null&gt;(null);
   const streamRef = useRef&lt;MediaStream | null&gt;(null);
   const liveRef = useRef(true);</code></pre></div>
@@ -450,7 +450,7 @@ export function micErrorMessage(err: unknown): string {
 <p><code>phase</code> and <code>elapsed</code> are state because they <em>are</em> the UI — <code>🎙</code> versus <code>0:07</code> versus <code>…</code>. <code>recorderRef</code> and <code>streamRef</code> are refs because nothing renders them; they are resources with a <code>.stop()</code> that must be callable from a cleanup function.</p>
 <p><strong>The bad alternative</strong> — <code>const [recorder, setRecorder] = useState&lt;MediaRecorder|null&gt;(null)</code> — is a common first draft and it fails twice. It re-renders the whole panel every time you obtain an object nobody displays; and worse, an unmount cleanup that closes over <code>recorder</code> sees whatever value existed <em>when that effect last ran</em>. You end up calling <code>.stop()</code> on a stale object, or on <code>null</code>, while the real recorder keeps the mic light on.</p>
 <h3 id="recorder-lifecycle--one-interval-drives-two-features">One interval drives two features</h3>
-<div class="codewrap"><pre><code>// client/src/hooks/useDictation.ts:45-55
+<div class="codewrap"><pre><code>// client/src/hooks/useDictation.ts:47-57
   useEffect(() =&gt; {
     if (phase !== 'recording') return;
     setElapsed(0);
@@ -466,8 +466,8 @@ export function micErrorMessage(err: unknown): string {
 <p><strong>The bad alternative</strong> is the obvious one — a <code>setInterval</code> for the display plus a separate <code>setTimeout(stop, 120_000)</code> for the cap. It reads cleaner, one timer per job. But now two clocks measure the same span, and they <em>will</em> disagree: <code>setInterval</code> drifts under load and is throttled hard in a backgrounded tab, <code>setTimeout</code> drifts differently. The user watches the counter reach <code>1:58</code> and the recording cuts, or it passes <code>2:04</code> and keeps going. Neither is broken exactly — but the number on screen has stopped governing the cap, so you can no longer debug one by looking at the other.</p>
 <p>Deriving both from a single <code>Date.now()</code> baseline means the cap fires <em>because</em> the displayed number hit 120. There is one clock, and it is the one you can see. Note also that <code>started</code> is captured once rather than counting ticks: throttled or dropped ticks make the counter jump, but never make it lie.</p>
 <h3 id="recorder-lifecycle--race-one-the-panel-closes-while-the-permission-prompt-is-open">Race one: the panel closes while the permission prompt is open</h3>
-<p>This hook lives inside <code>MessagePanel</code>, the turn-end reply window — and per <a href="../../subsystems/remote-message.md"><code>docs/subsystems/remote-message.md</code> <span class="ext">↗</span></a> that panel has an <strong>idle sweep that tears it down on its own</strong>, with nobody clicking anything. So: you tap the mic, iOS puts up "Allow microphone?", you hesitate, and the panel dies underneath the dialog.</p>
-<div class="codewrap"><pre><code>// client/src/hooks/useDictation.ts:102-114  (comment elided)
+<p>This hook lives inside <code>MicButton</code>, which three panels mount: <code>ResumePanel</code> and <code>SpawnPanel</code> (each composing a prompt) and <code>MessagePanel</code>, the turn-end reply window. The race below is <code>MessagePanel</code>'s, because per <a href="../../../subsystems/remote-message.md"><code>docs/subsystems/remote-message.md</code> <span class="ext">↗</span></a> that panel has an <strong>idle sweep that tears it down on its own</strong>, with nobody clicking anything. So: you tap the mic, iOS puts up "Allow microphone?", you hesitate, and the panel dies underneath the dialog.</p>
+<div class="codewrap"><pre><code>// client/src/hooks/useDictation.ts:105-117  (comment elided)
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       if (!liveRef.current) {
@@ -479,7 +479,7 @@ export function micErrorMessage(err: unknown): string {
       const rec = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);</code></pre></div>
 <p>You then tap "Allow" — and <code>getUserMedia</code> resolves, handing a <strong>live microphone stream to a component that no longer exists</strong>. Nothing will ever clean it up, because the cleanup already ran, before this stream existed. The mic indicator stays lit until the tab dies. The check right after the <code>await</code> is the fix: not live, so stop the tracks here and arm nothing.</p>
 <h4 id="recorder-lifecycle--why-a-ref-and-not-the-usual-let-live">Why a ref, and not the usual <code>let live</code></h4>
-<div class="codewrap"><pre><code>// client/src/hooks/useDictation.ts:34-36
+<div class="codewrap"><pre><code>// client/src/hooks/useDictation.ts:36-38
   // Same liveness idiom as useRemoteAnswer.ts's `let live`, adapted to a ref:
   // `start` is a memoized callback that outlives any one effect run, so the
   // flag has to survive in something a later effect can still flip off.</code></pre></div>
@@ -487,7 +487,7 @@ export function micErrorMessage(err: unknown): string {
 <p>A rule of thumb worth keeping: <strong><code>let live</code> when the async work begins and ends inside one effect; a ref when the async work is started by something that outlives the effect.</strong></p>
 <h3 id="recorder-lifecycle--race-two-onstop-fires-because-you-cleaned-up">Race two: <code>onstop</code> fires <em>because</em> you cleaned up</h3>
 <p>This one is genuinely surprising the first time.</p>
-<div class="codewrap"><pre><code>// client/src/hooks/useDictation.ts:60-66
+<div class="codewrap"><pre><code>// client/src/hooks/useDictation.ts:62-68
   useEffect(() =&gt; {
     liveRef.current = true;
     return () =&gt; {
@@ -496,13 +496,13 @@ export function micErrorMessage(err: unknown): string {
     };
   }, [stopTracks]);</code></pre></div>
 <p>The unmount cleanup stops the stream's tracks. Reasonable. But per the MediaStream Recording spec, ending all of a stream's tracks makes the stream <strong>inactive</strong>, and an inactive stream <strong>stops the recorder</strong>, which <strong>fires its <code>stop</code> event</strong>. So the cleanup does not merely release the mic — it triggers the recorder's own stop handler on the way out:</p>
-<div class="codewrap"><pre><code>// client/src/hooks/useDictation.ts:117-120
+<div class="codewrap"><pre><code>// client/src/hooks/useDictation.ts:120-123
       rec.onstop = () =&gt; {
         stopTracks();
         void upload(new Blob(chunks, { type: rec.mimeType || mimeType || 'audio/mp4' }));
       };</code></pre></div>
 <p>Which calls <code>upload</code>. Which is why <code>upload</code> opens with the second liveness check:</p>
-<div class="codewrap"><pre><code>// client/src/hooks/useDictation.ts:75-76
+<div class="codewrap"><pre><code>// client/src/hooks/useDictation.ts:77-78
     if (!liveRef.current) return;
     setPhase('transcribing');</code></pre></div>
 <div class="diagram"><svg viewBox="0 0 780 344" role="img" xmlns="http://www.w3.org/2000/svg">
@@ -567,13 +567,13 @@ export function micErrorMessage(err: unknown): string {
 <p><strong>The bad alternative</strong> here is not "no check". It is the tempting-looking fix of <em>not stopping tracks in the cleanup</em>, since that is what sets the cascade off. Do not. On iOS a stream you never explicitly stop leaves the orange mic dot lit and holds the microphone against other apps. The hook comment is blunt about it: a mic indicator still lit after you stopped reads as a bug, and on iOS it is one.</p>
 <p>So the cascade is the <em>correct</em> behaviour, and the guard exists to make correct behaviour survivable. Two checks, two genuinely different windows: <code>start</code>'s covers a stream <strong>still resolving</strong>, <code>upload</code>'s covers a recording <strong>already running</strong>. Neither subsumes the other.</p>
 <h3 id="recorder-lifecycle--the-hook-does-not-know-a-textarea-exists">The hook does not know a textarea exists</h3>
-<div class="codewrap"><pre><code>// client/src/hooks/useDictation.ts:27
+<div class="codewrap"><pre><code>// client/src/hooks/useDictation.ts:29
 export function useDictation(onText: (text: string) =&gt; void): DictationState {</code></pre></div>
-<p>The transcript leaves through a callback. <code>useDictation</code> never imports <code>MessagePanel</code>, never touches a value or a setter, and never learns that the text becomes a Claude Code reply. <code>MessagePanel</code> folds it in with <code>appendTranscript</code>. <code>MicButton</code> is equally ignorant — it hands text to <code>onText</code> and knows nothing about what the text is for.</p>
-<p><strong>The bad alternative</strong> is passing the textarea's <code>value</code>/<code>setValue</code> pair into the hook. Fewer moving parts today. But then the hook owns the append-versus-replace policy, the 4000-character cap, and the never-auto-send rule — three decisions that belong to the composer, not to the microphone. And <code>appendTranscript</code> would stop being a pure function testable with node-assert and no DOM, which is exactly how this repo tests client code; <a href="../../../client/src/lib/dictation.ts"><code>client/src/lib/dictation.ts</code> <span class="ext">↗</span></a> says so in its own header comment.</p>
+<p>The transcript leaves through a callback. <code>useDictation</code> never imports <code>MessagePanel</code>, never touches a value or a setter, and never learns that the text becomes a Claude Code reply. <code>MessagePanel</code> folds it in with <code>appendTranscript</code>, and so do <code>ResumePanel</code> and <code>SpawnPanel</code>. <code>MicButton</code> is equally ignorant — it hands text to <code>onText</code> and knows nothing about what the text is for.</p>
+<p><strong>The bad alternative</strong> is passing the textarea's <code>value</code>/<code>setValue</code> pair into the hook. Fewer moving parts today. But then the hook owns the append-versus-replace policy, the 4000-character cap, and the never-auto-send rule — three decisions that belong to the composer, not to the microphone. And <code>appendTranscript</code> would stop being a pure function testable with node-assert and no DOM, which is exactly how this repo tests client code; <a href="../../../../client/src/lib/dictation.ts"><code>client/src/lib/dictation.ts</code> <span class="ext">↗</span></a> says so in its own header comment.</p>
 <p>The seam pays off concretely: the mic drops into any composer, and the interesting logic — mime picking, error copy, elapsed formatting, transcript folding — sits in a 75-line pure module with zero browser API in it.</p>
 <hr>
-<p>Back to <a href="#readme">the contents</a>, or read <a href="../../subsystems/dictation.md"><code>docs/subsystems/dictation.md</code> <span class="ext">↗</span></a> for the server half.</p>
+<p>Back to <a href="#readme">the contents</a>, or read <a href="../../../subsystems/dictation.md"><code>docs/subsystems/dictation.md</code> <span class="ext">↗</span></a> for the server half.</p>
 <p class="totop"><a href="#top">↑ back to contents</a></p>
 </section>
   </div>

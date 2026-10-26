@@ -4,7 +4,7 @@
  *   pnpm plugin:gen
  *
  * The routine wrapper runs outside the server and the client, under plain `node` from the installed plugin, which has no package.json: a `.js` would load as
- * CommonJS on the Node 18-20 this repo allows and die before its first log line, hence `.mjs` and the specifier rewrite. The output is only what
+ * CommonJS on the Node 20 this repo allows and die before its first log line, hence `.mjs` and the specifier rewrite. The output is only what
  * `transpileModule` prints; `test/plugin-manifest.test.ts` repeats the transpile and compares, so a shared/ edit without a regen fails CI.
  */
 import fs from 'node:fs';
