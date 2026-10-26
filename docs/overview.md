@@ -32,7 +32,8 @@ via `tsx`, dev and prod alike).
 
 ## Principles
 
-- **Read-only charter.** The app never writes to `~/.claude` or the transcripts. It reads
+- **Read-only charter.** The app never writes to the transcripts, and writes under `~/.claude` only for Routines and usage alerts (the end of this list) and the empty `~/.claude/dashboard-refresh` working directory
+  the [token refresh](subsystems/usage-limits.md#automatic-renewal-libtoken-refreshts) turn runs in. It reads
   one file outside them — `~/.claude.json`, for `oauthAccount` (the account chip's name
   and plan, see [account-header](subsystems/account-header.md)) and the `mcpServers` the config browser lists (`lib/management.ts`, top-level and
   per-project) — and nothing else in that file. The
@@ -100,7 +101,7 @@ remote-answer switch on, a **gate-only write** needs the gate alone ([who may wr
 | `POST /api/remote-answer` | flip the remote-answer toggle (gate-only write) |
 | `GET /api/dismiss` | where a tapped desk push lands — a page that closes the tab it opened in; carries no deep link |
 | `GET /api/health` | liveness + remote-answer state + connection origin and this caller's `writeAccess` + the two hook numbers (idle threshold, answer window) |
-| `GET /api/settings`, `POST /api/settings` | the non-per-device settings — idle threshold, answer window, push policy, usage-history recording, tailnet write trust, plus `notifyAvailable` and `usageAvailable` (never the ntfy topic itself); the POST is a gate-only write |
+| `GET /api/settings`, `POST /api/settings` | the non-per-device settings — idle threshold, answer window, push policy, usage-history recording, Git fetch interval (`gitFetchSecs`), tailnet write trust, plus `notifyAvailable` and `usageAvailable` (never the ntfy topic itself); the POST is a gate-only write |
 | `GET /api/pins`, `POST /api/pins` | pinned projects — listed past `LOOKBACK_HOURS` — plus the recent and older ones on offer to pin; the POST is a gate-only write (see [configs](subsystems/configs.md)) |
 | `POST /api/pins/order` | the whole pin list in a new order, accepted only as an exact permutation of the stored pins (409 otherwise); gate-only write, answers the `GET /api/pins` payload (see [configs](subsystems/configs.md)) |
 | `POST /api/open-folder` | open a pinned project's folder with macOS `open` (gate-only write); path must be a listed pin's, 501 off macOS (see [git-stats](subsystems/git-stats.md)) |
