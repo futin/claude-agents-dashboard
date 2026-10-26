@@ -20,11 +20,12 @@ The 12 states per view are daylight at the six `fixed` tiers (375, 640, 768, 102
 375 for the phone base) and the two `full` tiers (1537, 1921), plus midnight, amber, graphite and nightshift at 1280. 12 × 7 + 2 + 2 + 5 + 4 + 3 + 2 + 2 = 104;
 `views.spec.ts` asserts that number, so a new `SECTIONS` entry fails until the matrix and its baselines are reconsidered. Comparison is zero-tolerance:
 `maxDiffPixels: 0`, `threshold: 0`, animations disabled, caret hidden, full page — except the two What's new shots,
-which are the viewport, since the drawer is `position: fixed`. The one exception to zero tolerance is the two 1280 projects shots (tiles, columns): they set
+which are the viewport, since the drawer is `position: fixed`. The exceptions to zero tolerance start with the two 1280 projects shots (tiles, columns): they set
 `threshold: 0.01`, because Chromium anti-aliases the filter input's rounded corner one of two ways at random (#235). `maxDiffPixels` stays `0` for them.
 Every Routines shot takes the same `0.01`, for the same noise on the stats band's rounded corners, and the 375 Runs shot also masks the native job
 `<select>` (`ShotCase.mask`), whose label Chromium draws a whole pixel lower in about half the runs — a shift no colour tolerance absorbs; the 1280 Runs shot
 still pins it.
+The Git Matrix shot at 1280 and the Configs daylight 1921 shot take a wider `0.03` (`AA_NOISE_WIDE`): their noise on rounded corners, status dots and the `↻` fallback-face glyph reaches a channel difference of 8, which `0.01` does not absorb (#282).
 
 The Sessions fixture's working session runs a 13-task plan (7 done, Task 8 running) under a basename long enough to ellipsise, and the idle one holds a
 finished `TaskCreate` list, so the shots carry both task-pill states, the drawer card's `Plan · …` head and its phone fold. `StageOpts.layout` seeds the
