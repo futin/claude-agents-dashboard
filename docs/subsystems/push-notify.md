@@ -297,6 +297,8 @@ through the same master switch, per-event checkbox, desk/phone routing and trans
 ## Tapping the notification
 
 ntfy's `Click` header carries `<DASHBOARD_PUBLIC_URL>/?session=<id>`.
+A non-ASCII `Title` (a routine's `nightly · lost`) goes out RFC 2047 encoded (`ntfyHeaders` in `server/lib/notify.ts`): Node writes header values
+as latin1, so the raw `·` would arrive on the phone as a replacement char.
 `client/src/lib/deepLink.ts` consumes that once on load: force the Sessions section, seed
 `chatId`, then `history.replaceState` the parameter away. You land in the chat drawer, where
 `QuestionPanel`, `PlanPanel`, `MessagePanel` and `PermissionBanner` already render — one tap

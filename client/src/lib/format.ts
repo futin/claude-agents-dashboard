@@ -2,22 +2,26 @@
 
 /** Compact token count: 1.2M, 3.4k, 500. */
 export function fmtTok(n: number): string {
-  if (n >= 1e6) return (n / 1e6).toFixed(2) + 'M';
-  if (n >= 1e3) return (n / 1e3).toFixed(1) + 'k';
+  // Round before picking the unit: 999_999 is "1.00M", not "1000.0k".
+  const k = (n / 1e3).toFixed(1);
+  if (n >= 1e6 || Number(k) >= 1e3) return (n / 1e6).toFixed(2) + 'M';
+  if (n >= 1e3) return k + 'k';
   return String(n || 0);
 }
 
 /** Compact file size: 0 B, 1023 B, 15.1 KB, 2.5 MB. */
 export function fmtBytes(n: number): string {
-  if (n >= 1024 * 1024) return (n / (1024 * 1024)).toFixed(1) + ' MB';
-  if (n >= 1024) return (n / 1024).toFixed(1) + ' KB';
+  // Same rule as fmtTok: 1048575 is "1.0 MB", not "1024.0 KB".
+  const kb = (n / 1024).toFixed(1);
+  if (n >= 1024 * 1024 || Number(kb) >= 1024) return (n / (1024 * 1024)).toFixed(1) + ' MB';
+  if (n >= 1024) return kb + ' KB';
   return (n || 0) + ' B';
 }
 
 /** Compact elapsed duration in ms: 900ms, 12s, 1m30s, 2h5m. */
 export function fmtDuration(ms: number): string {
   if (!Number.isFinite(ms) || ms < 0) return '';
-  if (ms < 1000) return Math.round(ms) + 'ms';
+  if (Math.round(ms) < 1000) return Math.round(ms) + 'ms';
   const s = Math.round(ms / 1000);
   if (s < 60) return s + 's';
   const m = Math.floor(s / 60);

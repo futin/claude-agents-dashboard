@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, type ReactNode } from 'react';
 
 import { usePersistedState } from './usePersistedState';
+import { resetPersisted } from '../lib/persistedReset';
 import { clampSettings, DEFAULT_SETTINGS, type Settings } from '../lib/settings';
 
 interface SettingsControl {
@@ -61,9 +62,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   );
 
   const reset = useCallback(() => {
-    for (const key of OWNED_KEYS) {
-      try { localStorage.removeItem(key); } catch { /* private mode — ignore */ }
-    }
+    resetPersisted(OWNED_KEYS);
     setStored(DEFAULT_SETTINGS);
   }, [setStored]);
 
