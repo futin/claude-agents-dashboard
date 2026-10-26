@@ -90,7 +90,8 @@ restart and a per-device value could never reach the gate. It is the **Write acc
 write: a tailnet device that does so loses its own write access from its next request, and this machine, always `local`, can turn it back on. A hand-edited
 non-boolean reads back as the default, and a `POST /api/settings` patch carrying one is refused whole. A Shared save refused as `read-only from this
 network` shows `READ_ONLY_TEXT` (`client/src/lib/writeRefusal.ts`) under Remote answers in place of the token warning, since no token could help
-(`useServerSettings`' `readOnly`).
+(`useServerSettings`' `readOnly`). Any other failed save — a 400 for a value the server refused, a 500, no answer — shows one line there too
+(`saveError`, worded by `client/src/lib/serverSettingsSave.ts`) instead of the row snapping back in silence.
 
 `pinnedProjects` (#161, default `[]`) rides in the same file: encoded project dir names that
 stay listed past `LOOKBACK_HOURS` (see [configs](configs.md) §Pinned projects). Its order is meaningful — Management › Projects, Management › Git and the

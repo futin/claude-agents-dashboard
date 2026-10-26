@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { fetchFailureOf } from '../lib/gitClock';
+import type { FetchFailure } from '../lib/gitClock';
 import type { WriteAccess } from '../../../shared/types';
 import { useAnswerToken } from './useAnswerToken';
 import { authHeaders } from '../lib/answerToken';
@@ -10,8 +11,8 @@ export interface GitFetchControl {
   start(): void;
   /** This tab's own POST is out; a fetch another tab or the timer started is the payload's `runningSinceMs`, not this. */
   pending: boolean;
-  /** Why the last press launched nothing: the server refused the token, or the request failed any other way. Null after a success. */
-  failure: 'refused' | 'failed' | null;
+  /** Why the last press launched nothing: the server refused the token, said this network is read-only, or the request failed any other way. Null after a success. */
+  failure: FetchFailure | null;
   /** An Answer token is stored on this device (the `dashboard.answerToken` key `useSpawn` and `useRemoteAnswer` share). */
   tokenStored: boolean;
 }
@@ -23,7 +24,7 @@ export interface GitFetchControl {
 export function useGitFetch(tokenRequired: boolean | undefined, writeAccess: WriteAccess | undefined, onDone: () => void): GitFetchControl {
   const [token] = useAnswerToken();
   const [pending, setPending] = useState(false);
-  const [failure, setFailure] = useState<'refused' | 'failed' | null>(null);
+  const [failure, setFailure] = useState<FetchFailure | null>(null);
   const pendingRef = useRef(false);
   const onDoneRef = useRef(onDone);
   onDoneRef.current = onDone;
@@ -38,7 +39,10 @@ export function useGitFetch(tokenRequired: boolean | undefined, writeAccess: Wri
     setPending(true);
     const headers = authHeaders(token);
     fetch('/api/git-fetch', { method: 'POST', headers })
-      .then(res => setFailure(res.ok ? null : fetchFailureOf(res.status)), () => setFailure(fetchFailureOf('network')))
+      .then(
+        async res => setFailure(res.ok ? null : fetchFailureOf(res.status, res.status === 403 ? await res.json().catch(() => undefined) : undefined)),
+        () => setFailure(fetchFailureOf('network'))
+      )
       .finally(() => {
         pendingRef.current = false;
         setPending(false);

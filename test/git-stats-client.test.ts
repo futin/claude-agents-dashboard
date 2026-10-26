@@ -351,6 +351,10 @@ export function run(): number {
     assert.deepStrictEqual(k({ writeAccess: 'none' }), { disabled: true, label: 'now', sub: READ_ONLY_TEXT, subTone: 'amber' });
     assert.strictEqual(k({ writeAccess: 'none', failure: 'refused' }).sub, READ_ONLY_TEXT, 'read-only outranks a refusal');
     assert.deepStrictEqual([fetchFailureOf(403), fetchFailureOf(500), fetchFailureOf('network')], ['refused', 'failed', 'failed']);
+    // A read-only network's 403 is not a token refusal: its body says so, and the key reads READ_ONLY_TEXT rather than FETCH_REFUSED.
+    assert.strictEqual(fetchFailureOf(403, { error: 'read-only from this network' }), 'read-only');
+    assert.strictEqual(fetchFailureOf(403, { error: 'bad token' }), 'refused');
+    assert.deepStrictEqual(k({ failure: 'read-only' }), { disabled: true, label: 'now', sub: READ_ONLY_TEXT, subTone: 'amber' });
   })) p++; else f++;
 
   if (test('gitFetchedText: trouble word with the age, lock and old payloads read plain, running + origin reads fetching…', () => {

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 
 import { useAnswerToken } from './useAnswerToken';
 import { authHeaders } from '../lib/answerToken';
+import { settingsSaveFailure } from '../lib/serverSettingsSave';
 import { refusalKind } from '../lib/writeRefusal';
 import type { NotifyPatch, ServerSettings } from '../../../shared/types';
 
@@ -23,6 +24,8 @@ export interface ServerSettingsControl {
   needsToken: boolean;
   /** Set when the server says this network is read-only: no token can help, so the surface says so instead of prompting. */
   readOnly: boolean;
+  /** Why the last save did not land — a 400, a 500, no answer — or null. A 403 is `needsToken` / `readOnly` instead. */
+  saveError: string | null;
   save: (patch: Partial<ServerSettings>) => Promise<void>;
   /** Patch one or more notify keys. Merged server-side, so send only what changed. */
   saveNotify: (patch: NotifyPatch) => Promise<void>;
@@ -50,6 +53,7 @@ export function useServerSettings(): ServerSettingsControl {
   const [savingKeys, setSavingKeys] = useState<readonly string[]>([]);
   const [needsToken, setNeedsToken] = useState(false);
   const [readOnly, setReadOnly] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [token] = useAnswerToken();
 
   useEffect(() => {
@@ -73,6 +77,7 @@ export function useServerSettings(): ServerSettingsControl {
     const headers = authHeaders(token, { 'Content-Type': 'application/json' });
     try {
       const res = await fetch('/api/settings', { method: 'POST', headers, body: JSON.stringify(patch) });
+      setSaveError(settingsSaveFailure(res.status));
       if (res.status === 403) {
         const readOnlyNow = refusalKind(res.status, await res.json().catch(() => undefined)) === 'read-only';
         setReadOnly(readOnlyNow);
@@ -85,7 +90,8 @@ export function useServerSettings(): ServerSettingsControl {
         setState((await res.json()) as ServerSettings);
       }
     } catch {
-      /* keep the last known value; the row stays on the server's number */
+      // Keep the last known value; the row stays on the server's number, and the page says why.
+      setSaveError(settingsSaveFailure(0));
     } finally {
       setSavingKeys(prev => {
         const next = [...prev];
@@ -107,5 +113,5 @@ export function useServerSettings(): ServerSettingsControl {
     [save]
   );
 
-  return { state, isSaving, needsToken, readOnly, save, saveNotify };
+  return { state, isSaving, needsToken, readOnly, saveError, save, saveNotify };
 }

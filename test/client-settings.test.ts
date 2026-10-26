@@ -13,6 +13,7 @@ import { SECTIONS, isSection } from '../client/src/lib/sections.js';
 import { DEFAULTS } from '../server/lib/config.js';
 import { OWNED_KEYS } from '../client/src/hooks/useSettings.js';
 import { EFFORTS, MODELS } from '../client/src/lib/spawnOptions.js';
+import { settingsSaveFailure } from '../client/src/lib/serverSettingsSave.js';
 
 const CLIENT_SRC = resolve(dirname(fileURLToPath(import.meta.url)), '..', 'client', 'src');
 
@@ -447,6 +448,14 @@ export function run(): number {
     // `management.*` are kept on purpose: the pre-rename keys, swept so Reset clears what an older build left behind (D13).
     const stale = OWNED_KEYS.filter(k => !keys.has(k) && !k.startsWith('management.'));
     assert.deepStrictEqual(stale, [], 'keys nothing writes any more');
+  })) p++; else f++;
+
+  if (test('settingsSaveFailure: 2xx and 403 say nothing here; 400, 500 and no answer each name why the row snapped back', () => {
+    assert.strictEqual(settingsSaveFailure(200), null);
+    assert.strictEqual(settingsSaveFailure(403), null, 'a 403 is the token / read-only row, not this one');
+    assert.strictEqual(settingsSaveFailure(400), 'The server refused that value — the setting was not saved.');
+    assert.strictEqual(settingsSaveFailure(500), "Couldn't save the setting (HTTP 500).");
+    assert.strictEqual(settingsSaveFailure(0), "Couldn't reach the server — the setting was not saved.");
   })) p++; else f++;
 
   console.log(`\n  ${p} passed, ${f} failed`);

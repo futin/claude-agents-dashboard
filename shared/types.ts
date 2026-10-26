@@ -2173,6 +2173,12 @@ export interface RoutineStats {
   prev: { costUsd: number; runs: number };
 }
 
+/**
+ * The `error` of a 409 from `POST /api/routines/<name>/run` (`server/lib/routine-run.ts`). One union for both sides, so a code the server adds is a type
+ * error in the client's `writeFailureText` rather than a bare "failed (HTTP 409)".
+ */
+export type RoutineRunConflict = 'already-running' | 'no-plugin' | 'invalid' | 'not-this-machine';
+
 /** Reconcile's verdict, as the toolbar chip reads it; `not-owner` is what every server but the owner reports (spec §Owning server). */
 export type ReconcileState = 'in-sync' | 'drift' | 'failed' | 'pending' | 'not-owner' | 'no-plugin' | 'cron-down' | 'bad-machine' | 'no-claude';
 /** One job's difference between its file and the OS scheduler. `pending` is a change deferred (a running job) or blocked (`why` says which). */

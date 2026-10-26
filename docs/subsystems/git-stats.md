@@ -206,7 +206,8 @@ with two rows — **Local sync** (`now` = the old ↻) and **Fetch all** (`now` 
 amber line per repo whose last fetch failed with anything but `lock`. The Fetch all key is disabled with a reason when the server wants an Answer token this
 device has not stored, or after a `403`.
 A read-only network (`writeAccess: 'none'` from `GET /api/health`) outranks both: the key is disabled with `READ_ONLY_TEXT`, since no token could make the press
-work (`fetchKeyState`).
+work (`fetchKeyState`). A press made before health answers can still meet that network: its `403 read-only from this network` reads as `failure: 'read-only'` (`fetchFailureOf`
+through `refusalKind`) and shows the same `READ_ONLY_TEXT`, never the bad-token line.
 
 **The layouts.** A `.seg` switcher offers `gitLayoutsFor(narrow)` and stores the pick per device in `management.gitLayout` (default `inbox`), read through
 `parseGitLayout`; what is drawn is `drawableGitLayout`, so a phone draws Inbox while a stored Matrix waits for the next wide window
