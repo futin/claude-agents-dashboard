@@ -35,7 +35,7 @@ sequenceDiagram
 The whole mechanism is six lines:
 
 ```ts
-// server/api.ts:506-512
+// server/api.ts:1139-1145
 let questionId = '';
 res.on('close', () => { if (questionId) cancelPending(sessionId, questionId); });
 questionId = register(sessionId, questions, clampTimeout(body.timeoutMs), (result: WaitResult) => {
@@ -48,7 +48,7 @@ if (res.destroyed) cancelPending(sessionId, questionId);
 **Why the push comes last:**
 
 ```ts
-// server/api.ts:514-515
+// server/api.ts:1147-1148
 // Last, so a refused registration never pushes. Returns immediately — the
 // response above stays held either way.
 ```
@@ -98,8 +98,8 @@ function settle(entry: Entry, result: WaitResult): void {
 }
 ```
 
-Every exit routes through it — `answered`, `timeout`, `dismissed`, `superseded`, and (in
-`messages.ts`) `released`. Three lines, three invariants:
+Every exit routes through it — `answered`, `timeout`, `dismissed`, `superseded`, and `released`
+(the idle reaper every wait store runs). Three lines, three invariants:
 
 - **`clearTimeout`** — the deadline can never fire after another exit won.
 - **The identity check** — `entries.get(…) === entry` means a *superseded* entry does not
@@ -128,7 +128,7 @@ stateDiagram-v2
 interrupted — shows up only as a closed socket:
 
 ```ts
-// server/api.ts:502-505
+// server/api.ts:1135-1138
 // The hook's socket closing IS the signal that nobody is waiting any more
 // (session interrupted, hook killed, CLI hook timeout). Listen before
 // registering, and re-check after, so a socket that dies during the body read
@@ -142,7 +142,7 @@ again. The `res.destroyed` re-check catches exactly that window.
 **Why `cancel` takes a `questionId`:**
 
 ```ts
-// server/lib/pending.ts:249-254
+// server/lib/pending.ts:258-263
 export function cancel(sessionId: string, questionId: string): void {
   const entry = entries.get(sessionId);
   if (!entry || entry.questionId !== questionId) return;
@@ -159,7 +159,7 @@ which is what makes a stale phone tab 404 instead of answering the wrong questio
 ## 5. No locking, and the invariant that makes that safe
 
 ```ts
-// server/lib/pending.ts:218-222
+// server/lib/pending.ts:227-231
 /**
  * Answer (or dismiss) a session's pending question. Synchronous by design:
  * Node is single-threaded, so two tabs submitting at once means the first wins
@@ -180,9 +180,9 @@ introducing a race. The doc comment is the only guard.
 
 | Store | Held socket? | Verdicts | Distinctive |
 |---|---|---|---|
-| [`pending.ts`](../../../../../server/lib/pending.ts) | yes | answered / timeout / dismissed / superseded | `sanitizeQuestions` + `validateAnswer` |
-| [`plans.ts`](../../../../../server/lib/plans.ts) | yes | rejected only | accept refused upstream |
-| [`messages.ts`](../../../../../server/lib/messages.ts) | yes | + **released** | the 5s idle reaper |
+| [`pending.ts`](../../../../../server/lib/pending.ts) | yes | answered / timeout / dismissed / superseded / released | `sanitizeQuestions` + `validateAnswer` |
+| [`plans.ts`](../../../../../server/lib/plans.ts) | yes | rejected only (+ the same non-answer exits) | accept refused upstream |
+| [`messages.ts`](../../../../../server/lib/messages.ts) | yes | answered + the same non-answer exits | headless holds exempt from the idle reaper |
 | [`permissions.ts`](../../../../../server/lib/permissions.ts) | **no** | none | display-only, 30min TTL |
 
 **Why three modules rather than one generic store:**
@@ -263,6 +263,6 @@ record is ever appended.
 
 ---
 
-**Next:** [The Stop-hook chat loop](./stop-loop.md) — the store that needed a reaper.
+**Next:** [The Stop-hook chat loop](./stop-loop.md) — the store whose idle reaper skips headless holds.
 
 [↑ back to contents](../README.md)

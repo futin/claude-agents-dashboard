@@ -1,6 +1,6 @@
 # Dictation — a React + Node learning walkthrough
 
-This guide teaches the dictation subsystem — the mic button in the reply composer — by
+This guide teaches the dictation subsystem — the mic button in the reply composer (also mounted in the resume and new-session panels) — by
 explaining **why** each piece is shaped the way it is, contrasting every mechanism with
 the naive alternative a first draft would have reached for. It is a *why* layer, not a
 reference: for the endpoint table, the status codes and the accepted limits, read
@@ -21,7 +21,8 @@ reference: for the endpoint table, the status codes and the accepted limits, rea
 
 <!-- study-provenance: sources=server/lib/transcribe.ts,server/api.ts,client/src/hooks/useDictation.ts,client/src/hooks/useTranscribeAvailable.ts,client/src/components/MicButton.tsx,client/src/lib/dictation.ts commit=efea9f0 date=2026-08-17 -->
 
-> Baseline: written against the dictation sources at commit `efea9f0` (2026-08-17).
+> Baseline: written against the dictation sources at commit `efea9f0` (2026-08-17). Citations and the passages that had drifted refreshed
+> against `8d0f7f2` on 2026-10-26.
 
 ## The whole shape
 

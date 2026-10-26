@@ -21,11 +21,11 @@ stateDiagram-v2
 ## State vs. refs
 
 ```ts
-// client/src/hooks/useDictation.ts:28-37  (comment elided)
+// client/src/hooks/useDictation.ts:30-39  (comment elided)
   const [phase, setPhase] = useState<DictationPhase>('idle');
   const [elapsed, setElapsed] = useState(0);
   const [error, setError] = useState('');
-  const [token] = usePersistedState<string>('dashboard.answerToken', '');
+  const [token] = useAnswerToken();
   const recorderRef = useRef<MediaRecorder | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const liveRef = useRef(true);
@@ -47,7 +47,7 @@ obtain an object nobody displays; and worse, an unmount cleanup that closes over
 ## One interval drives two features
 
 ```ts
-// client/src/hooks/useDictation.ts:45-55
+// client/src/hooks/useDictation.ts:47-57
   useEffect(() => {
     if (phase !== 'recording') return;
     setElapsed(0);
@@ -79,14 +79,15 @@ the counter jump, but never make it lie.
 
 ## Race one: the panel closes while the permission prompt is open
 
-This hook lives inside `MessagePanel`, the turn-end reply window — and per
+This hook lives inside `MicButton`, which three panels mount: `ResumePanel` and `SpawnPanel` (each composing a prompt) and `MessagePanel`, the
+turn-end reply window. The race below is `MessagePanel`'s, because per
 [`docs/subsystems/remote-message.md`](../../../../subsystems/remote-message.md) that panel has
 an **idle sweep that tears it down on its own**, with nobody clicking anything. So: you tap
 the mic, iOS puts up "Allow microphone?", you hesitate, and the panel dies underneath the
 dialog.
 
 ```ts
-// client/src/hooks/useDictation.ts:102-114  (comment elided)
+// client/src/hooks/useDictation.ts:105-117  (comment elided)
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       if (!liveRef.current) {
@@ -107,7 +108,7 @@ nothing.
 ### Why a ref, and not the usual `let live`
 
 ```ts
-// client/src/hooks/useDictation.ts:34-36
+// client/src/hooks/useDictation.ts:36-38
   // Same liveness idiom as useRemoteAnswer.ts's `let live`, adapted to a ref:
   // `start` is a memoized callback that outlives any one effect run, so the
   // flag has to survive in something a later effect can still flip off.
@@ -128,7 +129,7 @@ effect; a ref when the async work is started by something that outlives the effe
 This one is genuinely surprising the first time.
 
 ```ts
-// client/src/hooks/useDictation.ts:60-66
+// client/src/hooks/useDictation.ts:62-68
   useEffect(() => {
     liveRef.current = true;
     return () => {
@@ -145,7 +146,7 @@ does not merely release the mic — it triggers the recorder's own stop handler 
 out:
 
 ```ts
-// client/src/hooks/useDictation.ts:117-120
+// client/src/hooks/useDictation.ts:120-123
       rec.onstop = () => {
         stopTracks();
         void upload(new Blob(chunks, { type: rec.mimeType || mimeType || 'audio/mp4' }));
@@ -155,7 +156,7 @@ out:
 Which calls `upload`. Which is why `upload` opens with the second liveness check:
 
 ```ts
-// client/src/hooks/useDictation.ts:75-76
+// client/src/hooks/useDictation.ts:77-78
     if (!liveRef.current) return;
     setPhase('transcribing');
 ```
@@ -193,13 +194,13 @@ resolving**, `upload`'s covers a recording **already running**. Neither subsumes
 ## The hook does not know a textarea exists
 
 ```ts
-// client/src/hooks/useDictation.ts:27
+// client/src/hooks/useDictation.ts:29
 export function useDictation(onText: (text: string) => void): DictationState {
 ```
 
 The transcript leaves through a callback. `useDictation` never imports `MessagePanel`,
 never touches a value or a setter, and never learns that the text becomes a Claude Code
-reply. `MessagePanel` folds it in with `appendTranscript`. `MicButton` is equally ignorant
+reply. `MessagePanel` folds it in with `appendTranscript`, and so do `ResumePanel` and `SpawnPanel`. `MicButton` is equally ignorant
 — it hands text to `onText` and knows nothing about what the text is for.
 
 **The bad alternative** is passing the textarea's `value`/`setValue` pair into the hook.
