@@ -319,8 +319,8 @@ export function run(): number {
     const cron = e(2, 'cron: bad');
     const machines = e(3, 'machines needs mac, wsl or both');
     const r = routeErrors(SKILL, [model, prompt, cron0, comment, cron, machines], 'claude');
-    assert.deepStrictEqual(r.byField, { model: [model], prompt: [prompt], schedule: [cron], machines: [machines] });
-    assert.deepStrictEqual(r.rest, [cron0, comment]);
+    assert.deepStrictEqual(r.byField, { model: [model], prompt: [prompt], schedule: [cron0, cron], machines: [machines] });
+    assert.deepStrictEqual(r.rest, [comment]);
 
     const bash = e(5, 'shell job needs a ```bash block');
     const shellModel = e(lineOf(SKILL, 'model:'), 'model must be one token');
@@ -377,6 +377,21 @@ export function run(): number {
     const out = FIELDS.schedule.write(crlf(SKILL), daily(9, 25));
     assert.strictEqual(out.split('\n').length, SKILL.split('\n').length);
     assert.ok(out.split('\n').every((l, i, a) => i === a.length - 1 || l.endsWith('\r')));
+  });
+
+  t('schedule write: a blank Custom removes the cron line, never writes cron: ""', () => {
+    const at = lineOf(SKILL, 'cron:') - 1;
+    const without = SKILL.split('\n').filter((_, i) => i !== at).join('\n');
+    for (const text of ['', '   ']) {
+      const out = FIELDS.schedule.write(SKILL, { preset: 'custom', text });
+      assert.strictEqual(fmValue(out, 'cron'), null, JSON.stringify(text));
+      assert.strictEqual(out, without, JSON.stringify(text));
+    }
+    const bare = setKey(SKILL, 'cron', null);
+    assert.strictEqual(FIELDS.schedule.write(bare, { preset: 'custom', text: '' }), bare);
+    const out = FIELDS.schedule.write(crlf(SKILL), { preset: 'custom', text: '' });
+    assert.strictEqual(out, crlf(without));
+    assert.strictEqual(FIELDS.schedule.write(withCron('>'), { preset: 'custom', text: '' }), withCron('>'));
   });
 
   t('schedule: read(write(t, s)) round-trips one value of every preset', () => {

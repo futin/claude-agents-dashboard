@@ -464,8 +464,11 @@ const schedule: FieldDef<Schedule> = {
   },
   write(text, v) {
     const now = schedule.read(text);
+    if (now === UNREADABLE) return text;
+    // A blank Custom removes the line, the way a blank Limits or Tools does; `cronFor`'s '' stays for the Custom view's own readers.
+    if (v.preset === 'custom' && v.text.trim() === '') return setKey(text, 'cron', null);
     const cron = cronFor(v);
-    if (now === UNREADABLE || cron === null || sameSchedule(now, v)) return text;
+    if (cron === null || sameSchedule(now, v)) return text;
     return setKey(text, 'cron', v.preset === 'manual' ? cron : quoted(cron));
   },
   summary(v) {
@@ -508,8 +511,8 @@ const OWNER: Record<string, FieldId> = {
 };
 
 /**
- * Hand each validator error to the row that owns its line (§Validation in rows). Two body errors are matched by message, since the validator pins them to
- * line 0 or to the `run:` line; an error a hidden row would own, or on a line no row owns, goes to `rest` so a disabled Save always shows its reason.
+ * Hand each validator error to the row that owns its line (§Validation in rows). Three errors are matched by message, since the validator pins them to
+ * line 0 or to the `run:` line — `cron is required` (a blank Custom removes the line) and the two body ones; an error a hidden row would own, or on a line no row owns, goes to `rest` so a disabled Save always shows its reason.
  */
 export function routeErrors(text: string, errors: JobError[], kind: FormKind): { byField: Partial<Record<FieldId, JobError[]>>; rest: JobError[] } {
   const d = doc(text);
@@ -518,7 +521,8 @@ export function routeErrors(text: string, errors: JobError[], kind: FormKind): {
   const rest: JobError[] = [];
   for (const err of errors) {
     let owner: FieldId | undefined;
-    if (err.message === 'claude job needs a prompt') owner = 'prompt';
+    if (err.message === 'cron is required') owner = 'schedule';
+    else if (err.message === 'claude job needs a prompt') owner = 'prompt';
     else if (err.message === 'shell job needs a ```bash block') owner = 'script';
     else if (d && err.line > 1 && err.line - 1 < d.end) {
       const key = /^([A-Za-z0-9_-]+):/.exec(d.lines[err.line - 1])?.[1];
