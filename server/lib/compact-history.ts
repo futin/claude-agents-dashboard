@@ -45,8 +45,3 @@ export function resolveCompactPreTokens(
 export function resetCompactHistoryCache(): void {
   boundaries.reset();
 }
-
-/** Test seam: how many times we went to disk below the tail window. */
-export function compactHistoryCacheStats(): { entries: number; fullScans: number } {
-  return boundaries.stats();
-}

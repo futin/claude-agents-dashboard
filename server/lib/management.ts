@@ -17,10 +17,10 @@
 
 import fs from 'node:fs';
 import fsp from 'node:fs/promises';
-import os from 'node:os';
 import path from 'node:path';
 
 import { parseFrontmatter } from '../../shared/frontmatter.js';
+import { claudeHome, claudeJsonPath, defaultClaudeRoots, isClaudeOwned, isUnder } from './paths.js';
 import { listTranscripts } from './scan.js';
 import type { TranscriptRef } from './scan.js';
 import { readTranscript } from './transcript.js';
@@ -34,15 +34,6 @@ export const FILE_CONTENT_CAP = 256 * 1024;
 
 /** Max files listed per skill dir (after sorting, so SKILL.md always survives). */
 export const SKILL_FILES_CAP = 200;
-
-export function claudeHome(homeDir?: string): string {
-  return path.join(homeDir || os.homedir(), '.claude');
-}
-
-/** `~/.claude.json` — a sibling of {@link claudeHome}, not inside it. Read for its `mcpServers` only; never servable. */
-export function claudeJsonPath(homeDir?: string): string {
-  return path.join(homeDir || os.homedir(), '.claude.json');
-}
 
 interface ProjectsOptions {
   root?: string;
@@ -684,41 +675,6 @@ export function listRecentProjects(config: Partial<Config>, options: ProjectsOpt
     .filter(r => isListedProjectPath(r.path))
     .map(r => (pinned && pinned.has(r.dirName) ? { ...r, pinned: true as const } : r))
     .sort((a, b) => b.lastActiveMs - a.lastActiveMs);
-}
-
-let claudeRootsOverride: readonly string[] | null = null;
-
-/**
- * Test seam: replace {@link defaultClaudeRoots} process-wide, null to restore. The
- * API suites need it — their `$HOME`, and so every project they plant, is a tmpdir.
- */
-export function overrideClaudeRoots(roots: readonly string[] | null): void {
-  claudeRootsOverride = roots;
-}
-
-/**
- * Where Claude itself makes working dirs, never offered for pinning: the temp
- * dirs (`os.tmpdir()` and its realpath — macOS hands out a `/var` symlink —
- * `/tmp`, `/private/tmp`) that hold session scratchpads, `~/.claude`, and the
- * desktop app's data dir, which holds its scratch workspaces. Not
- * platform-gated: a root that does not exist hides nothing.
- */
-export function defaultClaudeRoots(homeDir?: string): readonly string[] {
-  if (claudeRootsOverride) return claudeRootsOverride;
-  const home = homeDir || os.homedir();
-  const roots = [os.tmpdir(), '/tmp', '/private/tmp', claudeHome(homeDir), path.join(home, 'Library', 'Application Support', 'Claude')];
-  try { roots.push(fs.realpathSync(os.tmpdir())); } catch { /* keep the literal */ }
-  return roots;
-}
-
-function isUnder(p: string, root: string): boolean {
-  const rel = path.relative(root, p);
-  return rel === '' || (!rel.startsWith('..') && !path.isAbsolute(rel));
-}
-
-/** Whether `p` is at or under one of `roots` ({@link defaultClaudeRoots}). */
-export function isClaudeOwned(p: string, roots: readonly string[]): boolean {
-  return roots.some(root => isUnder(p, root));
 }
 
 /**

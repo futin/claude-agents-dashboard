@@ -14,7 +14,7 @@ import { SUBAGENT_DIR } from './subagent-usage.js';
 import { refreshCwd } from './token-refresh.js';
 import { readSessionTasks } from './tasks.js';
 import { repoNameFor } from './worktree-repo.js';
-import { defaultClaudeRoots, isClaudeOwned } from './management.js';
+import { defaultClaudeRoots, isClaudeOwned } from './paths.js';
 import { readSessionAnalyticsLog, lessonForSession } from './sessionAnalyticsLog.js';
 import type { SessionAnalyticsLesson } from './sessionAnalyticsLog.js';
 import type { Config } from './config.js';

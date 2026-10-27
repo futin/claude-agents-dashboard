@@ -83,7 +83,7 @@ remote as a held question.
   it — `curl` stays connected, so nothing closes the socket and no verdict arrives. Without
   a sweep the entry would hold its full deadline while the dashboard kept offering a
   send-back the model will never see. `plans.ts`'s `sweepDecided(movedOn)` — driven from
-  `api.ts`'s `sweepTerminalDecisions` off the scan tick, only while holds exist — settles it
+  `lib/scan-snapshot.ts`'s `sweepTerminalDecisions` off the scan tick, only while holds exist — settles it
   as `dismissed` once `lastMessageMs` shows the transcript has grown past its `askedAt`.
   Identical to the question store's sweep (see
   [remote-answer](remote-answer.md#state-machine) for why that test uses `lastMessageTs`).
@@ -93,8 +93,8 @@ remote as a held question.
   records `permissions.ts`'s `noteTerminalHandoff(sessionId)` for those — the same handoff
   the question store records — and the push layer reads it to avoid buzzing about a dialog
   the dashboard handed over itself.
-- **So does coming back to the keyboard.** `plans.ts` runs the same 5s `sweepIdle()` reaper
-  as `pending.ts`, over the same shared `lib/idle.ts` `backAtDesk()` policy, settling held
+- **So does coming back to the keyboard.** The same 5s reaper releases held plans and questions — one interval for all three stores, in
+  `lib/wait-store.ts` — over the same shared `lib/idle.ts` `backAtDesk()` policy, settling held
   plans as `released` so the plan card appears within ~5s of your first keystroke. Read
   [the idle sweep](remote-answer.md#the-idle-sweep-coming-back-to-the-desk) for the
   reasoning, the fail directions, and why there is no headless exemption. Before this,
@@ -200,6 +200,7 @@ same failure mode, and the same one setting as
 <!-- docs-sync:
   sources:
     - server/lib/plans.ts
+    - server/lib/wait-store.ts
     - server/api.ts
     - server/index.ts
     - server/lib/scan.ts

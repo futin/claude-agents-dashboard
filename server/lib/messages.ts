@@ -19,8 +19,8 @@
 
 import { randomUUID } from 'node:crypto';
 
-import { backAtDesk } from './idle.js';
 import { wrapRemoteMessage } from './remote-message-prose.js';
+import { createWaitStore, type WaitEntry } from './wait-store.js';
 import type { MessageAnswerRequest, MessageWaitResult, PendingMessage } from '../../shared/types.js';
 
 /** Cap on the follow-up that reaches the model verbatim. */
@@ -29,12 +29,10 @@ export const TEXT_CAP = 4000;
 /** How a submitted answer was judged. Mirrors `plans.ts`'s outcome union. */
 export type MessageOutcome = 'ok' | 'not-found' | 'mismatch' | 'malformed';
 
-interface Entry {
+interface Entry extends WaitEntry<MessageWaitResult> {
   messageId: string;
-  sessionId: string;
   askedAt: string;
   expiresAt: string;
-  timer: NodeJS.Timeout;
   /**
    * The session runs headless (`claude -p`, the dashboard `+ New` path) — no
    * terminal exists, so "back at the keyboard" gives the user no other way to
@@ -42,11 +40,14 @@ interface Entry {
    * or a supersede ends them.
    */
   headless: boolean;
-  /** Completes the hook's held response. Called at most once. */
-  resolve: (r: MessageWaitResult) => void;
 }
 
-const entries = new Map<string, Entry>();
+const store = createWaitStore<Entry, MessageWaitResult>({
+  superseded: { status: 'superseded' },
+  released: { status: 'released' },
+  // The headless exemption — see {@link sweepIdle}: a `claude -p` session has no terminal to come back to, so the dashboard window stays its only channel.
+  releasable: entry => !entry.headless
+});
 
 /**
  * The prose the hook prints as the Stop block's `reason`. Two jobs: carry the
@@ -58,13 +59,6 @@ const entries = new Map<string, Entry>();
  */
 export function composeReason(text: string): string {
   return wrapRemoteMessage(text);
-}
-
-/** Finish an entry: fire `resolve` once, clear its timer, drop it from the map. */
-function settle(entry: Entry, result: MessageWaitResult): void {
-  clearTimeout(entry.timer);
-  if (entries.get(entry.sessionId) === entry) entries.delete(entry.sessionId);
-  entry.resolve(result);
 }
 
 /**
@@ -80,9 +74,6 @@ export function register(
   resolve: (r: MessageWaitResult) => void,
   headless = false
 ): string {
-  const prev = entries.get(sessionId);
-  if (prev) settle(prev, { status: 'superseded' });
-
   const messageId = randomUUID();
   const now = Date.now();
   const entry: Entry = {
@@ -90,18 +81,17 @@ export function register(
     sessionId,
     askedAt: new Date(now).toISOString(),
     expiresAt: new Date(now + timeoutMs).toISOString(),
-    timer: setTimeout(() => settle(entry, { status: 'timeout' }), timeoutMs),
+    timer: setTimeout(() => store.settle(entry, { status: 'timeout' }), timeoutMs),
     headless,
     resolve
   };
-  entries.set(sessionId, entry);
-  ensureReaper();
+  store.add(entry);
   return messageId;
 }
 
 /** The reply window a session is holding, or null. */
 export function getPendingMessage(sessionId: string): PendingMessage | null {
-  const entry = entries.get(sessionId);
+  const entry = store.get(sessionId);
   if (!entry) return null;
   return { messageId: entry.messageId, askedAt: entry.askedAt, expiresAt: entry.expiresAt };
 }
@@ -111,7 +101,7 @@ export function getPendingMessage(sessionId: string): PendingMessage | null {
  * the row can show `reply?`. A fresh Set: callers never get the store's keys.
  */
 export function messageSessionIds(): Set<string> {
-  return new Set(entries.keys());
+  return store.sessionIds();
 }
 
 /**
@@ -120,7 +110,7 @@ export function messageSessionIds(): Set<string> {
  * the first wins and the second sees `not-found`, with no locking.
  */
 export function answer(sessionId: string, body: unknown): MessageOutcome {
-  const entry = entries.get(sessionId);
+  const entry = store.get(sessionId);
   if (!entry) return 'not-found';
 
   const req = body as MessageAnswerRequest | null;
@@ -128,14 +118,14 @@ export function answer(sessionId: string, body: unknown): MessageOutcome {
   if (req.messageId !== entry.messageId) return 'mismatch';
 
   if (req.dismiss === true) {
-    settle(entry, { status: 'dismissed' });
+    store.settle(entry, { status: 'dismissed' });
     return 'ok';
   }
 
   const text = typeof req.text === 'string' ? req.text.slice(0, TEXT_CAP) : '';
   if (!text.trim()) return 'malformed';
 
-  settle(entry, { status: 'answered', reason: composeReason(text) });
+  store.settle(entry, { status: 'answered', reason: composeReason(text) });
   return 'ok';
 }
 
@@ -146,10 +136,7 @@ export function answer(sessionId: string, body: unknown): MessageOutcome {
  * newer entry.
  */
 export function cancel(sessionId: string, messageId: string): void {
-  const entry = entries.get(sessionId);
-  if (!entry || entry.messageId !== messageId) return;
-  clearTimeout(entry.timer);
-  entries.delete(sessionId);
+  store.cancel(sessionId, entry => entry.messageId === messageId);
 }
 
 /**
@@ -158,21 +145,17 @@ export function cancel(sessionId: string, messageId: string): void {
  * Returns how many were released.
  */
 export function dismissAll(): number {
-  const waiting = [...entries.values()];
-  for (const entry of waiting) settle(entry, { status: 'dismissed' });
+  const waiting = store.values();
+  for (const entry of waiting) store.settle(entry, { status: 'dismissed' });
   return waiting.length;
 }
 
 /** Test seam: drop every entry without resolving. */
 export function resetStore(): void {
-  for (const entry of entries.values()) clearTimeout(entry.timer);
-  entries.clear();
-  if (reaper) { clearInterval(reaper); reaper = null; }
+  store.reset();
 }
 
 /* ------------------------------------------------- idle auto-release */
-
-let reaper: NodeJS.Timeout | null = null;
 
 /**
  * Release every terminal-backed hold if the user is back at the keyboard.
@@ -184,26 +167,10 @@ let reaper: NodeJS.Timeout | null = null;
  *
  * The fail directions (unreadable idle, `idleSecs === 0`) live in
  * {@link backAtDesk}, shared with the other two stores.
+ *
+ * The same release runs every 5 s from the one reaper `wait-store.ts` keeps for all three stores, which asks {@link backAtDesk} once per tick, not once per store.
  */
 export function sweepIdle(): number {
-  if (entries.size === 0) return 0;
-  const releasable = [...entries.values()].filter(e => !e.headless);
-  if (releasable.length === 0) return 0; // nothing to release — don't spawn ioreg
-  if (!backAtDesk()) return 0;
-  for (const entry of releasable) settle(entry, { status: 'released' });
-  return releasable.length;
+  return store.sweepIdle();
 }
 
-/**
- * The 5s reaper behind {@link sweepIdle}. Runs only while holds exist — an
- * idle server never spawns `ioreg`. `unref()` so it cannot hold the process
- * open.
- */
-function ensureReaper(): void {
-  if (reaper) return;
-  reaper = setInterval(() => {
-    sweepIdle();
-    if (entries.size === 0 && reaper) { clearInterval(reaper); reaper = null; }
-  }, 5_000);
-  reaper.unref();
-}

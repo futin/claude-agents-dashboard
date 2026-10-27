@@ -13,7 +13,8 @@ import type { Harness } from './api-harness.js';
 import { overrideCodegraphRunner } from '../server/lib/codegraph.js';
 import type { CodegraphRunner } from '../server/lib/codegraph.js';
 import { codegraphRunsSettled, resetCodegraph } from '../server/lib/codegraph-store.js';
-import { encodeProjectDir, overrideClaudeRoots } from '../server/lib/management.js';
+import { encodeProjectDir } from '../server/lib/management.js';
+import { overrideClaudeRoots } from '../server/lib/paths.js';
 import { resetSettings, setPinned } from '../server/lib/settings.js';
 import type { CodegraphResponse } from '../shared/types.js';
 

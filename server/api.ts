@@ -11,10 +11,8 @@ import nodePath from 'node:path';
 
 import type { HubHandler } from 'lookout-widgets';
 
-import {
-  scanSessions, lastMessageMs, listTranscripts, findTranscript, liveSessionIds, projectsRoot, sessionFromRef, sessionSurface
-} from './lib/scan.js';
-import type { TranscriptRef } from './lib/scan.js';
+import { listTranscripts, findTranscript, liveSessionIds, projectsRoot, sessionFromRef, sessionSurface } from './lib/scan.js';
+import { scanSnapshot } from './lib/scan-snapshot.js';
 import { readSessionAnalyticsLog } from './lib/sessionAnalyticsLog.js';
 import { archivedSessionIds } from './lib/archived.js';
 import { lastSessionEffort, readTranscript } from './lib/transcript.js';
@@ -22,41 +20,33 @@ import { readAgentsCached } from './lib/agents-cache.js';
 import { getCachedUsageState } from './lib/usage.js';
 import { isRefreshSession } from './lib/token-refresh.js';
 import { readAccountProfile } from './lib/account.js';
-import { deriveProfile, profileSnapshot, RATES_HISTORY_BYTES, readRecentSamples, readSamplesSince } from './lib/usage-history.js';
+import { profileSnapshot, RATES_HISTORY_BYTES, readRecentSamples, readSamplesSince } from './lib/usage-history.js';
 import { buildUsageHistory } from './lib/usage-history-series.js';
-import type { ProfileState, UsageSample } from './lib/usage-history.js';
 import { ledgerStartMs, readLedgerSince } from './lib/usage-ledger.js';
-import type { LedgerLine } from './lib/usage-ledger.js';
+import { BASELINE_MS } from './lib/usage-rate.js';
+import { localOffsetMinutes } from './lib/usage-forecast.js';
+import { blankCells, emptyRates, shapeUsageProfile, shapeUsageRates } from './lib/usage-shape.js';
 import {
-  BASELINE_MS, WEEKLY_FLOORS, coverageBreakdown, currentRange, dailyRates, driftRow, externalShare,
-  fitDeviation, fitRates, fitSplits, joinIntervals, joinWeeklyIntervals, ledgerBreakMs,
-  poolRate, rateFor
-} from './lib/usage-rate.js';
-import { detectBoost, emptyBoost } from './lib/usage-boost.js';
-import { HOURS_PER_WEEK, confidenceOf, localOffsetMinutes, walkForward } from './lib/usage-forecast.js';
-import {
-  claudeHome, collectServablePaths, defaultClaudeRoots, isClaudeOwned, listOlderProjects, listPinRows,
-  listRecentProjects, readGlobalScope, readProjectScope, readServableFile, resolveProject
+  collectServablePaths, listOlderProjects, listPinRows, listRecentProjects, readGlobalScope, readProjectScope, readServableFile, resolveProject
 } from './lib/management.js';
+import { claudeHome, defaultClaudeRoots, isClaudeOwned } from './lib/paths.js';
 import { listReports, reviewStatus } from './lib/analytics.js';
 import {
   CHAT_PAGE_MESSAGES, DEFAULT_CAPS, NO_CAPS, readChatAfter, readChatBefore, readChatTail
 } from './lib/chat.js';
 import {
   answer as answerPending, cancel as cancelPending, clampTimeout,
-  dismissAll, getPending, pendingSessionIds, register, sanitizeQuestions,
-  sweepDecided as sweepDecidedPending
+  dismissAll, getPending, register, sanitizeQuestions
 } from './lib/pending.js';
 import {
   answer as answerPlan, cancel as cancelPlan, dismissAll as dismissAllPlans,
-  getPendingPlan, planSessionIds, register as registerPlan, sanitizePlan,
-  sweepDecided as sweepDecidedPlans
+  getPendingPlan, register as registerPlan, sanitizePlan
 } from './lib/plans.js';
 import {
   answer as answerMessage, cancel as cancelMessage, dismissAll as dismissAllMessages,
-  getPendingMessage, messageSessionIds, register as registerMessage
+  getPendingMessage, register as registerMessage
 } from './lib/messages.js';
-import { notifyPermission, permissionWaits } from './lib/permissions.js';
+import { notifyPermission } from './lib/permissions.js';
 import { maybeSend, sendTest } from './lib/notify.js';
 import { getState, setEnabled } from './lib/remoteState.js';
 import { getPinnedProjects, getSettings, setPinOrder, setPinned, setSettings } from './lib/settings.js';
@@ -72,7 +62,7 @@ import { releasesPayload } from './lib/releases.js';
 import { extForMime, isTranscribing, probeTranscribe, transcribe } from './lib/transcribe.js';
 import {
   EFFORTS, MAX_LAUNCHING, adoptLaunched, clampPermission, forceStopSession, hasLiveChild, launch, listLaunching, parseSpawnRequest,
-  probeSpawn, stopSession, stopStates
+  probeSpawn, stopSession
 } from './lib/spawn.js';
 import { staleEnvKeys, toPosInt, type Config } from './lib/config.js';
 import { describeCron, isManualCron, nextAfter, parseCron } from '../shared/cron.js';
@@ -87,8 +77,8 @@ import { RoutineStoreError, deleteJob, isOwner, readJobs, writeJob, writePinsSna
 import type {
   AnalyticsResponse, GitQuickRequest, ManagementIndex, MessageWaitResult, OpenFolderResponse, PinsResponse, PlanWaitResult, ScopeConfig,
   SessionMessage, SessionPlan, SessionPrInfo, SessionPrResponse, SessionQuestion, SessionsResponse, SessionChat, SessionDetail, SpawnRequest,
-  ModelRateRow, RateLimit, ServerSettings, SpawnResponse, UsageCoverage, UsageProfileCell,
-  UsageHistoryResponse, UsageProfileResponse, UsageRatesResponse, WaitResult, ConnectionOrigin, WriteAccess,
+  ServerSettings, SpawnResponse,
+  UsageHistoryResponse, UsageProfileResponse, WaitResult, ConnectionOrigin, WriteAccess,
   ReconcileReport, RoutineFile, RoutineJob, RoutineJobRow, RoutineRunsResponse, RoutinesResponse, RoutineValidateResponse, Session,
   AccountResponse, GitFetchResponse, HealthResponse, NotifyTestResponse, OkResponse, RemoteAnswerToggleResponse, RoutineErrorsResponse,
   RoutineWriteResponse, StopResponse, TranscribeResponse
@@ -124,66 +114,6 @@ export function scanOverrides(config: Config, params?: URLSearchParams): Config 
     lookbackHours: pick('lookback', config.lookbackHours, SCAN_CAPS.lookback),
     activeWindowMin: pick('active', config.activeWindowMin, SCAN_CAPS.active)
   };
-}
-
-/**
- * Release held question/plan waits whose session has moved on — the terminal
- * card decided it. The CLI renders that card *alongside* the hook and, when the
- * card wins, abandons the hook without killing it: `curl` stays connected, so no
- * socket closes and neither store hears anything. Without this the entry sits
- * out its whole deadline (up to 10 min) with the dashboard still offering an
- * answer nothing will read.
- *
- * Runs off the scan tick and only while holds exist, so an idle server does no
- * extra IO — the same shape as `messages.ts`'s idle reaper. One transcript read
- * per held wait, and there is at most one per session; the ids resolve from the
- * scan's own listing, so a held wait costs no directory walk.
- */
-function sweepTerminalDecisions(root: string, transcripts: readonly TranscriptRef[]): void {
-  if (pendingSessionIds().size === 0 && planSessionIds().size === 0) return;
-  const movedOn = (sessionId: string, askedAtMs: number): boolean => {
-    const ms = lastMessageMs(root, sessionId, transcripts);
-    return ms !== null && ms > askedAtMs;
-  };
-  sweepDecidedPending(movedOn);
-  sweepDecidedPlans(movedOn);
-}
-
-/** One scan of the session rows with every RAM-store injection applied — what `/api/sessions` serves before launches and usage are attached. */
-export function scanSnapshot(config: Config, projects?: ReadonlySet<string> | null): SessionsResponse {
-  // One listing per request, shared by the sweep and the scan.
-  const root = projectsRoot();
-  const transcripts = listTranscripts(root);
-  // Before the scan, not after: a wait the terminal already decided must not
-  // colour this tick's row blue either.
-  sweepTerminalDecisions(root, transcripts);
-  // pendingIds comes from the RAM store, not disk: a question held by the
-  // AskUserQuestion hook is flagged on its row before the transcript knows
-  // about it, so it's visible without opening the chat drawer. planIds and
-  // messageIds are the same thing, for a held ExitPlanMode call and a held
-  // Stop-hook reply window respectively.
-  // permissionWaits likewise: a terminal permission dialog is TUI-only and
-  // never reaches the transcript, so the Notification hook is the only way the
-  // scan can know a session is parked on one.
-  // archivedIds mirrors the desktop app's own list: "delete" there is an
-  // archive that leaves the transcript on disk, so without this the row keeps
-  // showing until it ages out of the lookback window. Read here, not in
-  // scan.ts, so the scan stays free of the app's store (see archived.ts).
-  return scanSessions(config, {
-    skipProcScan: config.skipProcScan,
-    pendingIds: pendingSessionIds(),
-    planIds: planSessionIds(),
-    messageIds: messageSessionIds(),
-    permissionWaits: permissionWaits(),
-    archivedIds: archivedSessionIds(),
-    // stopStates is the same injection again, and the only one that is not a
-    // hint about a wait: it says which rows this server can actually signal,
-    // so the Stop control is offered only where it would work.
-    stopStates: stopStates(),
-    projects,
-    root,
-    transcripts
-  });
 }
 
 /** The Sessions toolbar's project filter, as repeated `?project=` params; empty values dropped. null = no filter. */
@@ -659,114 +589,6 @@ export function serveSettingsRead(config: Config, res: ServerResponse): void {
   sendJson(res, 200, settingsBody(config, getSettings()));
 }
 
-/** An empty grid, for the fail-open path and for a never-recorded profile. */
-function blankCells(): UsageProfileCell[] {
-  return Array.from({ length: HOURS_PER_WEEK }, (_, hourOfWeek) => ({
-    hourOfWeek, weight: null, observedMin: 0, staleWeeks: 0
-  }));
-}
-
-/**
- * Shape one `GET /api/usage/profile` body. Pure — no clock, no disk, no
- * timezone — so every calendar edge is testable (test/usage-profile-api.test.ts).
- *
- * The walk is re-run here with the *same* implementation that produced the
- * projection in `usage-pace.ts`, so the inspector can never drift from what it
- * claims to disclose. And it deliberately carries **no raw samples and no file
- * paths** — cells and the walk only, the same posture as `NTFY_TOPIC` never
- * leaving the server.
- *
- * With recording off the learned cells are still returned (they are real
- * evidence, and this endpoint exists to disclose it) but `confidence` is `none`
- * and the walk is empty: nothing is feeding the forecast, so claiming otherwise
- * would be the dishonest option. The view leads with `recording: false`.
- */
-export function shapeUsageProfile(opts: {
-  recording: boolean;
-  state: ProfileState;
-  weekly: RateLimit | null;
-  nowMs: number;
-  offsetMinutes: number;
-}): UsageProfileResponse {
-  const { recording, state, weekly, nowMs, offsetMinutes } = opts;
-  const profile = deriveProfile(state);
-
-  const cells: UsageProfileCell[] = state.buckets.map((b, hourOfWeek) => {
-    const stamp = b.weekStamp;
-    return {
-      hourOfWeek,
-      weight: profile.weights[hourOfWeek],
-      observedMin: b.lifetimeObservedMin,
-      // Observed weeks after the one this bucket last saw traffic in — the same
-      // count the fold's decay applies. `observedWeeks` never holds a future
-      // week, so "after the stamp" already means "up to now".
-      staleWeeks: stamp === null ? 0 : state.observedWeeks.filter((w) => w > stamp).length
-    };
-  });
-
-  const rate = weekly?.ratePerHour ?? null;
-  const resetsAtMs = weekly?.resetsAt ? Date.parse(weekly.resetsAt) : Number.NaN;
-  // The window's own two facts, reported whether or not a walk can be run:
-  // the forecast page states them before any projection, so they follow the
-  // *limits* being readable, not the profile being usable.
-  const utilizationPct = typeof weekly?.utilization === 'number' ? weekly.utilization : null;
-  const resetsAt = Number.isFinite(resetsAtMs) ? new Date(resetsAtMs).toISOString() : null;
-  // Ordered, not combined: the strip states *which* precondition is missing, so
-  // "there is nothing to draw" reads as a state rather than as a broken panel.
-  // Recording first — with it off nothing else has been measured either.
-  const absent: UsageProfileResponse['walkAbsent'] =
-    !recording ? 'recording-off'
-      : rate == null || rate <= 0 ? 'no-rate'
-        : weekly?.utilization == null || !Number.isFinite(resetsAtMs) ? 'no-window'
-          : null;
-
-  if (absent !== null) {
-    return {
-      cells,
-      globalMean: profile.globalMean,
-      confidence: recording ? confidenceOf(profile) : 'none',
-      recording,
-      walk: [],
-      exhaustAt: null,
-      walkAbsent: absent,
-      utilizationPct,
-      resetsAt,
-      // No walk, so no slices to weigh — null rather than 0, which would read
-      // as a measured "never active".
-      dutyCycle: null
-    };
-  }
-
-  const walked = walkForward({
-    nowMs,
-    utilization: weekly!.utilization as number,
-    activeRatePerHour: rate as number,
-    profile,
-    resetsAtMs,
-    offsetMinutes
-  });
-  return {
-    cells,
-    globalMean: profile.globalMean,
-    confidence: confidenceOf(profile),
-    recording,
-    walk: walked.steps.map((x) => ({
-      t: new Date(x.tMs).toISOString(),
-      gain: x.gain,
-      cum: x.cum,
-      weight: x.weight,
-      learned: x.learned
-    })),
-    exhaustAt: walked.exhaustAtMs == null ? null : new Date(walked.exhaustAtMs).toISOString(),
-    // A walked window has nothing absent to report; the field is the negative
-    // space of `walk`, so a non-empty walk always pairs with null.
-    walkAbsent: null,
-    utilizationPct,
-    resetsAt,
-    dutyCycle: walked.dutyCycle
-  };
-}
-
 /**
  * `GET /api/usage/profile` — the duty-cycle inspector's data. Read-only.
  *
@@ -790,196 +612,6 @@ export function serveUsageProfile(res: ServerResponse): void {
       utilizationPct: null, resetsAt: null, dutyCycle: null
     } satisfies UsageProfileResponse);
   }
-}
-
-/**
- * An honest empty body — no ledger yet, recording off, or a failed fit.
- *
- * `coverage` is present and zeroed rather than absent: the counters have no
- * nulls, so "nothing measured" is a row of measured zeros, and an optional
- * field here would push a null check into the card for a state that cannot
- * happen. `startProvable` is false because nothing was read to prove it.
- */
-function zeroCoverage(): UsageCoverage {
-  return {
-    movedPct: 0, pricedPct: 0, mixedPct: 0, externalPct: 0,
-    preLedgerPct: 0, missingPct: 0, partialPct: 0,
-    recorderBreakHours: 0, startProvable: false
-  };
-}
-
-/** Exported for the fail-open body's test only — the route is its one production caller. */
-export function emptyRates(nowMs: number, recording: boolean, error?: true): UsageRatesResponse {
-  return {
-    generatedAt: new Date(nowMs).toISOString(),
-    recording,
-    models: [],
-    externalSharePct: null,
-    coverage: zeroCoverage(),
-    // `weeklyRecorded` is false because nothing was read to say otherwise — the
-    // same reasoning as `startProvable`, and not a claim that the record is old.
-    weeklyRecorded: false,
-    weeklyCoverage: zeroCoverage(),
-    weeklyExternalSharePct: null,
-    boost: emptyBoost(),
-    ...(error ? { error: true } : {})
-  };
-}
-
-
-/**
- * Shape one `GET /api/usage/rates` body. Pure — no clock, no disk — so the
- * arithmetic and every honesty rule are testable (test/api-usage-rates.test.ts).
- *
- * One row per model that either owns an attributable interval **or** is
- * identified by the one-term joint fit, richest evidence first: the model you
- * actually use should not sit under a model you tried once. A model with
- * neither still gets no row at all — there is nothing to say about it yet, and
- * a row of nulls reads as a broken fit rather than as an absence of evidence.
- *
- * The fitted-only case is the one the second half of that rule exists for: a
- * model used only as a subagent beside a driver model never holds `DOMINANCE`
- * of a window, so the pooled rate has nothing for it and the card used to omit
- * it entirely. Its row's pooled numbers are legitimately all null with a `thin`
- * verdict and zeroed counters — honest, and not special-cased.
- */
-export function shapeUsageRates(opts: {
-  recording: boolean;
-  samples: UsageSample[];
-  ledger: LedgerLine[];
-  nowMs: number;
-  /**
-   * When recording provably began, or null when the ledger cannot prove it.
-   * A parameter rather than a read, so this stays pure.
-   */
-  ledgerStartMs: number | null;
-}): UsageRatesResponse {
-  const { recording, samples, ledger, nowMs, ledgerStartMs: startMs } = opts;
-  if (!recording) return emptyRates(nowMs, false);
-
-  const intervals = joinIntervals(samples, ledger, startMs);
-  const models = new Set<string>();
-  for (const interval of intervals) {
-    if (typeof interval.kind === 'object') models.add(interval.kind.model);
-  }
-
-  // Both joint fits run over the same current window the pooled rows report,
-  // so a row's three numbers never describe different spans.
-  const cur = currentRange(nowMs);
-  const splits = fitSplits(intervals, cur.sinceMs, cur.untilMs);
-  const fitted = fitRates(intervals, cur.sinceMs, cur.untilMs);
-  for (const model of fitted.keys()) models.add(model);
-
-  // The weekly set, built once. Paired tick to tick rather than sample to
-  // sample — see `joinWeeklyIntervals`, where the 6.5×–10.4× underestimate that
-  // consecutive pairing produces is measured. Fitted over the *same* 3-day
-  // window as everything above: this card refuses to put two figures spanning
-  // different windows side by side.
-  const weeklyIntervals = joinWeeklyIntervals(samples, ledger, startMs);
-  const weeklyFitted = fitRates(weeklyIntervals, cur.sinceMs, cur.untilMs, WEEKLY_FLOORS);
-  // A model priced only weekly still gets a row, exactly as a fitted-only model
-  // already does.
-  for (const interval of weeklyIntervals) {
-    if (typeof interval.kind === 'object') models.add(interval.kind.model);
-  }
-  for (const model of weeklyFitted.keys()) models.add(model);
-
-  const rows: ModelRateRow[] = [...models]
-    .map((model) => {
-      const split = splits.get(model);
-      const fit = fitted.get(model);
-      const drift = driftRow(intervals, model, nowMs);
-      const weeklyPooled = rateFor(
-        weeklyIntervals, model, cur.sinceMs, cur.untilMs, WEEKLY_FLOORS
-      );
-      const weeklyFit = weeklyFitted.get(model);
-      // The evidence survives the refusal, as the 5-hour row's already does:
-      // "10 windows over 2 days, still thin" and "nothing at all" are different
-      // statements and the card says which.
-      const weeklyEvidence = poolRate(weeklyIntervals, model, cur.sinceMs, cur.untilMs);
-      return {
-        ...drift,
-        pctPerMWeighted: split?.pctPerMWeighted ?? null,
-        pctPerRequest: split?.pctPerRequest ?? null,
-        splitVerdict: split === undefined ? ('thin' as const) : ('fitted' as const),
-        fittedWeightedPerPct: fit?.weightedPerPct ?? null,
-        fitVerdict: fit === undefined ? ('thin' as const) : ('fitted' as const),
-        // Against the pooled rate the row already publishes, so the number the
-        // card compares is the number the card shows.
-        fitDeviationPct: fitDeviation(fit?.weightedPerPct ?? null, drift.weightedPerPct),
-        weekly: {
-          weightedPerPct: weeklyPooled?.weightedPerPct ?? null,
-          rawPerPct: weeklyPooled?.rawPerPct ?? null,
-          fittedWeightedPerPct: weeklyFit?.weightedPerPct ?? null,
-          verdict: weeklyPooled === null ? ('thin' as const) : ('fitted' as const),
-          fitVerdict: weeklyFit === undefined ? ('thin' as const) : ('fitted' as const),
-          intervals: weeklyEvidence?.intervals ?? 0,
-          utilSum: weeklyEvidence?.utilSum ?? 0,
-          days: weeklyEvidence?.days ?? 0
-        },
-        // The days the two figures above were pooled from, judged against the
-        // same baseline the badge is — so the cells and the verdict cannot
-        // disagree about what a day was compared to.
-        daily: dailyRates(intervals, model, nowMs, startMs, drift.baselineWeightedPerPct)
-      };
-    })
-    // On the **5-hour** `utilSum`, unchanged: a weekly-only model sorts last,
-    // as a fitted-only model already does.
-    .sort((a, b) => b.utilSum - a.utilSum || a.model.localeCompare(b.model));
-
-  // Over the whole fitted horizon, not just the trailing window: it describes
-  // how much of everything behind these numbers had to be thrown away.
-  const share = externalShare(intervals, nowMs - BASELINE_MS, Number.POSITIVE_INFINITY);
-
-  // Deliberately the same horizon as `externalSharePct` above: two disclosure
-  // figures on one card that quietly spanned different windows would be a
-  // defect, not a nuance.
-  const buckets = coverageBreakdown(intervals, nowMs - BASELINE_MS, Number.POSITIVE_INFINITY);
-  const breakMs = ledgerBreakMs(ledger, nowMs - BASELINE_MS, Number.POSITIVE_INFINITY);
-
-  // Same horizon again for the weekly disclosure figures, for the same reason.
-  const weeklyBuckets = coverageBreakdown(
-    weeklyIntervals, nowMs - BASELINE_MS, Number.POSITIVE_INFINITY
-  );
-  const weeklyShare = externalShare(
-    weeklyIntervals, nowMs - BASELINE_MS, Number.POSITIVE_INFINITY
-  );
-
-  return {
-    generatedAt: new Date(nowMs).toISOString(),
-    recording: true,
-    models: rows,
-    externalSharePct: share === null ? null : share * 100,
-    coverage: {
-      movedPct: buckets.moved,
-      pricedPct: buckets.priced,
-      mixedPct: buckets.mixed,
-      externalPct: buckets.external,
-      preLedgerPct: buckets.preLedger,
-      missingPct: buckets.gap,
-      partialPct: buckets.partial,
-      recorderBreakHours: breakMs / 3_600_000,
-      startProvable: startMs !== null
-    },
-    // Read off the samples, not the intervals: a record that carries weekly
-    // readings whose counter simply never moved yields no intervals at all, and
-    // that is a different state from a record written before the field existed.
-    weeklyRecorded: samples.some((sample) => sample.week !== undefined),
-    weeklyCoverage: {
-      movedPct: weeklyBuckets.moved,
-      pricedPct: weeklyBuckets.priced,
-      mixedPct: weeklyBuckets.mixed,
-      externalPct: weeklyBuckets.external,
-      preLedgerPct: weeklyBuckets.preLedger,
-      missingPct: weeklyBuckets.gap,
-      partialPct: weeklyBuckets.partial,
-      recorderBreakHours: breakMs / 3_600_000,
-      startProvable: startMs !== null
-    },
-    weeklyExternalSharePct: weeklyShare === null ? null : weeklyShare * 100,
-    // Off the 5-hour intervals already built above — no second join, no second read.
-    boost: detectBoost(intervals, nowMs)
-  };
 }
 
 /**

@@ -6,7 +6,7 @@
 import assert from 'node:assert';
 
 import { testAsync, userRecord, withServer } from './api-harness.js';
-import { scanSnapshot } from '../server/api.js';
+import { scanSnapshot } from '../server/lib/scan-snapshot.js';
 import { pendingSessionIds, register as registerQuestion } from '../server/lib/pending.js';
 import { planSessionIds, register as registerPlan } from '../server/lib/plans.js';
 import type { SessionsResponse } from '../shared/types.js';
@@ -15,7 +15,7 @@ const ENV = 'SHOW_USAGE=false\nSKIP_PROC_SCAN=true\n';
 const KEYS = ['activeWindowMin', 'generatedAt', 'launching', 'maxSessions', 'projects', 'runningClaudeProcs', 'sessions', 'totals'];
 
 export async function run(): Promise<number> {
-  console.log('\n=== scanSnapshot (api.ts) ===\n');
+  console.log('\n=== scanSnapshot (lib/scan-snapshot.ts) ===\n');
   let ok = 0, total = 0;
   const check = (r: boolean): void => { total++; if (r) ok++; };
 

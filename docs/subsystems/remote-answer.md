@@ -141,7 +141,7 @@ you answer it there the CLI discards the hook's output without killing it: `curl
 connected, so no socket closes and no verdict ever arrives. Left alone the entry would sit
 out its whole deadline while the dashboard kept offering picks nothing will read, and an
 answer POSTed in that window would settle into an orphaned response. `sweepDecided(movedOn)`
-releases it instead. `api.ts`'s `sweepTerminalDecisions` drives it off the scan tick and only
+releases it instead. `lib/scan-snapshot.ts`'s `sweepTerminalDecisions` drives it off the scan tick and only
 while holds exist — so an idle server does no extra IO — asking `scan.ts`'s `lastMessageMs`
 whether the transcript has grown past the entry's `askedAt`. That is deliberately
 `lastMessageTs` and not `lastTimestamp`: hook and queue records bump the file without a turn
@@ -152,9 +152,8 @@ ignores it, and a hook still listening falls through to its card.
 ## The idle sweep: coming back to the desk
 
 Walking away is what sent the question to your phone, so walking back should bring it home.
-A 5-second `setInterval` (armed on the first `register`, cleared once the store empties,
-`unref()`d so it can't hold the process open) calls `sweepIdle()`, which settles every held
-question as `released`; the hook's `/api/questions/wait` returns, exits 0, and the terminal
+One 5-second `setInterval` in `lib/wait-store.ts`, shared by all three stores (armed on the first `register` in any of them, cleared once every store
+is empty, `unref()`d so it can't hold the process open), settles every held question as `released`; the hook's `/api/questions/wait` returns, exits 0, and the terminal
 dialog appears — within ~5s of the first keystroke, with nothing to tap.
 
 `sweepDecided` does **not** cover this, and that is why the gap existed unnoticed for so
@@ -173,8 +172,9 @@ already decide this?" versus "is the user back?".
   [push-notify](push-notify.md#fail-directions)), because a wrong guess here ends a hold early
   instead of merely sending an extra ping. The comparison itself is `notify.ts`'s
   `atDesk`, shared with callers that already hold an idle reading; the zero-threshold check
-  runs *before* the read, so that case never spawns `ioreg`. Each store keeps its own `sweepIdle()`,
-  because *what* is releasable and *which* status it settles as differ. This layout is the
+  runs *before* the read, so that case never spawns `ioreg`. Each store still declares *what* is releasable and *which*
+  status it settles as — `createWaitStore`'s `releasable` and `released` options — and keeps its own `sweepIdle()` export; the interval is one, and
+  asks `backAtDesk()` at most once per tick across all three stores, where three intervals each spawned their own `ioreg`. This layout is the
   fix for the bug itself: the sweep first lived only in `messages.ts`, and questions and
   plans were simply never given one.
 - **Callers check they have something releasable before asking**, so an idle server never
@@ -282,7 +282,7 @@ then turn tailnet trust off and use the token; behind a *public* tunnel it is th
 - **Visible without the drawer.** `QuestionPanel` only exists inside `ChatDrawer`, so a
   held question used to be invisible unless you already had that exact session's drawer
   open, and the transcript-derived blue dot can't cover it (the wait is registered during
-  `PreToolUse`, before the `tool_use` record is written). So `scanSnapshot` (behind `serveSessions`) passes
+  `PreToolUse`, before the `tool_use` record is written). So `scanSnapshot` (`lib/scan-snapshot.ts`, behind `serveSessions`) passes
   `pendingSessionIds()` into `scanSessions` as `pendingIds`: a flagged session gets
   `status: 'question'` plus `Session.remoteQuestion`, and the row's chat button (`sessions/atoms.tsx`) goes into
   a pulsing amber `Answer` — first in the `holdKind` precedence (`lib/holds.ts`) that
@@ -316,6 +316,8 @@ then turn tailnet trust off and use the token; behind a *public* tunnel it is th
 <!-- docs-sync:
   sources:
     - server/lib/pending.ts
+    - server/lib/wait-store.ts
+    - server/lib/scan-snapshot.ts
     - server/lib/idle.ts
     - server/lib/remoteState.ts
     - server/api.ts

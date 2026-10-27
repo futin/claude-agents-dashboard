@@ -24,7 +24,8 @@ import {
   setCodegraphClock,
   startCodegraphRun,
 } from '../server/lib/codegraph-store.js';
-import { encodeProjectDir, overrideClaudeRoots } from '../server/lib/management.js';
+import { encodeProjectDir } from '../server/lib/management.js';
+import { overrideClaudeRoots } from '../server/lib/paths.js';
 import { resetSettings, setPinned } from '../server/lib/settings.js';
 import type { CodegraphRepo, CodegraphResponse } from '../shared/types.js';
 

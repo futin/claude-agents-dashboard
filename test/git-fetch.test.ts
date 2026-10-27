@@ -24,7 +24,8 @@ import {
 import { anyRepoLockHeld, heldRepoLocks, tryLockRepo } from '../server/lib/git-locks.js';
 import type { FetchRunner } from '../server/lib/git-fetch.js';
 import { gitStatsMemoKeys, readGitStats } from '../server/lib/git-stats.js';
-import { encodeProjectDir, overrideClaudeRoots } from '../server/lib/management.js';
+import { encodeProjectDir } from '../server/lib/management.js';
+import { overrideClaudeRoots } from '../server/lib/paths.js';
 import { resetSettings, setPinned, setSettings } from '../server/lib/settings.js';
 import type { FetchError, GitStatsResponse } from '../shared/types.js';
 import { GitFixture, withGitFixture } from './git-fixture.js';

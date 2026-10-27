@@ -15,7 +15,8 @@ import path from 'node:path';
 
 import { testAsync, userRecord, withServer } from './api-harness.js';
 import type { Harness } from './api-harness.js';
-import { encodeProjectDir, overrideClaudeRoots } from '../server/lib/management.js';
+import { encodeProjectDir } from '../server/lib/management.js';
+import { overrideClaudeRoots } from '../server/lib/paths.js';
 import { getPinnedProjects, resetSettings } from '../server/lib/settings.js';
 import type { PinsResponse, ProjectRef } from '../shared/types.js';
 

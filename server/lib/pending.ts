@@ -25,8 +25,8 @@
 
 import { randomUUID } from 'node:crypto';
 
-import { backAtDesk } from './idle.js';
 import { noteTerminalHandoff } from './permissions.js';
+import { createWaitStore, type WaitEntry } from './wait-store.js';
 import type {
   AnswerRequest, PendingOption, PendingQuestion, PendingQuestionItem,
   QuestionAnswer, WaitResult
@@ -50,17 +50,22 @@ export const MAX_TIMEOUT_MS = 1_800_000;
 /** How a submitted answer was judged. */
 export type AnswerOutcome = 'ok' | 'not-found' | 'mismatch' | 'malformed';
 
-interface Entry {
+interface Entry extends WaitEntry<WaitResult> {
   questionId: string;
-  sessionId: string;
   questions: PendingQuestionItem[];
   askedAt: string;
-  timer: NodeJS.Timeout;
-  /** Completes the hook's held response. Called at most once. */
-  resolve: (r: WaitResult) => void;
 }
 
-const entries = new Map<string, Entry>();
+const store = createWaitStore<Entry, WaitResult>({
+  superseded: { status: 'superseded' },
+  // Released rather than dismissed purely to record who triggered it — see {@link sweepIdle}.
+  released: { status: 'released' },
+  // Anything but `answered` means the terminal dialog takes over, and that
+  // dialog reports itself as a permission event a few seconds later. Record the
+  // handoff so it does not buzz a phone about a prompt the user chose to walk
+  // over and answer — see `noteTerminalHandoff`.
+  onSettle: (entry, result) => { if (result.status !== 'answered') noteTerminalHandoff(entry.sessionId); }
+});
 
 function str(v: unknown, cap: number): string {
   return typeof v === 'string' ? v.slice(0, cap) : '';
@@ -157,18 +162,6 @@ export function composeReason(questions: PendingQuestionItem[], answers: Questio
     + '\nTreat these as the user\'s answers and continue; do not ask again.';
 }
 
-/** Finish an entry: fire `resolve` once, clear its timer, drop it from the map. */
-function settle(entry: Entry, result: WaitResult): void {
-  clearTimeout(entry.timer);
-  if (entries.get(entry.sessionId) === entry) entries.delete(entry.sessionId);
-  // Anything but `answered` means the terminal dialog takes over, and that
-  // dialog reports itself as a permission event a few seconds later. Record the
-  // handoff so it does not buzz a phone about a prompt the user chose to walk
-  // over and answer — see `noteTerminalHandoff`.
-  if (result.status !== 'answered') noteTerminalHandoff(entry.sessionId);
-  entry.resolve(result);
-}
-
 /**
  * Register a question and take ownership of the caller's held response.
  * Returns the `questionId` the browser must echo when answering.
@@ -186,9 +179,6 @@ export function register(
   timeoutMs: number,
   resolve: (r: WaitResult) => void
 ): string {
-  const prev = entries.get(sessionId);
-  if (prev) settle(prev, { status: 'superseded' });
-
   const questionId = randomUUID();
   const entry: Entry = {
     questionId,
@@ -196,19 +186,18 @@ export function register(
     questions,
     askedAt: new Date().toISOString(),
     timer: setTimeout(
-      () => settle(entry, { status: 'timeout' }),
+      () => store.settle(entry, { status: 'timeout' }),
       Number.isFinite(timeoutMs) ? timeoutMs : DEFAULT_TIMEOUT_MS
     ),
     resolve
   };
-  entries.set(sessionId, entry);
-  ensureReaper();
+  store.add(entry);
   return questionId;
 }
 
 /** The question a session is waiting on, or null. */
 export function getPending(sessionId: string): PendingQuestion | null {
-  const entry = entries.get(sessionId);
+  const entry = store.get(sessionId);
   if (!entry) return null;
   return { questionId: entry.questionId, askedAt: entry.askedAt, questions: entry.questions };
 }
@@ -221,7 +210,7 @@ export function getPending(sessionId: string): PendingQuestion | null {
  * A fresh Set: callers never get a handle on the store's keys.
  */
 export function pendingSessionIds(): Set<string> {
-  return new Set(entries.keys());
+  return store.sessionIds();
 }
 
 /**
@@ -230,7 +219,7 @@ export function pendingSessionIds(): Set<string> {
  * outright and the second sees `not-found`, with no locking.
  */
 export function answer(sessionId: string, body: unknown): AnswerOutcome {
-  const entry = entries.get(sessionId);
+  const entry = store.get(sessionId);
   if (!entry) return 'not-found';
 
   const req = body as AnswerRequest | null;
@@ -238,7 +227,7 @@ export function answer(sessionId: string, body: unknown): AnswerOutcome {
   if (req.questionId !== entry.questionId) return 'mismatch';
 
   if (req.dismiss === true) {
-    settle(entry, { status: 'dismissed' });
+    store.settle(entry, { status: 'dismissed' });
     return 'ok';
   }
 
@@ -246,7 +235,7 @@ export function answer(sessionId: string, body: unknown): AnswerOutcome {
   if (verdict !== 'ok') return verdict;
 
   const answers = (req.answers as QuestionAnswer[]).map(a => ({ index: a.index, selected: a.selected }));
-  settle(entry, { status: 'answered', reason: composeReason(entry.questions, answers), answers });
+  store.settle(entry, { status: 'answered', reason: composeReason(entry.questions, answers), answers });
   return 'ok';
 }
 
@@ -256,10 +245,7 @@ export function answer(sessionId: string, body: unknown): AnswerOutcome {
  * A stale `questionId` is a no-op, so a late close can't evict a newer entry.
  */
 export function cancel(sessionId: string, questionId: string): void {
-  const entry = entries.get(sessionId);
-  if (!entry || entry.questionId !== questionId) return;
-  clearTimeout(entry.timer);
-  entries.delete(sessionId);
+  store.cancel(sessionId, entry => entry.questionId === questionId);
 }
 
 /**
@@ -269,8 +255,8 @@ export function cancel(sessionId: string, questionId: string): void {
  * Returns how many were released.
  */
 export function dismissAll(): number {
-  const waiting = [...entries.values()];
-  for (const entry of waiting) settle(entry, { status: 'dismissed' });
+  const waiting = store.values();
+  for (const entry of waiting) store.settle(entry, { status: 'dismissed' });
   return waiting.length;
 }
 
@@ -299,9 +285,9 @@ export function sweepDecided(
   movedOn: (sessionId: string, askedAtMs: number) => boolean
 ): number {
   let released = 0;
-  for (const entry of [...entries.values()]) {
+  for (const entry of store.values()) {
     if (!movedOn(entry.sessionId, Date.parse(entry.askedAt))) continue;
-    settle(entry, { status: 'dismissed' });
+    store.settle(entry, { status: 'dismissed' });
     released++;
   }
   return released;
@@ -309,14 +295,10 @@ export function sweepDecided(
 
 /** Test seam: drop every entry without resolving. */
 export function resetStore(): void {
-  for (const entry of entries.values()) clearTimeout(entry.timer);
-  entries.clear();
-  if (reaper) { clearInterval(reaper); reaper = null; }
+  store.reset();
 }
 
 /* ------------------------------------------------- idle auto-release */
-
-let reaper: NodeJS.Timeout | null = null;
 
 /**
  * Hand every held question back to its terminal dialog if the user is back at
@@ -339,24 +321,10 @@ let reaper: NodeJS.Timeout | null = null;
  * not — `ask-remote-hook.sh` does no TTY detection at all, so a headless
  * session's question already goes to the CLI's own handling whenever the user
  * is at the desk. Releasing it here lands in the same place.
+ *
+ * The same release runs every 5 s from the one reaper `wait-store.ts` keeps for all three stores, which asks {@link backAtDesk} once per tick, not once per store.
  */
 export function sweepIdle(): number {
-  if (entries.size === 0) return 0; // nothing to release — don't spawn ioreg
-  if (!backAtDesk()) return 0;
-  const waiting = [...entries.values()];
-  for (const entry of waiting) settle(entry, { status: 'released' });
-  return waiting.length;
+  return store.sweepIdle();
 }
 
-/**
- * The 5s reaper behind {@link sweepIdle}. Runs only while holds exist — an idle
- * server never spawns `ioreg`. `unref()` so it cannot hold the process open.
- */
-function ensureReaper(): void {
-  if (reaper) return;
-  reaper = setInterval(() => {
-    sweepIdle();
-    if (entries.size === 0 && reaper) { clearInterval(reaper); reaper = null; }
-  }, 5_000);
-  reaper.unref();
-}

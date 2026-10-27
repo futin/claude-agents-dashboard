@@ -13,7 +13,8 @@ import type { Harness } from './api-harness.js';
 import { GitFixture, withGitFixture } from './git-fixture.js';
 import { makeFetchRunner, overrideFetchRunner, resetGitFetch } from '../server/lib/git-fetch.js';
 import type { FetchRunner } from '../server/lib/git-fetch.js';
-import { encodeProjectDir, overrideClaudeRoots } from '../server/lib/management.js';
+import { encodeProjectDir } from '../server/lib/management.js';
+import { overrideClaudeRoots } from '../server/lib/paths.js';
 import { resetSettings, setPinned, setSettings } from '../server/lib/settings.js';
 import type { FetchClock, GitStatsResponse } from '../shared/types.js';
 
