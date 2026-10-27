@@ -3,8 +3,8 @@ import { useId, useState } from 'react';
 import type { JobError } from '../../../../shared/routine-file';
 import { useDraft } from '../../hooks/useDraft';
 import {
-  FIELDS, UNREADABLE, cronFor, fmValue, formKind, frontmatterReadable, routeErrors, switchPreset, timeoutUnitView, timeoutWithUnit, visibleFields,
-  type FieldDef, type FieldId, type FormKind, type Limits, type Machines, type ModelEffort, type Permission, type Preset, type Repos, type Schedule,
+  FIELDS, UNREADABLE, formKind, frontmatterReadable, routeErrors, scheduleEdit, schedulePick, timeoutUnitView, timeoutWithUnit, visibleFields,
+  type FieldDef, type FieldId, type FormKind, type Limits, type Machines, type ModelEffort, type Permission, type Repos, type Schedule, type ScheduleStep,
   type Summary, type TimeoutUnit, type Tools
 } from '../../lib/routineForm';
 import { jobPins } from '../../lib/routines';
@@ -242,16 +242,10 @@ export default function JobRows({ text, onText, errors, readOnly, ctl, onFile }:
   const ctx = { pinCount: jobPins('pinned', ctl.pins).length, kind };
 
   const put = <K extends FieldId>(id: K, v: Val<K>) => onText((FIELDS[id] as unknown as FieldDef<Val<K>>).write(text, v));
-  const applySchedule = (s: Schedule) => {
-    const cron = cronFor(s);
-    setSchedView(s.preset === 'custom' || cron === null ? s : null);
-    if (cron !== null) put('schedule', s);
-  };
-  const pickPreset = (current: Schedule, p: Preset) => {
-    if (p === current.preset) return;
-    // Custom starts from the cron as the file has it and writes nothing until it is typed in.
-    if (p === 'custom') setSchedView({ preset: 'custom', text: fmValue(text, 'cron')?.value ?? '' });
-    else applySchedule(switchPreset(current, p));
+  const apply = (step: ScheduleStep | null) => {
+    if (step === null) return;
+    setSchedView(step.view);
+    if (step.write !== null) put('schedule', step.write);
   };
 
   const control = (id: FieldId, value: unknown) => {
@@ -259,7 +253,8 @@ export default function JobRows({ text, onText, errors, readOnly, ctl, onFile }:
     switch (id) {
       case 'schedule': {
         const v = schedView ?? (value as Schedule);
-        return <ScheduleControl value={v} now={ctl.now} disabled={disabled} onPick={p => pickPreset(v, p)} onChange={applySchedule} />;
+        return <ScheduleControl value={v} now={ctl.now} disabled={disabled} onPick={p => apply(schedulePick(text, v, p))}
+          onChange={s => apply(scheduleEdit(s))} />;
       }
       case 'machines': return <MachinesControl v={value as Machines} ctl={ctl} disabled={disabled} put={v => put('machines', v)} />;
       case 'repos': return <ReposControl v={value as Repos} ctl={ctl} disabled={disabled} put={v => put('repos', v)} />;

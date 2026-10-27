@@ -293,7 +293,7 @@ line under the toolbar, one `busy` key so only the clicked control greys out, an
   fetches the row and opens the ChatDrawer, and its failure shows beside the link that was clicked.
 - **Drawer:** `JobDrawer` shows one text two ways, switched by a `Form | File` seg in its header (Form by default). Form is `JobRows`: one summary row per
   setting the job's `run:` kind shows (Schedule, Machines, Repos, Script or Prompt, Model, Permission, Limits, Tools), one opened at a time, each control
-  writing only the lines its field owns through the registry in `client/src/lib/routineForm.ts` (Schedule's six presets live in `ScheduleControl`). A
+  writing only the lines its field owns through the registry in `client/src/lib/routineForm.ts` (Schedule's six presets live in `ScheduleControl`; what a preset click or an edit shows and writes is `routineForm.ts`'s `schedulePick` / `scheduleEdit`). A
   `/validate` error shows inside the row that owns its line and turns that row's summary red; the rest show under the rows. A value the form cannot show
   reads `edit in File`. File is the raw textarea. The text is validated on each keystroke (debounced) in both views; a New job's **Save and install**
   writes `enabled: true` and **Save, keep paused** writes `false`, a New job whose schedule is Manual has a single **Save** (`enabled: true`; nothing
