@@ -117,6 +117,11 @@ export interface Config {
    */
   syncPermissionMode: PermissionMode;
   /**
+   * Stamp dashboard-launched `claude` children — spawns and routine runs — with this tool's own entrypoint label (`SPAWN_OWN_ENTRYPOINT=true`) instead
+   * of the default `sdk-cli`. Off by default: an unsupported workaround for anthropics/claude-code#97074, see `entrypoint.ts`.
+   */
+  spawnOwnEntrypoint: boolean;
+  /**
    * Extra `Host` names the server answers to (`ALLOWED_HOSTS`, comma-separated: exact names, `.suffix` rules, or `*` for any). Loopback, IP literals,
    * single-label names and `.localhost`/`.local`/`.ts.net` are always allowed — this is for public tunnels. See `lib/request-guard.ts`.
    */
@@ -156,6 +161,7 @@ export const DEFAULTS = {
   CLAUDE_BIN: '',
   SPAWN_MAX_PERMISSION: 'auto',
   SYNC_PERMISSION_MODE: 'auto',
+  SPAWN_OWN_ENTRYPOINT: false,
   ALLOWED_HOSTS: '',
   ROUTINES_DIR: '~/claude-global/routines',
   ROUTINE_MACHINE: '',
@@ -343,6 +349,7 @@ export function loadConfig(options: { envPath?: string } = {}): Config {
     claudeBin: (src('CLAUDE_BIN') || DEFAULTS.CLAUDE_BIN).trim(),
     spawnMaxPermission: toPermissionMode(src('SPAWN_MAX_PERMISSION'), DEFAULTS.SPAWN_MAX_PERMISSION),
     syncPermissionMode: toPermissionMode(src('SYNC_PERMISSION_MODE'), DEFAULTS.SYNC_PERMISSION_MODE, 'SYNC_PERMISSION_MODE'),
+    spawnOwnEntrypoint: toBool(src('SPAWN_OWN_ENTRYPOINT'), DEFAULTS.SPAWN_OWN_ENTRYPOINT),
     allowedHosts: (src('ALLOWED_HOSTS') || DEFAULTS.ALLOWED_HOSTS).split(',').map(h => h.trim()).filter(Boolean),
     // Each also reads its name from before Schedules became Routines (`SCHEDULES_DIR`, …), so an `.env` written then keeps working.
     routinesDir: (src('ROUTINES_DIR') || src('SCHEDULES_DIR') || DEFAULTS.ROUTINES_DIR).trim(),

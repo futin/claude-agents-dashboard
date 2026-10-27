@@ -51,8 +51,9 @@ labelled too.
 
 Three details that are load-bearing:
 
-- **Only `sdk-cli` earns `dashboard`; every other value, unknown or absent included,
-  is `local`.** The failure direction is chosen: under-claiming costs a pill, while
+- **Only `sdk-cli` and `claude-agents-dashboard` earn `dashboard`; every other value, unknown or absent included,
+  is `local`.** The second is what a spawn stamps under `SPAWN_OWN_ENTRYPOINT` ([spawn](spawn.md#own-entrypoint-label)), and it is read whether
+  the switch is on now or not, so turning it off never strands the sessions launched while it was on. The failure direction is chosen: under-claiming costs a pill, while
   over-claiming would tell you a session is invisible to the desktop app while it sits
   in its sidebar.
 - **Newest record wins.** One transcript on this machine runs `sdk-cli` →

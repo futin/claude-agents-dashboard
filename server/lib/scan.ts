@@ -12,6 +12,7 @@ import { launchCwd, readTranscript } from './transcript.js';
 import { readAgentsCached } from './agents-cache.js';
 import { SUBAGENT_DIR } from './subagent-usage.js';
 import { refreshCwd } from './token-refresh.js';
+import { DASHBOARD_ENTRYPOINT, HEADLESS_ENTRYPOINT } from './entrypoint.js';
 import { readSessionTasks } from './tasks.js';
 import { repoNameFor } from './worktree-repo.js';
 import { defaultClaudeRoots, isClaudeOwned } from './paths.js';
@@ -114,15 +115,14 @@ export function decodeProjectName(dirName: string): string {
   return base || dirName;
 }
 
-/** The transcript `entrypoint` value a headless `claude -p` run writes. */
-const HEADLESS_ENTRYPOINT = 'sdk-cli';
-
 /**
  * Which surfaces a session exists on, from the transcript's own `entrypoint`
  * (see {@link SessionSurface} for what each value promises the reader).
  *
  * Only `sdk-cli` — a headless `-p` run, which is what a dashboard spawn is —
- * earns `dashboard`. Everything else, **an unrecognized or absent value
+ * and `claude-agents-dashboard` — what a spawn stamps under `SPAWN_OWN_ENTRYPOINT`
+ * (`entrypoint.ts`), read whatever the switch says now so a session launched
+ * with it on stays resumable after it is turned off — earn `dashboard`. Everything else, **an unrecognized or absent value
  * included**, is `local`: the failure direction matters, because `local` is the
  * unremarkable case that prints no pill, while a wrong `dashboard` would tell
  * you a session is invisible to the desktop app when it is sitting in its
@@ -136,7 +136,7 @@ const HEADLESS_ENTRYPOINT = 'sdk-cli';
  * keep past adoption (see `docs/subsystems/spawn.md`).
  */
 export function sessionSurface(entrypoint: string | null | undefined): SessionSurface {
-  return entrypoint === HEADLESS_ENTRYPOINT ? 'dashboard' : 'local';
+  return entrypoint === HEADLESS_ENTRYPOINT || entrypoint === DASHBOARD_ENTRYPOINT ? 'dashboard' : 'local';
 }
 
 /** One transcript file as a ref, or null when it is gone or not a file. */

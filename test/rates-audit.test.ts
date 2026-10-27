@@ -20,8 +20,9 @@ import type { LedgerLine, TokenCounts } from '../server/lib/usage-ledger.js';
 import type { Interval } from '../server/lib/usage-rate.js';
 import {
   binCovariates, DAY_MS, emptyAcc, explainedShare, formatShares, gapVerdict, gateFailures, ledgerRows, mergeBins,
-  MIXED_SURFACE, modifierRows, readRecords, rebuildLedger, recordWeighted, surfaceLabel, walkTranscripts
+  isInteractive, MIXED_SURFACE, modifierRows, readRecords, rebuildLedger, recordWeighted, surfaceLabel, walkTranscripts
 } from '../scripts/lib/transcript-audit.js';
+import { rateSurface } from '../server/lib/usage-rate.js';
 import type { Acc, AuditRecord } from '../scripts/lib/transcript-audit.js';
 
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -213,6 +214,19 @@ export function run(): number {
   if (test('surface label: 85% claude-desktop → claude-desktop; 70/30 → mixed-surface', () => {
     assert.strictEqual(surfaceLabel(new Map([['claude-desktop', 85], ['sdk-cli', 15]])), 'claude-desktop');
     assert.strictEqual(surfaceLabel(new Map([['claude-desktop', 70], ['sdk-cli', 30]])), MIXED_SURFACE);
+  })) p++; else f++;
+
+  if (test('rate surfaces are billing classes: only sdk-cli is headless, the dashboard\'s own label is interactive', () => {
+    assert.strictEqual(rateSurface('sdk-cli'), 'headless');
+    // A dashboard session by ownership (scan.ts), but billed at the interactive
+    // rate (anthropics/claude-code#97074) — headless would blend two rates.
+    assert.strictEqual(rateSurface('claude-agents-dashboard'), 'interactive');
+    assert.strictEqual(rateSurface('claude-desktop'), 'interactive');
+    assert.strictEqual(rateSurface(''), 'interactive');
+    assert.strictEqual(isInteractive('sdk-cli'), false);
+    assert.strictEqual(isInteractive('claude-agents-dashboard'), true);
+    assert.strictEqual(isInteractive('(none)'), true);
+    assert.strictEqual(isInteractive(MIXED_SURFACE), false);
   })) p++; else f++;
 
   // ── modifiers ──

@@ -51,6 +51,7 @@ import type { ChildProcess, SpawnOptions } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 
 import type { Config } from './config.js';
+import { DASHBOARD_ENTRYPOINT } from './entrypoint.js';
 import type { LaunchingSession, PermissionMode, ProjectRef, StopState } from '../../shared/types.js';
 
 /** The permission ladder, lowest to highest. Array index order IS the ordering. */
@@ -641,9 +642,11 @@ export function launch(
   // keys (measured), but that is filtering behaviour to not lean on — an
   // absent key needs no guarantee at all. CLAUDE_DASHBOARD_ONESHOT is deleted
   // for the same reason: a server started inside a one-shot session's shell
-  // would otherwise turn the reply hold off for every child it spawns.
+  // would otherwise turn the reply hold off for every child it spawns. The one
+  // value set back is this tool's own label, under SPAWN_OWN_ENTRYPOINT.
   const env = { ...process.env };
   delete env.CLAUDE_CODE_ENTRYPOINT;
+  if (config.spawnOwnEntrypoint) env.CLAUDE_CODE_ENTRYPOINT = DASHBOARD_ENTRYPOINT;
   delete env.CLAUDE_DASHBOARD_ONESHOT;
   if (input.oneShot) env.CLAUDE_DASHBOARD_ONESHOT = '1';
 

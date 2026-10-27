@@ -776,8 +776,10 @@ Seven things are deliberate:
 - **`sur` is a parallel map too, and it keeps the raw `entrypoint`** (bug-23). `model → entrypoint → counts`, from the `entrypoint` every assistant record
   carries (`sdk-cli`, `claude-desktop`, `cli`, …). A model's surfaces need not sum to its `tok`: a record with no `entrypoint` is counted in `tok` and in no
   surface, so the shortfall reads as unattributed rather than as a third surface. Absent on every line written before 2026-09-23, and absent stays absent
-  exactly as for `req`. The raw value is recorded and the headless/interactive class is applied at read time (`rateSurface` in `usage-rate.ts`, via
-  `scan.ts`' own `sessionSurface`), so the classification can change without the record being wrong.
+  exactly as for `req`. The raw value is recorded and the headless/interactive class is applied at read time (`rateSurface` in `usage-rate.ts`), so the
+  classification can change without the record being wrong. The class is the **billing label**, not session ownership: only `sdk-cli` is headless, and
+  `claude-agents-dashboard` (a dashboard spawn under `SPAWN_OWN_ENTRYPOINT`) is interactive although `sessionSurface` calls it `dashboard`, because
+  anthropics/claude-code#97074 measures a tool's own label at the interactive rate. `pnpm audit:rates -- gap` sides bins the same way.
 
 #### Every measured number in this document predates the nested-transcript fix
 

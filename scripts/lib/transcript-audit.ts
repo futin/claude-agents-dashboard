@@ -16,10 +16,10 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-import { listUsageTranscripts, sessionSurface } from '../../server/lib/scan.js';
+import { listUsageTranscripts } from '../../server/lib/scan.js';
 import { rawTokens, sumWindow, weightedTokens, weightsFor } from '../../server/lib/usage-ledger.js';
 import type { LedgerLine, TokenCounts, UsageEvent } from '../../server/lib/usage-ledger.js';
-import { DOMINANCE, isUnpriced, totalWeighted } from '../../server/lib/usage-rate.js';
+import { DOMINANCE, isUnpriced, rateSurface, totalWeighted } from '../../server/lib/usage-rate.js';
 import type { Interval } from '../../server/lib/usage-rate.js';
 
 export const DAY_MS = 86_400_000;
@@ -511,9 +511,9 @@ export function gapVerdict(ratio: number | null, shares: Partial<Record<Covariat
   return `not on disk (best: ${best ? `${best[0]} ${best[1].toFixed(2)}` : 'none'})`;
 }
 
-/** Is a bin labelled `surface` on the interactive side? `mixed-surface` is on neither. */
+/** Is a bin labelled `surface` on the interactive side? `mixed-surface` is on neither. Sides are billing classes, as in `rateSurface`. */
 export function isInteractive(surface: string): boolean {
-  return surface !== MIXED_SURFACE && sessionSurface(surface === '(none)' ? '' : surface) === 'local';
+  return surface !== MIXED_SURFACE && rateSurface(surface === '(none)' ? '' : surface) === 'interactive';
 }
 
 // ── ledger ──

@@ -159,7 +159,8 @@ character (`\n`, `\r`, `\0` or any other C0 character except tab) in a baked val
 the env file's content counts as an `update`.
 
 **The baked environment.** `routineEnv(config)` builds one list for both an installed job and a `/run` spawn: `PATH`, `HOME`, `USER` and `LOGNAME` as the server sees them,
-`CLAUDE_BIN`, `SPAWN_MAX_PERMISSION`, `SYNC_PERMISSION_MODE`, `ROUTINE_MACHINE` and `ROUTINES_DIR`. `.env` values live in `Config`, never in
+`CLAUDE_BIN`, `SPAWN_MAX_PERMISSION`, `SYNC_PERMISSION_MODE`, `ROUTINE_MACHINE` and `ROUTINES_DIR`, plus `CLAUDE_CODE_ENTRYPOINT=claude-agents-dashboard`
+only under `SPAWN_OWN_ENTRYPOINT` ([spawn](spawn.md#own-entrypoint-label)); toggling it reaches installed jobs at the next reconcile. `.env` values live in `Config`, never in
 `process.env`, so nothing reaches a child unless it is baked; without this `git`, `gh`, `pnpm` and the CLI's own plugin launches exit 127 under launchd
 and cron, which hand a job no shell rc. `USER` (with `LOGNAME`, falling back to the OS account name when the server has neither) is what the `claude`
 CLI looks its claude.ai login up by in the macOS Keychain; without it every claude step fails `Not logged in · Please run /login`. `RUN_ROUTINE_GRACE_MS` is a wrapper test seam and is not baked.

@@ -73,7 +73,8 @@ The atoms in `sessions/atoms.tsx`, in every view that has room for them:
 - **Surface pill** — where the session lives, when that isn't the obvious answer. A headless
   spawn appears in no other list, which is worth saying on the row rather than leaving to be
   rediscovered. `scan.ts`'s `sessionSurface` reads the transcript's own `entrypoint`: only
-  `sdk-cli` (a headless `-p` run, which is what a [dashboard spawn](spawn.md) is) earns a
+  `sdk-cli` (a headless `-p` run, which is what a [dashboard spawn](spawn.md) is) and
+  `claude-agents-dashboard` (the same spawn under `SPAWN_OWN_ENTRYPOINT`) earn a
   `dashboard` pill, and everything else — an unrecognized or absent value included — is
   `local` and prints nothing at all. The fail direction is deliberate: under-claiming loses a
   pill, while a wrong `dashboard` would say a session is invisible to the desktop app when it
