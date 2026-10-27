@@ -2,8 +2,8 @@ import { useCallback, useRef, useState } from 'react';
 
 import type { OpenFolderRequest } from '../../../shared/types';
 import { useAnswerToken } from './useAnswerToken';
-import { authHeaders } from '../lib/answerToken';
 import { openFolderNote } from '../lib/openFolder';
+import { postWrite } from '../lib/postWrite';
 
 export interface OpenFolderControl {
   /** `POST /api/open-folder` `{path}`. A no-op while this hook's own POST is out. Never throws. */
@@ -28,11 +28,9 @@ export function useOpenFolder(): OpenFolderControl {
     if (pendingRef.current) return;
     pendingRef.current = true;
     setPending(true);
-    const headers = authHeaders(token, { 'Content-Type': 'application/json' });
     const body: OpenFolderRequest = { path };
-    fetch('/api/open-folder', { method: 'POST', headers, body: JSON.stringify(body) })
-      .then(async res => openFolderNote(res.status, res.status === 403 ? await res.json().catch(() => null) : null))
-      .catch(() => "Couldn't open the folder.")
+    postWrite('/api/open-folder', { token, body })
+      .then(result => openFolderNote(result.status, result.body ?? null))
       .then(setNote)
       .finally(() => {
         pendingRef.current = false;

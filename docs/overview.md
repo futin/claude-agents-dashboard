@@ -324,7 +324,7 @@ client/src/
                   useConfigs, useConfigsScope (the scope + the one index
                   fetch, shared by the rail's tree and the page), useAnalytics,
                   useUsageProfile, useUsageRates, useUsageHistory, usePendingQuestion, usePendingPlan,
-                  usePendingMessage, useRemoteAnswer, useSpawn, useStopSession, usePins, usePinReorder (Projects' pin grip), useOpenFolder (Git's Open folder
+                  usePendingMessage (the three thin over usePendingReply, the reply panels' shared poll and POST), useRemoteAnswer, useSpawn, useStopSession, usePins, usePinReorder (Projects' pin grip), useOpenFolder (Git's Open folder
                   key),
                   useAccount (the header chip's 30s poll, owned by App), useGitFetch (Git's Fetch all key), useGitQuick (the Sync menu's Pull and Push),
                   useCodegraph (the CodeGraph sub-view's 30s visible-only poll, 3s while a run is live), useCodegraphRun (its Sync / Reindex keys),
@@ -347,7 +347,8 @@ client/src/
                   usageRatesFormat, usageHistory (the History tab's step path, ticks and figures), panelCollapse, surface, walkChart (the headroom
                   chart's geometry), walkRows (the same walk as day rows), holds,
                   composer (that keyboard's pure rules and the session's latest `wrap_up` suggestion), modelLabel (`claude-opus-5-5` → `Opus 5.5`),
-                  notifyRows (Settings' push-event rows), writeRefusal (a 403's token vs read-only-network kind), writeStatus (Settings › Local ›
+                  notifyRows (Settings' push-event rows), writeRefusal (a 403's token vs read-only-network kind), postWrite (every write hook's POST and its one read of the reply),
+                  pendingReply (the reply panels' phase machine), writeStatus (Settings › Local ›
                   Connection's write-access line),
                   webNotify, backClose, clipboard (copyText with the execCommand fallback), stopControl, triage (the board/triage piles), answerToken (the token store + authHeaders),
                   stickyStrip, agentLabel (a subagent's type only when informative),

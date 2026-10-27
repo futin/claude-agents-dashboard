@@ -361,7 +361,11 @@ record often has no `end_turn`, so on disk it looks recent + pending = `working`
 even though nothing runs. So `scan.ts` `liveCwds()` shells out twice — `ps -Ao pid=,comm=`
 for the pids whose comm ends in `/claude` (or *is* `claude`), then
 `lsof -p <pids> -a -d cwd -Fn` for those pids' cwds; a session with **neither** cwd key in
-that set is forced to `idle`, no matter the transcript.
+that set is forced to `idle`, no matter the transcript. That one `ps` stdout also yields
+`runningClaudeProcs` (the count of matching pids; `null` when `ps` failed, `0` when it ran and
+matched nothing), so a scan forks one `ps -Ao pid=,comm=`, not a second one for the count
+(`countClaudeProcs`). `scanSnapshot` likewise lists the transcript tree once per request and
+hands that listing to both the held-wait sweep and the scan (`ScanOptions.transcripts`).
 
 **Two cwd keys, either one is proof of life.** `lsof` reports the *process* cwd, and a
 transcript's newest `cwd` drifts away from it in both directions, so neither value is reliable

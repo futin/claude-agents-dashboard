@@ -62,6 +62,27 @@ export function run(): number {
     assert.equal(r.analysis!.totals.billableApprox, 160); // 100+50+10
   });
 
+  // #312: a session split across two project dirs (a `cd` into a worktree) resolves to its live half, whichever
+  // dir `readdirSync` yields first — so run it with the halves' dir names both ways round.
+  for (const [oldDir, newDir] of [['-a-old', '-z-new'], ['-z-old', '-a-new']]) {
+    t(`split session → the newer half's cwd (old half in ${oldDir})`, () => {
+      const home = fakeHome({ sessionAnalyticsLog: logLine('2026-07-12', 'demo', 'split123', 'one id, two dirs.') });
+      const id = 'split123-0000-1111-2222-333344445555';
+      const write = (dirName: string, cwd: string, mtimeSec: number) => {
+        const dir = path.join(home, '.claude', 'projects', dirName);
+        fs.mkdirSync(dir, { recursive: true });
+        const file = path.join(dir, `${id}.jsonl`);
+        fs.writeFileSync(file, JSON.stringify(turn(cwd, '2026-07-12T10:00:00.000Z')));
+        fs.utimesSync(file, mtimeSec, mtimeSec);
+      };
+      write(oldDir, '/old', 1_000_000);
+      write(newDir, '/new', 2_000_000);
+      const reports = listReports(5, { homeDir: home });
+      assert.equal(reports.length, 1);
+      assert.equal(reports[0].cwd, '/new');
+    });
+  }
+
   t('missing transcript → lesson kept, analysis null, project from log', () => {
     const home = fakeHome({ sessionAnalyticsLog: logLine('2026-07-12', 'ghostproj', 'deadbeef', 'still logged.') });
     const reports = listReports(5, { homeDir: home });

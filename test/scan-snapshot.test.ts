@@ -7,6 +7,8 @@ import assert from 'node:assert';
 
 import { testAsync, userRecord, withServer } from './api-harness.js';
 import { scanSnapshot } from '../server/api.js';
+import { pendingSessionIds, register as registerQuestion } from '../server/lib/pending.js';
+import { planSessionIds, register as registerPlan } from '../server/lib/plans.js';
 import type { SessionsResponse } from '../shared/types.js';
 
 const ENV = 'SHOW_USAGE=false\nSKIP_PROC_SCAN=true\n';
@@ -47,6 +49,26 @@ export async function run(): Promise<number> {
       const one = (await h.req('/api/sessions?project=beta')).json as unknown as SessionsResponse;
       assert.deepStrictEqual(one.sessions.map(s => s.id), ['p-b']);
       assert.deepStrictEqual(one.projects, ['alpha', 'beta']);
+    });
+  }));
+
+  check(await testAsync('held waits on two sessions whose transcripts moved on are both swept, and neither row is flagged', async () => {
+    await withServer(ENV, async h => {
+      const later = new Date(Date.now() + 60_000).toISOString();
+      const moved = (id: string, cwd: string) => [{ ...(userRecord(`${id}-u1`, 'hello', cwd) as object), timestamp: later }];
+      h.plant('held-q', moved('held-q', '/x/alpha'));
+      h.plant('held-p', moved('held-p', '/x/beta'));
+      registerQuestion('held-q', [], 60_000, () => {});
+      registerPlan('held-p', 'plan', 60_000, () => {});
+      const snap = scanSnapshot(h.cfg);
+      assert.equal(pendingSessionIds().size, 0);
+      assert.equal(planSessionIds().size, 0);
+      const rows = snap.sessions.filter(s => s.id === 'held-q' || s.id === 'held-p');
+      assert.equal(rows.length, 2);
+      for (const r of rows) {
+        assert.equal(r.remoteQuestion, false, r.id);
+        assert.equal(r.remotePlan, false, r.id);
+      }
     });
   }));
 

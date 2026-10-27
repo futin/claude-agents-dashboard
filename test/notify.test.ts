@@ -240,10 +240,30 @@ export async function run(): Promise<number> {
   }))) p++; else f++;
 
   // The one case that exercises the real lookup, so the fallback is covered
-  // rather than stubbed. Runs one scan; no id this shaped can ever match.
+  // rather than stubbed. Reads one listing; no id this shaped can ever match.
   if (test('an unknown session falls back to a short id', () => {
     resetNotify();
     assert.strictEqual(resolveLabel(conf(), 'deadbeef-0000-0000-0000-000000000000'), 'deadbeef');
+  })) p++; else f++;
+
+  // #312: the label is read from the one transcript, not from a scan's top rows — a named session past the
+  // lookback, behind more than `maxSessions` newer ones, used to come back as its id prefix.
+  if (test('a named session outside the scan window still gets its name', () => {
+    resetNotify();
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'cad-label-'));
+    const dir = path.join(root, '-x-proj');
+    fs.mkdirSync(dir);
+    const id = 'abcdef12-0000-0000-0000-000000000000';
+    const write = (name: string, records: unknown[], mtimeSec?: number): void => {
+      const file = path.join(dir, `${name}.jsonl`);
+      fs.writeFileSync(file, records.map(r => JSON.stringify(r)).join('\n') + '\n');
+      if (mtimeSec !== undefined) fs.utimesSync(file, mtimeSec, mtimeSec);
+    };
+    const user = (cwd: string) => ({ type: 'user', cwd, timestamp: '2026-07-01T10:00:00Z', message: { role: 'user', content: 'hi' } });
+    write(id, [user('/x/proj'), { type: 'custom-title', customTitle: 'my-name', sessionId: id }], (Date.now() - 100 * 3600_000) / 1000);
+    for (let i = 0; i < 3; i++) write(`newer-${i}`, [user('/x/proj')]);
+    const c = conf({ lookbackHours: 48, maxSessions: 2 });
+    assert.strictEqual(resolveLabel(c, id, root), 'my-name');
   })) p++; else f++;
 
   if (await testAsync('a throwing sender never escapes maybeSend', () => inTmpCwd(() => {
