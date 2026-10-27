@@ -1,8 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 
 import { useAnswerToken } from './useAnswerToken';
-import { authHeaders } from '../lib/answerToken';
-import { refusalKind } from '../lib/writeRefusal';
+import { postWrite } from '../lib/postWrite';
 import type { HealthResponse, RemoteAnswerState } from '../../../shared/types';
 
 /** Slow poll: the switch only changes when someone flips it. */
@@ -51,25 +50,21 @@ export function useRemoteAnswer(): RemoteAnswerControl {
   const toggle = useCallback(async () => {
     if (!state?.available || busy) return;
     setBusy(true);
-    const headers = authHeaders(token, { 'Content-Type': 'application/json' });
     try {
-      const res = await fetch('/api/remote-answer', {
-        method: 'POST', headers, body: JSON.stringify({ enabled: !state.enabled })
-      });
-      if (res.status === 403) {
-        const readOnlyNow = refusalKind(res.status, await res.json().catch(() => undefined)) === 'read-only';
+      // A network failure leaves the pill as it was; the poll will re-sync.
+      const result = await postWrite('/api/remote-answer', { token, body: { enabled: !state.enabled } });
+      if (result.refusal) {
+        const readOnlyNow = result.refusal === 'read-only';
         setReadOnly(readOnlyNow);
         setNeedsToken(!readOnlyNow);
-      } else if (res.ok) {
+      } else if (result.ok) {
         setNeedsToken(false);
         setReadOnly(false);
         // This endpoint answers with the switch state alone — merge, or the
         // health-only fields (origin) would blank out until the next poll.
-        const body = (await res.json()) as RemoteAnswerState;
-        setState(prev => ({ ...(prev ?? { ok: true as const }), ...body }));
+        const body = result.body as RemoteAnswerState | undefined;
+        if (body) setState(prev => ({ ...(prev ?? { ok: true as const }), ...body }));
       }
-    } catch {
-      /* leave the pill as it was; the poll will re-sync */
     } finally {
       setBusy(false);
     }

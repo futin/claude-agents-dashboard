@@ -1023,6 +1023,12 @@ export interface NotifyEventRequest {
   permissionMode?: string;
 }
 
+/** A write that answers nothing but its success: the answer, plan-answer and message-answer routes, the notify hooks, a codegraph run, a reveal. */
+export interface OkResponse { ok: true }
+
+/** `POST /api/spawn/:id/stop` and `POST /api/sessions/:id/stop`: killed outright, or a graceful stop still landing. */
+export type StopResponse = { stopped: true } | { stopping: true };
+
 /** `POST /api/notify/test` — what the Settings button reports back. */
 export interface NotifyTestResponse {
   outcome: string;
@@ -1101,6 +1107,13 @@ export interface ServerSettings {
   staleEnvKeys: string[];
 }
 
+/**
+ * `POST /api/settings`'s body: the {@link ServerSettings} keys the browser may change, each optional, plus a partial `notify` block. Picked from
+ * `ServerSettings` so a renamed field breaks the build on both sides; the server-derived fields (`notifyAvailable`, `usageAvailable`, …) are not in it.
+ */
+export type ServerSettingsPatch =
+  Partial<Pick<ServerSettings, 'idleSecs' | 'answerSecs' | 'recordUsageHistory' | 'gitFetchSecs' | 'trustTailnet'>> & { notify?: NotifyPatch };
+
 /** Where an overriding `CLAUDE_DASHBOARD_*` variable was found. */
 export interface EnvOverride {
   value: string;
@@ -1114,6 +1127,9 @@ export interface EnvOverride {
  * `answerSecs` are optional so an older server (or a test double) that omits
  * them simply hides the badge / falls back to the hook's own defaults.
  */
+/** `POST /api/remote-answer`: the switch, and how many held waits switching off released. */
+export interface RemoteAnswerToggleResponse extends RemoteAnswerState { released: number }
+
 export interface HealthResponse extends RemoteAnswerState {
   ok: true;
   origin?: ConnectionOrigin;
@@ -1819,6 +1835,9 @@ export interface FetchClock {
   lastEndedMs: number | null;
 }
 
+/** `POST /api/git-fetch`: the clock once the fetch has finished. */
+export interface GitFetchResponse { fetch: FetchClock }
+
 /** Payload of `GET /api/git-stats`: one entry per pin, in pin order. */
 export interface GitStatsResponse {
   repos: RepoGitStats[];
@@ -2222,6 +2241,14 @@ export interface RoutinesResponse {
 export interface RoutineRunsResponse {
   runs: RoutineRun[];
   stats: RoutineStats;
+}
+
+/** A routine create, save, toggle or delete: the job as it now parses (absent on a delete), and the reconcile that followed. */
+export interface RoutineWriteResponse { job?: RoutineJob | null; reconcile: ReconcileReport }
+
+/** The 422 a routine create, save or run answers when the file does not parse: every error, each naming its line. */
+export interface RoutineErrorsResponse {
+  errors: JobError[];
 }
 
 /** `POST /api/routines/validate`: what the drawer shows under the textarea. `summary` is the one-line reading of a valid file, null otherwise. */

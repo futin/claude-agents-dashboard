@@ -7,6 +7,7 @@
  */
 import { isManualCron } from '../../../shared/cron';
 import { scalarEnd, writeFrontmatterLine } from '../../../shared/frontmatter';
+import { LABEL_PREFIX, NAME_RE, RESERVED } from '../../../shared/routine-file';
 import type {
   ReconcileChange, RoutineJob, RoutineJobRow, RoutineRun, RoutineRunConflict, RoutineStats, RoutineStep, RoutinesResponse,
 } from '../../../shared/types';
@@ -281,14 +282,11 @@ git pull --ff-only --quiet
 `;
 }
 
-const JOB_NAME = /^[a-z0-9-]+$/;
-const RESERVED_NAMES = new Set(['runs', 'validate', 'reconcile', 'reveal']);
-
 /** The Name field's live check, the same rules the server applies (pattern, reserved route segments, an existing file); null when the name is usable. */
 export function nameProblem(name: string, existing: readonly string[]): string | null {
   if (name === '') return 'Name the job; it becomes the filename.';
-  if (!JOB_NAME.test(name)) return 'Lowercase letters, digits and - only.';
-  if (RESERVED_NAMES.has(name)) return `${name} is reserved.`;
+  if (!NAME_RE.test(name)) return 'Lowercase letters, digits and - only.';
+  if (RESERVED.has(name)) return `${name} is reserved.`;
   if (existing.includes(name)) return `A job named ${name} already exists.`;
   return null;
 }
@@ -457,7 +455,7 @@ export function runClock(run: RoutineRun): string {
 
 /** The launchd label a job is installed under (spec §Reconcile), what the menu's Copy puts on the clipboard. */
 export function launchdLabel(name: string): string {
-  return `com.claude-dashboard.routine.${name}`;
+  return `${LABEL_PREFIX}${name}`;
 }
 
 /**

@@ -4,7 +4,7 @@ import { fetchFailureOf } from '../lib/gitClock';
 import type { FetchFailure } from '../lib/gitClock';
 import type { WriteAccess } from '../../../shared/types';
 import { useAnswerToken } from './useAnswerToken';
-import { authHeaders } from '../lib/answerToken';
+import { postWrite } from '../lib/postWrite';
 
 export interface GitFetchControl {
   /** Fetch all now: `POST /api/git-fetch`. A no-op while this tab's own POST is out, while a token the server wants is not stored, and on a read-only network. */
@@ -37,12 +37,8 @@ export function useGitFetch(tokenRequired: boolean | undefined, writeAccess: Wri
     if (pendingRef.current || writeAccess === 'none' || (tokenRequired === true && !tokenStored)) return;
     pendingRef.current = true;
     setPending(true);
-    const headers = authHeaders(token);
-    fetch('/api/git-fetch', { method: 'POST', headers })
-      .then(
-        async res => setFailure(res.ok ? null : fetchFailureOf(res.status, res.status === 403 ? await res.json().catch(() => undefined) : undefined)),
-        () => setFailure(fetchFailureOf('network'))
-      )
+    postWrite('/api/git-fetch', { token })
+      .then(result => setFailure(result.ok ? null : fetchFailureOf(result.status === 0 ? 'network' : result.status, result.body)))
       .finally(() => {
         pendingRef.current = false;
         setPending(false);
