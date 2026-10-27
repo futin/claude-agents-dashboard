@@ -6,7 +6,7 @@
 import assert from 'node:assert';
 
 import {
-  FIELDS, UNREADABLE, cronFor, fmValue, formKind, frontmatterReadable, routeErrors, setKey, switchPreset, visibleFields
+  FIELDS, UNREADABLE, cronFor, fmValue, formKind, frontmatterReadable, routeErrors, setKey, switchPreset, timeoutUnitView, timeoutWithUnit, visibleFields
 } from '../client/src/lib/routineForm.js';
 import { jobTemplate, setRepos } from '../client/src/lib/routines.js';
 import type { Schedule } from '../client/src/lib/routineForm.js';
@@ -301,6 +301,25 @@ export function run(): number {
     onlyLineChanged(SKILL, out, at);
     assert.strictEqual(lm.write(SKILL, { maxTurns: '', timeout: '30m' }), SKILL.split('\n').filter(l => !l.startsWith('max-turns:')).join('\n'));
     assert.strictEqual(lm.write(SHELL, { maxTurns: null, timeout: '2h' }), SHELL.replace('enabled: true\n', 'enabled: true\ntimeout: 2h\n'));
+  });
+
+  t('limits: the timeout unit is the file\'s, the pick before any timeout, and none for an unparsed one', () => {
+    assert.deepStrictEqual(timeoutUnitView('30m', null), { amount: '30', shown: 'm', commit: 'm' });
+    assert.deepStrictEqual(timeoutUnitView('30m', 'h'), { amount: '30', shown: 'm', commit: 'm' });
+    assert.deepStrictEqual(timeoutUnitView(null, null), { amount: '', shown: 'm', commit: 'm' });
+    assert.deepStrictEqual(timeoutUnitView(null, 's'), { amount: '', shown: 's', commit: 's' });
+    assert.deepStrictEqual(timeoutUnitView('90', null), { amount: '90', shown: null, commit: 'm' });
+    assert.deepStrictEqual(timeoutUnitView('90', 'h'), { amount: '90', shown: 'h', commit: 'h' });
+    assert.deepStrictEqual(timeoutUnitView('1.5h', null), { amount: '1.5h', shown: null, commit: 'm' });
+  });
+
+  t('limits: a unit click rewrites a parsed timeout, repairs a bare whole number, and writes nothing otherwise', () => {
+    assert.strictEqual(timeoutWithUnit('30m', 'h'), '30h');
+    assert.strictEqual(timeoutWithUnit('90', 's'), '90s');
+    assert.strictEqual(timeoutWithUnit(' 90 ', 's'), '90s');
+    assert.strictEqual(timeoutWithUnit('1.5h', 'm'), null);
+    assert.strictEqual(timeoutWithUnit('0', 'm'), null);
+    assert.strictEqual(timeoutWithUnit(null, 'm'), null);
   });
 
   // --- tools ---

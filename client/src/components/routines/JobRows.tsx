@@ -3,9 +3,9 @@ import { useId, useState } from 'react';
 import type { JobError } from '../../../../shared/routine-file';
 import { useDraft } from '../../hooks/useDraft';
 import {
-  FIELDS, UNREADABLE, cronFor, fmValue, formKind, frontmatterReadable, routeErrors, switchPreset, visibleFields,
+  FIELDS, UNREADABLE, cronFor, fmValue, formKind, frontmatterReadable, routeErrors, switchPreset, timeoutUnitView, timeoutWithUnit, visibleFields,
   type FieldDef, type FieldId, type FormKind, type Limits, type Machines, type ModelEffort, type Permission, type Preset, type Repos, type Schedule,
-  type Summary, type Tools
+  type Summary, type TimeoutUnit, type Tools
 } from '../../lib/routineForm';
 import { jobPins } from '../../lib/routines';
 import { EFFORTS, MODELS } from '../../lib/spawnOptions';
@@ -148,16 +148,17 @@ function PermissionControl({ v, disabled, put }: { v: Permission; disabled: bool
 }
 
 function LimitsControl({ v, kind, disabled, put }: { v: Limits; kind: FormKind; disabled: boolean; put(v: Limits): void }) {
-  const parsed = /^(\d+)([smh])$/.exec(v.timeout ?? '');
-  const [unitPick, setUnitPick] = useState<'s' | 'm' | 'h'>('m');
-  // The file's unit wins; the local pick only matters while no timeout is written, so a unit can be chosen before the number.
-  const unit = (parsed?.[2] as 's' | 'm' | 'h' | undefined) ?? unitPick;
+  const [unitPick, setUnitPick] = useState<TimeoutUnit | null>(null);
+  // The file's unit wins; the local pick matters while no timeout is written, so a unit can be chosen before the number, and while the written one does
+  // not parse, where nothing is pressed until a unit is picked.
+  const view = timeoutUnitView(v.timeout, unitPick);
   const turns = useDraft<HTMLInputElement>(v.maxTurns ?? '', s => put({ ...v, maxTurns: s.trim() || null }), s => WHOLE_COUNT.test(s));
-  const amount = useDraft<HTMLInputElement>(parsed ? parsed[1] : v.timeout ?? '', s => put({ ...v, timeout: s.trim() ? `${s.trim()}${unit}` : null }),
+  const amount = useDraft<HTMLInputElement>(view.amount, s => put({ ...v, timeout: s.trim() ? `${s.trim()}${view.commit}` : null }),
     s => WHOLE_COUNT.test(s));
-  const pickUnit = (u: 's' | 'm' | 'h') => {
+  const pickUnit = (u: TimeoutUnit) => {
     setUnitPick(u);
-    if (parsed) put({ ...v, timeout: `${parsed[1]}${u}` });
+    const timeout = timeoutWithUnit(v.timeout, u);
+    if (timeout !== null) put({ ...v, timeout });
   };
   return (
     <>
@@ -172,7 +173,8 @@ function LimitsControl({ v, kind, disabled, put }: { v: Limits; kind: FormKind; 
           <span className="rtn-label">Timeout</span>
           <div className="rtn-f-row rtn-f-tight">
             <span className="rtn-in rtn-f-num"><input inputMode="numeric" aria-label="Timeout" placeholder="1" disabled={disabled} {...amount} /></span>
-            <Seg label="Timeout unit" value={unit} disabled={disabled} pick={pickUnit} options={[['s', 's'], ['m', 'm'], ['h', 'h']]} />
+            <Seg<TimeoutUnit | null> label="Timeout unit" value={view.shown} disabled={disabled} pick={u => u && pickUnit(u)}
+              options={[['s', 's'], ['m', 'm'], ['h', 'h']]} />
           </div>
         </div>
       </div>

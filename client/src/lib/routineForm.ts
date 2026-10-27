@@ -371,6 +371,28 @@ const limits: FieldDef<Limits> = {
   },
 };
 
+export type TimeoutUnit = 's' | 'm' | 'h';
+const TIMEOUT = /^(\d+)([smh])$/;
+
+/**
+ * What the Limits row shows for a timeout: the amount, the pressed unit and the unit a typed amount commits with. The file's unit wins; with no timeout
+ * the local pick (else `m`) is pressed, so a unit can be chosen before the number; a written timeout the row cannot parse presses nothing until one is picked.
+ */
+export function timeoutUnitView(timeout: string | null, pick: TimeoutUnit | null): { amount: string; shown: TimeoutUnit | null; commit: TimeoutUnit } {
+  const parsed = TIMEOUT.exec(timeout ?? '');
+  if (parsed) return { amount: parsed[1], shown: parsed[2] as TimeoutUnit, commit: parsed[2] as TimeoutUnit };
+  if (timeout === null) return { amount: '', shown: pick ?? 'm', commit: pick ?? 'm' };
+  return { amount: timeout, shown: pick, commit: pick ?? 'm' };
+}
+
+/** The timeout a unit click writes, or null to write nothing: a bare positive whole number is repaired to carry the unit, anything else unparsed is left. */
+export function timeoutWithUnit(timeout: string | null, u: TimeoutUnit): string | null {
+  const parsed = TIMEOUT.exec(timeout ?? '');
+  if (parsed) return `${parsed[1]}${u}`;
+  const bare = timeout?.trim() ?? '';
+  return /^[1-9]\d*$/.test(bare) ? `${bare}${u}` : null;
+}
+
 const tools: FieldDef<Tools> = {
   id: 'tools', label: 'Tools', keys: ['allowed-tools'], kinds: kindsOf('tools'),
   read(text) {
