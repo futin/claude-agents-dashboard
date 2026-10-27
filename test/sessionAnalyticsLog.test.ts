@@ -1,7 +1,10 @@
 import assert from 'node:assert';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 
 import {
-  parseSessionAnalyticsLog, lessonForSession, parseLogEvents, statusForSession
+  parseSessionAnalyticsLog, lessonForSession, parseLogEvents, readSessionAnalyticsLog, resetSessionAnalyticsLogCache, statusForSession
 } from '../server/lib/sessionAnalyticsLog.js';
 
 function test(name: string, fn: () => void): boolean {
@@ -117,6 +120,30 @@ export function run(): number {
     assert.deepEqual(statusForSession(statuses, 'bbbb2222-1111'), { status: 'dropped', date: '2026-08-02' });
     assert.equal(statusForSession(statuses, 'ffffffff-0000'), null);
     assert.equal(statusForSession(statuses, ''), null);
+  });
+
+  t('readSessionAnalyticsLog reuses its parse until the file changes, and forgets a deleted file', () => {
+    resetSessionAnalyticsLogCache();
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cad-kaizen-'));
+    const log = path.join(dir, 'session-analytics-log.md');
+    const line = (id: string) => `- 2026-07-10 [proj-a] ${id}: 500k billable (2M ctx), top cost Read. Lesson: read less.\n`;
+    try {
+      fs.writeFileSync(log, line('aaaa1111'));
+      const first = readSessionAnalyticsLog(log);
+      assert.equal(first.length, 1);
+      assert.strictEqual(readSessionAnalyticsLog(log), first, 'untouched file returns the remembered array');
+      fs.appendFileSync(log, line('bbbb2222'));
+      assert.equal(readSessionAnalyticsLog(log).length, 2);
+      fs.rmSync(log);
+      assert.deepEqual(readSessionAnalyticsLog(log), []);
+      fs.writeFileSync(log, line('cccc3333'));
+      const again = readSessionAnalyticsLog(log);
+      assert.equal(again.length, 1);
+      assert.equal(again[0].idPrefix, 'cccc3333');
+    } finally {
+      resetSessionAnalyticsLogCache();
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
   });
 
   console.log(`  ${ok}/${n}`);

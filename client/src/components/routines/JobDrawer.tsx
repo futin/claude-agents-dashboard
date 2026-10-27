@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 
 import { serializeEnabled, type JobError } from '../../../../shared/routine-file';
-import type { RoutineFile, RoutineJobRow, RoutineValidateResponse } from '../../../../shared/types';
+import type { RoutineErrorsResponse, RoutineFile, RoutineJobRow, RoutineValidateResponse } from '../../../../shared/types';
 import { useAnswerToken } from '../../hooks/useAnswerToken';
 import { useBackClose } from '../../hooks/useBackClose';
 import type { RoutineWriteControl } from '../../hooks/useRoutineWrite';
@@ -106,7 +106,8 @@ export default function JobDrawer({ mode, row, confirmDelete, existing, ctl, sen
       : await send('Save', `save:${row!.name}`, 'PUT', `/api/routines/${encodeURIComponent(row!.name)}`, { text }, true);
     setSaving(false);
     if (r.ok) { onClose(); return; }
-    const body = r.body as { errors?: JobError[] } | null;
+    // Still checked: a type is no proof of what an older server sends.
+    const body = r.body as Partial<RoutineErrorsResponse> | null;
     if (r.status === 422 && body && Array.isArray(body.errors)) setServerErrors(body.errors);
     setFailure(r.failure);
   };

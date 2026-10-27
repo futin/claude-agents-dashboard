@@ -266,7 +266,8 @@ then turn tailnet trust off and use the token; behind a *public* tunnel it is th
   and permission decisions as well as plain replies, so naming one device understates it.
   And never "instead of the terminal": on only *allows* remote answers, gate 3 still
   sends desk-time questions to the terminal.
-- **`usePendingQuestion`** polls the question endpoint at the configured refresh rate
+- **`usePendingQuestion`** — like `usePendingPlan` and `usePendingMessage`, a thin wrapper over `usePendingReply` (`client/src/hooks/usePendingReply.ts`),
+  whose every transition is a pure function in `client/src/lib/pendingReply.ts` — polls the question endpoint at the configured refresh rate
   (`useSettings().settings.refreshMs`, same cadence as `useSessionChat`; the response is a
   ~50-byte in-memory lookup). The reset-on-new-question effect is deliberately kept in its
   own `useEffect` keyed on `id` alone, while the poll's effect also depends on `refreshMs` —
@@ -275,7 +276,8 @@ then turn tailnet trust off and use the token; behind a *public* tunnel it is th
   `idle → submitting → submitted | gone`, tracked against the current `questionId` so a
   new question resets the panel and a stale banner never leaks across questions.
   404/409 → `gone` ("answered in the terminal, or it expired"), 403 → the token prompt.
-  A 403 whose body is `read-only from this network` sets `readOnly` instead (`refusalKind` in `client/src/lib/writeRefusal.ts`): no token can unlock that
+  A 403 whose body is `read-only from this network` sets `readOnly` instead (`refusalKind` in `client/src/lib/writeRefusal.ts`, which `postWrite` in
+  `client/src/lib/postWrite.ts` applies to the one read of every write's reply): no token can unlock that
   network, so the panel shows `READ_ONLY_TEXT` where the prompt would be. The plan and reply panels do the same, and the switch shows a `read-only` mark.
 - **Visible without the drawer.** `QuestionPanel` only exists inside `ChatDrawer`, so a
   held question used to be invisible unless you already had that exact session's drawer
@@ -324,6 +326,8 @@ then turn tailnet trust off and use the token; behind a *public* tunnel it is th
     - client/src/lib/panelCollapse.ts
     - client/src/components/RemoteAnswerToggle.tsx
     - client/src/hooks/usePendingQuestion.ts
+    - client/src/hooks/usePendingReply.ts
+    - client/src/lib/pendingReply.ts
     - client/src/hooks/useRemoteAnswer.ts
     - client/src/hooks/useAnswerToken.ts
     - client/src/lib/answerToken.ts

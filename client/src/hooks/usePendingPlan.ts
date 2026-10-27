@@ -1,10 +1,7 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback } from 'react';
 
-import { useAnswerToken } from './useAnswerToken';
-import { authHeaders } from '../lib/answerToken';
-import { useSettings } from './useSettings';
-import { refusalKind } from '../lib/writeRefusal';
-import type { PendingPlan, PlanAnswerRequest, SessionPlan } from '../../../shared/types';
+import { usePendingReply } from './usePendingReply';
+import type { PendingPlan, PlanAnswerRequest } from '../../../shared/types';
 
 /**
  * idle       — nothing sent for the current plan
@@ -38,117 +35,15 @@ export interface PendingPlanState {
  * approving is only ever possible on the card itself.
  */
 export function usePendingPlan(id: string): PendingPlanState {
-  const [pending, setPending] = useState<PendingPlan | null>(null);
-  const [phase, setPhase] = useState<PlanPhase>('idle');
-  const [needsToken, setNeedsToken] = useState(false);
-  const [readOnly, setReadOnly] = useState(false);
-  // Shared with the question panel — one dashboard, one token.
-  const [token, setToken] = useAnswerToken();
-  const { settings: { refreshMs } } = useSettings();
+  const reply = usePendingReply<PendingPlan, 'sent'>({ id, pollPath: 'plan', answerPath: 'plan-answer', idOf: p => p.planId, sentPhase: 'sent' });
+  const { send, dismiss: drop } = reply;
 
-  /** planId the current phase refers to — a new plan resets the panel. */
-  const phaseFor = useRef<string | null>(null);
-  const tokenRef = useRef(token);
-  tokenRef.current = token;
+  const reject = useCallback((feedback: string) => send(
+    (p): PlanAnswerRequest => ({ planId: p.planId, verdict: 'reject', feedback }), { text: feedback }
+  ), [send]);
 
-  // Kept separate from the poll below: retuning the refresh rate restarts the
-  // interval, and it must not wipe the panel of a plan already on screen.
-  useEffect(() => {
-    setPending(null);
-    setPhase('idle');
-    phaseFor.current = null;
-  }, [id]);
+  const dismiss = useCallback(() => drop((p): PlanAnswerRequest => ({ planId: p.planId, verdict: 'dismiss' })), [drop]);
 
-  useEffect(() => {
-    let live = true;
-
-    async function poll(): Promise<void> {
-      let body: SessionPlan | null = null;
-      try {
-        const res = await fetch(`/api/sessions/${encodeURIComponent(id)}/plan`);
-        body = (await res.json()) as SessionPlan;
-      } catch {
-        return; // keep the last snapshot; the next tick retries
-      }
-      if (!live || !body || body.error) return;
-
-      const next = body.pending;
-      setPending(next);
-      if (!next) {
-        // The wait is over. Keep a fresh "sent" banner; otherwise reset.
-        if (phaseFor.current !== null) setPhase(cur => (cur === 'sent' ? cur : 'idle'));
-        return;
-      }
-      if (phaseFor.current !== next.planId) {
-        // A revised plan is waiting now — clear any stale banner/error.
-        phaseFor.current = next.planId;
-        setPhase('idle');
-      }
-    }
-
-    void poll();
-    const timer = setInterval(() => void poll(), refreshMs);
-    return () => {
-      live = false;
-      clearInterval(timer);
-    };
-  }, [id, refreshMs]);
-
-  const post = useCallback(async (body: PlanAnswerRequest): Promise<'ok' | 'gone' | 'token' | 'read-only' | 'error'> => {
-    const headers = authHeaders(tokenRef.current, { 'Content-Type': 'application/json' });
-    let status = 0;
-    let refusal: unknown;
-    try {
-      const res = await fetch(`/api/sessions/${encodeURIComponent(id)}/plan-answer`, {
-        method: 'POST', headers, body: JSON.stringify(body)
-      });
-      status = res.status;
-      if (status === 403) refusal = await res.json().catch(() => undefined);
-    } catch {
-      return 'error';
-    }
-    if (status === 200) return 'ok';
-    if (status === 403) return refusalKind(status, refusal) === 'read-only' ? 'read-only' : 'token';
-    // 404 (nothing waiting) and 409 (a newer plan now) both mean the plan we
-    // were looking at is no longer answerable.
-    if (status === 404 || status === 409) return 'gone';
-    return 'error';
-  }, [id]);
-
-  const reject = useCallback(async (feedback: string) => {
-    const current = pending;
-    if (!current || phase === 'submitting' || !feedback.trim()) return;
-    setPhase('submitting');
-    const outcome = await post({ planId: current.planId, verdict: 'reject', feedback });
-    if (outcome === 'ok') {
-      setNeedsToken(false);
-      setReadOnly(false);
-      setPhase('sent');
-    } else if (outcome === 'token') {
-      setNeedsToken(true);
-      setReadOnly(false);
-      setPhase('idle');
-    } else if (outcome === 'read-only') {
-      setReadOnly(true);
-      setNeedsToken(false);
-      setPhase('idle');
-    } else if (outcome === 'gone') {
-      setPhase('gone');
-    } else {
-      setPhase('idle');
-    }
-  }, [pending, phase, post]);
-
-  const dismiss = useCallback(async () => {
-    const current = pending;
-    if (!current || phase === 'submitting') return;
-    setPhase('submitting');
-    const outcome = await post({ planId: current.planId, verdict: 'dismiss' });
-    if (outcome === 'token') setNeedsToken(true);
-    if (outcome === 'read-only') setReadOnly(true);
-    setPhase(outcome === 'gone' ? 'gone' : 'idle');
-    if (outcome === 'ok') setPending(null);
-  }, [pending, phase, post]);
-
+  const { pending, phase, needsToken, readOnly, setToken } = reply;
   return { pending, phase, needsToken, readOnly, reject, dismiss, setToken };
 }

@@ -22,6 +22,7 @@ import path from 'node:path';
 
 import { parseFrontmatter } from '../../shared/frontmatter.js';
 import { listTranscripts } from './scan.js';
+import type { TranscriptRef } from './scan.js';
 import { readTranscript } from './transcript.js';
 import type { Config } from './config.js';
 import type {
@@ -65,6 +66,11 @@ interface ProjectsOptions {
    * lives under `os.tmpdir()`.
    */
   claudeRoots?: readonly string[];
+  /**
+   * A listing of `root` the caller already took, used in place of `listTranscripts` — `pinsPayload` lists once for its three lists. Omitted ⇒ each
+   * call lists `root` itself.
+   */
+  transcripts?: readonly TranscriptRef[];
 }
 
 /* ---------------------------------------------------------------- helpers */
@@ -588,12 +594,17 @@ function projectsRootOf(options: ProjectsOptions): string {
   return options.root || path.join(claudeHome(options.homeDir), 'projects');
 }
 
+/** The caller's listing when it passed one, else a fresh one of {@link projectsRootOf}. */
+function transcriptsOf(options: ProjectsOptions): readonly TranscriptRef[] {
+  return options.transcripts ?? listTranscripts(projectsRootOf(options));
+}
+
 function nowOf(options: ProjectsOptions): number {
   return Number.isFinite(options.now) ? (options.now as number) : Date.now();
 }
 
 /** Newest transcript per project dir, over the transcripts `keep` admits. */
-function newestPerDir(transcripts: ReturnType<typeof listTranscripts>, keep: (t: { id: string; dirName: string; mtimeMs: number }) => boolean): Newest {
+function newestPerDir(transcripts: readonly TranscriptRef[], keep: (t: { id: string; dirName: string; mtimeMs: number }) => boolean): Newest {
   const out: Newest = new Map();
   for (const t of transcripts) {
     if (!keep(t)) continue;
@@ -660,7 +671,7 @@ export function listRecentProjects(config: Partial<Config>, options: ProjectsOpt
   const lookbackMs = lookbackMsOf(config);
   const archived = options.archivedIds || null;
   const pinned = options.pinnedDirs || null;
-  const transcripts = listTranscripts(projectsRootOf(options));
+  const transcripts = transcriptsOf(options);
 
   const newest = newestPerDir(transcripts, t => !(archived && archived.has(t.id)) && now - t.mtimeMs <= lookbackMs);
   if (pinned && pinned.size > 0) {
@@ -723,7 +734,7 @@ export function listOlderProjects(config: Partial<Config>, options: ProjectsOpti
   const horizonMs = OLDER_PROJECTS_DAYS * DAY_MS;
   const archived = options.archivedIds || null;
   const claudeRoots = options.claudeRoots ?? defaultClaudeRoots(options.homeDir);
-  const transcripts = listTranscripts(projectsRootOf(options));
+  const transcripts = transcriptsOf(options);
 
   const newest = newestPerDir(transcripts, t => !(archived && archived.has(t.id)) && now - t.mtimeMs <= horizonMs);
 
@@ -747,7 +758,7 @@ export function listPinRows(config: Partial<Config>, dirNames: readonly string[]
   const listedPaths = new Set(recent.map(r => r.path));
   const unlisted = new Set(dirNames.filter(d => !byDir.has(d)));
   const stale = unlisted.size > 0
-    ? newestPerDir(listTranscripts(projectsRootOf(options)), t => unlisted.has(t.dirName))
+    ? newestPerDir(transcriptsOf(options), t => unlisted.has(t.dirName))
     : new Map() as Newest;
 
   return dirNames.map(dirName => {

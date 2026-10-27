@@ -15,7 +15,7 @@
 import path from 'node:path';
 
 import { analyzeSession } from './analyze.js';
-import { listTranscripts, projectsRoot } from './scan.js';
+import { findTranscriptByPrefix, listTranscripts, projectsRoot } from './scan.js';
 import { claudeHome } from './management.js';
 import { readLogEvents, recentLessons, statusForSession } from './sessionAnalyticsLog.js';
 import type { AnalyticsReport } from '../../shared/types.js';
@@ -48,7 +48,7 @@ export function listReports(limit: number, opts: { homeDir?: string } = {}): Ana
 
   return recent.map(entry => {
     const ref = ID_RE.test(entry.idPrefix)
-      ? transcripts.find(t => t.id.startsWith(entry.idPrefix))
+      ? findTranscriptByPrefix(transcripts, entry.idPrefix)
       : undefined;
     const analysis = ref ? analyzeSession(ref.file, ref.id) : null;
     const sessionId = ref?.id ?? entry.idPrefix;

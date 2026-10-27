@@ -34,7 +34,7 @@ import { execFileSync } from 'node:child_process';
 import https from 'node:https';
 
 import { getState } from './remoteState.js';
-import { scanSessions } from './scan.js';
+import { findTranscript, projectsRoot, sessionFromRef } from './scan.js';
 import { getSettings } from './settings.js';
 import { staleEnvKeys } from './config.js';
 import type { Config } from './config.js';
@@ -161,9 +161,9 @@ export function setSender(fn: Sender | null): void {
 }
 
 /**
- * Test seam: swap the label lookup. Without it every delivery test would run a
- * real scan of `~/.claude/projects` — slow, and dependent on whatever sessions
- * the developer happens to have on disk.
+ * Test seam: swap the label lookup. Without it every delivery test would read
+ * the real `~/.claude/projects` — dependent on whatever sessions the developer
+ * happens to have on disk.
  */
 export function setLabelResolver(fn: ((config: Config, sessionId: string) => string) | null): void {
   labelResolver = fn;
@@ -231,16 +231,20 @@ export function atDesk(idleSecs: number | null, thresholdSecs: number): boolean 
 /**
  * Human label for a session. Every caller has an id and none has a name — the
  * hooks cannot know it and the registration handlers never needed it — so it is
- * resolved the way the rest of the app does. Called only after the predicate has
- * passed, so the scan is never paid for a push that will not be sent.
+ * resolved the way `GET /api/sessions/:id/row` does: the one transcript
+ * `findTranscript` names, built into one row with no liveness probe, no wait sets
+ * and no list skips. No scan, so a session outside the list's top rows or its
+ * lookback still gets its name. Called only after the predicate has passed, so
+ * the read is never paid for a push that will not be sent. `root` is a test seam.
  */
-export function resolveLabel(config: Config, sessionId: string): string {
+export function resolveLabel(config: Config, sessionId: string, root = projectsRoot()): string {
   if (labelResolver) return labelResolver(config, sessionId);
   try {
-    const found = scanSessions(config).sessions.find(s => s.id === sessionId);
-    if (found) return found.sessionName || found.project;
+    const ref = findTranscript(root, sessionId);
+    const row = ref ? sessionFromRef(ref, { now: Date.now(), activeWindowMin: config.activeWindowMin, liveCwds: null, lessons: null }) : null;
+    if (row) return row.sessionName || row.project;
   } catch {
-    /* scan failed — a poor label beats no push */
+    /* read failed — a poor label beats no push */
   }
   return sessionId.slice(0, 8);
 }

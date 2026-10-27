@@ -1,13 +1,12 @@
 import { useCallback, useEffect, useState } from 'react';
 
 import { useAnswerToken } from './useAnswerToken';
-import { authHeaders } from '../lib/answerToken';
+import { postWrite } from '../lib/postWrite';
 import { settingsSaveFailure } from '../lib/serverSettingsSave';
-import { refusalKind } from '../lib/writeRefusal';
-import type { NotifyPatch, ServerSettings } from '../../../shared/types';
+import type { NotifyPatch, ServerSettings, ServerSettingsPatch } from '../../../shared/types';
 
-/** What a caller can ask about: the two number fields, or the notify policy. */
-export type SavingKey = 'idleSecs' | 'answerSecs' | 'notify' | 'recordUsageHistory' | 'gitFetchSecs' | 'trustTailnet';
+/** What a caller can ask about: any key a save can carry, the notify policy included. */
+export type SavingKey = keyof ServerSettingsPatch;
 
 export interface ServerSettingsControl {
   state: ServerSettings | null;
@@ -26,7 +25,7 @@ export interface ServerSettingsControl {
   readOnly: boolean;
   /** Why the last save did not land — a 400, a 500, no answer — or null. A 403 is `needsToken` / `readOnly` instead. */
   saveError: string | null;
-  save: (patch: Partial<ServerSettings>) => Promise<void>;
+  save: (patch: ServerSettingsPatch) => Promise<void>;
   /** Patch one or more notify keys. Merged server-side, so send only what changed. */
   saveNotify: (patch: NotifyPatch) => Promise<void>;
 }
@@ -70,28 +69,26 @@ export function useServerSettings(): ServerSettingsControl {
     return () => { live = false; };
   }, []);
 
-  const save = useCallback(async (patch: Partial<ServerSettings>) => {
+  const save = useCallback(async (patch: ServerSettingsPatch) => {
     // The patch names what is being saved, so the rows don't have to be told.
     const keys = Object.keys(patch);
     setSavingKeys(prev => [...prev, ...keys]);
-    const headers = authHeaders(token, { 'Content-Type': 'application/json' });
     try {
-      const res = await fetch('/api/settings', { method: 'POST', headers, body: JSON.stringify(patch) });
-      setSaveError(settingsSaveFailure(res.status));
-      if (res.status === 403) {
-        const readOnlyNow = refusalKind(res.status, await res.json().catch(() => undefined)) === 'read-only';
+      const result = await postWrite('/api/settings', { token, body: patch });
+      // A network failure is status 0: the row keeps the server's last number, and the page says why.
+      setSaveError(settingsSaveFailure(result.status));
+      if (result.refusal) {
+        const readOnlyNow = result.refusal === 'read-only';
         setReadOnly(readOnlyNow);
         setNeedsToken(!readOnlyNow);
-      } else if (res.ok) {
+      } else if (result.ok) {
         setNeedsToken(false);
         setReadOnly(false);
         // Trust the response, not the request: the server clamps, so what it
         // echoes back is what the hooks will actually read.
-        setState((await res.json()) as ServerSettings);
+        const body = result.body as ServerSettings | undefined;
+        if (typeof body?.idleSecs === 'number') setState(body);
       }
-    } catch {
-      // Keep the last known value; the row stays on the server's number, and the page says why.
-      setSaveError(settingsSaveFailure(0));
     } finally {
       setSavingKeys(prev => {
         const next = [...prev];
@@ -109,7 +106,7 @@ export function useServerSettings(): ServerSettingsControl {
   // The server merges a partial `notify` block, so a single flipped checkbox is
   // the whole request — no need to round-trip the rest of the policy.
   const saveNotify = useCallback(
-    (patch: NotifyPatch) => save({ notify: patch } as unknown as Partial<ServerSettings>),
+    (patch: NotifyPatch) => save({ notify: patch }),
     [save]
   );
 

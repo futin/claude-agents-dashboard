@@ -3,6 +3,7 @@
  * directions. Every date is built from local parts and `now` is passed in, so the cases hold in any TZ.
  */
 import assert from 'node:assert';
+import fs from 'node:fs';
 
 import {
   chipClass, costDelta, createPollSeq, editsWithoutAsking, foreachLine, formatStat, groupRunsByDay, isFanOut, jobTemplate, launchdLabel, medianMs, nameProblem,
@@ -10,7 +11,7 @@ import {
   pausedLook, splitNext, splitSteps, stepPill, successRate, topTokenShare, withLate, writeFailureText
 } from '../client/src/lib/routines.js';
 import { READ_ONLY_TEXT } from '../client/src/lib/writeRefusal.js';
-import { parseJob } from '../shared/routine-file.js';
+import { LABEL_PREFIX, parseJob } from '../shared/routine-file.js';
 import type { RoutineJob, RoutineJobRow, RoutineRun, RoutineStats, RoutineStep } from '../shared/types.js';
 
 function test(name: string, fn: () => void): boolean {
@@ -403,6 +404,13 @@ export function run(): number {
     assert.deepStrictEqual(none.shown.map(x => x.index), [1, 4]);
     assert.strictEqual(none.hiddenOk, 3);
     assert.strictEqual(launchdLabel('git-sync-all'), 'com.claude-dashboard.routine.git-sync-all');
+  });
+
+  t('launchdLabel builds on the shared LABEL_PREFIX, and routines.ts copies neither it nor the reserved names', () => {
+    assert.strictEqual(launchdLabel('x'), LABEL_PREFIX + 'x');
+    const source = fs.readFileSync(new URL('../client/src/lib/routines.ts', import.meta.url), 'utf8');
+    assert.ok(!source.includes('com.claude-dashboard.routine.'), 'the label prefix is imported from shared/routine-file.ts');
+    assert.ok(!source.includes("new Set(['runs'"), 'the reserved names are imported from shared/routine-file.ts');
   });
 
   t('reconcileChip: owned by <x>, not owner for a server that never opted in, then the owner\'s verdicts', () => {
