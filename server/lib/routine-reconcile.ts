@@ -17,8 +17,9 @@ import type { Config } from './config.js';
 import { machineName, routineDirs, routineEnv } from './routine-config.js';
 import { createProbe, isOwner, readJobs, wrapperAlive } from './routine-store.js';
 import type { Probe, StoredJob } from './routine-store.js';
+import { LABEL_PREFIX } from '../../shared/routine-file.js';
 
-export const LABEL_PREFIX = 'com.claude-dashboard.routine.';
+export { LABEL_PREFIX };
 export const CRON_START = '# >>> claude-dashboard routines >>>';
 export const CRON_END = '# <<< claude-dashboard routines <<<';
 /** The names jobs were installed under before Schedules became Routines (2026-10-23). A plan reads them so an apply moves those jobs over, never twins them. */

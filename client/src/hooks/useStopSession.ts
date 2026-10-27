@@ -1,8 +1,8 @@
 import { useCallback, useState } from 'react';
 
 import { useAnswerToken } from './useAnswerToken';
-import { authHeaders } from '../lib/answerToken';
-import { READ_ONLY_TEXT, refusalKind } from '../lib/writeRefusal';
+import { postWrite, replyError } from '../lib/postWrite';
+import { READ_ONLY_TEXT } from '../lib/writeRefusal';
 
 export interface StopControl {
   /**
@@ -37,24 +37,21 @@ export function useStopSession(): StopControl {
     if (pending) return false;
     setPending(true);
     setError(null);
-    const headers = authHeaders(token, { 'Content-Type': 'application/json' });
     try {
-      const res = await fetch(`/api/sessions/${encodeURIComponent(sessionId)}/stop`, {
-        method: 'POST', headers, body: JSON.stringify({ force })
-      });
-      if (res.status === 403) {
-        const readOnlyNow = refusalKind(res.status, await res.json().catch(() => undefined)) === 'read-only';
+      const result = await postWrite(`/api/sessions/${encodeURIComponent(sessionId)}/stop`, { token, body: { force } });
+      if (result.status === 0) {
+        setError('Could not reach the server.');
+        return false;
+      }
+      if (result.refusal) {
+        const readOnlyNow = result.refusal === 'read-only';
         setNeedsToken(!readOnlyNow);
         if (readOnlyNow) setError(READ_ONLY_TEXT);
         return false;
       }
       setNeedsToken(false);
-      if (res.ok) return true;
-      const body = await res.json().catch(() => null) as { error?: string } | null;
-      setError(body?.error ?? `Stop failed (${res.status}).`);
-      return false;
-    } catch {
-      setError('Could not reach the server.');
+      if (result.ok) return true;
+      setError(replyError(result.body) ?? `Stop failed (${result.status}).`);
       return false;
     } finally {
       setPending(false);

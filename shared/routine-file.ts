@@ -15,8 +15,12 @@ export interface PinSnapshot { dirName: string; name: string; path: string | nul
 
 export interface ParsedJob { job: RoutineJob | null; errors: JobError[] }
 
-const NAME_RE = /^[a-z0-9-]+$/;
-const RESERVED = new Set(['runs', 'validate', 'reconcile', 'reveal']);
+/** A routine's name: the filename, and a segment of its API routes. */
+export const NAME_RE = /^[a-z0-9-]+$/;
+/** Names a routine may not take: the `/api/routines/<x>` routes already spelled with them. */
+export const RESERVED: ReadonlySet<string> = new Set(['runs', 'validate', 'reconcile', 'reveal']);
+/** The launchd label every routine is installed under — a contract between the server's reconciler and the client's display. */
+export const LABEL_PREFIX = 'com.claude-dashboard.routine.';
 const KEY_RE = /^([A-Za-z0-9_-]+):(.*)$/;
 const KNOWN = new Set([
   'cron', 'machines', 'run', 'foreach', 'cwd', 'enabled', 'model', 'effort', 'permission-mode', 'allowed-tools', 'max-turns', 'timeout',

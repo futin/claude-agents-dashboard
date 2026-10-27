@@ -88,7 +88,9 @@ import type {
   SessionMessage, SessionPlan, SessionPrInfo, SessionPrResponse, SessionQuestion, SessionsResponse, SessionChat, SessionDetail, SpawnRequest,
   ModelRateRow, RateLimit, ServerSettings, SpawnResponse, UsageCoverage, UsageProfileCell,
   UsageHistoryResponse, UsageProfileResponse, UsageRatesResponse, WaitResult, ConnectionOrigin, WriteAccess,
-  ReconcileReport, RoutineFile, RoutineJob, RoutineJobRow, RoutineRunsResponse, RoutinesResponse, RoutineValidateResponse, Session
+  ReconcileReport, RoutineFile, RoutineJob, RoutineJobRow, RoutineRunsResponse, RoutinesResponse, RoutineValidateResponse, Session,
+  AccountResponse, GitFetchResponse, HealthResponse, NotifyTestResponse, OkResponse, RemoteAnswerToggleResponse, RoutineErrorsResponse,
+  RoutineWriteResponse, StopResponse, TranscribeResponse
 } from '../shared/types.js';
 
 /** Session ids are transcript filenames (UUIDs) — restrict to safe chars. */
@@ -457,7 +459,7 @@ export async function serveTranscribe(
   if (body.bytes.length === 0) return sendJson(res, 400, { error: 'empty body' });
 
   const out = await transcribe(config, body.bytes, ext);
-  if (out.ok) return sendJson(res, 200, { text: out.text });
+  if (out.ok) return sendJson(res, 200, { text: out.text } satisfies TranscribeResponse);
   const code = out.reason === 'busy' ? 429 : out.reason === 'timeout' ? 504 : 500;
   return sendJson(res, code, { error: out.reason });
 }
@@ -586,7 +588,7 @@ export function serveHealth(config: Config, res: ServerResponse, req: IncomingMe
     spawnAvailable: probeSpawn(config),
     spawnMaxPermission: config.spawnMaxPermission,
     syncPermissionMode: clampPermission(config.syncPermissionMode, config.spawnMaxPermission)
-  });
+  } satisfies HealthResponse);
 }
 
 /**
@@ -996,11 +998,11 @@ export function shapeUsageRates(opts: {
 export function serveAccount(config: Config, res: ServerResponse, homeDir?: string): void {
   try {
     const profile = readAccountProfile(homeDir);
-    if (!config.showUsage) return sendJson(res, 200, { profile });
+    if (!config.showUsage) return sendJson(res, 200, { profile } satisfies AccountResponse);
     const u = getCachedUsageState();
-    sendJson(res, 200, { profile, usage: u.usage, usageStatus: u.status });
+    sendJson(res, 200, { profile, usage: u.usage, usageStatus: u.status } satisfies AccountResponse);
   } catch {
-    sendJson(res, 200, { profile: null });
+    sendJson(res, 200, { profile: null } satisfies AccountResponse);
   }
 }
 
@@ -1103,7 +1105,7 @@ export async function serveRemoteAnswerToggle(
   // appear within a second instead of sitting out the full window. One switch,
   // both stores: a held plan is as remote as a held question.
   const released = body.enabled ? 0 : dismissAll() + dismissAllPlans() + dismissAllMessages();
-  sendJson(res, 200, { ...state, released });
+  sendJson(res, 200, { ...state, released } satisfies RemoteAnswerToggleResponse);
 }
 
 /**
@@ -1177,7 +1179,7 @@ export async function serveSessionAnswer(
   if (!body) return sendBadBody(res, { error: 'bad body' });
 
   switch (answerPending(id, body)) {
-    case 'ok': return sendJson(res, 200, { ok: true });
+    case 'ok': return sendJson(res, 200, { ok: true } satisfies OkResponse);
     case 'not-found': return sendJson(res, 404, { error: 'no question is waiting' });
     case 'mismatch': return sendJson(res, 409, { error: 'that question is no longer the one waiting' });
     default: return sendJson(res, 400, { error: 'bad answer' });
@@ -1270,7 +1272,7 @@ export async function serveSessionPlanAnswer(
   if (!body) return sendBadBody(res, { error: 'bad body' });
 
   switch (answerPlan(id, body)) {
-    case 'ok': return sendJson(res, 200, { ok: true });
+    case 'ok': return sendJson(res, 200, { ok: true } satisfies OkResponse);
     case 'not-found': return sendJson(res, 404, { error: 'no plan is waiting' });
     case 'mismatch': return sendJson(res, 409, { error: 'that plan is no longer the one waiting' });
     default: return sendJson(res, 400, { error: 'bad verdict' });
@@ -1350,7 +1352,7 @@ export async function serveSessionMessageAnswer(
   if (!body) return sendBadBody(res, { error: 'bad body' });
 
   switch (answerMessage(id, body)) {
-    case 'ok': return sendJson(res, 200, { ok: true });
+    case 'ok': return sendJson(res, 200, { ok: true } satisfies OkResponse);
     case 'not-found': return sendJson(res, 404, { error: 'no reply window is open' });
     case 'mismatch': return sendJson(res, 409, { error: 'that window is no longer the one open' });
     default: return sendJson(res, 400, { error: 'bad message' });
@@ -1393,7 +1395,7 @@ export async function servePermissionNotify(
       permissionMode: typeof body.permissionMode === 'string' ? body.permissionMode : undefined
     });
   }
-  sendJson(res, 200, { ok: true });
+  sendJson(res, 200, { ok: true } satisfies OkResponse);
 }
 
 /**
@@ -1426,13 +1428,13 @@ export async function serveNotifyEvent(
     return sendJson(res, 400, { error: 'bad event' });
   }
   // The token-renewal turn is plumbing nobody started — no event from it is worth a push (#178). Same backstop as `serveMessageWait`.
-  if (isRefreshSession(sessionId)) return sendJson(res, 200, { ok: true });
+  if (isRefreshSession(sessionId)) return sendJson(res, 200, { ok: true } satisfies OkResponse);
 
   maybeSend(config, event, {
     sessionId,
     permissionMode: typeof body.permissionMode === 'string' ? body.permissionMode : undefined
   });
-  sendJson(res, 200, { ok: true });
+  sendJson(res, 200, { ok: true } satisfies OkResponse);
 }
 
 /** `POST /api/notify/test` — fire one push regardless of policy and report the outcome. */
@@ -1440,7 +1442,7 @@ export async function serveNotifyTest(
   config: Config, req: IncomingMessage, res: ServerResponse
 ): Promise<void> {
   if (refuseWrite(config, req, res)) return;
-  sendJson(res, 200, { outcome: await sendTest(config) });
+  sendJson(res, 200, { outcome: await sendTest(config) } satisfies NotifyTestResponse);
 }
 
 /* -------------------------------------------------- spawn endpoints */
@@ -1616,8 +1618,8 @@ export function serveSpawnStop(
     // this route has always answered. An id that has since become a running
     // session reaches the graceful path instead and honestly says so, rather
     // than claiming `stopped` for a SIGTERM that has not landed yet.
-    case 'stopped': return sendJson(res, 200, { stopped: true });
-    default: return sendJson(res, 200, { stopping: true });
+    case 'stopped': return sendJson(res, 200, { stopped: true } satisfies StopResponse);
+    default: return sendJson(res, 200, { stopping: true } satisfies StopResponse);
   }
 }
 
@@ -1658,8 +1660,8 @@ export async function serveSessionStop(
 
   switch (force ? forceStopSession(id) : stopSession(id)) {
     case 'not-found': return sendJson(res, 404, { error: 'no live session' });
-    case 'stopped': return sendJson(res, 200, { stopped: true });
-    default: return sendJson(res, 200, { stopping: true });
+    case 'stopped': return sendJson(res, 200, { stopped: true } satisfies StopResponse);
+    default: return sendJson(res, 200, { stopping: true } satisfies StopResponse);
   }
 }
 
@@ -1802,7 +1804,7 @@ export async function serveGitFetch(config: Config, req: IncomingMessage, res: S
   if (refuseWrite(config, req, res)) return;
   try {
     markGitWatched();
-    sendJson(res, 200, { fetch: await fetchAll(config) });
+    sendJson(res, 200, { fetch: await fetchAll(config) } satisfies GitFetchResponse);
   } catch (e) {
     console.error('[dashboard] git fetch failed:', (e as Error).message);
     sendJson(res, 500, { error: 'git fetch failed' });
@@ -1868,7 +1870,7 @@ export async function serveCodegraphRun(config: Config, req: IncomingMessage, re
   }
   try {
     const result = await startCodegraphRun(config, body.dirName, body.kind);
-    if (result === 'started') return sendJson(res, 200, { ok: true });
+    if (result === 'started') return sendJson(res, 200, { ok: true } satisfies OkResponse);
     const [status, error] = CODEGRAPH_RUN_REFUSALS[result];
     sendJson(res, status, { error });
   } catch (e) {
@@ -2093,14 +2095,14 @@ export async function serveRoutineWrite(config: Config, name: string, req: Incom
   const dir = routineDirs(config).routines;
   if (!readJobs(dir).some(s => s.name === name)) return sendJson(res, 404, { error: 'no such job' });
   const { job, errors } = validateRoutineText(config, name, body.text);
-  if (!job) return sendJson(res, 422, { errors });
+  if (!job) return sendJson(res, 422, { errors } satisfies RoutineErrorsResponse);
   try {
     writeJob(dir, name, body.text, 'replace');
   } catch (e) {
     console.error('[dashboard] routine write failed:', (e as Error).message);
     return sendJson(res, 500, { error: 'write failed' });
   }
-  sendJson(res, 200, { job, reconcile: await applyReconcile(config) });
+  sendJson(res, 200, { job, reconcile: await applyReconcile(config) } satisfies RoutineWriteResponse);
 }
 
 /** `POST /api/routines` `{name, text}` — a new job: `409` when the file exists, else validated and written like PUT. */
@@ -2115,7 +2117,7 @@ export async function serveRoutineCreate(config: Config, req: IncomingMessage, r
   const dir = routineDirs(config).routines;
   if (readJobs(dir).some(s => s.name === name)) return sendJson(res, 409, { error: 'exists' });
   const { job, errors } = validateRoutineText(config, name, text);
-  if (!job) return sendJson(res, 422, { errors });
+  if (!job) return sendJson(res, 422, { errors } satisfies RoutineErrorsResponse);
   try {
     writeJob(dir, name, text, 'create');
   } catch (e) {
@@ -2123,7 +2125,7 @@ export async function serveRoutineCreate(config: Config, req: IncomingMessage, r
     console.error('[dashboard] routine create failed:', (e as Error).message);
     return sendJson(res, 500, { error: 'write failed' });
   }
-  sendJson(res, 200, { job, reconcile: await applyReconcile(config) });
+  sendJson(res, 200, { job, reconcile: await applyReconcile(config) } satisfies RoutineWriteResponse);
 }
 
 /** `DELETE /api/routines/:name` — remove the file and reconcile; the run log keeps the job's rows. */
@@ -2138,7 +2140,7 @@ export async function serveRoutineDelete(config: Config, name: string, req: Inco
     return sendJson(res, 500, { error: 'delete failed' });
   }
   if (!removed) return sendJson(res, 404, { error: 'no such job' });
-  sendJson(res, 200, { reconcile: await applyReconcile(config) });
+  sendJson(res, 200, { reconcile: await applyReconcile(config) } satisfies RoutineWriteResponse);
 }
 
 /** `PATCH /api/routines/:name` `{enabled}` — rewrite the `enabled:` line only (every other byte kept), then reconcile. */
@@ -2151,7 +2153,7 @@ export async function serveRoutinePatch(config: Config, name: string, req: Incom
   const stored = readJobs(dir).find(s => s.name === name);
   if (!stored) return sendJson(res, 404, { error: 'no such job' });
   // An unparseable file has no trustworthy `enabled:` line to rewrite; the drawer fixes it through PUT.
-  if (!stored.job) return sendJson(res, 422, { errors: stored.errors });
+  if (!stored.job) return sendJson(res, 422, { errors: stored.errors } satisfies RoutineErrorsResponse);
   const text = serializeEnabled(stored.text, body.enabled);
   try {
     writeJob(dir, name, text, 'replace');
@@ -2159,7 +2161,7 @@ export async function serveRoutinePatch(config: Config, name: string, req: Incom
     console.error('[dashboard] routine toggle failed:', (e as Error).message);
     return sendJson(res, 500, { error: 'write failed' });
   }
-  sendJson(res, 200, { job: parseJob(name, text).job, reconcile: await applyReconcile(config) });
+  sendJson(res, 200, { job: parseJob(name, text).job, reconcile: await applyReconcile(config) } satisfies RoutineWriteResponse);
 }
 
 /** `POST /api/routines/reconcile` `{apply?}` — the diff, applied when `apply` is true. The plugin sync script posts `{apply: true}`. */
@@ -2236,7 +2238,7 @@ export async function serveRoutineReveal(config: Config, req: IncomingMessage, r
     console.error(`[dashboard] routines reveal failed: ${(e as Error).message}`);
     return sendJson(res, 500, { error: 'open failed' });
   }
-  sendJson(res, 200, { ok: true });
+  sendJson(res, 200, { ok: true } satisfies OkResponse);
 }
 
 /**

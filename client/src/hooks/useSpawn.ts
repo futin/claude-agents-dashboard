@@ -1,8 +1,8 @@
 import { useCallback, useState } from 'react';
 
 import { useAnswerToken } from './useAnswerToken';
-import { authHeaders } from '../lib/answerToken';
-import { READ_ONLY_TEXT, refusalKind } from '../lib/writeRefusal';
+import { postWrite, replyError } from '../lib/postWrite';
+import { READ_ONLY_TEXT } from '../lib/writeRefusal';
 import type { SpawnRequest, SpawnResponse } from '../../../shared/types';
 
 export interface SpawnControl {
@@ -41,13 +41,14 @@ export function useSpawn(): SpawnControl {
     if (pending) return null;
     setPending(true);
     setError(null);
-    const headers = authHeaders(token, { 'Content-Type': 'application/json' });
     try {
-      const res = await fetch('/api/spawn', {
-        method: 'POST', headers, body: JSON.stringify(req)
-      });
-      if (res.status === 403) {
-        const readOnlyNow = refusalKind(res.status, await res.json().catch(() => undefined)) === 'read-only';
+      const result = await postWrite('/api/spawn', { token, body: req });
+      if (result.status === 0) {
+        setError('Could not reach the server.');
+        return null;
+      }
+      if (result.refusal) {
+        const readOnlyNow = result.refusal === 'read-only';
         setReadOnly(readOnlyNow);
         setNeedsToken(!readOnlyNow);
         if (readOnlyNow) setError(READ_ONLY_TEXT);
@@ -55,15 +56,8 @@ export function useSpawn(): SpawnControl {
       }
       setNeedsToken(false);
       setReadOnly(false);
-      if (res.ok) {
-        const body = (await res.json()) as SpawnResponse;
-        return body.sessionId;
-      }
-      const body = await res.json().catch(() => null) as { error?: string } | null;
-      setError(body?.error ?? `Launch failed (${res.status}).`);
-      return null;
-    } catch {
-      setError('Could not reach the server.');
+      if (result.ok) return (result.body as SpawnResponse | undefined)?.sessionId ?? null;
+      setError(replyError(result.body) ?? `Launch failed (${result.status}).`);
       return null;
     } finally {
       setPending(false);

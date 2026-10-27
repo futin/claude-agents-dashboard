@@ -33,7 +33,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 import { claudeHome } from './management.js';
-import type { EnvOverride, NotifyEvent, NotifyPolicy, ServerSettings } from '../../shared/types.js';
+import type { EnvOverride, NotifyEvent, NotifyPolicy, ServerSettings, ServerSettingsPatch } from '../../shared/types.js';
 
 /** Gitignored, repo-local — never inside `~/.claude` (read-only under Docker). */
 export const SETTINGS_FILE = '.dashboard-settings.json';
@@ -279,14 +279,7 @@ export function getSettings(homeDir?: string): ServerSettings {
  * a half-applied save is the one outcome the UI can't report honestly.
  */
 export function setSettings(patch: unknown): ServerSettings | null {
-  const body = patch as {
-    idleSecs?: unknown;
-    answerSecs?: unknown;
-    notify?: unknown;
-    recordUsageHistory?: unknown;
-    gitFetchSecs?: unknown;
-    trustTailnet?: unknown;
-  } | null;
+  const body = patch as { [K in keyof ServerSettingsPatch]?: unknown } | null;
   if (!body || typeof body !== 'object') return null;
 
   const next: Partial<Stored> = {};
