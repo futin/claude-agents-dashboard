@@ -1306,6 +1306,23 @@ export function run(): number {
     }
   })) p++; else f++;
 
+  if (test('launch under spawnOwnEntrypoint stamps claude-agents-dashboard over an inherited entrypoint', () => {
+    resetLaunches();
+    const calls: SpawnCall[] = [];
+    setSpawner(fakeSpawner(calls, []));
+    const prev = process.env.CLAUDE_CODE_ENTRYPOINT;
+    process.env.CLAUDE_CODE_ENTRYPOINT = 'claude-desktop';
+    try {
+      launch(cfg({ spawnOwnEntrypoint: true }), REF, baseInput());
+      const env = calls[0].options.env as Record<string, string>;
+      assert.strictEqual(env.CLAUDE_CODE_ENTRYPOINT, 'claude-agents-dashboard');
+    } finally {
+      if (prev === undefined) delete process.env.CLAUDE_CODE_ENTRYPOINT;
+      else process.env.CLAUDE_CODE_ENTRYPOINT = prev;
+      setSpawner(null);
+    }
+  })) p++; else f++;
+
   if (test('launch with oneShot sets CLAUDE_DASHBOARD_ONESHOT=1 in the child env', () => {
     resetLaunches();
     const calls: SpawnCall[] = [];

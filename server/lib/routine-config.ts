@@ -8,6 +8,7 @@ import os from 'node:os';
 import path from 'node:path';
 
 import type { Config } from './config.js';
+import { DASHBOARD_ENTRYPOINT } from './entrypoint.js';
 
 export interface RoutineHost {
   platform: NodeJS.Platform;
@@ -117,7 +118,7 @@ export function routineDirs(config: Config, host: Partial<RoutineHost> = {}): { 
  * The environment baked into a plist, a crontab line and a `/run` spawn: `.env` values live in `Config`, never in `process.env`, and launchd and cron
  * give a job no shell rc. Exactly these keys — the wrapper's `PATH`/`HOME`/`USER`/`LOGNAME` are the server's own, everything else comes from `Config`.
  * `USER` is load-bearing on macOS: the `claude` CLI finds its claude.ai login in the Keychain by that account name, and without it reports
- * "Not logged in · Please run /login".
+ * "Not logged in · Please run /login". `CLAUDE_CODE_ENTRYPOINT` joins them only under `SPAWN_OWN_ENTRYPOINT` (`entrypoint.ts`).
  */
 export function routineEnv(config: Config, host: Partial<RoutineHost> = {}): Record<string, string> {
   const h = { ...realHost(), ...host };
@@ -130,6 +131,7 @@ export function routineEnv(config: Config, host: Partial<RoutineHost> = {}): Rec
     SPAWN_MAX_PERMISSION: config.spawnMaxPermission,
     SYNC_PERMISSION_MODE: config.syncPermissionMode,
     ROUTINE_MACHINE: machineName(config, h).name,
-    ROUTINES_DIR: routineDirs(config, h).routines
+    ROUTINES_DIR: routineDirs(config, h).routines,
+    ...(config.spawnOwnEntrypoint ? { CLAUDE_CODE_ENTRYPOINT: DASHBOARD_ENTRYPOINT } : {})
   };
 }

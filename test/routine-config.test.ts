@@ -19,7 +19,7 @@ function test(name: string, fn: () => void): boolean {
 /** Load a Config from an `.env` body in a tmpdir, with the keys under test cleared from process.env so the host never leaks in. */
 function cfg(envBody: string): Config {
   const keys = ['ROUTINES_DIR', 'ROUTINE_MACHINE', 'ROUTINES_OWNER', 'ROUTINES_STATE_ROOT', 'SCHEDULES_DIR', 'SCHEDULE_MACHINE', 'SCHEDULES_OWNER',
-    'SCHEDULES_STATE_ROOT', 'CLAUDE_BIN', 'SPAWN_MAX_PERMISSION', 'SYNC_PERMISSION_MODE'];
+    'SCHEDULES_STATE_ROOT', 'CLAUDE_BIN', 'SPAWN_MAX_PERMISSION', 'SYNC_PERMISSION_MODE', 'SPAWN_OWN_ENTRYPOINT'];
   const saved = keys.map(k => [k, process.env[k]] as const);
   for (const k of keys) delete process.env[k];
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'routine-config-'));
@@ -66,6 +66,15 @@ export function run(): number {
     const env = routineEnv(cfg(''), { ...macHost, ...homed });
     assert.deepStrictEqual(Object.keys(env).sort(),
       ['CLAUDE_BIN', 'HOME', 'LOGNAME', 'PATH', 'ROUTINES_DIR', 'ROUTINE_MACHINE', 'SPAWN_MAX_PERMISSION', 'SYNC_PERMISSION_MODE', 'USER']);
+  });
+  t('SPAWN_OWN_ENTRYPOINT=true adds exactly CLAUDE_CODE_ENTRYPOINT=claude-agents-dashboard; unset or false adds nothing', () => {
+    const base = routineEnv(cfg(''), { ...macHost, ...homed });
+    const on = routineEnv(cfg('SPAWN_OWN_ENTRYPOINT=true\n'), { ...macHost, ...homed });
+    assert.deepStrictEqual(on, { ...base, CLAUDE_CODE_ENTRYPOINT: 'claude-agents-dashboard' });
+    assert.deepStrictEqual(routineEnv(cfg('SPAWN_OWN_ENTRYPOINT=false\n'), { ...macHost, ...homed }), base);
+    // Never inherited: a server started from a desktop-app shell must not pass its own marker to a routine.
+    const leaky = routineEnv(cfg(''), { ...macHost, ...homed, env: { HOME, PATH: '/bin', CLAUDE_CODE_ENTRYPOINT: 'claude-desktop' } });
+    assert.ok(!('CLAUDE_CODE_ENTRYPOINT' in leaky));
   });
   t('routineEnv takes only PATH, HOME and USER from the process env, the rest from Config', () => {
     const c = cfg('CLAUDE_BIN=/opt/claude\nSPAWN_MAX_PERMISSION=acceptEdits\nSYNC_PERMISSION_MODE=plan\nROUTINE_MACHINE=wsl\nROUTINES_DIR=/srv/jobs\n');

@@ -18,7 +18,7 @@ import { sameWindow } from './usage-history.js';
 import type { UsageSample } from './usage-history.js';
 import { addCounts, emptyCounts, scaleCounts, weightedTokens } from './usage-ledger.js';
 import type { LedgerLine, TokenCounts } from './usage-ledger.js';
-import { sessionSurface } from './scan.js';
+import { HEADLESS_ENTRYPOINT } from './entrypoint.js';
 import type { ModelDayRate, ModelDayState, ModelRateSurface, ModelSurfaceRate } from '../../shared/types.js';
 
 /** Weighted share of an interval one model must hold to own it. */
@@ -116,11 +116,14 @@ export interface Interval {
 
 /**
  * The two surfaces a rate is stratified by, from the transcript `entrypoint`:
- * headless `claude -p` (`sdk-cli`) against everything a person drives. The
- * mapping is `scan.ts`' own, so "headless" means one thing across the app.
+ * the `sdk-cli` label against everything else. A billing class, not session
+ * ownership, so deliberately not `scan.ts`' `sessionSurface`: a spawn stamped
+ * `claude-agents-dashboard` (`SPAWN_OWN_ENTRYPOINT`) is a dashboard session but
+ * reportedly draws on the window at the interactive rate (anthropics/claude-code#97074),
+ * and filing it under headless would blend two rates into one.
  */
 export function rateSurface(entrypoint: string): ModelRateSurface {
-  return sessionSurface(entrypoint) === 'dashboard' ? 'headless' : 'interactive';
+  return entrypoint === HEADLESS_ENTRYPOINT ? 'headless' : 'interactive';
 }
 
 /** Fixed order, so a row's surfaces never reshuffle between polls. */

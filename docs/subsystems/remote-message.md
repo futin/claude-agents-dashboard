@@ -157,7 +157,9 @@ case "$CLAUDE_CODE_ENTRYPOINT" in claude-desktop) HEADLESS=false ;; esac
 ```
 
 `sdk-cli` is what a dashboard-spawned `-p` child stamps ([spawn](spawn.md) deletes the
-inherited value precisely so it cannot stamp anything else; `sessionSurface`, scan.ts).
+inherited value precisely so it cannot stamp anything else; `sessionSurface`, scan.ts) — or
+`claude-agents-dashboard` under `SPAWN_OWN_ENTRYPOINT`, which is not on the list either, so
+the child's missing TTY still makes it headless.
 The list holds only values measured to be interactive, so an unfamiliar entrypoint leaves
 the TTY verdict standing and a new headless front-end still fails closed — the same
 direction as the unreadable-TTY case above. `serveMessageWait` accepts it

@@ -185,6 +185,7 @@ server/
   index.ts        HTTP entry + routing; static-serves client/dist in prod
   api.ts          all /api handlers (+ error fallbacks)
   lib/config.ts   .env loader — process.env > .env > defaults
+  lib/entrypoint.ts  the transcript `entrypoint` labels read or stamped: `sdk-cli`, and `claude-agents-dashboard` under SPAWN_OWN_ENTRYPOINT
   lib/request-guard.ts  pure pre-route checks: `hostAllowed` (DNS rebinding) and `crossSiteWrite` (CSRF)
   lib/transcript.ts  tail-reads a transcript → tokens/model/window/activity
   lib/title-cache.ts  remembers a custom title once it sinks below the tail window

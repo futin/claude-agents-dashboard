@@ -235,6 +235,26 @@ day a resume fails. The strip covers only sessions this dashboard launches: tran
 written *before* the fix by a marker-carrying server stay `local` and stay unresumable —
 the stamp is in the file, not recomputed.
 
+### Own entrypoint label
+
+`SPAWN_OWN_ENTRYPOINT=true` (off by default) sets one value back after the strip: `CLAUDE_CODE_ENTRYPOINT=claude-agents-dashboard`, on every session
+launch and in `routineEnv`, so routine runs carry it too. The token-renewal turn (`token-refresh.ts`) does not; it is a few tokens.
+
+Why it exists: anthropics/claude-code#97074 (opened 2026-09-25, no Anthropic reply as of 2026-10-27) measures `sdk-cli` and `sdk-ts` drawing on the
+5-hour window ~1.7–2.9× faster per token than interactive labels, with the weekly limit reportedly unaffected, and a tool's *own* label measured at the
+interactive rate. The variable is undocumented and Anthropic has not said whether the weighting is intended, so the switch is a deliberate, reversible
+choice of the person running the server, not a default. What it will not do:
+
+- **Name another client.** The label is a constant in `server/lib/entrypoint.ts`, not a `.env` value, so no setting can make a child report itself as
+  `cli`, `claude-desktop` or `claude-vscode`.
+- **Strand sessions.** `sessionSurface` reads `claude-agents-dashboard` as `dashboard` whatever the switch says now, so a session launched with it on keeps
+  its pill and stays resumable after it is turned off.
+- **Blend the window rates.** `rateSurface` keys on the billing label, not ownership, so these sessions count as interactive in the Usage rate split
+  ([usage-limits](usage-limits.md)).
+
+Measured 2026-10-27 on CLI 2.1.303: a `claude -p` run with the variable set stamps `claude-agents-dashboard` on every transcript record. Takes effect for
+new launches after a server restart (`Config` is read at boot); installed routine jobs pick it up at the next reconcile.
+
 ## A spawned row says `dashboard`
 
 Once the launch is adopted it is an ordinary row — which was the problem: nothing on it
@@ -552,7 +572,7 @@ is what launches `claude -p` for each step. It goes through `spawn.ts`'s exporte
 one seam for it, and nothing about `launch`'s own contract changes. Three differences from a session launch matter here:
 
 - **The environment is `routineEnv(config)` and nothing else** — `PATH`, `HOME`, `USER`, `LOGNAME`, `CLAUDE_BIN`, `SPAWN_MAX_PERMISSION`, `SYNC_PERMISSION_MODE`, `ROUTINE_MACHINE`,
-  `ROUTINES_DIR` — the same list an installed launchd/cron job bakes, so a manual run and a 22:00 run see one environment. The server's own env, which carries
+  `ROUTINES_DIR`, and `CLAUDE_CODE_ENTRYPOINT` under `SPAWN_OWN_ENTRYPOINT` (below) — the same list an installed launchd/cron job bakes, so a manual run and a 22:00 run see one environment. The server's own env, which carries
   `CLAUDE_CODE_ENTRYPOINT` and the markers `launch` strips, never reaches the child.
 - **The permission ceiling is the wrapper's, from the baked `SPAWN_MAX_PERMISSION`**, applied with the same clamp as `clampPermission` — except `bypassPermissions`
   is refused outright for a routine, never clamped down (the validator and the wrapper both say so).
@@ -580,7 +600,7 @@ one seam for it, and nothing about `launch`'s own contract changes. Three differ
 | `client/src/lib/spawnOptions.ts` | the client's copy of `MODELS`/`EFFORTS`/`PERMISSION_MODES` (duplicated, not imported — the FE/BE boundary is `shared/types.ts` alone — kept honest by `test/spawn-options.test.ts` asserting byte-for-byte equality against the server's arrays) and `allowedPermissionModes` |
 | The Board card's `+ New session` | rendered only when `spawnAvailable` is true on the one `/api/health` poll `SessionsView` already owns |
 | each view's phantom row | renders each `launching` entry at the head of its list — project, truncated prompt, `starting…` or (for `failed`) the error — and disappears on its own once the real row adopts the id; never interactive |
-| `sessionSurface` (`server/lib/scan.ts`) | maps the transcript's `entrypoint` → `Session.surface`; `sdk-cli` ⇒ `dashboard`, everything else ⇒ `local` |
+| `sessionSurface` (`server/lib/scan.ts`) | maps the transcript's `entrypoint` → `Session.surface`; `sdk-cli` or `claude-agents-dashboard` ⇒ `dashboard`, everything else ⇒ `local` |
 | `client/src/components/ResumePanel.tsx` | the resume composer pinned in an ended dashboard session's chat drawer — textarea + mic + *resume session*, POSTing `useSpawn().launch({prompt, resume: id})`; Enter sends and Tab takes the last turn's suggested reply (`ComposerSuggestion.tsx`, see [chat](chat.md)) |
 | `client/src/lib/resume.ts` | `resumeEligible` — the pure gate deciding when the drawer offers that composer (dashboard surface, nothing pending, turn over, spawn available, no `stopState` or `processLive`); `stillRunningNote` and `resumeErrorText` for the [still-running note](#processlive-the-live-process-this-server-cannot-signal); unit-tested like every other client lib |
 | `client/src/lib/surface.ts` | the pill's label + tooltip, one copy shared by the session views (`sessions/atoms.tsx`) and the `ChatDrawer` header |

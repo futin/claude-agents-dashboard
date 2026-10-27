@@ -967,8 +967,11 @@ export function run(): number {
     assert.strictEqual(gated.sessions[0].kaizenLesson, null);
   })) p++; else f++;
 
-  if (test('sessionSurface: only sdk-cli is dashboard; anything unknown stays local', () => {
+  if (test('sessionSurface: only sdk-cli and claude-agents-dashboard are dashboard; anything unknown stays local', () => {
     assert.strictEqual(scan.sessionSurface('sdk-cli'), 'dashboard');
+    // SPAWN_OWN_ENTRYPOINT's label — read whatever the switch says now, so a
+    // session launched with it on keeps its pill and resume after it is off.
+    assert.strictEqual(scan.sessionSurface('claude-agents-dashboard'), 'dashboard');
     assert.strictEqual(scan.sessionSurface('cli'), 'local');
     assert.strictEqual(scan.sessionSurface('claude-desktop'), 'local');
     // The failure direction is the point: an unknown or missing value must not
