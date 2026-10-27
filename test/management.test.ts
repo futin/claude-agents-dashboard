@@ -247,6 +247,18 @@ export async function run(): Promise<number> {
     assert.strictEqual(refs[0].name, path.basename(projA));
   }));
 
+  tally(await test('project lists read a given transcripts listing instead of the root (#312)', async () => {
+    const NOW = Date.parse('2026-07-12T12:00:00Z');
+    const proj = makeProject();
+    const root = makeProjectsRoot([{ dirName: '-p', id: 'p1', cwd: proj, mtimeMs: NOW - 3600_000 }]);
+    const cfg = { lookbackHours: 24 };
+    assert.deepStrictEqual(mgmt.listRecentProjects(cfg, { root, now: NOW, transcripts: [] }), []);
+    assert.deepStrictEqual(mgmt.listRecentProjects(cfg, { root, now: NOW }).map(r => r.path), [proj]);
+    // A stale pin resolves its cwd through the same listing: given none, it has no path.
+    assert.strictEqual(mgmt.listPinRows(cfg, ['-p'], { root, now: NOW, transcripts: [] })[0].path, null);
+    assert.strictEqual(mgmt.listPinRows(cfg, ['-p'], { root, now: NOW })[0].path, proj);
+  }));
+
   tally(await test('listRecentProjects: a dir whose newest transcript chdir\'d into a worktree publishes the repo, not the worktree', async () => {
     // bug-14. One dir, newest transcript launched at the repo root and chdir'd
     // into a worktree; the older one never left the root. Only the newest is

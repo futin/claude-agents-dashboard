@@ -14,6 +14,7 @@ import type { HubHandler } from 'lookout-widgets';
 import {
   scanSessions, lastMessageMs, listTranscripts, findTranscript, liveSessionIds, projectsRoot, sessionFromRef, sessionSurface
 } from './lib/scan.js';
+import type { TranscriptRef } from './lib/scan.js';
 import { readSessionAnalyticsLog } from './lib/sessionAnalyticsLog.js';
 import { archivedSessionIds } from './lib/archived.js';
 import { lastSessionEffort, readTranscript } from './lib/transcript.js';
@@ -135,13 +136,13 @@ export function scanOverrides(config: Config, params?: URLSearchParams): Config 
  *
  * Runs off the scan tick and only while holds exist, so an idle server does no
  * extra IO — the same shape as `messages.ts`'s idle reaper. One transcript read
- * per held wait, and there is at most one per session.
+ * per held wait, and there is at most one per session; the ids resolve from the
+ * scan's own listing, so a held wait costs no directory walk.
  */
-function sweepTerminalDecisions(): void {
+function sweepTerminalDecisions(root: string, transcripts: readonly TranscriptRef[]): void {
   if (pendingSessionIds().size === 0 && planSessionIds().size === 0) return;
-  const root = projectsRoot();
   const movedOn = (sessionId: string, askedAtMs: number): boolean => {
-    const ms = lastMessageMs(root, sessionId);
+    const ms = lastMessageMs(root, sessionId, transcripts);
     return ms !== null && ms > askedAtMs;
   };
   sweepDecidedPending(movedOn);
@@ -150,9 +151,12 @@ function sweepTerminalDecisions(): void {
 
 /** One scan of the session rows with every RAM-store injection applied — what `/api/sessions` serves before launches and usage are attached. */
 export function scanSnapshot(config: Config, projects?: ReadonlySet<string> | null): SessionsResponse {
+  // One listing per request, shared by the sweep and the scan.
+  const root = projectsRoot();
+  const transcripts = listTranscripts(root);
   // Before the scan, not after: a wait the terminal already decided must not
   // colour this tick's row blue either.
-  sweepTerminalDecisions();
+  sweepTerminalDecisions(root, transcripts);
   // pendingIds comes from the RAM store, not disk: a question held by the
   // AskUserQuestion hook is flagged on its row before the transcript knows
   // about it, so it's visible without opening the chat drawer. planIds and
@@ -176,7 +180,9 @@ export function scanSnapshot(config: Config, projects?: ReadonlySet<string> | nu
     // hint about a wait: it says which rows this server can actually signal,
     // so the Stop control is offered only where it would work.
     stopStates: stopStates(),
-    projects
+    projects,
+    root,
+    transcripts
   });
 }
 
@@ -1761,7 +1767,8 @@ function pinOptions(): { pinnedDirs: ReadonlySet<string> } {
  * `pinned` — that is where it can be removed.
  */
 function pinsPayload(config: Config): PinsResponse {
-  const options = { archivedIds: archivedSessionIds(), ...pinOptions() };
+  // One listing for all three lists, which used to enumerate the tree five times between them.
+  const options = { archivedIds: archivedSessionIds(), ...pinOptions(), transcripts: listTranscripts(projectsRoot()) };
   const claudeRoots = defaultClaudeRoots();
   return {
     pinned: listPinRows(config, getPinnedProjects(), options),

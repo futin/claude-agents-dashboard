@@ -1099,6 +1099,62 @@ export function run(): number {
     assert.strictEqual(scan.lastMessageMs(root, 'sx'), null);
   })) p++; else f++;
 
+  /* ------------------------------------------ one listing, one ps per scan (#312) */
+
+  const listingOpts = { skipProcScan: true, liveCwds: null, liveSessionIds: null, lessons: null } as const;
+
+  if (test('scanSessions with transcripts: [] reads no listing of its own — 0 sessions over a root holding one', () => {
+    const root = makeRoot([{ dirName: '-a', id: 'l1', records: [metaRec('/a', 'main'), at(assistantDone(), '2026-08-18T11:21:59.809Z')] }]);
+    assert.strictEqual(scan.scanSessions({}, { ...listingOpts, root, transcripts: [] }).sessions.length, 0);
+    assert.strictEqual(scan.scanSessions({}, { ...listingOpts, root }).sessions.length, 1);
+  })) p++; else f++;
+
+  if (test('findTranscript / lastMessageMs resolve from given refs, never from disk', () => {
+    const root = makeRoot([{ dirName: '-a', id: 'l2', records: [metaRec('/a', 'main'), at(assistantDone(), '2026-08-18T11:21:59.809Z')] }]);
+    assert.strictEqual(scan.findTranscript(root, 'l2', []), undefined);
+    assert.strictEqual(scan.lastMessageMs(root, 'l2', []), null);
+    // A ref absent from `root` (its file lives in a second root) is still the answer.
+    const other = makeRoot([{ dirName: '-b', id: 'ghost', records: [at(assistantDone(), '2026-08-18T12:00:00.000Z')] }]);
+    const ghost = scan.listTranscripts(other)[0];
+    assert.strictEqual(scan.findTranscript(root, 'ghost', [ghost]), ghost);
+    assert.strictEqual(scan.lastMessageMs(root, 'ghost', [ghost]), Date.parse('2026-08-18T12:00:00.000Z'));
+  })) p++; else f++;
+
+  if (test('findTranscript over given refs picks the newest half of a split id, in both list orders', () => {
+    const old = { file: '/x/-a/s.jsonl', dirName: '-a', id: 's', mtimeMs: 1000, size: 1 };
+    const cur = { file: '/x/-b/s.jsonl', dirName: '-b', id: 's', mtimeMs: 2000, size: 1 };
+    assert.strictEqual(scan.findTranscript('/nowhere', 's', [old, cur]), cur);
+    assert.strictEqual(scan.findTranscript('/nowhere', 's', [cur, old]), cur);
+  })) p++; else f++;
+
+  if (test('one ps -Ao pid=,comm= per scan feeds runningClaudeProcs', () => {
+    const root = makeRoot([]);
+    let calls = 0;
+    const out = (s: string) => () => { calls++; return s; };
+    try {
+      scan.setCommRunner(out('12 claude\n34 /usr/local/bin/claude\n56 claude-helper\n78 node\n'));
+      const counted = scan.scanSessions({}, { root, liveCwds: new Set(), liveSessionIds: null, lessons: null });
+      assert.strictEqual(counted.runningClaudeProcs, 2);
+      assert.strictEqual(calls, 1);
+
+      calls = 0;
+      const probed = scan.scanSessions({}, { root, liveSessionIds: null, lessons: null });
+      assert.strictEqual(probed.runningClaudeProcs, 2);
+      assert.strictEqual(calls, 1, 'liveCwds and the count share one ps');
+
+      calls = 0;
+      const skipped = scan.scanSessions({}, { root, skipProcScan: true, liveSessionIds: null, lessons: null });
+      assert.strictEqual(skipped.runningClaudeProcs, null);
+      assert.strictEqual(calls, 0);
+
+      scan.setCommRunner(() => { throw new Error('ps: command not found'); });
+      assert.strictEqual(scan.scanSessions({}, { root, liveCwds: new Set(), liveSessionIds: null, lessons: null }).runningClaudeProcs, null);
+
+      scan.setCommRunner(() => '78 node\n');
+      assert.strictEqual(scan.scanSessions({}, { root, liveCwds: new Set(), liveSessionIds: null, lessons: null }).runningClaudeProcs, 0);
+    } finally { scan.setCommRunner(null); }
+  })) p++; else f++;
+
   // ---- bug-7: the liveness gate matches on either cwd key -------------------
 
   // Origin /a/repo, newest /a/repo/backlog/bugs/open: a `cd` inside a Bash tool

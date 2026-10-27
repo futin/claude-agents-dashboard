@@ -119,8 +119,10 @@ line's project tag.
   `parseLogEvents` / `statusForSession`). Both unit-tested.
 - **How the reader works (`lib/analytics.ts`):** `readLogEvents` →
   `recentLessons(limit)` (dedupe by id-prefix, newest-first) → for each, resolve the
-  transcript by **prefix-matching** the logged short id against
-  `listTranscripts(projectsRoot())` (never joined into a path — same philosophy as
+  transcript by **prefix-matching** the logged short id against one
+  `listTranscripts(projectsRoot())` through `scan.ts` `findTranscriptByPrefix` — the newest
+  half per id, then the newest id, so a session split across two project dirs resolves to its
+  live half (never joined into a path — same philosophy as
   `serveSessionDetail`; validated with `ID_RE`) → `analyzeSession(ref.file, ref.id)`
   live. `analysis` is `null` when the transcript is gone.
 - **`reviewDue`** = lessons exist AND no `review:` marker within 7 days
