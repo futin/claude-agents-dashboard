@@ -13,7 +13,8 @@ import { makeFetchRunner, resetGitFetch } from '../server/lib/git-fetch.js';
 import type { FetchRunner } from '../server/lib/git-fetch.js';
 import { tryLockRepo } from '../server/lib/git-locks.js';
 import { QUICK_TIMEOUT_MS, overrideQuickRunner } from '../server/lib/git-quick.js';
-import { encodeProjectDir, overrideClaudeRoots } from '../server/lib/management.js';
+import { encodeProjectDir } from '../server/lib/management.js';
+import { overrideClaudeRoots } from '../server/lib/paths.js';
 import { resetSettings, setPinned } from '../server/lib/settings.js';
 import type { GitQuickResponse } from '../shared/types.js';
 

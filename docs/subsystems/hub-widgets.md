@@ -33,7 +33,7 @@ holds `sessions` and `git` alone and `/api/hub/widgets/usage` is 404.
 | `usage: null`, or any status but `ok` | 500 `{ error: 'usage <status>' }` |
 | `ok` with both windows null | 500 `{ error: 'usage has no windows' }` |
 
-**`sessions`** — list, "Sessions", refreshed every 10 s, tile `open: "/"`. One row per session from `scanSnapshot(config)`, the same scan `/api/sessions`
+**`sessions`** — list, "Sessions", refreshed every 10 s, tile `open: "/"`. One row per session from `scanSnapshot(config)` (`lib/scan-snapshot.ts`), the same scan `/api/sessions`
 serves, so the two routes cannot disagree about a row's status; the row count is that scan's `MAX_SESSIONS` cap, and no `total` is sent.
 
 | Session field | Row field |
@@ -89,6 +89,7 @@ data the dashboard already exposes, and a write path through Lookout would need 
 <!-- docs-sync:
   sources:
     - server/lib/hub-widgets.ts
+    - server/lib/scan-snapshot.ts
     - server/api.ts
     - server/index.ts
     - shared/gitUpstream.ts

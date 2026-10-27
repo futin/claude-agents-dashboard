@@ -346,7 +346,7 @@ Consequence for the client: `ratePerHour × 24` overstates the daily figure by
 
 ### The inspector
 
-`GET /api/usage/profile` (read-only; `server/api.ts`'s `shapeUsageProfile` is the pure
+`GET /api/usage/profile` (read-only; `server/lib/usage-shape.ts`'s `shapeUsageProfile` is the pure
 part) returns the 168 cells, the fallback mean, the confidence, and the walk behind the
 current projection — **never raw samples and never file paths**, the same posture as
 `NTFY_TOPIC` never leaving the server. That still holds after the history view landed: the recorded series
@@ -1291,7 +1291,7 @@ request:token variation away, so the design would be rank-deficient and
 
 ### The endpoint and the card
 
-`GET /api/usage/rates` (`shapeUsageRates` is the pure part) returns one row per
+`GET /api/usage/rates` (`shapeUsageRates` in `server/lib/usage-shape.ts` is the pure part) returns one row per
 model that either owns an attributable interval **or** is identified by the
 one-term joint fit, richest evidence first, plus `externalSharePct`, a
 `coverage` object and an always-present `boost` object (see the off-peak boost
@@ -1694,6 +1694,7 @@ Accepted limitations:
     - server/lib/usage-history.ts
     - server/lib/usage-ledger.ts
     - server/lib/usage-rate.ts
+    - server/lib/usage-shape.ts
     - server/lib/usage-boost.ts
     - server/lib/token-refresh.ts
     - client/src/lib/pace.ts

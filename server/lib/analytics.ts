@@ -16,7 +16,7 @@ import path from 'node:path';
 
 import { analyzeSession } from './analyze.js';
 import { findTranscriptByPrefix, listTranscripts, projectsRoot } from './scan.js';
-import { claudeHome } from './management.js';
+import { claudeHome } from './paths.js';
 import { readLogEvents, recentLessons, statusForSession } from './sessionAnalyticsLog.js';
 import type { AnalyticsReport } from '../../shared/types.js';
 

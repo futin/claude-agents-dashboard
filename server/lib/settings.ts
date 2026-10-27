@@ -32,7 +32,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-import { claudeHome } from './management.js';
+import { claudeHome } from './paths.js';
 import type { EnvOverride, NotifyEvent, NotifyPolicy, ServerSettings, ServerSettingsPatch } from '../../shared/types.js';
 
 /** Gitignored, repo-local — never inside `~/.claude` (read-only under Docker). */

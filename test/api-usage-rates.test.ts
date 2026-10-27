@@ -14,7 +14,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-import { emptyRates, shapeUsageRates } from '../server/api.js';
+import { emptyRates, shapeUsageRates } from '../server/lib/usage-shape.js';
 import { getSettings, SETTINGS_FILE } from '../server/lib/settings.js';
 import { readRecentSamples } from '../server/lib/usage-history.js';
 import { LEDGER_FILE, ledgerStartMs, readLedgerSince } from '../server/lib/usage-ledger.js';

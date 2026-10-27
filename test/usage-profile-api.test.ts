@@ -1,6 +1,6 @@
 import assert from 'node:assert';
 
-import { shapeUsageProfile } from '../server/api.js';
+import { shapeUsageProfile } from '../server/lib/usage-shape.js';
 import { emptyState } from '../server/lib/usage-history.js';
 import { HOURS_PER_WEEK } from '../server/lib/usage-forecast.js';
 import type { ProfileState } from '../server/lib/usage-history.js';

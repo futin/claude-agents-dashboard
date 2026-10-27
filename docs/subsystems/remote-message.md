@@ -110,14 +110,14 @@ because a held reply window is exactly as remote as a held question or plan.
 ## The `released` status and the idle sweep
 
 Coming back to the keyboard has to end every held turn quickly without you touching the
-drawer — walking away is what opened the window, so walking back should close it. A
-5-second `setInterval` (started on the first `register`, cleared once the store empties,
-`unref()`d so it can't hold the process open) calls `sweepIdle()`:
+drawer — walking away is what opened the window, so walking back should close it. The one
+5-second `setInterval` in `lib/wait-store.ts` (started on the first `register` in any of the three stores, cleared once all of them are empty,
+`unref()`d so it can't hold the process open) releases this store's holds by these rules — the same ones its own `sweepIdle()` applies:
 
 ⚠️ **This reaper was originally unique to this store, and that was a bug in the other two.**
 Held questions and plans had no equivalent, so a question raised while you were away sat
 parked on the dashboard for its full `answerSecs` window even once you were back at the
-keyboard. `pending.ts` and `plans.ts` now run the same reaper; the shared half of the
+keyboard. All three stores now share one reaper (`lib/wait-store.ts`); the shared half of the
 policy lives in `lib/idle.ts` as `backAtDesk()` and is documented once, in
 [the idle sweep](remote-answer.md#the-idle-sweep-coming-back-to-the-desk). What stays here
 is the headless exemption, which is this store's alone.
@@ -165,7 +165,7 @@ only as a strict `=== true` (the same fail-soft rule as spawn's `remoteControl` 
 caller "lying" headless only opts its own hold out of the release; the deadline still caps
 it), `register` stamps the entry, and `sweepIdle` releases only unstamped ones. The same
 gate is skipped hook-side, so the window *opens* at the desk too, not just survives it.
-While only headless holds exist, `sweepIdle` returns before reading idle at all — no
+While only headless holds exist, `sweepIdle` and the shared reaper's tick return before reading idle at all — no
 `ioreg` spawns for holds it could never release. Everything else still ends a headless
 hold: the deadline, an answer, a dismiss, a supersede, and `dismissAll` (the remote-answer
 toggle flipping off clears headless holds too, deliberately — the switch means "stop
@@ -271,6 +271,7 @@ state, reset on a new `messageId`, never persisted.
 <!-- docs-sync:
   sources:
     - server/lib/messages.ts
+    - server/lib/wait-store.ts
     - server/lib/remote-message-prose.ts
     - server/api.ts
     - server/index.ts

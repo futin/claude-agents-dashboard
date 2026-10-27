@@ -35,7 +35,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-import { claudeHome } from './management.js';
+import { claudeHome } from './paths.js';
 
 /** Claude Code clamps an env-supplied window up to this floor. */
 export const ENV_WINDOW_FLOOR = 100000;

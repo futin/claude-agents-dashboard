@@ -27,8 +27,8 @@
 
 import { randomUUID } from 'node:crypto';
 
-import { backAtDesk } from './idle.js';
 import { noteTerminalHandoff } from './permissions.js';
+import { createWaitStore, type WaitEntry } from './wait-store.js';
 import type { PendingPlan, PlanAnswerRequest, PlanWaitResult } from '../../shared/types.js';
 
 /** A plan is markdown and can be long; cap it so a runaway tool input can't pin memory. */
@@ -39,17 +39,20 @@ export const FEEDBACK_CAP = 2_000;
 /** How a submitted verdict was judged. Mirrors `pending.ts`'s outcome union. */
 export type PlanOutcome = 'ok' | 'not-found' | 'mismatch' | 'malformed';
 
-interface Entry {
+interface Entry extends WaitEntry<PlanWaitResult> {
   planId: string;
-  sessionId: string;
   plan: string;
   askedAt: string;
-  timer: NodeJS.Timeout;
-  /** Completes the hook's held response. Called at most once. */
-  resolve: (r: PlanWaitResult) => void;
 }
 
-const entries = new Map<string, Entry>();
+const store = createWaitStore<Entry, PlanWaitResult>({
+  superseded: { status: 'superseded' },
+  released: { status: 'released' },
+  // `rejected` is this store's "acted on remotely"; everything else hands the
+  // plan back to its card in the terminal, which then reports itself as a
+  // permission event. Same handoff the question store records.
+  onSettle: (entry, result) => { if (result.status !== 'rejected') noteTerminalHandoff(entry.sessionId); }
+});
 
 /**
  * Pull the plan markdown out of an `ExitPlanMode` tool input. Tolerant like
@@ -77,17 +80,6 @@ export function composeReason(feedback: string): string {
     + 'do not start implementing.';
 }
 
-/** Finish an entry: fire `resolve` once, clear its timer, drop it from the map. */
-function settle(entry: Entry, result: PlanWaitResult): void {
-  clearTimeout(entry.timer);
-  if (entries.get(entry.sessionId) === entry) entries.delete(entry.sessionId);
-  // `rejected` is this store's "acted on remotely"; everything else hands the
-  // plan back to its card in the terminal, which then reports itself as a
-  // permission event. Same handoff the question store records.
-  if (result.status !== 'rejected') noteTerminalHandoff(entry.sessionId);
-  entry.resolve(result);
-}
-
 /**
  * Register a proposed plan and take ownership of the caller's held response.
  * Returns the `planId` the browser must echo when sending a verdict.
@@ -102,26 +94,22 @@ export function register(
   timeoutMs: number,
   resolve: (r: PlanWaitResult) => void
 ): string {
-  const prev = entries.get(sessionId);
-  if (prev) settle(prev, { status: 'superseded' });
-
   const planId = randomUUID();
   const entry: Entry = {
     planId,
     sessionId,
     plan,
     askedAt: new Date().toISOString(),
-    timer: setTimeout(() => settle(entry, { status: 'timeout' }), timeoutMs),
+    timer: setTimeout(() => store.settle(entry, { status: 'timeout' }), timeoutMs),
     resolve
   };
-  entries.set(sessionId, entry);
-  ensureReaper();
+  store.add(entry);
   return planId;
 }
 
 /** The plan a session is waiting on, or null. */
 export function getPendingPlan(sessionId: string): PendingPlan | null {
-  const entry = entries.get(sessionId);
+  const entry = store.get(sessionId);
   if (!entry) return null;
   return { planId: entry.planId, askedAt: entry.askedAt, plan: entry.plan };
 }
@@ -132,7 +120,7 @@ export function getPendingPlan(sessionId: string): PendingPlan | null {
  * A fresh Set: callers never get a handle on the store's keys.
  */
 export function planSessionIds(): Set<string> {
-  return new Set(entries.keys());
+  return store.sessionIds();
 }
 
 /**
@@ -141,7 +129,7 @@ export function planSessionIds(): Set<string> {
  * `not-found`, with no locking.
  */
 export function answer(sessionId: string, body: unknown): PlanOutcome {
-  const entry = entries.get(sessionId);
+  const entry = store.get(sessionId);
   if (!entry) return 'not-found';
 
   const req = body as PlanAnswerRequest | null;
@@ -149,7 +137,7 @@ export function answer(sessionId: string, body: unknown): PlanOutcome {
   if (req.planId !== entry.planId) return 'mismatch';
 
   if (req.verdict === 'dismiss') {
-    settle(entry, { status: 'dismissed' });
+    store.settle(entry, { status: 'dismissed' });
     return 'ok';
   }
   if (req.verdict !== 'reject') return 'malformed';
@@ -159,7 +147,7 @@ export function answer(sessionId: string, body: unknown): PlanOutcome {
   const feedback = typeof req.feedback === 'string' ? req.feedback.slice(0, FEEDBACK_CAP) : '';
   if (!feedback.trim()) return 'malformed';
 
-  settle(entry, { status: 'rejected', reason: composeReason(feedback) });
+  store.settle(entry, { status: 'rejected', reason: composeReason(feedback) });
   return 'ok';
 }
 
@@ -169,10 +157,7 @@ export function answer(sessionId: string, body: unknown): PlanOutcome {
  * A stale `planId` is a no-op, so a late close can't evict a newer entry.
  */
 export function cancel(sessionId: string, planId: string): void {
-  const entry = entries.get(sessionId);
-  if (!entry || entry.planId !== planId) return;
-  clearTimeout(entry.timer);
-  entries.delete(sessionId);
+  store.cancel(sessionId, entry => entry.planId === planId);
 }
 
 /**
@@ -181,8 +166,8 @@ export function cancel(sessionId: string, planId: string): void {
  * Returns how many were released.
  */
 export function dismissAll(): number {
-  const waiting = [...entries.values()];
-  for (const entry of waiting) settle(entry, { status: 'dismissed' });
+  const waiting = store.values();
+  for (const entry of waiting) store.settle(entry, { status: 'dismissed' });
   return waiting.length;
 }
 
@@ -211,9 +196,9 @@ export function sweepDecided(
   movedOn: (sessionId: string, askedAtMs: number) => boolean
 ): number {
   let released = 0;
-  for (const entry of [...entries.values()]) {
+  for (const entry of store.values()) {
     if (!movedOn(entry.sessionId, Date.parse(entry.askedAt))) continue;
-    settle(entry, { status: 'dismissed' });
+    store.settle(entry, { status: 'dismissed' });
     released++;
   }
   return released;
@@ -221,14 +206,10 @@ export function sweepDecided(
 
 /** Test seam: drop every entry without resolving. */
 export function resetStore(): void {
-  for (const entry of entries.values()) clearTimeout(entry.timer);
-  entries.clear();
-  if (reaper) { clearInterval(reaper); reaper = null; }
+  store.reset();
 }
 
 /* ------------------------------------------------- idle auto-release */
-
-let reaper: NodeJS.Timeout | null = null;
 
 /**
  * Hand every held plan back to its plan card if the user is back at the
@@ -239,24 +220,10 @@ let reaper: NodeJS.Timeout | null = null;
  *
  * Settles as `released`; the hook exits 0 on any non-`rejected` status, which
  * is what makes the plan card appear.
+ *
+ * The same release runs every 5 s from the one reaper `wait-store.ts` keeps for all three stores, which asks {@link backAtDesk} once per tick, not once per store.
  */
 export function sweepIdle(): number {
-  if (entries.size === 0) return 0; // nothing to release — don't spawn ioreg
-  if (!backAtDesk()) return 0;
-  const waiting = [...entries.values()];
-  for (const entry of waiting) settle(entry, { status: 'released' });
-  return waiting.length;
+  return store.sweepIdle();
 }
 
-/**
- * The 5s reaper behind {@link sweepIdle}. Runs only while holds exist — an idle
- * server never spawns `ioreg`. `unref()` so it cannot hold the process open.
- */
-function ensureReaper(): void {
-  if (reaper) return;
-  reaper = setInterval(() => {
-    sweepIdle();
-    if (entries.size === 0 && reaper) { clearInterval(reaper); reaper = null; }
-  }, 5_000);
-  reaper.unref();
-}

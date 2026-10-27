@@ -230,11 +230,15 @@ server/
                   and the exported `poolRate`
   lib/usage-alerts.ts  5-hour limit reached/reset pushes: pure detector + copy, and the shell the recorder calls (ledger
                   `~/.claude/dashboard/usage-alerts.json`)
+  lib/usage-shape.ts  the pure bodies of GET /api/usage/profile and /api/usage/rates (`shapeUsageProfile`, `shapeUsageRates`, `emptyRates`);
+                  the routes in api.ts keep the disk reads
   lib/usage-boost.ts  off-peak usage-limit boost detector over those intervals: weekday
                   off-peak vs same-day peak, weekend vs pooled weekday peak (pure)
   lib/token-refresh.ts  makes the CLI renew an expired OAuth token (auth status,
                   then one haiku turn) so the bars self-heal
   lib/management.ts   config scanner + servable-path security set
+  lib/paths.ts        `~/.claude`, `~/.claude.json` and the Claude-owned roots never offered for pinning — a Node-only leaf, so no lib module
+                  reaches them through management.ts and closes an import cycle (`test/import-cycles.test.ts`)
   lib/git-stats.ts    read-only git reader for the pinned repos: runner, trunk, memoised branch counts + merged proof
   lib/codegraph.ts    the `codegraph` CLI reader: runner (update check off), status parser, graph-root walk, pid files
   lib/codegraph-store.ts  CodeGraph's per-(root, pin) status cache, runs, lock-loss rule and the payload
@@ -251,6 +255,8 @@ server/
   lib/routine-notify.ts  the `routine-failed` fold over runs: one push per run, `notified.json`, the first-start seed
   lib/routine-boot.ts    what the owning server does on listen and on exit, and the shared log reader
   lib/hub-widgets.ts  the Lookout hub tiles (usage gauge, sessions list, Git pending list), declared through lookout-widgets
+  lib/scan-snapshot.ts  `scanSnapshot`: one session scan with every RAM-store injection and the held-wait terminal sweep — what /api/sessions
+                  and the hub's sessions tile both serve
   lib/account.ts      `~/.claude.json` → `oauthAccount` as display strings, behind GET /api/account; fail-open to null
   lib/releases.ts     GET /api/releases: release-kit's memoised tag reader, pointed at the checkout, plus two test seams
   lib/analyze.ts  whole-session post-mortem → SessionAnalysis
@@ -259,11 +265,12 @@ server/
   lib/analytics.ts  reader for the Analytics tab
   lib/pending.ts  in-memory pending-question store (the first of the four session write paths)
   lib/plans.ts    in-memory pending-plan store (same machine, reject-only verdicts)
-  lib/messages.ts in-memory turn-end reply-window store (same machine, plus a 5s
-                  idle sweep that auto-releases every terminal-backed hold — headless
-                  ones are exempt)
+  lib/messages.ts in-memory turn-end reply-window store (same machine; the idle
+                  release skips its headless holds)
+  lib/wait-store.ts  the machine all three stores share: one entry per session, settle-once, supersede, stale-id-safe
+                  cancel, and the one 5s idle reaper across them (one `backAtDesk()` per tick)
   lib/remote-message-prose.ts  the reply prose, wrap + unwrap in one import-free leaf
-  lib/idle.ts     the shared `backAtDesk()` policy behind all three stores' 5s sweeps —
+  lib/idle.ts     the shared `backAtDesk()` policy behind the stores' 5s idle release —
                   threshold, ioreg reading, test seam, fail directions (the rule
                   itself is `atDesk` in lib/notify.ts)
   lib/remoteState.ts  remote-answer switch (env gate + persisted toggle)

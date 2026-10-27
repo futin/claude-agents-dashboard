@@ -3,10 +3,10 @@ import { createHubHandler, type GaugeBar, type HubHandler, type RowStatus, type 
 
 import { gitUpstreamShown } from '../../shared/gitUpstream.js';
 import type { RepoGitStats, Session } from '../../shared/types.js';
-import { scanSnapshot } from '../api.js';
 import type { Config } from './config.js';
 import { markGitWatched } from './git-fetch.js';
 import { readGitStats } from './git-stats.js';
+import { scanSnapshot } from './scan-snapshot.js';
 import { getCachedUsageState, type UsageState } from './usage.js';
 
 export interface HubSources {

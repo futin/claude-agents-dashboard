@@ -16,7 +16,8 @@ import {
   GitTimeoutError, defaultGitRunner, gitStatsMemoKeys, makeGitRunner, overrideGitRunner,
 } from '../server/lib/git-stats.js';
 import type { GitRunner } from '../server/lib/git-stats.js';
-import { encodeProjectDir, overrideClaudeRoots } from '../server/lib/management.js';
+import { encodeProjectDir } from '../server/lib/management.js';
+import { overrideClaudeRoots } from '../server/lib/paths.js';
 import { resetSettings, setPinOrder, setPinned } from '../server/lib/settings.js';
 import type { GitStatsResponse } from '../shared/types.js';
 
