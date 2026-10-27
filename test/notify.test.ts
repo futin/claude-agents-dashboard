@@ -247,9 +247,11 @@ export async function run(): Promise<number> {
   })) p++; else f++;
 
   if (await testAsync('a throwing sender never escapes maybeSend', () => inTmpCwd(() => {
+    let calls = 0;
     setSettings({ notify: { enabled: true, events: { stop: true } } });
-    setSender(() => { throw new Error('network down'); });
-    maybeSend(conf(), 'stop', { sessionId: SID }); // must not throw
+    setSender(() => { calls++; throw new Error('network down'); });
+    assert.doesNotThrow(() => maybeSend(conf(), 'stop', { sessionId: SID }));
+    assert.strictEqual(calls, 1, 'the sender must actually run, or nothing here was tested');
   }))) p++; else f++;
 
   if (await testAsync('sendTest fires regardless of the policy', () => inTmpCwd(async sent => {
@@ -297,9 +299,11 @@ export async function run(): Promise<number> {
     }))) p++; else f++;
 
   if (await testAsync('a rejecting sender never escapes maybeSend', () => inTmpCwd(async () => {
+    let calls = 0;
     setSettings({ notify: { enabled: true, events: { stop: true } } });
-    setSender(() => Promise.reject(new Error('socket hang up')));
-    maybeSend(conf(), 'stop', { sessionId: SID });
+    setSender(() => { calls++; return Promise.reject(new Error('socket hang up')); });
+    assert.doesNotThrow(() => maybeSend(conf(), 'stop', { sessionId: SID }));
+    assert.strictEqual(calls, 1, 'the sender must actually run, or nothing here was tested');
     // An un-awaited rejection surfaces a tick later, so give it one before the
     // process gets the chance to die on it.
     await new Promise(r => setTimeout(r, 0));

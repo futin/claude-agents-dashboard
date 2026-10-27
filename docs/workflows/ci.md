@@ -39,7 +39,8 @@ docker run --rm --name ci-linux --user root -v "$PWD":/src-ro:ro node:22 bash -c
 
 Three container differences from the runner are undone on purpose: the local `node:22` image has no `git` (the git-state suites spawn it) and no
 `jq` (the hook suites print `⚠ SKIPPED` and pass without it — 83 cases on 2026-10-15), and `/.dockerenv` exists, which flips `loadConfig`'s Docker
-detection and fails its default-value test. The runner is a VM with git and jq, so none of these applies there. Compare the `✓` count with a macOS run.
+detection. Its default-value test follows detection since #310, so it no longer fails there, but removing the marker keeps the container's defaults the
+runner's. The runner is a VM with git and jq, so none of these applies there. Compare the `✓` count with a macOS run.
 
 ## The ruleset
 

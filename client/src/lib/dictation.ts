@@ -6,6 +6,8 @@
  * hooks/useDictation.ts instead.
  */
 
+import { READ_ONLY_TEXT, refusalKind } from './writeRefusal';
+
 /**
  * Recorder types worth asking for, best first: iOS Safari records `audio/mp4`
  * natively, while Chrome/Android favor webm/opus, so mp4 is tried first.
@@ -72,4 +74,15 @@ export function appendTranscript(existing: string, incoming: string, cap = 4000)
   if (!tail) return existing;
   if (!head) return tail.slice(0, cap);
   return `${head} ${tail}`.slice(0, cap);
+}
+
+/**
+ * What a non-ok `POST /api/transcribe` says to the user. `reply` is the parsed body, read only on a 403. 429 is checked first: a single-flight refusal
+ * is the answer whatever the body says.
+ */
+export function transcribeErrorText(status: number, reply: unknown): string {
+  if (status === 429) return 'another clip is transcribing';
+  if (refusalKind(status, reply) === 'read-only') return READ_ONLY_TEXT;
+  if (status === 403) return 'token needed — tap send to enter it';
+  return 'transcription failed';
 }
