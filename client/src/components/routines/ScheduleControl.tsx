@@ -1,6 +1,6 @@
 import { describeCron, nextAfter, parseCron } from '../../../../shared/cron';
 import { useDraft } from '../../hooks/useDraft';
-import { cronFor, type Preset, type Schedule } from '../../lib/routineForm';
+import { cronFor, pad2, type Preset, type Schedule } from '../../lib/routineForm';
 import { nextText } from '../../lib/routines';
 
 const PRESETS: Array<[Preset, string]> = [
@@ -9,7 +9,6 @@ const PRESETS: Array<[Preset, string]> = [
 const EVERY = [1, 2, 3, 6, 12] as const;
 /** Monday first, as the mockup's chips read; the numbers are cron's (0 = Sunday). */
 const DAYS: Array<[number, string]> = [[1, 'Mon'], [2, 'Tue'], [3, 'Wed'], [4, 'Thu'], [5, 'Fri'], [6, 'Sat'], [0, 'Sun']];
-const pad2 = (n: number): string => String(n).padStart(2, '0');
 
 function nextFire(cron: string, now: Date): string {
   const p = parseCron(cron);
@@ -65,7 +64,8 @@ function CustomFields({ text, now, disabled, onChange }: { text: string; now: Da
 
 /**
  * The Schedule row's control (spec §Schedule presets): the six-preset seg, each preset's own inputs, and the cron line it writes with its next fire.
- * `onPick` is a seg click and `onChange` an edit inside a preset; `JobRows` decides what reaches the file, since Weekly with no day writes nothing.
+ * `onPick` is a seg click and `onChange` an edit inside a preset; `routineForm.ts`'s `schedulePick` / `scheduleEdit` decide what reaches the file, since
+ * Weekly with no day writes nothing.
  */
 export default function ScheduleControl({ value, now, disabled, onPick, onChange }: {
   value: Schedule;

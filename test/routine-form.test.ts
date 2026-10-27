@@ -6,7 +6,7 @@
 import assert from 'node:assert';
 
 import {
-  FIELDS, UNREADABLE, cronFor, fmValue, formKind, frontmatterReadable, routeErrors, setKey, switchPreset, timeoutUnitView, timeoutWithUnit, visibleFields
+  FIELDS, UNREADABLE, cronFor, fmValue, formKind, frontmatterReadable, routeErrors, scheduleEdit, schedulePick, setKey, switchPreset, timeoutUnitView, timeoutWithUnit, visibleFields
 } from '../client/src/lib/routineForm.js';
 import { jobTemplate, setRepos } from '../client/src/lib/routines.js';
 import type { Schedule } from '../client/src/lib/routineForm.js';
@@ -466,6 +466,29 @@ export function run(): number {
     assert.deepStrictEqual(switchPreset(daily(9, 25), 'manual'), { preset: 'manual' });
     assert.deepStrictEqual(switchPreset({ preset: 'custom', text: '*/15 * * * *' }, 'manual'), { preset: 'manual' });
     assert.deepStrictEqual(switchPreset({ preset: 'manual' }, 'daily'), daily(9, 0));
+  });
+
+  t('scheduleEdit: a writable edit clears the view, Weekly with no day writes nothing, Custom keeps its view and is written', () => {
+    const weekly = (days: number[]): Schedule => ({ preset: 'weekly', days, hour: 9, minute: 25 });
+    const custom = (text: string): Schedule => ({ preset: 'custom', text });
+    assert.deepStrictEqual(scheduleEdit(daily(9, 25)), { view: null, write: daily(9, 25) });
+    assert.deepStrictEqual(scheduleEdit(weekly([])), { view: weekly([]), write: null });
+    assert.deepStrictEqual(scheduleEdit(weekly([1])), { view: null, write: weekly([1]) });
+    assert.deepStrictEqual(scheduleEdit(custom('0 14 * * *')), { view: custom('0 14 * * *'), write: custom('0 14 * * *') });
+    assert.deepStrictEqual(scheduleEdit(custom('')), { view: custom(''), write: custom('') });
+    assert.deepStrictEqual(scheduleEdit({ preset: 'manual' }), { view: null, write: { preset: 'manual' } });
+  });
+
+  t('schedulePick: same preset is a no-op, Custom starts from the file and writes nothing, the rest go through switchPreset', () => {
+    const text = withCron('"25 9 * * *"');
+    assert.strictEqual(schedulePick(text, daily(9, 25), 'daily'), null);
+    assert.deepStrictEqual(schedulePick(text, daily(9, 25), 'custom'), { view: { preset: 'custom', text: '25 9 * * *' }, write: null });
+    assert.deepStrictEqual(schedulePick(setKey(SKILL, 'cron', null), { preset: 'manual' }, 'custom'), { view: { preset: 'custom', text: '' }, write: null });
+    assert.deepStrictEqual(schedulePick(text, daily(9, 25), 'weekly'), { view: { preset: 'weekly', days: [], hour: 9, minute: 25 }, write: null });
+    const weekdays = schedulePick(text, daily(9, 25), 'weekdays');
+    assert.deepStrictEqual(weekdays, { view: null, write: { preset: 'weekdays', hour: 9, minute: 25 } });
+    assert.deepStrictEqual(schedulePick(text, { preset: 'custom', text: '0 14 * * *' }, 'daily'), { view: null, write: daily(14, 0) });
+    assert.strictEqual(fmValue(FIELDS.schedule.write(text, weekdays!.write!), 'cron')?.value, '25 9 * * 1-5');
   });
 
   console.log(`\n  ${p} passed, ${f} failed`);

@@ -411,7 +411,7 @@ const tools: FieldDef<Tools> = {
 
 const HOURLY_STEPS = [2, 3, 6, 12] as const;
 const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-const pad2 = (n: number): string => String(n).padStart(2, '0');
+export const pad2 = (n: number): string => String(n).padStart(2, '0');
 const inRange = (token: string, max: number): number | null => (/^\d+$/.test(token) && Number(token) <= max ? Number(token) : null);
 
 /**
@@ -473,6 +473,23 @@ export function switchPreset(from: Schedule, to: Preset): Schedule {
   if (to === 'hourly') return base.preset === 'hourly' ? base : { preset: 'hourly', minute, every: 1 };
   if (to === 'weekly') return base.preset === 'weekly' ? base : { preset: 'weekly', days: [], hour, minute };
   return { preset: to, hour, minute };
+}
+
+/** One Schedule-row step: `view` is what the open row shows instead of the file's value (null = the file's), `write` what reaches the file (null = nothing). */
+export interface ScheduleStep { view: Schedule | null; write: Schedule | null }
+
+/** An edit inside a preset. Weekly with no day has no cron to write, and Custom keeps its own view while typed even when the text reads as a preset. */
+export function scheduleEdit(s: Schedule): ScheduleStep {
+  const writable = cronFor(s) !== null;
+  return { view: s.preset === 'custom' || !writable ? s : null, write: writable ? s : null };
+}
+
+/** A seg click on `p` while the row shows `current`; null when it is the preset already shown, which leaves the view alone. */
+export function schedulePick(text: string, current: Schedule, p: Preset): ScheduleStep | null {
+  if (p === current.preset) return null;
+  // Custom starts from the cron as the file has it and writes nothing until it is typed in.
+  if (p === 'custom') return { view: { preset: 'custom', text: fmValue(text, 'cron')?.value ?? '' }, write: null };
+  return scheduleEdit(switchPreset(current, p));
 }
 
 const sameSchedule = (a: Schedule, b: Schedule): boolean => JSON.stringify(a) === JSON.stringify(b);
