@@ -34,7 +34,7 @@ interface ScanOptions {
   now?: number;
   root?: string;
   skipProcScan?: boolean;
-  /** Override the live-cwd set (tests). null disables gating; undefined probes. */
+  /** Override the live-cwd set (tests). null disables gating; undefined probes. The process count still forks its one `ps` unless `skipProcScan`. */
   liveCwds?: Set<string> | null;
   /**
    * Override the set of session ids named by a live `claude` argv (tests). null = unknown, no row is flagged `processLive`; undefined probes
@@ -42,7 +42,7 @@ interface ScanOptions {
    */
   liveSessionIds?: Set<string> | null;
   /** Override kaizen lessons (tests). null skips tagging; undefined reads the log. */
-  lessons?: SessionAnalyticsLesson[] | null;
+  lessons?: readonly SessionAnalyticsLesson[] | null;
   /**
    * Sessions with a remote-answer wait held right now (`pending.ts`
    * `pendingSessionIds()`), injected by the handler so this module stays pure and
@@ -91,6 +91,11 @@ interface ScanOptions {
   projects?: ReadonlySet<string> | null;
   /** Override the dirs Claude makes for itself (tests); undefined ⇒ `defaultClaudeRoots(homeDir)`. */
   claudeRoots?: readonly string[];
+  /**
+   * A listing the caller already took (`scanSnapshot` shares one with the held-wait sweep), used in place of `listTranscripts(root)`. The archived,
+   * lookback and newest-per-id steps still apply to it. Omitted ⇒ the scan lists `root` itself.
+   */
+  transcripts?: readonly TranscriptRef[];
 }
 
 /** Default transcripts root. */
@@ -243,7 +248,7 @@ export function listUsageTranscripts(root: string): UsageTranscriptRef[] {
  * analytics need every half — and this reduction is the one answer to "which
  * file *is* this session now".
  */
-function newestPerId(refs: TranscriptRef[]): TranscriptRef[] {
+function newestPerId(refs: readonly TranscriptRef[]): TranscriptRef[] {
   const byId = new Map<string, TranscriptRef>();
   for (const ref of refs) {
     const seen = byId.get(ref.id);
@@ -255,13 +260,25 @@ function newestPerId(refs: TranscriptRef[]): TranscriptRef[] {
 /**
  * The live transcript for one session id, or undefined when nothing names it.
  *
- * Every caller resolving an id to a file to *read* goes through here rather than
- * `listTranscripts(...).find(...)`: a plain `find` returns whichever half
+ * Every caller resolving an id to a file to *read* goes through here (or
+ * {@link findTranscriptByPrefix}) rather than a plain `find` over a listing,
+ * which returns whichever half
  * `readdirSync` yielded first, so a split session's chat drawer or detail pane
  * could be served the abandoned half of its own transcript.
+ *
+ * `refs`, when given, is a listing the caller already took this request (`scanSnapshot` lists once and resolves every held wait from it); nothing is
+ * read from disk then.
  */
-export function findTranscript(root: string, id: string): TranscriptRef | undefined {
-  return newestPerId(listTranscripts(root).filter(t => t.id === id))[0];
+export function findTranscript(root: string, id: string, refs?: readonly TranscriptRef[]): TranscriptRef | undefined {
+  return newestPerId((refs ?? listTranscripts(root)).filter(t => t.id === id))[0];
+}
+
+/**
+ * The live transcript for a logged id *prefix* (the `/kaizen` log keys sessions by one), or undefined. Same rule as {@link findTranscript}: newest half
+ * per id, then the newest of those ids, so a split session resolves to the half it is writing now rather than whichever `readdirSync` yielded first.
+ */
+export function findTranscriptByPrefix(refs: readonly TranscriptRef[], prefix: string): TranscriptRef | undefined {
+  return newestPerId(refs.filter(t => t.id.startsWith(prefix))).sort((a, b) => b.mtimeMs - a.mtimeMs)[0];
 }
 
 /**
@@ -279,9 +296,9 @@ export function findTranscript(root: string, id: string): TranscriptRef | undefi
  * `<id>/subagents/`, and no sidechain record ever lands in the parent transcript
  * `findTranscript` returns, so the newest message is always the main thread's.
  */
-export function lastMessageMs(root: string, sessionId: string): number | null {
+export function lastMessageMs(root: string, sessionId: string, refs?: readonly TranscriptRef[]): number | null {
   let ref: TranscriptRef | undefined;
-  try { ref = findTranscript(root, sessionId); }
+  try { ref = findTranscript(root, sessionId, refs); }
   catch { return null; }
   if (!ref) return null;
   const parsed = readTranscript(ref.file);
@@ -329,14 +346,12 @@ export function subagentRunning(parentFile: string, sessionId: string, nowMs: nu
   return !!jobs && jobs.some(j => j.status === 'running');
 }
 
-/** Count running `claude` processes (informational cross-check). */
-export function countClaudeProcesses(): number | null {
-  try {
-    const out = execFileSync('ps', ['-Ao', 'comm='], { encoding: 'utf8', timeout: 2000 });
-    return out.split('\n').filter(l => /(^|\/)claude$/.test(l.trim())).length;
-  } catch {
-    return null;
-  }
+/**
+ * Running `claude` processes (informational cross-check), counted from the `ps -Ao pid=,comm=` stdout {@link liveCwds} already reads — so one poll forks
+ * one `ps` for both. `null` when `ps` failed; `0` when it ran and matched nothing, where `liveCwds` answers `null` instead.
+ */
+export function countClaudeProcs(psOut: string | null): number | null {
+  return psOut === null ? null : parsePsClaudePids(psOut).length;
 }
 
 /** Strip a trailing slash so cwd strings compare consistently. */
@@ -347,8 +362,8 @@ function normCwd(p: string): string {
 /**
  * Pids of every running `claude` CLI process, from `ps -Ao pid=,comm=` stdout.
  *
- * Matches comm against `/(^|\/)claude$/` — the same test `countClaudeProcesses`
- * uses, so the two can no longer disagree. Comm is everything after the pid and
+ * Matches comm against `/(^|\/)claude$/`; `countClaudeProcs` counts these same
+ * matches, so the live-cwd probe and the process count cannot disagree. Comm is everything after the pid and
  * may contain spaces (`…/Application Support/Claude/…`), so the split is at the
  * first whitespace run only.
  */
@@ -423,13 +438,8 @@ export function usableLsofStdout(err: unknown): string | null {
  * sessions in the same directory can't be told apart, so a dead session sharing
  * a directory with a live one still reads live.
  */
-export function liveCwds(): Set<string> | null {
-  let psOut: string | null = null;
-  try {
-    psOut = execFileSync('ps', ['-Ao', 'pid=,comm='], { encoding: 'utf8', timeout: 2000 });
-  } catch {
-    return null;
-  }
+export function liveCwds(psOut: string | null = readPsComm()): Set<string> | null {
+  if (psOut === null) return null;
   const pids = parsePsClaudePids(psOut);
   if (pids.length === 0) return null;
 
@@ -443,6 +453,23 @@ export function liveCwds(): Set<string> | null {
     lsofOut = usableLsofStdout(e);
   }
   return composeLiveCwds(psOut, lsofOut);
+}
+
+/** Test seam for {@link readPsComm}, the `ps -Ao pid=,comm=` read; same shape as {@link setPsRunner}. */
+let commRunner: PsRunner | null = null;
+
+/** Test seam: swap the `ps -Ao pid=,comm=` runner. `null` restores the real `execFileSync`. */
+export function setCommRunner(fn: PsRunner | null): void {
+  commRunner = fn;
+}
+
+/** The stdout of `ps -Ao pid=,comm=`, or `null` when it could not run. Read once per scan and shared by {@link liveCwds} and {@link countClaudeProcs}. */
+function readPsComm(): string | null {
+  try {
+    return commRunner ? commRunner() : execFileSync('ps', ['-Ao', 'pid=,comm='], { encoding: 'utf8', timeout: 2000 });
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -526,7 +553,7 @@ export interface RowOptions extends Pick<ScanOptions, 'homeDir' | 'pendingIds' |
   liveCwds: Set<string> | null;
   /** Session ids named by a live `claude` argv; null or omitted fails open, as `skipProcScan` does: no row is flagged `processLive`. */
   liveSessionIds?: Set<string> | null;
-  lessons: SessionAnalyticsLesson[] | null;
+  lessons: readonly SessionAnalyticsLesson[] | null;
   /**
    * Apply the list's skips (no conversational message, slash-command only, the token-refresh cwd) by answering null. The row-by-id route leaves them
    * off, so a routine run the list would hide still opens.
@@ -693,7 +720,7 @@ export function scanSessions(config: Partial<Config>, options: ScanOptions = {})
   // pushed as two `Session`s with the same id — one row per half, parsed from
   // different halves, so reading `working` and `idle` at once.
   const inLookback = newestPerId(
-    listTranscripts(root)
+    (options.transcripts ?? listTranscripts(root))
       .filter(t => !archived || !archived.has(t.id))
       .filter(t => now - t.mtimeMs <= lookbackMs))
     .sort((a, b) => b.mtimeMs - a.mtimeMs);
@@ -716,12 +743,12 @@ export function scanSessions(config: Partial<Config>, options: ScanOptions = {})
   const candidates = (wanted ? inLookback.filter(t => { const p = projectOf.get(t); return p == null || wanted.has(p); }) : inLookback)
     .slice(0, maxSessions * 2);
 
+  // One `ps -Ao pid=,comm=` per scan, feeding both the live-cwd set and `runningClaudeProcs`. null = skipped or failed.
+  const psOut = options.skipProcScan ? null : readPsComm();
   // Set of cwds with a live `claude` process. null = probe skipped/unavailable
   // → fail open (no gating). A session whose cwd is absent has no live process,
   // so it can't be working/pending — force it to idle regardless of transcript.
-  const live = options.liveCwds !== undefined
-    ? options.liveCwds
-    : options.skipProcScan ? null : liveCwds();
+  const live = options.liveCwds !== undefined ? options.liveCwds : liveCwds(psOut);
   // Session ids in a live `claude` argv: one more `ps` per poll, the same cost class as the two above. A null probe fails open (no row flagged), leaving
   // the server-side 409 on POST as the safety net.
   const liveIds = options.liveSessionIds !== undefined
@@ -755,7 +782,7 @@ export function scanSessions(config: Partial<Config>, options: ScanOptions = {})
     generatedAt: new Date(now).toISOString(),
     activeWindowMin,
     maxSessions,
-    runningClaudeProcs: options.skipProcScan ? null : countClaudeProcesses(),
+    runningClaudeProcs: countClaudeProcs(psOut),
     totals: {
       shown: sessions.length,
       active: sessions.filter(s => s.status === 'working').length

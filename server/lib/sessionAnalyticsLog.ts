@@ -152,15 +152,36 @@ export function readLogEvents(logPath = sessionAnalyticsLogPath()): SessionAnaly
   return parseLogEvents(text);
 }
 
-/** Read + parse the log at `logPath` (default: global). `[]` if unreadable. */
-export function readSessionAnalyticsLog(logPath = sessionAnalyticsLogPath()): SessionAnalyticsLesson[] {
+/** Parsed lessons per log path, keyed on the stat they were read at. */
+const lessonCache = new Map<string, { mtimeMs: number; size: number; lessons: readonly SessionAnalyticsLesson[] }>();
+
+/** Test seam: forget every remembered parse. */
+export function resetSessionAnalyticsLogCache(): void {
+  lessonCache.clear();
+}
+
+/**
+ * Read + parse the log at `logPath` (default: global). `[]` if unreadable.
+ *
+ * Every sessions poll and row read calls this, and the file changes only when `/kaizen` appends, so the parse is remembered per path and reused while
+ * the file's `mtimeMs` and `size` both match; one `stat` per call instead of a read and a parse. The array (and its entries) is shared between callers —
+ * hence `readonly`; never mutate it.
+ */
+export function readSessionAnalyticsLog(logPath = sessionAnalyticsLogPath()): readonly SessionAnalyticsLesson[] {
   let text: string;
+  let stat: fs.Stats;
   try {
+    stat = fs.statSync(logPath);
+    const hit = lessonCache.get(logPath);
+    if (hit && hit.mtimeMs === stat.mtimeMs && hit.size === stat.size) return hit.lessons;
     text = fs.readFileSync(logPath, 'utf8');
   } catch {
+    lessonCache.delete(logPath);
     return [];
   }
-  return parseSessionAnalyticsLog(text);
+  const lessons = parseSessionAnalyticsLog(text);
+  lessonCache.set(logPath, { mtimeMs: stat.mtimeMs, size: stat.size, lessons });
+  return lessons;
 }
 
 /**
@@ -168,7 +189,7 @@ export function readSessionAnalyticsLog(logPath = sessionAnalyticsLogPath()): Se
  * prefix of the full session UUID; newest match wins (entries are oldest-first,
  * so scan in reverse).
  */
-export function lessonForSession(lessons: SessionAnalyticsLesson[], sessionId: string): string | null {
+export function lessonForSession(lessons: readonly SessionAnalyticsLesson[], sessionId: string): string | null {
   if (!sessionId) return null;
   for (let i = lessons.length - 1; i >= 0; i--) {
     if (sessionId.startsWith(lessons[i].idPrefix)) return lessons[i].lesson;
