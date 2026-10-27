@@ -66,6 +66,20 @@ export function diffNeeds(
   return out;
 }
 
+/**
+ * One poll's step: the baseline to keep for the next poll, and what to announce now. `baseline` always advances; `targets` is empty on the first snapshot
+ * (`prev` null), so a page load never replays every already-waiting session, and while `enabled` is off, so switching it on cannot replay a backlog.
+ */
+export function notifyStep(
+  prev: ReadonlyMap<string, NotifyKind> | null,
+  sessions: readonly Session[],
+  enabled: boolean
+): { baseline: Map<string, NotifyKind>; targets: NotifyTarget[] } {
+  const baseline = kindMap(sessions);
+  if (prev === null || !enabled) return { baseline, targets: [] };
+  return { baseline, targets: diffNeeds(prev, sessions) };
+}
+
 /** Identity of one announcement. The same session under a different hold is still news. */
 export function notifyKey(t: NotifyTarget): string {
   return `${t.id}:${t.kind}`;

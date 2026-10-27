@@ -3,7 +3,7 @@ import assert from 'node:assert';
 import type { Session } from '../shared/types.js';
 import { holdCount, holdKind } from '../client/src/lib/holds.js';
 import {
-  dedupe, diffNeeds, notifyBody, notifyKey, notifyKind,
+  dedupe, diffNeeds, kindMap, notifyBody, notifyKey, notifyKind, notifyStep,
   type NotifyKind, type NotifyTarget
 } from '../client/src/lib/webNotify.js';
 
@@ -164,6 +164,37 @@ export function run(): number {
       notifyKey(target({ id: 'a', kind: 'question' })),
       notifyKey(target({ id: 'a', kind: 'reply' }))
     );
+  })) p++; else f++;
+
+  // --- kindMap + notifyStep: useWebNotify's effect, without the ref ------
+
+  if (test('kindMap keeps only headless sessions holding something worth a banner', () => {
+    const map = kindMap([
+      headless({ id: 'q', remoteQuestion: true }),
+      headless({ id: 'perm', permissionWait: true }),
+      sess({ id: 'local-q', remoteQuestion: true }),
+      headless({ id: 'busy', status: 'working' })
+    ]);
+    assert.deepStrictEqual([...map], [['q', 'question']]);
+  })) p++; else f++;
+
+  const waiting = [headless({ id: 'q', remoteQuestion: true })];
+
+  if (test('notifyStep: the first snapshot seeds the baseline and announces nothing', () => {
+    const step = notifyStep(null, waiting, true);
+    assert.deepStrictEqual(step.targets, []);
+    assert.deepStrictEqual([...step.baseline], [['q', 'question']]);
+  })) p++; else f++;
+
+  if (test('notifyStep: switched off still advances the baseline, and announces nothing', () => {
+    const step = notifyStep(new Map(), waiting, false);
+    assert.deepStrictEqual(step.targets, []);
+    assert.deepStrictEqual([...step.baseline], [['q', 'question']]);
+  })) p++; else f++;
+
+  if (test('notifyStep: switched on with a baseline announces the new hold', () => {
+    const step = notifyStep(new Map(), waiting, true);
+    assert.deepStrictEqual(step.targets.map(t => [t.id, t.kind]), [['q', 'question']]);
   })) p++; else f++;
 
   console.log(`\n  ${p} passed, ${f} failed`);

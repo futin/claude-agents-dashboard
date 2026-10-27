@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react';
 
 import { useSettings } from './useSettings';
 import {
-  NOTIFY_TITLE, dedupe, diffNeeds, iconColorVar, kindMap, notifyBody,
+  NOTIFY_TITLE, dedupe, iconColorVar, notifyBody, notifyStep,
   type NotifyKind, type NotifyTarget
 } from '../lib/webNotify';
 import type { Session } from '../../../shared/types';
@@ -246,11 +246,8 @@ export function useWebNotify(sessions: Session[] | null | undefined): void {
 
   useEffect(() => {
     if (!sessions) return;
-    const prev = previous.current;
-    previous.current = kindMap(sessions);
-    if (!prev) return; // first snapshot — baseline only
-
-    if (!settings.notifyBrowser) return;
-    announce(diffNeeds(prev, sessions));
+    const { baseline, targets } = notifyStep(previous.current, sessions, settings.notifyBrowser);
+    previous.current = baseline;
+    announce(targets);
   }, [sessions, settings.notifyBrowser]);
 }

@@ -1,6 +1,10 @@
 import assert from 'node:assert';
 
-import { appendTranscript, fmtElapsed, micErrorMessage, pickMimeType } from '../client/src/lib/dictation.js';
+import { appendTranscript, fmtElapsed, micErrorMessage, pickMimeType, transcribeErrorText } from '../client/src/lib/dictation.js';
+import { READ_ONLY_TEXT } from '../client/src/lib/writeRefusal.js';
+
+/** The exact body the server sends a write from a read-only network. */
+const READ_ONLY_BODY = { error: 'read-only from this network' };
 
 function test(name: string, fn: () => void): boolean {
   try { fn(); console.log('  ✓ ' + name); return true; }
@@ -66,6 +70,27 @@ export function run(): number {
     assert.equal(micErrorMessage(null), 'microphone unavailable');
     assert.equal(micErrorMessage('boom'), 'microphone unavailable');
     assert.equal(micErrorMessage({}), 'microphone unavailable');
+  }));
+
+  // --- transcribeErrorText: useDictation's non-ok branch -----------------
+
+  check(test('a 429 is the single-flight refusal, whatever the body says', () => {
+    assert.equal(transcribeErrorText(429, undefined), 'another clip is transcribing');
+    assert.equal(transcribeErrorText(429, READ_ONLY_BODY), 'another clip is transcribing');
+  }));
+
+  check(test('a read-only 403 says so instead of asking for a token', () => {
+    assert.equal(transcribeErrorText(403, READ_ONLY_BODY), READ_ONLY_TEXT);
+  }));
+
+  check(test('any other 403 asks for the token', () => {
+    assert.equal(transcribeErrorText(403, undefined), 'token needed — tap send to enter it');
+    assert.equal(transcribeErrorText(403, { error: 'bad token' }), 'token needed — tap send to enter it');
+  }));
+
+  check(test('every other failure is a generic one', () => {
+    assert.equal(transcribeErrorText(500, undefined), 'transcription failed');
+    assert.equal(transcribeErrorText(413, undefined), 'transcription failed');
   }));
 
   console.log(`\n  ${ok}/${total} passed`);

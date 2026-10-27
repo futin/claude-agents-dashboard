@@ -26,6 +26,7 @@ import path from 'node:path';
 import { testAsync, until, withServer } from './api-harness.js';
 import { messageSessionIds } from '../server/lib/messages.js';
 import { pendingSessionIds } from '../server/lib/pending.js';
+import { permissionWaits, resetPermissions } from '../server/lib/permissions.js';
 import { planSessionIds } from '../server/lib/plans.js';
 import { resetNotify, setIdleSource, setLabelResolver, setSender } from '../server/lib/notify.js';
 import type { NotifyPayload } from '../server/lib/notify.js';
@@ -340,6 +341,70 @@ export async function run(): Promise<number> {
         assert.match(sent[0].body, /finished — reply window open/);
         held.abort();
         await until(() => !messageSessionIds().has(ID), 'the ordinary wait is released');
+      } finally {
+        resetNotify();
+        resetSettings();
+      }
+    });
+  }));
+
+  /* ------------------------------- the two fire-and-forget notify routes */
+
+  const GHOST = '99999999-9999-4999-8999-999999999999';
+
+  check(await testAsync('POST /api/permissions/notify: every refusal is a 400/404 that registers nothing, and a known session registers', async () => {
+    await withServer(ENV, async h => {
+      h.plant(ID);
+      try {
+        const cases: Array<[string, number, string]> = [
+          ['{not json', 400, 'bad body'],
+          [JSON.stringify({ sessionId: '../../etc/passwd' }), 400, 'bad sessionId'],
+          [JSON.stringify({}), 400, 'bad sessionId'],
+          [JSON.stringify({ sessionId: GHOST }), 404, 'unknown session']
+        ];
+        for (const [body, status, error] of cases) {
+          const reply = await h.req('/api/permissions/notify', { method: 'POST', body });
+          assert.equal(reply.status, status, `${body} must be refused with ${status}`);
+          assert.equal(reply.json?.error, error);
+          assert.equal(permissionWaits().size, 0, `${body} registered a permission wait`);
+        }
+        // The mirror: the same route takes a planted session, so the zeros above are the gates and not a dead store.
+        const reply = await h.req('/api/permissions/notify', { method: 'POST', body: JSON.stringify({ sessionId: ID }) });
+        assert.equal(reply.status, 200);
+        assert.deepEqual(reply.json, { ok: true });
+        assert.ok(permissionWaits().has(ID), 'the known session is registered');
+      } finally {
+        resetPermissions();
+      }
+    });
+  }));
+
+  check(await testAsync('POST /api/notify/event: bad body, id or event is a 400 that pushes nothing; an unknown session still pushes', async () => {
+    await withServer(`${ENV}NTFY_TOPIC=tevent\n`, async h => {
+      h.plant(ID);
+      const sent: NotifyPayload[] = [];
+      setSender(payload => { sent.push(payload); });
+      setLabelResolver(() => 'proj');
+      setIdleSource(() => null);
+      try {
+        setSettings({ notify: { enabled: true, events: { stop: true }, requireRemoteAnswer: false, requireAfk: false, requireAutoMode: false } });
+        const cases: Array<[string, string]> = [
+          ['{not json', 'bad body'],
+          [JSON.stringify({ sessionId: '../../etc/passwd', event: 'stop' }), 'bad sessionId'],
+          [JSON.stringify({ sessionId: ID, event: 'bogus' }), 'bad event'],
+          [JSON.stringify({ sessionId: ID }), 'bad event']
+        ];
+        for (const [body, error] of cases) {
+          const reply = await h.req('/api/notify/event', { method: 'POST', body });
+          assert.equal(reply.status, 400, `${body} must be refused`);
+          assert.equal(reply.json?.error, error);
+        }
+        assert.equal(sent.length, 0, 'a refused event must never push');
+
+        // The route deliberately skips `sessionExists` (a stop hook can beat its transcript to disk), so a ghost id still pushes.
+        const reply = await h.req('/api/notify/event', { method: 'POST', body: JSON.stringify({ sessionId: GHOST, event: 'stop' }) });
+        assert.equal(reply.status, 200);
+        assert.equal(sent.length, 1);
       } finally {
         resetNotify();
         resetSettings();

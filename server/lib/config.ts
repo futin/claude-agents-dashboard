@@ -233,9 +233,9 @@ export function toPermissionMode(value: unknown, fallback: PermissionMode, key =
  * never see anything there and would force every session to `idle`. So
  * containerized runs default the gate off (same as "probe unavailable").
  */
-export function isDockerContainer(): boolean {
+export function isDockerContainer(marker = '/.dockerenv'): boolean {
   try {
-    return fs.existsSync('/.dockerenv');
+    return fs.existsSync(marker);
   } catch {
     return false;
   }

@@ -343,7 +343,7 @@ client/src/
                   tail poll at a time, an epoch per re-tail), pollSeq (`createPollSeq`, the skip-while-in-flight rule useSessions and the Routines polls share),
                   heldBody (which timeline body a pinned panel folds), markdown, configsEntries,
                   format, settings, persistedReset (Settings › Reset's reach into mounted usePersistedState holders),
-                  sections, deepLink, dictation, spawnOptions, pins, resume, pace, usageProfile,
+                  sections, deepLink, dictation, openFolder (the Open folder key's status → note), spawnOptions, pins, resume, pace, usageProfile,
                   usageRatesFormat, usageHistory (the History tab's step path, ticks and figures), panelCollapse, surface, walkChart (the headroom
                   chart's geometry), walkRows (the same walk as day rows), holds,
                   composer (that keyboard's pure rules and the session's latest `wrap_up` suggestion), modelLabel (`claude-opus-5-5` → `Opus 5.5`),

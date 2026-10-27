@@ -47,7 +47,7 @@ obtain an object nobody displays; and worse, an unmount cleanup that closes over
 ## One interval drives two features
 
 ```ts
-// client/src/hooks/useDictation.ts:47-57
+// client/src/hooks/useDictation.ts:46-56
   useEffect(() => {
     if (phase !== 'recording') return;
     setElapsed(0);
@@ -108,7 +108,7 @@ nothing.
 ### Why a ref, and not the usual `let live`
 
 ```ts
-// client/src/hooks/useDictation.ts:36-38
+// client/src/hooks/useDictation.ts:35-37
   // Same liveness idiom as useRemoteAnswer.ts's `let live`, adapted to a ref:
   // `start` is a memoized callback that outlives any one effect run, so the
   // flag has to survive in something a later effect can still flip off.
@@ -129,7 +129,7 @@ effect; a ref when the async work is started by something that outlives the effe
 This one is genuinely surprising the first time.
 
 ```ts
-// client/src/hooks/useDictation.ts:62-68
+// client/src/hooks/useDictation.ts:61-67
   useEffect(() => {
     liveRef.current = true;
     return () => {
@@ -146,7 +146,7 @@ does not merely release the mic — it triggers the recorder's own stop handler 
 out:
 
 ```ts
-// client/src/hooks/useDictation.ts:120-123
+// client/src/hooks/useDictation.ts:113-116
       rec.onstop = () => {
         stopTracks();
         void upload(new Blob(chunks, { type: rec.mimeType || mimeType || 'audio/mp4' }));
@@ -156,7 +156,7 @@ out:
 Which calls `upload`. Which is why `upload` opens with the second liveness check:
 
 ```ts
-// client/src/hooks/useDictation.ts:77-78
+// client/src/hooks/useDictation.ts:76-77
     if (!liveRef.current) return;
     setPhase('transcribing');
 ```
@@ -194,7 +194,7 @@ resolving**, `upload`'s covers a recording **already running**. Neither subsumes
 ## The hook does not know a textarea exists
 
 ```ts
-// client/src/hooks/useDictation.ts:29
+// client/src/hooks/useDictation.ts:28
 export function useDictation(onText: (text: string) => void): DictationState {
 ```
 

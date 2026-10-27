@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 
 import * as scan from '../server/lib/scan.js';
-import { DEFAULTS, parseEnv, toPosInt, loadConfig } from '../server/lib/config.js';
+import { DEFAULTS, parseEnv, toPosInt, loadConfig, isDockerContainer } from '../server/lib/config.js';
 import { refreshCwd } from '../server/lib/token-refresh.js';
 import { holdKind, type HoldKind } from '../client/src/lib/holds.js';
 
@@ -131,13 +131,28 @@ export function run(): number {
     const wasEnv = process.env.SKIP_PROC_SCAN;
     delete process.env.SKIP_PROC_SCAN;
     try {
-      // /.dockerenv doesn't exist on this host/CI runner → default false outside a container.
-      assert.strictEqual(loadConfig({ envPath: '/no/such/.env' }).skipProcScan, false);
+      // The default is whatever detection says, so this holds on a host and inside a container alike.
+      assert.strictEqual(loadConfig({ envPath: '/no/such/.env' }).skipProcScan, isDockerContainer());
       process.env.SKIP_PROC_SCAN = 'true';
       assert.strictEqual(loadConfig({ envPath: '/no/such/.env' }).skipProcScan, true);
+      // The mirror of `=true`: the only case that proves the override beats detection inside a container.
+      process.env.SKIP_PROC_SCAN = 'false';
+      assert.strictEqual(loadConfig({ envPath: '/no/such/.env' }).skipProcScan, false);
     } finally {
       if (wasEnv === undefined) delete process.env.SKIP_PROC_SCAN;
       else process.env.SKIP_PROC_SCAN = wasEnv;
+    }
+  })) p++; else f++;
+
+  if (test('isDockerContainer: true when the marker file exists, false when it does not', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'docker-marker-'));
+    try {
+      const marker = path.join(dir, '.dockerenv');
+      fs.writeFileSync(marker, '');
+      assert.strictEqual(isDockerContainer(marker), true);
+      assert.strictEqual(isDockerContainer(path.join(dir, 'missing')), false);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
     }
   })) p++; else f++;
 
