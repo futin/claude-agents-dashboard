@@ -99,7 +99,10 @@ one of them at random — the same two-state rule the Sessions board follows.
   entirely `/kaizen`'s.
 - **Status badge** (`.an-status`) — `actioned` / `promoted` / `dropped` / `open`: did you
   ever act on the lesson? `/kaizen` records that by appending a `status` line to the same
-  log; no line means still open. The same fact leads the row as `.an-dot`.
+  log; no line means still open. The same fact leads the row as `.an-dot`. A `none` lesson (the session taught nothing new) is born closed: it draws
+  `.an-status.none` (`— none`) and a hollow `.an-dot.none`, never `○ open`.
+- **Lesson fields** (`.an-lesson-fields`) — when the lesson line carries a tail, its `cue` / `component` / `evidence` / `confidence` sit as a labelled list
+  under the lesson text; nothing extra when it does not. The collapsed tile clamps the lesson text only, never the tail.
 
 Workflow: run `/kaizen` in a Claude Code session → it appends a lesson → the session
 appears in the tab (↻ to pull it in). If the transcript has since been deleted, the
@@ -125,8 +128,8 @@ line's project tag.
   live half (never joined into a path — same philosophy as
   `serveSessionDetail`; validated with `ID_RE`) → `analyzeSession(ref.file, ref.id)`
   live. `analysis` is `null` when the transcript is gone.
-- **`reviewDue`** = lessons exist AND no `review:` marker within 7 days
-  (`REVIEW_INTERVAL_DAYS` in `analytics.ts`; `now` injectable for tests). An empty log is
+- **`reviewDue`** = lessons other than `none` ones exist AND no `review:` marker within 7 days
+  (`REVIEW_INTERVAL_DAYS` in `analytics.ts`; `now` injectable for tests). An empty log, or one of only `none` lessons, is
   never "due". The client renders it twice over in the band: the `.an-review` chip
   (`Review due`, with `lastReviewAt` in its tooltip) and one appended sentence naming the
   move — run `/kaizen review`, which sweeps accumulated lessons, promotes recurring ones
@@ -228,14 +231,23 @@ returned — no backend change, so the read-only invariant above still holds.
 - **⚠️ Log grammar (the contract with `/kaizen` — three line shapes, all append-only):**
 
   ```
-  - 2026-07-12 [dashboard] d04e9b52: 210k billable (1.4M ctx), top cost Explore. Lesson: <takeaway>.
+  - 2026-07-12 [dashboard] d04e9b52: 210k billable (1.4M ctx), top cost Explore. Lesson: <takeaway>. ‖ cue: <…> · component: <…> · evidence: <…> · confidence: high (<why>)
+  - 2026-07-12 [dashboard] 7f31c0aa: 95k billable (600k ctx), top cost Edit. Lesson: none — <reason>.
   - 2026-08-09 [dashboard] d04e9b52: status actioned — added to project CLAUDE.md
   - 2026-08-09 review: swept 12 lessons, promoted 1, pruned 2
   ```
 
+  A lesson line may carry a **tail** after the first ` ‖ ` (space, U+2016, space). Both parsers cut the lesson text there, so `lesson`,
+  `lessonForSession` (the Sessions view's `kaizenLesson`) and the collapsed tile never show it, and split it into `cue`, `component`, `evidence` and
+  `confidence` — a field starts only where ` · ` (space, U+00B7, space) is followed by one of those keys and a colon, so a value may contain either
+  separator. `confidence` must be `high|medium|low` (stored lower-case, an optional `(<why>)` kept as `confidenceReason`) or that one field is dropped;
+  unknown text is never a field. `AnalyticsReport.lessonFields` carries what parsed. A lesson whose text is `none` then a dash is `lessonNone`: born
+  closed, it takes no status line, draws as `none` rather than open, and `reviewStatus` does not count it as a lesson to sweep. Lines without a tail parse
+  exactly as before. `kaizen.mjs --trend` reads only the billable/ctx prefix, so tailed and `none` lines are points like any other.
+
   `parseLogEvents` classifies each line by the **first** pattern it matches (status →
   review → lesson), so a status note containing `Lesson:` can't be mistaken for a lesson.
-  The older `parseSessionAnalyticsLog` is untouched (still used by `scan.ts`) and skips
+  The older `parseSessionAnalyticsLog` (still used by `scan.ts`) returns the same lesson shape and skips
   the two newer shapes — they lack `Lesson:` — so a log with status/review lines reads
   byte-for-byte as before to every pre-existing consumer. **Never add a line shape on one
   side only** (skill ↔ parser).
@@ -243,7 +255,7 @@ returned — no backend change, so the read-only invariant above still holds.
   appending a later `status` line, never by rewriting the original — the machine runs
   many sessions at once and a read-modify-write of a shared file loses concurrent entries
   silently. `AnalyticsReport.lessonStatus` is the newest status matching the session
-  (prefix + newest-wins, mirroring `lessonForSession`); `null`/absent = still **open**.
+  (prefix + newest-wins, mirroring `lessonForSession`); `null`/absent = still **open**, unless `lessonNone` is set.
 
 ## Live meter
 

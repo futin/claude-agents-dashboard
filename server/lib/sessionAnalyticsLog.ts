@@ -8,6 +8,9 @@
  *   - <date> [<project>] <session-id>: status actioned — added to project CLAUDE.md
  *   - <date> review: swept 12 lessons, promoted 1, pruned 2
  *
+ * A lesson may carry a tail — `Lesson: <text>. ‖ cue: … · component: … · evidence: … · confidence: high (<why>)` — or be
+ * `Lesson: none — <reason>.`, which is born closed and never gets a status line.
+ *
  * The log is **append-only** — a lesson's fate is recorded by appending a later
  * `status` line, never by editing the original. That is what makes it safe for
  * the parallel sessions this dashboard exists to watch: concurrent appends can't
@@ -25,7 +28,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 import { claudeHome } from './paths.js';
-import type { LessonStatus } from '../../shared/types.js';
+import type { LessonFields, LessonStatus } from '../../shared/types.js';
 
 /** One parsed session-analytics-log entry. */
 export interface SessionAnalyticsLesson {
@@ -35,8 +38,14 @@ export interface SessionAnalyticsLesson {
   project: string;
   /** Session-id prefix as written — a prefix of the full transcript UUID. */
   idPrefix: string;
-  /** The `Lesson:` text (trailing period preserved as written). */
+  /** The `Lesson:` text up to the ` ‖ ` tail (trailing period preserved as written). */
   lesson: string;
+  /** The tail's fields, when it carries at least one known key. */
+  fields?: LessonFields;
+  /** Set on a `Lesson: none — <reason>` line. */
+  none?: true;
+  /** The text after a `none` lesson's dash. */
+  noneReason?: string;
 }
 
 /** A `status` line: what became of one session's lesson. */
@@ -72,6 +81,47 @@ const STATUS_RE =
 // - <date> review: <summary>
 const REVIEW_RE = /^-\s+(\d{4}-\d{2}-\d{2})\s+review\b\s*:?/i;
 
+const TAIL_SEP = ' ‖ ';
+
+// A field starts the tail or follows ` · ` — and only when a known key comes next, so a value may itself hold ` · ` or `: `.
+const FIELD_RE = /(?:^|\s·\s)\s*(cue|component|evidence|confidence)\s*:\s*/gi;
+
+const CONFIDENCE_RE = /^(high|medium|low)\b\s*(?:\((.*)\))?\s*\.?$/i;
+
+// `none` then a dash — `nonetheless` and `none of …` stay ordinary lessons.
+const NONE_RE = /^none\s*[—–-]\s*(.*)$/i;
+
+/** The tail's known fields, first occurrence of each key; undefined when it names none. */
+function parseFields(tail: string): LessonFields | undefined {
+  const hits = [...tail.matchAll(FIELD_RE)];
+  const fields: LessonFields = {};
+  hits.forEach((h, i) => {
+    const key = h[1].toLowerCase() as keyof LessonFields;
+    const value = tail.slice(h.index + h[0].length, hits[i + 1]?.index ?? tail.length).trim();
+    if (!value || key in fields) return;
+    if (key === 'confidence') {
+      const c = CONFIDENCE_RE.exec(value);
+      if (!c) return;
+      fields.confidence = c[1].toLowerCase() as LessonFields['confidence'];
+      if (c[2]?.trim()) fields.confidenceReason = c[2].trim();
+    } else {
+      fields[key] = value;
+    }
+  });
+  return Object.keys(fields).length ? fields : undefined;
+}
+
+function lessonEntry(m: RegExpExecArray): SessionAnalyticsLesson {
+  const raw = m[4].trim();
+  const cut = raw.indexOf(TAIL_SEP);
+  const lesson = cut < 0 ? raw : raw.slice(0, cut).trim();
+  const entry: SessionAnalyticsLesson = { date: m[1], project: m[2], idPrefix: m[3], lesson };
+  const none = NONE_RE.exec(lesson);
+  if (none) return { ...entry, none: true, noneReason: none[1].trim() };
+  const fields = cut < 0 ? undefined : parseFields(raw.slice(cut + TAIL_SEP.length));
+  return fields ? { ...entry, fields } : entry;
+}
+
 /** Parse the log body into entries (file order = chronological, oldest-first). */
 export function parseSessionAnalyticsLog(text: string): SessionAnalyticsLesson[] {
   if (typeof text !== 'string') return [];
@@ -79,7 +129,7 @@ export function parseSessionAnalyticsLog(text: string): SessionAnalyticsLesson[]
   for (const raw of text.split('\n')) {
     const m = LINE_RE.exec(raw.trim());
     if (!m) continue;
-    out.push({ date: m[1], project: m[2], idPrefix: m[3], lesson: m[4].trim() });
+    out.push(lessonEntry(m));
   }
   return out;
 }
@@ -119,7 +169,7 @@ export function parseLogEvents(text: string): SessionAnalyticsEvents {
     }
 
     const m = LINE_RE.exec(line);
-    if (m) out.lessons.push({ date: m[1], project: m[2], idPrefix: m[3], lesson: m[4].trim() });
+    if (m) out.lessons.push(lessonEntry(m));
   }
 
   return out;

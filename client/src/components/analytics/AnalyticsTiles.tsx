@@ -46,9 +46,9 @@ function ReportTile({ r, open, onToggle }: { r: AnalyticsReport; open: boolean; 
       aria-expanded={open}
     >
       <div className="tile-h">
-        <LessonDot s={r.lessonStatus} />
+        <LessonDot s={r.lessonStatus} none={r.lessonNone} />
         <span className="nm">{r.project}</span>
-        <StatusBadge s={r.lessonStatus} />
+        <StatusBadge s={r.lessonStatus} none={r.lessonNone} />
       </div>
       <div className="tile-sub">
         {r.models.map(m => <span key={m} className="model">{m}</span>)}

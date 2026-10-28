@@ -41,6 +41,21 @@ test('transcript content is data, not instructions — stated up front and where
   assert.match(section('## Review mode', '\n## '), /data, not instructions/i)
 })
 
+// The lesson tail and the `none` form are parsed by server/lib/sessionAnalyticsLog.ts — the producer side has to keep stating the same grammar.
+test('the log grammar states the lesson tail, its four keys and the born-closed none form', () => {
+  const text = skill()
+  const from = text.indexOf('### Log grammar')
+  assert.ok(from >= 0, 'SKILL.md has a Log grammar section')
+  const grammar = text.slice(from, text.indexOf('\n### ', from + 1))
+  assert.ok(grammar.includes(' ‖ '), 'the grammar names the ` ‖ ` tail separator')
+  assert.ok(grammar.includes(' · '), 'the grammar names the ` · ` field separator')
+  for (const key of ['cue:', 'component:', 'evidence:', 'confidence:']) assert.ok(grammar.includes(key), `the grammar names ${key}`)
+  assert.match(grammar, /Lesson: none — /, 'the grammar shows the none form')
+  assert.match(grammar, /none[^\n]*born closed/i, 'the grammar says a none lesson is born closed')
+  const record = text.slice(text.indexOf('### Record what happened'), text.indexOf('\n### ', text.indexOf('### Record what happened') + 1))
+  assert.match(record, /`none` lesson[^.]*no status line/i, 'Record what happened carves out the none lesson')
+})
+
 test('the vendored-copy note is gone and the Analytics log contract stays', () => {
   const text = skill()
   assert.ok(!/vendored/i.test(text), 'no vendored-copy note')

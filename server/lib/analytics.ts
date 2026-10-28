@@ -60,6 +60,8 @@ export function listReports(limit: number, opts: { homeDir?: string } = {}): Ana
       loggedAt: entry.date,
       analysis,
       lesson: entry.lesson,
+      ...(entry.fields ? { lessonFields: entry.fields } : {}),
+      ...(entry.none ? { lessonNone: true } : {}),
       lessonStatus: statusForSession(statuses, sessionId)
     };
   });
@@ -72,13 +74,14 @@ const REVIEW_INTERVAL_DAYS = 7;
  * Whether the log is due a sweep. `reviewDue` is true only when there are
  * lessons to sweep AND no `review:` marker landed in the last
  * {@link REVIEW_INTERVAL_DAYS} days — a fresh install with an empty log is never
- * "due". Fails open to not-due if the log can't be read.
+ * "due", and neither is one holding only `none` lessons, which are born closed.
+ * Fails open to not-due if the log can't be read.
  */
 export function reviewStatus(
   opts: { homeDir?: string; now?: Date } = {}
 ): { lastReviewAt: string | null; reviewDue: boolean } {
   const { lessons, lastReviewDate } = readLogEvents(logPath(opts.homeDir));
-  if (!lessons.length) return { lastReviewAt: lastReviewDate, reviewDue: false };
+  if (!lessons.some(l => !l.none)) return { lastReviewAt: lastReviewDate, reviewDue: false };
 
   const ms = lastReviewDate ? Date.parse(`${lastReviewDate}T00:00:00Z`) : NaN;
   // No marker (or an unreadable one) means nothing has ever swept the log — due.

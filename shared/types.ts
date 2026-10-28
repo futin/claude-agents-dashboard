@@ -1522,7 +1522,8 @@ export interface SessionAnalysis {
  * What became of a logged lesson, from the log's own `status` lines:
  * `actioned` (written into a CLAUDE.md / memory), `promoted` (raised to global
  * config after recurring across projects), `dropped` (considered and rejected).
- * Lessons with no status line are still open.
+ * Lessons with no status line are still open — except a `none` lesson, which
+ * is born closed and never gets one ({@link AnalyticsReport.lessonNone}).
  */
 export interface LessonStatus {
   status: 'actioned' | 'promoted' | 'dropped';
@@ -1551,10 +1552,27 @@ export interface AnalyticsReport {
   loggedAt: string;
   /** Deterministic post-mortem facts, re-run live; null if the transcript is gone. */
   analysis: SessionAnalysis | null;
-  /** The session-analytics-log lesson text (always present — it's what puts the session here). */
+  /** The session-analytics-log lesson text (always present — it's what puts the session here), without its ` ‖ ` field tail. */
   lesson: string;
-  /** Newest `status` line for this session, or null while the lesson is still open. */
+  /** The lesson's structured tail, when the line carries one with at least one known key. */
+  lessonFields?: LessonFields;
+  /** True for a `Lesson: none — <reason>` line: the session taught nothing new, so the lesson is settled without a status line. */
+  lessonNone?: boolean;
+  /** Newest `status` line for this session, or null while the lesson is still open (or is a `none` lesson). */
   lessonStatus?: LessonStatus | null;
+}
+
+/**
+ * The fields a kaizen lesson line may carry after ` ‖ `: which situation it should fire on next time, which artifact it changes (or `habit`), what in
+ * the record backs it, and how sure it is. Each is absent when the line does not carry it.
+ */
+export interface LessonFields {
+  cue?: string;
+  component?: string;
+  evidence?: string;
+  confidence?: 'high' | 'medium' | 'low';
+  /** The parenthesised reason after the confidence level. */
+  confidenceReason?: string;
 }
 
 /** Payload of `GET /api/analytics` — the last N logged sessions, newest-first. */
@@ -1565,7 +1583,7 @@ export interface AnalyticsResponse {
   reports: AnalyticsReport[];
   /** Date of the newest `review:` marker in the log (YYYY-MM-DD), else null. */
   lastReviewAt?: string | null;
-  /** True when lessons exist and no review marker landed in the last 7 days. */
+  /** True when lessons other than `none` ones exist and no review marker landed in the last 7 days. */
   reviewDue?: boolean;
   /** Set only when listing failed. */
   error?: boolean;

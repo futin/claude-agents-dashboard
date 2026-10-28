@@ -165,6 +165,36 @@ export function run(): number {
     assert.equal(at('2026-08-08T12:00:00Z').lastReviewAt, '2026-08-01');
   });
 
+  t('reviewStatus: `none` lessons are born closed — a log of only them is never due', () => {
+    const nones = [
+      logLine('2026-07-12', 'demo', 'abc12345', 'none — routine, nothing new.'),
+      logLine('2026-07-13', 'demo', 'dddd4444', 'None - x')
+    ];
+    const now = new Date('2026-08-09T00:00:00Z');
+    assert.equal(reviewStatus({ homeDir: fakeHome({ sessionAnalyticsLog: nones.join('\n') }), now }).reviewDue, false);
+    const withOne = [...nones, logLine('2026-07-14', 'demo', 'eeee5555', 'batch the reads.')].join('\n');
+    assert.equal(reviewStatus({ homeDir: fakeHome({ sessionAnalyticsLog: withOne }), now }).reviewDue, true);
+  });
+
+  t('report: a tailed lesson carries its fields and clean text; a none lesson is flagged, not open', () => {
+    const home = fakeHome({
+      sessionAnalyticsLog: [
+        logLine('2026-07-12', 'demo', 'abc12345',
+          'read less. ‖ cue: big reads · component: habit · evidence: byTool[Read] · confidence: low (one session)'),
+        logLine('2026-07-13', 'demo', 'dddd4444', 'none — nothing new.')
+      ].join('\n')
+    });
+    const byId = Object.fromEntries(listReports(5, { homeDir: home }).map(r => [r.sessionId.slice(0, 8), r]));
+    assert.equal(byId['abc12345'].lesson, 'read less.');
+    assert.deepEqual(byId['abc12345'].lessonFields, {
+      cue: 'big reads', component: 'habit', evidence: 'byTool[Read]', confidence: 'low', confidenceReason: 'one session'
+    });
+    assert.equal(byId['abc12345'].lessonNone, undefined);
+    assert.equal(byId['dddd4444'].lessonNone, true);
+    assert.equal(byId['dddd4444'].lessonFields, undefined);
+    assert.equal(byId['dddd4444'].lesson, 'none — nothing new.');
+  });
+
   console.log(`  ${ok}/${n}`);
   return n - ok;
 }
