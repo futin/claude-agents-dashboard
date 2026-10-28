@@ -4,7 +4,8 @@ import os from 'node:os';
 import path from 'node:path';
 
 import {
-  parseSessionAnalyticsLog, lessonForSession, parseLogEvents, readSessionAnalyticsLog, resetSessionAnalyticsLogCache, statusForSession
+  parseSessionAnalyticsLog, lessonForSession, parseLogEvents, readSessionAnalyticsLog, resetSessionAnalyticsLogCache, statusForSession,
+  verdictForSession
 } from '../server/lib/sessionAnalyticsLog.js';
 
 function test(name: string, fn: () => void): boolean {
@@ -234,6 +235,69 @@ export function run(): number {
   t('tail: lessonForSession returns the clean lesson text only', () => {
     const lessons = parseSessionAnalyticsLog(PREFIX + 'Lesson: read less. ‖ cue: c · component: habit');
     assert.equal(lessonForSession(lessons, 'd04e9b52-0000'), 'read less.');
+  });
+
+  // --- verdict lines ------------------------------------------------------
+
+  t('verdict: date, value and note as written', () => {
+    const ev = parseLogEvents(
+      '- 2026-11-10 [dashboard] d04e9b52: verdict helped — errorSignals.retries median 4 → 1 over 5 sessions (before 5)'
+    );
+    assert.deepEqual(ev.verdicts, [{
+      date: '2026-11-10', project: 'dashboard', idPrefix: 'd04e9b52', verdict: 'helped',
+      note: 'errorSignals.retries median 4 → 1 over 5 sessions (before 5)'
+    }]);
+    assert.equal(ev.lessons.length, 0);
+    assert.equal(ev.statuses.length, 0);
+  });
+
+  t('verdict: the four values parse case-insensitively, stored lower-case; anything else is no verdict', () => {
+    const v = (word: string) => parseLogEvents(`- 2026-11-10 [p] abcd1234: verdict ${word} — x`).verdicts;
+    assert.equal(v('no-effect')[0]?.verdict, 'no-effect');
+    assert.equal(v('NO-EFFECT')[0]?.verdict, 'no-effect');
+    assert.equal(v('confounded')[0]?.verdict, 'confounded');
+    assert.equal(v('hurt')[0]?.verdict, 'hurt');
+    assert.deepEqual(v('maybe'), []);
+    assert.deepEqual(v('helpedx'), []);
+    assert.equal(parseLogEvents('- 2026-11-10 [p] abcd1234: verdict helped').verdicts[0]?.note, undefined);
+  });
+
+  t('verdict: a note holding `Lesson:` is a verdict, never a lesson; status and verdict never cross', () => {
+    const ev = parseLogEvents([
+      '- 2026-11-10 [p] abcd1234: verdict hurt — Lesson: x ‖ cue: y',
+      '- 2026-11-11 [p] abcd1234: status actioned — verdict helped next time',
+      '- 2026-11-12 [p] abcd1234: verdict confounded — status actioned twice in the window'
+    ].join('\n'));
+    assert.equal(ev.lessons.length, 0);
+    assert.deepEqual(ev.verdicts.map(v => v.verdict), ['hurt', 'confounded']);
+    assert.deepEqual(ev.statuses.map(s => s.status), ['actioned']);
+  });
+
+  t('verdict: the legacy lesson parser never reads a verdict or status note holding `Lesson:` as a lesson', () => {
+    const lessons = parseSessionAnalyticsLog([
+      '- 2026-11-10 [p] abcd1234: verdict hurt — Lesson: x',
+      '- 2026-11-11 [p] abcd1234: status actioned — Lesson: y'
+    ].join('\n'));
+    assert.deepEqual(lessons, []);
+  });
+
+  t('verdictForSession: prefix match, newest wins, no match → null', () => {
+    const { verdicts } = parseLogEvents([
+      '- 2026-11-10 [p] d04e9b52: verdict confounded — before 2',
+      '- 2026-11-20 [p] d04e9b52: verdict helped — retries 4 → 1'
+    ].join('\n'));
+    assert.deepEqual(verdictForSession(verdicts, 'd04e9b52-aaaa-bbbb'), { verdict: 'helped', date: '2026-11-20', note: 'retries 4 → 1' });
+    assert.equal(verdictForSession(verdicts, 'ffffffff-0000'), null);
+    assert.equal(verdictForSession(verdicts, ''), null);
+  });
+
+  t('verdict: a lesson with a verdict and no status line is still open', () => {
+    const { statuses, verdicts } = parseLogEvents([
+      PREFIX + 'Lesson: read less.',
+      '- 2026-11-10 [claude-agents-dashboard] d04e9b52: verdict no-effect — retries 2 → 2'
+    ].join('\n'));
+    assert.equal(statusForSession(statuses, 'd04e9b52-0000'), null);
+    assert.equal(verdictForSession(verdicts, 'd04e9b52-0000')?.verdict, 'no-effect');
   });
 
   console.log(`  ${ok}/${n}`);

@@ -1,7 +1,7 @@
 import type { AnalyticsReport } from '../../../../shared/types';
 import { fmtTok, fmtDuration } from '../../lib/format';
 import { keyActivate } from '../sessions/atoms';
-import { LessonDot, ReportBody, StatusBadge, shortId } from './atoms';
+import { LessonDot, ReportBody, StatusBadge, VerdictBadge, shortId } from './atoms';
 
 /**
  * The log as the Sessions **split**, down to its markup: a `.list` of `.lrow`s
@@ -88,6 +88,7 @@ function Inspector({ r }: { r: AnalyticsReport }) {
           <div className="ins-meta">
             <LessonDot s={r.lessonStatus} none={r.lessonNone} />
             <StatusBadge s={r.lessonStatus} none={r.lessonNone} />
+            <VerdictBadge v={r.lessonVerdict} />
             {r.models.map(m => <span key={m} className="model">{m}</span>)}
             <span className="an-id">{shortId(r.sessionId)}</span>
             <span className="an-when">

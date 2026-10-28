@@ -56,6 +56,20 @@ test('the log grammar states the lesson tail, its four keys and the born-closed 
   assert.match(record, /`none` lesson[^.]*no status line/i, 'Record what happened carves out the none lesson')
 })
 
+// The verdict line is parsed by server/lib/sessionAnalyticsLog.ts and measured by `--compare`; review mode is its only writer.
+test('the log grammar states the verdict line, and review mode says how a verdict is decided', () => {
+  const text = skill()
+  const from = text.indexOf('### Log grammar')
+  const grammar = text.slice(from, text.indexOf('\n### ', from + 1))
+  for (const v of ['helped', 'hurt', 'no-effect', 'confounded']) assert.ok(grammar.includes(v), `the grammar names verdict ${v}`)
+  assert.match(grammar, /verdict[^\n]*never[^\n]*\n?[^\n]*open or settled|never\*\* changes whether a lesson is open/i, 'a verdict never changes open/settled')
+  const review = text.slice(text.indexOf('## Review mode'))
+  assert.ok(review.includes('kaizen.mjs" --compare'), 'review mode runs --compare')
+  assert.match(review, /after `n` < 3/, 'review mode states the 3-session threshold')
+  assert.match(review, /`confounded`[^\n]*default whenever attribution is unclear/, 'confounded is the default when attribution is unclear')
+  assert.match(review, /judged <n>/, 'the review marker counts judged lessons')
+})
+
 test('the vendored-copy note is gone and the Analytics log contract stays', () => {
   const text = skill()
   assert.ok(!/vendored/i.test(text), 'no vendored-copy note')

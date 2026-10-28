@@ -17,7 +17,7 @@ import path from 'node:path';
 import { analyzeSession } from './analyze.js';
 import { findTranscriptByPrefix, listTranscripts, projectsRoot } from './scan.js';
 import { claudeHome } from './paths.js';
-import { readLogEvents, recentLessons, statusForSession } from './sessionAnalyticsLog.js';
+import { readLogEvents, recentLessons, statusForSession, verdictForSession } from './sessionAnalyticsLog.js';
 import type { AnalyticsReport } from '../../shared/types.js';
 
 /** Logged ids are transcript UUID prefixes — restrict to safe chars (mirrors api.ts). */
@@ -40,7 +40,7 @@ function projectName(cwd: string | null, fallback: string): string {
  * Pure read; fails open to [] only at the caller.
  */
 export function listReports(limit: number, opts: { homeDir?: string } = {}): AnalyticsReport[] {
-  const { lessons, statuses } = readLogEvents(logPath(opts.homeDir));
+  const { lessons, statuses, verdicts } = readLogEvents(logPath(opts.homeDir));
   const recent = recentLessons(lessons, limit);
   if (!recent.length) return [];
 
@@ -62,7 +62,8 @@ export function listReports(limit: number, opts: { homeDir?: string } = {}): Ana
       lesson: entry.lesson,
       ...(entry.fields ? { lessonFields: entry.fields } : {}),
       ...(entry.none ? { lessonNone: true } : {}),
-      lessonStatus: statusForSession(statuses, sessionId)
+      lessonStatus: statusForSession(statuses, sessionId),
+      lessonVerdict: verdictForSession(verdicts, sessionId)
     };
   });
 }

@@ -1478,6 +1478,12 @@ code,kbd,samp,pre{font-family:inherit}
 .an-status.none{background:none;color:var(--ink3)}
 /* the row's second line is dense — match what `.spill` gets there */
 .lrow .act-line .an-status{padding:1px 7px}
+/* verdict: whether an actioned/promoted rule worked — only `/kaizen review` writes one, so no badge is the quiet default. `hurt` sets ink on the
+   red tint: --red as 11px text fell to 4.1:1 on Midnight */
+.an-verdict{flex:none;font-size:11px;font-weight:500;padding:2px 8px;border-radius:12px;background:var(--strip-hi);color:var(--ink3);white-space:nowrap}
+.an-verdict.helped{background:var(--green-tint);color:var(--green)}
+.an-verdict.hurt{background:var(--red-tint);color:var(--ink)}
+.an-verdict.confounded{background:none;border:1px solid var(--hairline2);padding:1px 7px}
 
 /* the log row: billable where a session shows context used, and the id, the
    elapsed span and the logged date on the line under it */
