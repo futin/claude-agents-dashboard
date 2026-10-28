@@ -63,3 +63,39 @@ test('the vendored-copy note is gone and the Analytics log contract stays', () =
     assert.ok(text.includes(ref), `SKILL.md names the contract's other side: ${ref}`)
   }
 })
+
+// Step 7 routes each lesson to its cheapest home and escalates prose the log shows ignored (#334). The status-note prefix is what escalation reads to know
+// a rule was prose, so the routing table, the hand-off boundary, the prefixes and both triggers all have to stay stated.
+const step7 = () => {
+  const text = skill()
+  const from = text.indexOf('## 7. Offer to apply the improvements')
+  assert.ok(from >= 0, 'SKILL.md has step 7')
+  return text.slice(from, text.indexOf('\n## Mid-session capture', from))
+}
+
+test('step 7 routes to every home, habit included, and names the hand-off targets', () => {
+  const s = step7()
+  for (const home of ['memory file', 'existing skill', 'project CLAUDE.md', 'a new skill', 'a script', 'a hook', 'bounded fallback', '`habit`']) {
+    assert.ok(s.includes(home), `step 7 names the home: ${home}`)
+  }
+  for (const target of ['skill-creator', 'update-config', '/backlog-capture']) assert.ok(s.includes(target), `step 7 hands off to ${target}`)
+})
+
+test('step 7 says kaizen never writes a new skill, script or hook body itself', () => {
+  assert.match(step7(), /never writes a new skill, a script or a hook body/)
+})
+
+test('step 7 states every status-note home prefix', () => {
+  const s = step7()
+  for (const prefix of ['memory:', 'claude-md:', 'skill:', 'script:', 'hook:', 'fallback:']) assert.ok(s.includes(`\`${prefix}\``), `step 7 names ${prefix}`)
+})
+
+test('step 7 states both escalation triggers', () => {
+  const s = step7()
+  const from = s.indexOf('### Escalation')
+  assert.ok(from >= 0, 'step 7 has an Escalation section')
+  const esc = s.slice(from, s.indexOf('\n### ', from + 1))
+  assert.match(esc, /`no-effect`/, 'a no-effect verdict escalates')
+  assert.match(esc, /2 or more later lessons[^.]*same `cue` \+ `component`/, 'two later recurrences of the same cue + component escalate')
+  assert.match(esc, /Never escalate silently/)
+})
