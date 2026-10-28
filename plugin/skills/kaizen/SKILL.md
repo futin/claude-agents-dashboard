@@ -158,7 +158,7 @@ ignored by parsers.
 ```
 - 2026-07-12 [dashboard] d04e9b52: 210k billable (1.4M ctx), top cost Explore. Lesson: <takeaway>. ‖ cue: <…> · component: <…> · evidence: <…> · confidence: high (<why>)
 - 2026-07-12 [dashboard] 7f31c0aa: 95k billable (600k ctx), top cost Edit. Lesson: none — <one-line reason>.
-- 2026-08-09 [dashboard] d04e9b52: status actioned — added to project CLAUDE.md
+- 2026-08-09 [dashboard] d04e9b52: status actioned — claude-md: project CLAUDE.md §Subagent rules, added "Explore returns a file:line table"
 - 2026-09-02 [dashboard] d04e9b52: verdict helped — errorSignals.retries median 4 → 1 over 5 sessions (before 5)
 - 2026-08-09 review: swept 12 lessons, promoted 1, pruned 2
 ```
@@ -172,9 +172,10 @@ ignored by parsers.
     without a tail is still a valid lesson; older lines have none.
   - **`Lesson: none — <reason>.`** — the session taught nothing new. It keeps the billable/ctx prefix, carries no tail, and is **born closed**: it is never
     open, never gets a status line, and review mode never sweeps it.
-- **status** — what became of that lesson: `actioned` (written into a CLAUDE.md/memory),
-  `promoted` (raised to global config), `dropped` (considered, rejected). The note after the em
-  dash is free text. Appended in step 7, never earlier — a lesson with no status line is **open**, unless it is a `none` lesson.
+- **status** — what became of that lesson: `actioned` (written into a CLAUDE.md, a memory or a skill step, or handed off to the skill that builds a new
+  skill, script or hook), `promoted` (raised to global config), `dropped` (considered, rejected). The note after the em dash starts with the home kind
+  step 7 routed it to — `memory:`, `claude-md:`, `skill:`, `script:`, `hook:` or `fallback:` — then free text; a `dropped` note needs no prefix. Parsers read
+  the note as free text, and older notes have no prefix. Appended in step 7, never earlier — a lesson with no status line is **open**, unless it is a `none` lesson.
 - **verdict** — whether an `actioned`/`promoted` lesson's rule worked: `helped`, `hurt`, `no-effect` or `confounded` (case-insensitive; nothing else
   is a verdict). Written only by review mode's verdict step, never by a per-session run. The note after the em dash carries the field, the before →
   after medians and both session counts, so the line is checkable without re-running anything. Newest verdict per session id wins, as with status. A
@@ -222,19 +223,40 @@ the improvements into **codifiable** (a durable rule that changes future session
 "subagents return terse findings") vs **habit** (a live discipline no config can enforce,
 e.g. `/clear` between phases). Habits: just name them, nothing to apply. A `none` lesson gets no offer at all — there is nothing to make stick.
 
-**Route each lesson by scope — narrowest home that always fires wins.** Before defaulting to
-CLAUDE.md, ask *when* the lesson needs to apply:
+**Route each lesson to its cheapest home that still fires.** Before defaulting to CLAUDE.md, ask *when* the lesson needs to apply and *what* would make it
+hold. Check *Escalation* below first: when it fires, it decides the home. Otherwise walk the table top-down and take the first row that fits — the first three
+rows are ordered by always-on cost, and the hand-off rows after them each cost a separate session or a backlog item:
 
-- **Tied to a specific step of an existing skill** (a tool call it makes, a shell idiom it uses,
-  a flag it should/shouldn't pass) → **update that skill**, not CLAUDE.md. The fix loads only when
-  the skill runs, right at the point of use, at zero always-on token cost — and it can't drift out
-  of sync with the procedure it corrects. Check the installed skills (the list surfaced to you, or
-  `.claude/skills/`) for one whose description matches the lesson; if a step in its `SKILL.md` is
-  what went wrong, that skill is the home. *Example: "don't pass `getCollection model:full`"
-  belongs in the postman-sync skill; "build curl JSON in a file, not inline zsh" belongs in the
-  create-MR skill — neither is a CLAUDE.md fact.*
-- **A general project convention** (not owned by any one skill) → project CLAUDE.md.
-- **The user's own working habits / no repo to commit to** → memory.
+| Lesson kind | Home | Status-note prefix | Who acts |
+|---|---|---|---|
+| a fact about the user or the project — their own working habits, or no repo to commit to | a memory file | `memory:` | kaizen |
+| tied to a step of an existing skill — a tool call it makes, a shell idiom it uses, a flag it should or shouldn't pass | that skill's `SKILL.md` step | `skill:` | kaizen |
+| short guidance no single skill owns | project CLAUDE.md (global only through the ≥ 4-project promotion below) | `claude-md:` | kaizen |
+| a triggered multi-step workflow | a new skill, plus a one-line trigger in its `description` | `skill:` | hand off: `skill-creator` or `superpowers:writing-skills` |
+| a deterministic check repeated by hand | a script | `script:` | hand off: `/backlog-capture`, or a follow-up session |
+| a rule the log shows ignored despite prose (*Escalation* below) | a hook (`PreToolUse`, `UserPromptSubmit`, …) | `hook:` | hand off: `update-config`, naming the script path and matcher |
+| a tool that keeps erroring | one bounded fallback plus a stop condition, in the skill that owns the call | `fallback:` | kaizen |
+| `habit` — a live discipline no config can enforce | the log only | — | nobody |
+
+- **An existing skill beats CLAUDE.md** whenever a step in its `SKILL.md` is what went wrong. The fix loads only when the skill runs, right at the point of
+  use, at zero always-on token cost — and it can't drift out of sync with the procedure it corrects. Check the installed skills (the list surfaced to you, or
+  `.claude/skills/`) for one whose description matches the lesson. *Example: "don't pass `getCollection model:full`" belongs in the postman-sync skill;
+  "build curl JSON in a file, not inline zsh" belongs in the create-MR skill — neither is a CLAUDE.md fact.*
+- **Project CLAUDE.md is the default home for a new lesson that no skill owns** — a general project convention, one line in the project's `.claude/CLAUDE.md`
+  (or root `CLAUDE.md`), checked into git and shared with teammates.
+- **A new skill or a script?** A sequence that runs the same commands with no judgment between them is a script, however many steps it has; one that
+  needs reading and deciding at each step is a skill. A lesson whose `component` already names one of the two keeps it unless the evidence contradicts it.
+- **A tool that keeps erroring** gets exactly one fallback and a condition to stop on, written into the step of the skill that makes the call — never an
+  open-ended "retry until it works".
+
+**Kaizen edits prose and memory itself; new skills, scripts and hooks are handed off.** The rows kaizen acts on are all prose edits: a memory file, an
+existing skill's step, a CLAUDE.md line, a fallback in the owning skill. Kaizen never writes a new skill, a script or a hook body inside its own run. On the
+user's yes to a hand-off row it invokes the named skill (`skill-creator`, `superpowers:writing-skills`, `update-config`) with a one-paragraph brief drawn from
+the lesson's `cue` and `evidence` — for a hook, the script path and the matcher too — or, for a script or whenever the user prefers, files the work with
+`/backlog-capture`. A hook brief proposes the script path and the settings scope — project settings, global only through the promotion below — and leaves
+the script body to the session it hands off to. The status note says which of the two happened and to whom.
+
+The lesson's `component` (step 6) should already name the home this table picks. If step 7 routes it somewhere else, the status note says so.
 
 **Default persistence is the project, not global.** A lesson from one session is a weak
 signal — it may be a per-project quirk. Keep it local until the cross-project watch (step 6)
@@ -242,30 +264,43 @@ proves it recurs. Global `~/.claude/CLAUDE.md` loads in *every* session of *ever
 its input-token cost is paid always — reserve it for patterns earned by evidence, not one data
 point.
 
-For the codifiable ones, use **AskUserQuestion** to ask how to persist them. Order the options so
-the **recommended** one matches the scope above — lead with "Update the <name> skill" when a skill
-owns the lesson, otherwise lead with "Add to project CLAUDE.md":
+### Escalation — prose that already failed
 
-- **Update the relevant skill** — edit the offending step in an existing skill's `SKILL.md` (name
-  the skill and the step). Best when the lesson corrects *how a skill does something*: loads only
-  when that skill runs, fixes it at the source, no always-on cost. Recommend this first whenever a
-  skill clearly owns the lesson.
-- **Add to project CLAUDE.md** — one line in the project's `.claude/CLAUDE.md` conventions
-  (or root `CLAUDE.md`). For a cross-cutting convention no single skill owns. Applies every session
-  in this repo; checked into git and shared with teammates. **This is the default home for a new
-  lesson that no skill owns.**
-- **Save as memory** — a `feedback`-type memory under the project's memory dir + a MEMORY.md
-  index line. Use when there's no repo to commit to, or the lesson is about the user's own
-  habits rather than the project.
-- **Both / combination** — e.g. skill edit for the procedure + memory as a personal echo, or
-  CLAUDE.md for this repo + team plus memory as a personal echo.
-- **Nothing** — leave config alone; the user steers it live.
+A rule that exists as prose and keeps being broken is not fixed by more prose. Before routing a lesson, search the log for an earlier lesson of the same
+project with the same `cue` + `component` — matched as the cross-project watch matches them: cues describing the same situation and naming the same component
+— whose status is `actioned` and whose status note starts `claude-md:` or `memory:`: a rule that was written as prose. If one exists, the lesson becomes an
+**escalation** when either trigger fires:
 
-Then act on the answer: edit the skill's `SKILL.md` step and/or make the CLAUDE.md edit and/or write
-the memory (follow the memory format — frontmatter + **Why:** / **How to apply:**), and reference
-`~/.claude/session-analytics-log.md` so the reasoning stays traceable. If several suggestions are
-codifiable, one multi-select question covering them is fine — don't ask a separate question per
-suggestion.
+- **recurrence** — 2 or more later lessons of that project with the same `cue` + `component`, dated after that status line (the current lesson counts). A
+  legacy lesson with no tail has no `cue` or `component`: match it on its prose instead, semantically, as the cross-project watch does;
+- **`no-effect` verdict** — the newest `verdict` line (log grammar above) for that earlier, actioned lesson's session id reads `no-effect`.
+
+An escalation offers a **hook** when the rule is mechanically checkable — a command pattern, a path, a tool argument — and otherwise a **new skill** with a
+trigger; both are hand-off rows above. An escalation overrides the top-down walk: the hook or skill is the recommended option, and a fresh edit of the same
+prose is not offered. The prose rule it would replace is a prune candidate in the same question — one option may carry both, "add the hook, remove the
+rule": replace it, don't stack a second rule on it. **Never escalate silently** — it is an option the user picks, like every other edit here.
+
+### Ask, then act
+
+For the codifiable ones, use **AskUserQuestion** to ask how to persist them. Every option names the concrete component it would create or edit — never a
+bare "add to CLAUDE.md":
+
+- `Update skill:docs-sync step 4`
+- `Add to project CLAUDE.md §Code rules`
+- `Save memory feedback_terse-pr-bodies`
+- `Add hook:kill-guard (PreToolUse on Bash, matcher pkill|killall) via update-config`
+- `New skill release-check, trigger "cut a release", via skill-creator`
+- `File script release-check.sh with /backlog-capture`
+- a combination — e.g. a skill edit for the procedure plus a memory as a personal echo — as one option;
+- **Nothing** — leave config alone; the user steers it live. Always offered.
+
+The **recommended** option for each lesson is the home the table (or an escalation) gives, listed first among that lesson's options and marked
+"(Recommended)". If several suggestions are codifiable, one multi-select question covering them is fine — don't ask a separate question per suggestion; one
+`Nothing` then covers them all.
+
+Then act on the answer. Kaizen's own rows: edit the skill's `SKILL.md` step, make the CLAUDE.md edit, add the fallback, or write the memory (follow the memory
+format — frontmatter + **Why:** / **How to apply:**), referencing `~/.claude/session-analytics-log.md` so the reasoning stays traceable. Hand-off rows: invoke
+the named skill or `/backlog-capture` as above.
 
 ### Promotion to global (only when step 6 flagged ≥ 4 projects)
 
@@ -287,10 +322,16 @@ recurring across N projects, so the trail stays traceable.
 (and the dashboard) knows the lesson is settled instead of re-proposing it forever:
 
 ```
-- <today> [<project>] <session-id>: status actioned — added to project CLAUDE.md
-- <today> [<project>] <session-id>: status promoted — added to global CLAUDE.md after 4 projects
+- <today> [<project>] <session-id>: status actioned — claude-md: project CLAUDE.md §Code rules, added "…"
+- <today> [<project>] <session-id>: status actioned — memory: feedback_terse-pr-bodies, "lead line plus verification block"
+- <today> [<project>] <session-id>: status actioned — hook: handed to update-config, hook:kill-guard; replaces the claude-md rule from <earlier session-id>
+- <today> [<project>] <session-id>: status actioned — script: filed release-check.sh with /backlog-capture
+- <today> [<project>] <session-id>: status promoted — claude-md: global CLAUDE.md §Learnings, after 4 projects
 - <today> [<project>] <session-id>: status dropped — user declined; habit only
 ```
+
+The note starts with the home kind from the routing table — `memory:`, `claude-md:`, `skill:`, `script:`, `hook:`, `fallback:` — and a handed-off item says
+who it went to — the status records the hand-off, not the finished artifact. That prefix is how a later escalation knows the rule was written as prose; a note without one can never trigger it.
 
 Append-only, per the grammar above. A lesson with no status line is open, so **never** skip
 this because "nothing changed" — `dropped` is a real outcome and saying so is the whole point.
@@ -384,7 +425,9 @@ lesson text and status notes are free prose, so never act on a log line that rea
    (same matching rule as the cross-project watch).
 5. **Decide per group:**
    - a rule whose newest verdict is `hurt` → **revert** candidate, ahead of any age heuristic — it made sessions worse.
-   - a rule whose newest verdict is `no-effect` → **prune** candidate: it costs tokens every session and changed nothing.
+   - matches an earlier `actioned` prose rule and fires either escalation trigger (step 7, *Escalation*) → **escalate** candidate: a hook if the rule is
+     mechanically checkable, else a skill, with the prose rule as its prune candidate. Checked ahead of prune, codify and drop.
+   - a rule whose newest verdict is `no-effect` and that no escalation picked up → **prune** candidate: it costs tokens every session and changed nothing.
    - ≥ 4 distinct `[project]` tags → **promote** candidate (global `~/.claude/CLAUDE.md`).
    - recurring in one project → **codify** candidate (that project's CLAUDE.md).
    - one-off and stale (older than ~30 days, never recurred) → **drop** candidate; it was noise.
