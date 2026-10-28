@@ -46,8 +46,8 @@ export function StatusBadge({ s, none }: { s?: LessonStatus | null; none?: boole
 }
 
 const VERDICT_MARK: Record<LessonVerdict['verdict'], string> = {
-  helped: '▲',
-  hurt: '▼',
+  helped: '↑',
+  hurt: '↓',
   'no-effect': '=',
   confounded: '?'
 };
