@@ -1,7 +1,7 @@
 import type { AnalyticsReport } from '../../../../shared/types';
 import { fmtTok } from '../../lib/format';
 import { keyActivate } from '../sessions/atoms';
-import { LessonDot, ReportBody, StatusBadge, shortId } from './atoms';
+import { LessonDot, ReportBody, StatusBadge, VerdictBadge, shortId } from './atoms';
 
 /**
  * Every report a metric card, the billable total as its figure — the Sessions
@@ -49,6 +49,7 @@ function ReportTile({ r, open, onToggle }: { r: AnalyticsReport; open: boolean; 
         <LessonDot s={r.lessonStatus} none={r.lessonNone} />
         <span className="nm">{r.project}</span>
         <StatusBadge s={r.lessonStatus} none={r.lessonNone} />
+        <VerdictBadge v={r.lessonVerdict} />
       </div>
       <div className="tile-sub">
         {r.models.map(m => <span key={m} className="model">{m}</span>)}

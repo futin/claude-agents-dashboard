@@ -101,6 +101,10 @@ one of them at random — the same two-state rule the Sessions board follows.
   ever act on the lesson? `/kaizen` records that by appending a `status` line to the same
   log; no line means still open. The same fact leads the row as `.an-dot`. A `none` lesson (the session taught nothing new) is born closed: it draws
   `.an-status.none` (`— none`) and a hollow `.an-dot.none`, never `○ open`.
+- **Verdict badge** (`.an-verdict`) — `helped` / `hurt` / `no-effect` / `confounded`, beside the status badge in the inspector head and the tile head:
+  did the actioned or promoted rule actually work? Only `/kaizen review` writes the `verdict` line, from `kaizen.mjs --compare` (below), so most lessons
+  have none and draw no badge — pending is the quiet default. The verdict's note (field, before → after medians, session counts) is spelled out under
+  the lesson. A verdict never changes the status badge: open is still "no status line".
 - **Lesson fields** (`.an-lesson-fields`) — when the lesson line carries a tail, its `cue` / `component` / `evidence` / `confidence` sit as a labelled list
   under the lesson text; nothing extra when it does not. The collapsed tile clamps the lesson text only, never the tail.
 
@@ -228,12 +232,19 @@ returned — no backend change, so the read-only invariant above still holds.
   (newest-wins, as `lessonForSession` reads it) and never writes the log. Lines without both figures — status, review, prose, mid-session captures —
   are skipped; a line with `billable` but no `(N ctx)` counts in `withoutCtx` and nowhere else. `--trend` is kaizen-only: no server module or
   Analytics view reads it, so `test/kaizen-trend.test.ts` spawns the plugin's script itself.
-- **⚠️ Log grammar (the contract with `/kaizen` — three line shapes, all append-only):**
+- **`kaizen.mjs --compare <project> <since> <field.path>` is what a verdict is measured with.** It re-runs the analyzer over the project's main-session
+  transcripts (cwd basename = the log's project tag; subagent transcripts never count) — up to 10 starting after the end of `<since>` (UTC), oldest
+  first, and as many, at least 3, immediately before it; a session starting on `<since>` is before. Each side prints `n`, `median`, `values` and
+  `missing`: a session where the dotted path resolves to no number is missing, never 0. `byTool.<tool>.<key>` (and `bySubagent.<type>.<key>`) address
+  a keyed row. A path that resolves in no session is an error exit. It never reads or writes the log. Kaizen-only like `--trend`, tested in
+  `plugin/skills/kaizen/test/compare.test.mjs`; a dir-name prefilter and a 64 KB head read keep it to one full analysis per selected session.
+- **⚠️ Log grammar (the contract with `/kaizen` — four line shapes, all append-only):**
 
   ```
   - 2026-07-12 [dashboard] d04e9b52: 210k billable (1.4M ctx), top cost Explore. Lesson: <takeaway>. ‖ cue: <…> · component: <…> · evidence: <…> · confidence: high (<why>)
   - 2026-07-12 [dashboard] 7f31c0aa: 95k billable (600k ctx), top cost Edit. Lesson: none — <reason>.
   - 2026-08-09 [dashboard] d04e9b52: status actioned — added to project CLAUDE.md
+  - 2026-09-02 [dashboard] d04e9b52: verdict helped — errorSignals.retries median 4 → 1 over 5 sessions (before 5)
   - 2026-08-09 review: swept 12 lessons, promoted 1, pruned 2
   ```
 
@@ -245,11 +256,16 @@ returned — no backend change, so the read-only invariant above still holds.
   closed, it takes no status line, draws as `none` rather than open, and `reviewStatus` does not count it as a lesson to sweep. Lines without a tail parse
   exactly as before. `kaizen.mjs --trend` reads only the billable/ctx prefix, so tailed and `none` lines are points like any other.
 
-  `parseLogEvents` classifies each line by the **first** pattern it matches (status →
-  review → lesson), so a status note containing `Lesson:` can't be mistaken for a lesson.
+  A **verdict** line is `verdict` then `helped|hurt|no-effect|confounded` (case-insensitive, stored lower-case; the value must end at whitespace, so
+  `helpedx` is no verdict) and an optional em-dash note. Only `/kaizen review` writes one, for an actioned/promoted lesson with ≥ 3 sessions after its
+  status date; `parseLogEvents` returns them as `verdicts`, and `AnalyticsReport.lessonVerdict` is the newest one matching the session
+  (`verdictForSession`: prefix + newest-wins). It never touches open/settled.
+
+  `parseLogEvents` classifies each line by the **first** pattern it matches (verdict → status →
+  review → lesson), so a verdict or status note containing `Lesson:` can't be mistaken for a lesson.
   The older `parseSessionAnalyticsLog` (still used by `scan.ts`) returns the same lesson shape and skips
-  the two newer shapes — they lack `Lesson:` — so a log with status/review lines reads
-  byte-for-byte as before to every pre-existing consumer. **Never add a line shape on one
+  the three newer shapes — review lines lack `Lesson:`, and status and verdict lines are skipped by pattern first — so a log with
+  status/verdict/review lines yields exactly the lessons it would without them. **Never add a line shape on one
   side only** (skill ↔ parser).
 - **Status + review are why the log stays append-only.** A lesson's fate is recorded by
   appending a later `status` line, never by rewriting the original — the machine runs

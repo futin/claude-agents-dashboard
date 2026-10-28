@@ -1534,6 +1534,19 @@ export interface LessonStatus {
 }
 
 /**
+ * Whether an actioned or promoted lesson's rule worked, from the log's `verdict` lines, which only `/kaizen review` writes: the project's sessions
+ * before and after the status date, compared on the field the lesson's `evidence` names. `confounded` when attribution is unclear. A verdict never
+ * changes whether a lesson is open — that is still {@link LessonStatus} alone.
+ */
+export interface LessonVerdict {
+  verdict: 'helped' | 'hurt' | 'no-effect' | 'confounded';
+  /** YYYY-MM-DD of the verdict line. */
+  date: string;
+  /** Free-text note after the em dash: the field, the before → after medians and both session counts. */
+  note?: string;
+}
+
+/**
  * Analytics section (`GET /api/analytics`) — a read-only view of the sessions
  * the `/kaizen` skill has logged. `~/.claude/session-analytics-log.md` (one line per
  * `/kaizen` run) is the sole trigger: for each of the last N logged sessions the
@@ -1560,6 +1573,8 @@ export interface AnalyticsReport {
   lessonNone?: boolean;
   /** Newest `status` line for this session, or null while the lesson is still open (or is a `none` lesson). */
   lessonStatus?: LessonStatus | null;
+  /** Newest `verdict` line for this session, or null while none has been written. */
+  lessonVerdict?: LessonVerdict | null;
 }
 
 /**

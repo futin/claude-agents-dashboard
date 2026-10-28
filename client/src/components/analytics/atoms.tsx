@@ -1,4 +1,4 @@
-import type { AnalyticsReport, LessonFields, LessonStatus, SessionAnalysis, SubagentTotals } from '../../../../shared/types';
+import type { AnalyticsReport, LessonFields, LessonStatus, LessonVerdict, SessionAnalysis, SubagentTotals } from '../../../../shared/types';
 import { agentLineName } from '../../lib/agentLabel';
 import { fmtTok } from '../../lib/format';
 
@@ -45,6 +45,23 @@ export function StatusBadge({ s, none }: { s?: LessonStatus | null; none?: boole
   );
 }
 
+const VERDICT_MARK: Record<LessonVerdict['verdict'], string> = {
+  helped: '↑',
+  hurt: '↓',
+  'no-effect': '=',
+  confounded: '?'
+};
+
+/**
+ * Whether the lesson's rule worked, from the log's `verdict` lines. Drawn only
+ * when one exists: a verdict needs three sessions after the rule landed and a
+ * `/kaizen review` to write it, so pending is the common case and stays quiet.
+ */
+export function VerdictBadge({ v }: { v?: LessonVerdict | null }) {
+  if (!v) return null;
+  return <span className={`an-verdict ${v.verdict}`}>{VERDICT_MARK[v.verdict]} {v.verdict}</span>;
+}
+
 /** The status line's note, spelled out under the lesson. */
 export function LessonOutcome({ s }: { s?: LessonStatus | null }) {
   if (!s) return null;
@@ -84,6 +101,11 @@ export function ReportBody({ r }: { r: AnalyticsReport }) {
         <p className="an-lesson-body">{r.lesson}</p>
         {r.lessonFields && <LessonFieldList f={r.lessonFields} />}
         <LessonOutcome s={r.lessonStatus} />
+        {r.lessonVerdict && (
+          <p className="an-lesson-body muted">
+            verdict {r.lessonVerdict.verdict} {r.lessonVerdict.date}{r.lessonVerdict.note ? ` — ${r.lessonVerdict.note}` : ''}
+          </p>
+        )}
       </div>
     </>
   );
