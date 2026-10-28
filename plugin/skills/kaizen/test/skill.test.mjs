@@ -99,3 +99,27 @@ test('step 7 states both escalation triggers', () => {
   assert.match(esc, /2 or more later lessons[^.]*same `cue` \+ `component`/, 'two later recurrences of the same cue + component escalate')
   assert.match(esc, /Never escalate silently/)
 })
+
+// Global §Learnings is paid for in every session of every project, so promotion is not add-only: it is measured, and over budget the recommended option
+// displaces or merges before the over-budget one is offered. Keeping the base unchanged is a recommendable outcome with its own status form.
+test('promotion states the 4,000-byte budget, its measurement, displacement first, and the kept-base status', () => {
+  const s = step7()
+  const from = s.indexOf('### Promotion to global')
+  assert.ok(from >= 0, 'step 7 has a Promotion to global section')
+  const promo = s.slice(from, s.indexOf('\n### ', from + 1))
+  assert.match(promo, /4,000 bytes/)
+  assert.match(promo, /2026-10-28[^.]*3,830 bytes/, 'the budget carries its measurement and date')
+  assert.match(promo, /kaizen\.mjs" --budget/)
+  const displace = promo.indexOf('**Merge into / displace')
+  const over = promo.indexOf('**Promote over budget**')
+  assert.ok(displace >= 0 && over > displace, 'displacement is offered, ahead of Promote over budget')
+  assert.match(promo.slice(displace, over), /\(Recommended\)/, 'displacement is the recommended option')
+  assert.match(s, /status dropped — kept base: /)
+  assert.match(s, /\*\*Nothing — leave config alone\*\* is the recommended option/)
+})
+
+test('review mode measures global Learnings against its budget in the prune pass', () => {
+  const text = skill()
+  const review = text.slice(text.indexOf('## Review mode'))
+  assert.match(review, /5\. \*\*Prune pass:\*\*[^]*?kaizen\.mjs" --budget[^]*?displacement candidates/)
+})
