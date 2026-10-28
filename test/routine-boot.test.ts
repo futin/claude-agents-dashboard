@@ -13,7 +13,7 @@ import type { Harness } from './api-harness.js';
 import type { Config } from '../server/lib/config.js';
 import { encodeProjectDir } from '../server/lib/management.js';
 import { overrideClaudeRoots } from '../server/lib/paths.js';
-import { defaultDeps, ownerStatus, resetRoutineBoot, startRoutines, stopRoutines } from '../server/lib/routine-boot.js';
+import { defaultDeps, foldForPush, ownerStatus, resetRoutineBoot, startRoutines, stopRoutines } from '../server/lib/routine-boot.js';
 import type { RoutineDeps } from '../server/lib/routine-boot.js';
 import { claimOwner, releaseOwner } from '../server/lib/routine-store.js';
 import type { Probe } from '../server/lib/routine-store.js';
@@ -66,6 +66,7 @@ function fakeDeps(claim: 'owner' | { ownedBy: string } = 'owner'): Fake {
       return rs.length;
     },
     sendRoutineEvent: (event) => { sent.push(event.run.id); return true; },
+    foldTickCaps: rec('foldTickCaps'),
     releaseOwner: rec('releaseOwner')
   };
   return { deps, calls, sent, fire: () => onChange?.(), setRuns: (r) => { runs = r; } };
@@ -126,13 +127,30 @@ export async function run(): Promise<number> {
       startRoutines(config, fake.deps);
       assert.deepStrictEqual(fake.calls, [
         'migrateLegacyState', 'claimOwner', 'sweepLocks', 'writePinsSnapshot', 'rotateIfLarge', 'applyReconcile', 'startReconcileWatchers',
-        'createLogReader', 'seedRoutineNotify', 'notifyRoutineRuns', 'watch'
+        'createLogReader', 'seedRoutineNotify', 'notifyRoutineRuns', 'foldTickCaps', 'watch'
       ]);
       assert.deepStrictEqual(fake.sent, ['r1']);
       fake.setRuns([runOf('r1'), runOf('r2')]);
       fake.fire();
-      assert.deepStrictEqual(fake.calls.slice(-1), ['notifyRoutineRuns'], 'a write to runs/ folds again');
+      assert.deepStrictEqual(fake.calls.slice(-2), ['notifyRoutineRuns', 'foldTickCaps'], 'a write to runs/ folds again');
       assert.deepStrictEqual(fake.sent, ['r1', 'r1', 'r2']);
+    });
+  }));
+
+  tally(await testAsync('foldForPush still checks tick caps when the routine fold throws, and a throwing tick fold is logged too', async () => {
+    await withHome(true, config => {
+      const fake = fakeDeps();
+      fake.deps.notifyRoutineRuns = () => { fake.calls.push('notifyRoutineRuns'); throw new Error('boom'); };
+      const err = console.error;
+      const logged: string[] = [];
+      console.error = (...a: unknown[]) => { logged.push(a.join(' ')); };
+      try {
+        foldForPush(config, [], fake.deps);
+        fake.deps.foldTickCaps = () => { fake.calls.push('foldTickCaps'); throw new Error('bang'); };
+        foldForPush(config, [], fake.deps);
+      } finally { console.error = err; }
+      assert.deepStrictEqual(fake.calls, ['notifyRoutineRuns', 'foldTickCaps', 'notifyRoutineRuns', 'foldTickCaps']);
+      assert.ok(logged.some(l => l.includes('tick-cap push fold failed') && l.includes('bang')), logged.join('\n'));
     });
   }));
 

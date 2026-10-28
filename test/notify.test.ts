@@ -4,8 +4,8 @@ import os from 'node:os';
 import path from 'node:path';
 
 import {
-  atDesk, AUTO_MODES, maybeSend, ntfyHeaders, resetNotify, resolveLabel, routineClickUrl, sendRoutineEvent, sendTest, sendUsageEvent,
-  setIdleSource, setLabelResolver, setSender, shouldNotify, usageCanSend, usageClickUrl
+  atDesk, AUTO_MODES, maybeSend, ntfyHeaders, resetNotify, resolveLabel, routineClickUrl, sendRoutineEvent, sendTest, sendTickCappedEvent, sendUsageEvent,
+  setIdleSource, setLabelResolver, setSender, shouldNotify, tickCanSend, tickCappedClickUrl, usageCanSend, usageClickUrl
 } from '../server/lib/notify.js';
 import { DEFAULT_NOTIFY, NOTIFY_EVENTS, resetSettings, setSettings } from '../server/lib/settings.js';
 import { resetState } from '../server/lib/remoteState.js';
@@ -558,6 +558,42 @@ export async function run(): Promise<number> {
     assert.strictEqual(usageCanSend('reset', conf()), false);
     assert.strictEqual(usageCanSend('reached', conf({ ntfyTopic: '' })), false);
     assert.strictEqual(sent.length, 0);
+  }))) p++; else f++;
+
+  const TICK = { title: 'proj · backlog tick blocked', body: '3/3 plans awaiting review — approve one to resume grooming' };
+
+  if (await testAsync('sendTickCappedEvent is exempt from requireAfk, requireRemoteAnswer and requireAutoMode', () => inTmpCwd(sent => {
+    setSettings({
+      idleSecs: 60,
+      notify: { enabled: true, events: { 'tick-capped': true }, requireAfk: true, requireRemoteAnswer: true, requireAutoMode: true }
+    });
+    setIdleSource(() => 1);
+    assert.strictEqual(tickCanSend(conf({ remoteAnswer: false })), true);
+    assert.strictEqual(sendTickCappedEvent(TICK, conf({ remoteAnswer: false })), true);
+    assert.deepStrictEqual(
+      { title: sent[0].title, body: sent[0].body, topic: sent[0].topic, tags: sent[0].tags, click: sent[0].click },
+      { ...TICK, topic: 'test-topic', tags: 'hourglass', click: 'https://dash.example/?view=routines' }
+    );
+  }))) p++; else f++;
+
+  if (await testAsync('sendTickCappedEvent: unticked, master off or no NTFY_TOPIC sends nothing', () => inTmpCwd(sent => {
+    setSettings({ notify: { enabled: true, events: { 'usage-limit': true } } });
+    assert.strictEqual(tickCanSend(conf()), false);
+    assert.strictEqual(sendTickCappedEvent(TICK, conf()), false);
+    setSettings({ notify: { events: { 'tick-capped': true } } });
+    assert.strictEqual(sendTickCappedEvent(TICK, conf({ ntfyTopic: '' })), false);
+    setSettings({ notify: { enabled: false } });
+    assert.strictEqual(sendTickCappedEvent(TICK, conf()), false);
+    assert.strictEqual(sent.length, 0);
+  }))) p++; else f++;
+
+  if (await testAsync('sendTickCappedEvent: the click is BACKLOG_BOARD_URL/ when set, else the Routines view, else none', () => inTmpCwd(sent => {
+    setSettings({ notify: { enabled: true, events: { 'tick-capped': true } } });
+    sendTickCappedEvent(TICK, conf({ backlogBoardUrl: 'http://localhost:4300' } as Partial<Config>));
+    assert.strictEqual(sent[0].click, 'http://localhost:4300/');
+    assert.strictEqual(tickCappedClickUrl(conf()), 'https://dash.example/?view=routines');
+    assert.strictEqual(tickCappedClickUrl(conf({ publicUrl: '' } as Partial<Config>)), '');
+    assert.strictEqual(tickCappedClickUrl(conf({ publicUrl: '', backlogBoardUrl: 'http://board.example' } as Partial<Config>)), 'http://board.example/');
   }))) p++; else f++;
 
   if (test('usageClickUrl is publicUrl + /?view=usage, and empty without a publicUrl', () => {

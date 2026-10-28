@@ -230,8 +230,9 @@ calendar arithmetic so a DST change cannot shift a run across a day, with the pr
 master switch and the desk or phone routing, has its own Settings checkbox, and is exempt from `requireAfk`, `requireRemoteAnswer` and `requireAutoMode`,
 which gate interactive sessions that a 22:00 job does not have. `sendRoutineEvent` in `notify.ts` takes the run instead of a session id.
 
-The owner folds the log on start, on an `fs.watch` of `runs/`, and on every poll, so a push goes out with no browser open. `notifyRoutineRuns` pushes each
-run once, tracked in memory and in `notified.json`:
+The owner folds the log on start, on an `fs.watch` of `runs/`, and on every poll, so a push goes out with no browser open. The same fold then checks the
+backlog ticks' plan-review caps (`foldTickCaps`, the [`tick-capped` push](push-notify.md#the-backlog-tick-event-tick-capped)), each in its own try/catch so
+one failing never stops the other. `notifyRoutineRuns` pushes each run once, tracked in memory and in `notified.json`:
 
 | Run | Title | Body |
 |---|---|---|

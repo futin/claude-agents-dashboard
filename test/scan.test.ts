@@ -186,6 +186,19 @@ export function run(): number {
     }
   })) p++; else f++;
 
+  if (test('loadConfig: BACKLOG_BOARD_URL is empty when unset, else trimmed without trailing slashes', () => {
+    const was = process.env.BACKLOG_BOARD_URL;
+    try {
+      delete process.env.BACKLOG_BOARD_URL;
+      assert.strictEqual(loadConfig({ envPath: '/no/such/.env' }).backlogBoardUrl, '');
+      process.env.BACKLOG_BOARD_URL = '  http://localhost:4300//  ';
+      assert.strictEqual(loadConfig({ envPath: '/no/such/.env' }).backlogBoardUrl, 'http://localhost:4300');
+    } finally {
+      if (was === undefined) delete process.env.BACKLOG_BOARD_URL;
+      else process.env.BACKLOG_BOARD_URL = was;
+    }
+  })) p++; else f++;
+
   console.log('\n=== scan.ts ===\n');
 
   if (test('decodeProjectName fallback basename', () => {

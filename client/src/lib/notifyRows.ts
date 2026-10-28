@@ -17,6 +17,11 @@ export const NOTIFY_EVENT_ROWS: readonly NotifyEventRow[] = [
   { key: 'stop', name: 'Task finished', hint: 'A session finished its turn. Suppressed while background agents are still running.' },
   { key: 'routine-failed', name: 'Routine failed', hint: 'A routine failed, was refused or never finished. Ignores the three conditions below.' },
   {
+    key: 'tick-capped',
+    name: 'Backlog tick blocked',
+    hint: 'A backlog-tick job stopped grooming: its plans awaiting review reached the cap. Ignores the three conditions below.'
+  },
+  {
     key: 'usage-limit',
     name: 'Usage limit reached',
     hint: 'Your 5-hour usage window hit 100%. Ignores the three conditions below. Needs Record usage history (Usage forecast).'

@@ -323,7 +323,8 @@ Worth knowing from this page's side:
   [push-notify](push-notify.md).
 - **The routine checkbox ignores the three AND-layers.** `routine-failed` is exempt from only-while-accepting-remote-answers, only-when-away and
   only-in-auto-modes, since those gate interactive sessions and a routine has none; the page's hint on that row says so. It rides the master switch and the
-  routing only. See [push-notify](push-notify.md#the-fifth-event-routine-failed).
+  routing only. See [push-notify](push-notify.md#the-fifth-event-routine-failed). **Backlog tick blocked** (`tick-capped`) is exempt the same way and
+  needs only a topic ([push-notify](push-notify.md#the-backlog-tick-event-tick-capped)).
 - **The two 5-hour limit rows ride the same exemption** and add two gates of their own: they are disabled, with a note saying which, while `SHOW_USAGE`
   is off (`usageAvailable: false`) or **Record usage history** is off. The rows live in `client/src/lib/notifyRows.ts` (`notifyRowState`). See
   [push-notify](push-notify.md#the-usage-events-usage-limit-and-usage-reset).

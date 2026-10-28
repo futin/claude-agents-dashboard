@@ -57,7 +57,8 @@ const ANSWER_ENV = 'CLAUDE_DASHBOARD_ANSWER_TIMEOUT';
 export const DEFAULT_NOTIFY: NotifyPolicy = {
   enabled: false,
   events: {
-    question: false, stop: false, permission: false, plan: false, 'routine-failed': false, 'usage-limit': false, 'usage-reset': false
+    question: false, stop: false, permission: false, plan: false, 'routine-failed': false, 'tick-capped': false, 'usage-limit': false,
+    'usage-reset': false
   },
   requireRemoteAnswer: false,
   requireAfk: false,
@@ -65,7 +66,7 @@ export const DEFAULT_NOTIFY: NotifyPolicy = {
 };
 
 export const NOTIFY_EVENTS: readonly NotifyEvent[] = [
-  'question', 'stop', 'permission', 'plan', 'routine-failed', 'usage-limit', 'usage-reset'
+  'question', 'stop', 'permission', 'plan', 'routine-failed', 'tick-capped', 'usage-limit', 'usage-reset'
 ];
 
 /** Off by default — recording makes the server poll Anthropic unattended. */

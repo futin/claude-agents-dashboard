@@ -297,6 +297,29 @@ through the same master switch, per-event checkbox, desk/phone routing and trans
 - **Account switch.** The ledger keeps only the current account's window; switching accounts drops the other one, so coming back never fires an old reset.
 - A failed fetch is no reading, never 0%: it neither resets nor hits anything.
 
+## The backlog-tick event: `tick-capped`
+
+One more member, `tick-capped`, pushes when a [backlog-tick](routines.md#notifications) job stops grooming because its project's plans awaiting review
+reached the cap (`decide` printed `N plans awaiting review (cap N)`). Only a person can clear that cap, by approving a plan on the backlog board, so this
+is the one tick state worth a push; open PRs already notify through GitHub. Like the routine and usage events it has no hook, no session id and no
+`maybeSend`, and `sendTickCappedEvent` (`lib/notify.ts`) delivers through the master switch, its own checkbox (**Backlog tick blocked**), the desk/phone
+routing and the transport, **exempt from `requireAfk`, `requireRemoteAnswer` and `requireAutoMode`**.
+
+- **Where it reads.** backlog-manager's `tick.mjs decide` writes `<tick home>/<encodeURIComponent(root)>/last-decide.json` (`{ at, verdict, caps }`) on
+  every run; the tick home is `$BM_TICK_HOME`, else `~/.backlog-manager/tick` (`tickHome` in `lib/tick-caps.ts`, a hand twin of backlog-manager's). The
+  dashboard only reads it. A missing home or a malformed file skips that project.
+- **When it checks.** `foldTickCaps` runs inside the routine push fold (`foldForPush`), so on every write to the run log (which is when a tick routine's run
+  ends) and on every Routines poll, throttled to one pass per 30 s. Only the routines owner checks, so two dashboards on one machine never both push.
+- **Capped** is `maxPlans > 0 && planReview >= maxPlans`, the cap read from the file, never assumed. A `--max-plans 0` job never grooms by choice and
+  never pushes.
+- **Once per episode.** The ledger `<routine state root>/tick-capped.json` holds an entry per capped project; the first capped reading adds it and pushes,
+  later ones push nothing, and a reading below the cap (or the project's tick directory going away) deletes it, which re-arms the push. Written (tmp +
+  rename) only when it changed, before the push goes out; a failed write keeps the claim in memory, as the usage ledger does.
+- **Recorded, not pushed.** An episode first seen with the checkbox, master switch or topic off is recorded `pushed: false`, so turning the checkbox on
+  mid-episode sends nothing for it. A capped reading older than 24 h (the server's first start, a disabled job) is recorded the same way.
+- **Copy.** `<project> · backlog tick blocked`, `<planReview>/<maxPlans> plans awaiting review — approve one to resume grooming`; the project is the root's
+  basename.
+
 ## Tapping the notification
 
 ntfy's `Click` header carries `<DASHBOARD_PUBLIC_URL>/?session=<id>`.
@@ -312,6 +335,9 @@ The `routine-failed` push carries `/?view=routines&run=<id>` instead and lands o
 [view-persistence](view-persistence.md)). A `?view=schedules` link, from a push sent before Schedules became Routines, lands there too.
 
 The usage pushes carry `/?view=usage` and land on the Usage section.
+
+The `tick-capped` push carries `<BACKLOG_BOARD_URL>/` when that is set, landing on the backlog board where plans awaiting review are approved; otherwise
+`<DASHBOARD_PUBLIC_URL>/?view=routines`, and no link without either.
 
 The parameter is stripped because session ids churn: a bookmarked or refreshed deep link
 would otherwise reopen a drawer for a session that no longer exists. Same reasoning that

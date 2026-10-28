@@ -102,6 +102,7 @@ hook installed produces silence, not an error.
 | *A permission dialog opened* | `permission-notify-hook.sh` | [permission-notify](../subsystems/permission-notify.md#install-manual-user-consented) |
 | *A task finished* | `stop-notify-hook.sh` | step 5 above |
 | *Routine failed* | no hook — the server folds the routine run log | [push-notify](../subsystems/push-notify.md#the-fifth-event-routine-failed) |
+| *Backlog tick blocked* | no hook — the same fold reads each tick's `last-decide.json`; this dashboard owns routines (`ROUTINES_OWNER`) | [push-notify](../subsystems/push-notify.md#the-backlog-tick-event-tick-capped) |
 | *5-hour limit reached* | no hook — `SHOW_USAGE` and **Record usage history** on | [push-notify](../subsystems/push-notify.md#the-usage-events-usage-limit-and-usage-reset) |
 | *5-hour limit reset* | no hook — same as above | [push-notify](../subsystems/push-notify.md#the-usage-events-usage-limit-and-usage-reset) |
 

@@ -362,6 +362,27 @@ export function run(): number {
     });
   })) p++; else f++;
 
+  if (test('tick-capped is a notify event, off by default; a stored policy without it keeps every other switch', () => {
+    assert.ok(NOTIFY_EVENTS.includes('tick-capped'));
+    assert.strictEqual(DEFAULT_NOTIFY.events['tick-capped'], false);
+    inTmpCwd(dir => {
+      const events = { question: true, stop: false, permission: true, plan: false, 'routine-failed': true, 'usage-limit': true, 'usage-reset': false };
+      fs.writeFileSync(path.join(dir, SETTINGS_FILE), JSON.stringify({ notify: { enabled: true, events } }), 'utf8');
+      resetSettings();
+      const loaded = getSettings().notify;
+      assert.strictEqual(loaded.enabled, true);
+      assert.deepStrictEqual(loaded.events, { ...events, 'tick-capped': false });
+    });
+  })) p++; else f++;
+
+  if (test('a notify patch accepts tick-capped', () => {
+    inTmpCwd(() => {
+      assert.notStrictEqual(setSettings({ notify: { events: { 'tick-capped': true } } }), null);
+      resetSettings();
+      assert.strictEqual(getSettings().notify.events['tick-capped'], true);
+    });
+  })) p++; else f++;
+
   if (test('an unreadable settings file yields notify defaults', () => {
     inTmpCwd(dir => {
       fs.writeFileSync(path.join(dir, SETTINGS_FILE), '{not json', 'utf8');

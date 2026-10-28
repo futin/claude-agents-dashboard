@@ -13,6 +13,7 @@ import { notifyRoutineRuns, seedRoutineNotify } from './routine-notify.js';
 import { applyReconcile, installedWrapper, startReconcileWatchers, stopReconcileWatchers } from './routine-reconcile.js';
 import { claimOwner, createProbe, isOwner, readJobs, releaseOwner, sweepLocks, wrapperAlive, writePinsSnapshot } from './routine-store.js';
 import type { Probe } from './routine-store.js';
+import { foldTickCaps } from './tick-caps.js';
 
 export interface RoutineDeps {
   migrateLegacyState: typeof migrateLegacyState;
@@ -27,6 +28,7 @@ export interface RoutineDeps {
   seedRoutineNotify: typeof seedRoutineNotify;
   notifyRoutineRuns: typeof notifyRoutineRuns;
   sendRoutineEvent: typeof sendRoutineEvent;
+  foldTickCaps: typeof foldTickCaps;
   releaseOwner: typeof releaseOwner;
 }
 
@@ -35,7 +37,7 @@ export const defaultDeps: RoutineDeps = {
   // folder would split the run log in two. Both sides read the old folder while it is the only one, so waiting costs nothing.
   migrateLegacyState: (config) => installedWrapper() !== null && migrateLegacyState(config),
   claimOwner, sweepLocks, writePinsSnapshot, rotateIfLarge, applyReconcile, startReconcileWatchers, stopReconcileWatchers, createLogReader,
-  seedRoutineNotify, notifyRoutineRuns, sendRoutineEvent, releaseOwner
+  seedRoutineNotify, notifyRoutineRuns, sendRoutineEvent, foldTickCaps, releaseOwner
 };
 
 /** The spec's default step timeout. A run of a deleted, unknown or invalid job ages out against it rather than staying `running` for ever. */
@@ -91,10 +93,17 @@ export function ownerStatus(): 'owner' | { ownedBy: string } {
   return claim && claim !== 'owner' ? claim : { ownedBy: '' };
 }
 
-/** Fold the log and push what is new. A no-op for a non-owner (`notifyRoutineRuns` checks), so the routes call it on every poll. */
+/**
+ * Fold the log and push what is new, then check the backlog ticks' plan-review caps (a tick routine's run ending is when `decide` has just written
+ * `last-decide.json`). A no-op for a non-owner (both folds check), so the routes call it on every poll. Each fold is caught on its own, so one failing
+ * never stops the other.
+ */
 export function foldForPush(config: Config, runs: RoutineRun[], deps: RoutineDeps = started?.deps ?? defaultDeps): void {
   try { deps.notifyRoutineRuns(config, runs, deps.sendRoutineEvent); } catch (e) {
     console.error('[dashboard] routine push fold failed:', (e as Error).message);
+  }
+  try { deps.foldTickCaps(config); } catch (e) {
+    console.error('[dashboard] tick-cap push fold failed:', (e as Error).message);
   }
 }
 

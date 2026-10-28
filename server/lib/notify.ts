@@ -137,6 +137,7 @@ const PHRASE: Record<NotifyEvent, string> = {
   permission: 'permission dialog open',
   stop: 'task finished',
   'routine-failed': 'routine failed',
+  'tick-capped': 'backlog tick blocked',
   'usage-limit': '5-hour limit reached',
   'usage-reset': '5-hour limit reset'
 };
@@ -147,6 +148,7 @@ const TAGS: Record<NotifyEvent, string> = {
   permission: 'lock',
   stop: 'white_check_mark',
   'routine-failed': 'warning',
+  'tick-capped': 'hourglass',
   'usage-limit': 'no_entry',
   'usage-reset': 'arrows_counterclockwise'
 };
@@ -272,6 +274,16 @@ export function routineClickUrl(config: Config, runId: string): string {
 export function usageClickUrl(config: Config): string {
   if (!config.publicUrl) return '';
   return `${config.publicUrl}/?view=usage`;
+}
+
+/**
+ * A `tick-capped` push's phone tap-through: the backlog board (`BACKLOG_BOARD_URL`), where the plans awaiting review are approved; else this dashboard's
+ * Routines view; else `''`.
+ */
+export function tickCappedClickUrl(config: Config): string {
+  if (config.backlogBoardUrl) return `${config.backlogBoardUrl}/`;
+  if (!config.publicUrl) return '';
+  return `${config.publicUrl}/?view=routines`;
 }
 
 /**
@@ -461,8 +473,8 @@ export function sendRoutineEvent(event: { run: RoutineRun; title: string; body: 
 
 const USAGE_EVENT: Record<UsageAlertKind, 'usage-limit' | 'usage-reset'> = { reached: 'usage-limit', reset: 'usage-reset' };
 
-/** The usage alerts' gate: topic, master switch and the event's checkbox — the session-only `require*` clauses do not apply, as for routines. */
-function usageOpen(event: 'usage-limit' | 'usage-reset', config: Config): { idleSecs: number; idle: () => number | null } | null {
+/** The gate of a push with no session behind it: topic, master switch and the event's checkbox — the session-only `require*` clauses do not apply. */
+function unattendedOpen(event: NotifyEvent, config: Config): { idleSecs: number; idle: () => number | null } | null {
   if (!config.ntfyTopic) return null;
   const settings = getSettings();
   const open = { ...settings.notify, requireRemoteAnswer: false, requireAfk: false, requireAutoMode: false };
@@ -474,7 +486,7 @@ function usageOpen(event: 'usage-limit' | 'usage-reset', config: Config): { idle
 /** Would a usage alert of this kind go out now? The detector records the answer, so a hit seen with the checkbox off never earns a reset. */
 export function usageCanSend(kind: UsageAlertKind, config: Config): boolean {
   try {
-    return usageOpen(USAGE_EVENT[kind], config) !== null;
+    return unattendedOpen(USAGE_EVENT[kind], config) !== null;
   } catch {
     return false;
   }
@@ -486,10 +498,36 @@ export function usageCanSend(kind: UsageAlertKind, config: Config): boolean {
  */
 export function sendUsageEvent(event: { kind: 'usage-limit' | 'usage-reset'; title: string; body: string }, config: Config): boolean {
   try {
-    const gate = usageOpen(event.kind, config);
+    const gate = unattendedOpen(event.kind, config);
     if (!gate) return false;
     const route = routeTo(config, usageClickUrl(config), gate.idleSecs, gate.idle);
     const result = deliver({ title: event.title, body: event.body, tags: TAGS[event.kind], click: route.click, topic: route.topic }, config);
+    void Promise.resolve(result).catch(() => { /* fire-and-forget stays that way */ });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Would a `tick-capped` push go out now? The detector records the answer, so an episode seen with the checkbox off is never pushed later. */
+export function tickCanSend(config: Config): boolean {
+  try {
+    return unattendedOpen('tick-capped', config) !== null;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * The backlog-tick sibling of {@link sendUsageEvent}: same gate and desk/phone routing, the phone tapping through to {@link tickCappedClickUrl}. Returns
+ * whether a push was handed to the transport, and never throws.
+ */
+export function sendTickCappedEvent(event: { title: string; body: string }, config: Config): boolean {
+  try {
+    const gate = unattendedOpen('tick-capped', config);
+    if (!gate) return false;
+    const route = routeTo(config, tickCappedClickUrl(config), gate.idleSecs, gate.idle);
+    const result = deliver({ title: event.title, body: event.body, tags: TAGS['tick-capped'], click: route.click, topic: route.topic }, config);
     void Promise.resolve(result).catch(() => { /* fire-and-forget stays that way */ });
     return true;
   } catch {
@@ -504,7 +542,7 @@ export function sendUsageEvent(event: { kind: 'usage-limit' | 'usage-reset'; tit
  * rather than only on the Settings page: this string is what someone reads when
  * they are asking "why did nothing arrive?".
  */
-const PUSH_ENV_KEYS = ['NTFY_TOPIC', 'NTFY_TOPIC_DESK', 'NTFY_SERVER', 'DASHBOARD_PUBLIC_URL', 'DASHBOARD_LOCAL_URL'];
+const PUSH_ENV_KEYS = ['NTFY_TOPIC', 'NTFY_TOPIC_DESK', 'NTFY_SERVER', 'DASHBOARD_PUBLIC_URL', 'DASHBOARD_LOCAL_URL', 'BACKLOG_BOARD_URL'];
 
 /**
  * Fire one push regardless of policy and say what happened.

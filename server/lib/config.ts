@@ -86,6 +86,12 @@ export interface Config {
    */
   localUrl: string;
   /**
+   * Where the backlog-manager board is served, for the `tick-capped` push's tap-through (the board is where a plan awaiting review is approved). Empty
+   * (the default) sends that tap to this dashboard's Routines view instead. Not defaulted, for the reason `publicUrl` is not: absent must stay
+   * distinguishable from chosen.
+   */
+  backlogBoardUrl: string;
+  /**
    * Path to a GGML whisper model. Empty (the default) disables dictation
    * outright, the same way an empty `NTFY_TOPIC` disables pushes — one
    * "unset means off" rule rather than a separate boolean.
@@ -155,6 +161,7 @@ export const DEFAULTS = {
   // Port-derived, so the real default is applied in `loadConfig` — this literal
   // is flat and cannot see `port`.
   DASHBOARD_LOCAL_URL: '',
+  BACKLOG_BOARD_URL: '',
   WHISPER_MODEL: '',
   WHISPER_BIN: 'whisper-cli',
   FFMPEG_BIN: 'ffmpeg',
@@ -343,6 +350,7 @@ export function loadConfig(options: { envPath?: string } = {}): Config {
     ntfyTopicDesk: (src('NTFY_TOPIC_DESK') || DEFAULTS.NTFY_TOPIC_DESK).trim(),
     localUrl: (src('DASHBOARD_LOCAL_URL') || `http://localhost:${toPosInt(src('PORT'), DEFAULTS.PORT)}`)
       .trim().replace(/\/+$/, ''),
+    backlogBoardUrl: (src('BACKLOG_BOARD_URL') || DEFAULTS.BACKLOG_BOARD_URL).trim().replace(/\/+$/, ''),
     whisperModel: (src('WHISPER_MODEL') || DEFAULTS.WHISPER_MODEL).trim(),
     whisperBin: (src('WHISPER_BIN') || DEFAULTS.WHISPER_BIN).trim(),
     ffmpegBin: (src('FFMPEG_BIN') || DEFAULTS.FFMPEG_BIN).trim(),

@@ -12,7 +12,8 @@ export const settings: ServerSettings = {
   answerOverride: null,
   notify: {
     enabled: true,
-    events: { question: true, stop: false, permission: true, plan: true, 'routine-failed': true, 'usage-limit': false, 'usage-reset': false },
+    events: { question: true, stop: false, permission: true, plan: true, 'routine-failed': true, 'tick-capped': false, 'usage-limit': false,
+      'usage-reset': false },
     requireRemoteAnswer: true,
     requireAfk: true,
     requireAutoMode: false

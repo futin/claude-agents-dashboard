@@ -61,7 +61,8 @@ via `tsx`, dev and prod alike).
   fast-forwards the checked-out branch with `merge --ff-only` and Push runs `git push`, never forced.
   The [Routines](subsystems/routines.md) section writes job files into `ROUTINES_DIR` (default `~/claude-global/routines`, owner only), keeps its state
   under `~/.claude/routines/`, and installs the jobs as launchd jobs or crontab lines; the 5-hour
-  [usage alerts](subsystems/push-notify.md#the-usage-events-usage-limit-and-usage-reset) keep their claim in `~/.claude/dashboard/usage-alerts.json`.
+  [usage alerts](subsystems/push-notify.md#the-usage-events-usage-limit-and-usage-reset) keep their claim in `~/.claude/dashboard/usage-alerts.json`; the
+  [`tick-capped` push](subsystems/push-notify.md#the-backlog-tick-event-tick-capped) reads `~/.backlog-manager/tick/*/last-decide.json` and never writes there.
 - **Zero runtime dependencies on the backend.** `server/` uses Node built-ins only, with two pinned exceptions, neither with deps of its own:
   `lookout-widgets` ([hub-widgets](subsystems/hub-widgets.md#the-dependency-exception)) and `release-kit`, whose memoised `createReleasesReader` backs
   [`GET /api/releases`](subsystems/releases.md); `test/server-deps.test.ts` pins both. Keep new npm deps out of it.
@@ -255,6 +256,7 @@ server/
   lib/routine-log.ts     the incremental run-log reader, the lost rule, 20 MB rotation and the window stats
   lib/routine-notify.ts  the `routine-failed` fold over runs: one push per run, `notified.json`, the first-start seed
   lib/routine-boot.ts    what the owning server does on listen and on exit, and the shared log reader
+  lib/tick-caps.ts       the `tick-capped` push: reads each backlog tick's `last-decide.json`, one push per capped episode, `tick-capped.json`
   lib/hub-widgets.ts  the Lookout hub tiles (usage gauge, sessions list, Git pending list), declared through lookout-widgets
   lib/scan-snapshot.ts  `scanSnapshot`: one session scan with every RAM-store injection and the held-wait terminal sweep — what /api/sessions
                   and the hub's sessions tile both serve
