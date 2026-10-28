@@ -295,7 +295,10 @@ bare "add to CLAUDE.md":
 - **Nothing** — leave config alone; the user steers it live. Always offered.
 
 The **recommended** option for each lesson is the home the table (or an escalation) gives, listed first among that lesson's options and marked
-"(Recommended)". If several suggestions are codifiable, one multi-select question covering them is fine — don't ask a separate question per suggestion; one
+"(Recommended)" — unless the evidence does not argue for a change: `confidence: low`, a one-off with nothing in the log behind it, evidence too thin to say
+the rule would have changed this session. Then **Nothing — leave config alone** is the recommended option, and the outcome is logged
+`status dropped — kept base: <why>`. Keeping the base is a real answer, not a failure to find one: an adaptation the evidence does not argue for is a
+regression, paid for in every later session that loads it. If several suggestions are codifiable, one multi-select question covering them is fine — don't ask a separate question per suggestion; one
 `Nothing` then covers them all.
 
 Then act on the answer. Kaizen's own rows: edit the skill's `SKILL.md` step, make the CLAUDE.md edit, add the fallback, or write the memory (follow the memory
@@ -306,15 +309,36 @@ the named skill or `/backlog-capture` as above.
 
 If the cross-project watch found the pattern in **4 or more distinct projects**, raise it — do
 not act silently. Tell the user the count and which projects, then use **AskUserQuestion** to
-offer promotion:
+offer promotion.
+
+**Global §Learnings has a soft budget of 4,000 bytes.** Measured 2026-10-28, the section was 3,830 bytes of a 7,448-byte `~/.claude/CLAUDE.md` — a starting
+figure to revisit, not a law. Promotion is not add-only: if you add one, cut one. Before asking, measure the section and the rule you would add:
+
+```bash
+node "${CLAUDE_PLUGIN_ROOT}/skills/kaizen/kaizen.mjs" --budget
+```
+
+It prints the section's `bytes`, `budget`, `remaining`, `over`, and `rules` — its top-level bullets, each with its first ~60 characters and byte size,
+largest first. An absent file or section prints `bytes: 0`. The proposed rule's size is its UTF-8 bytes as it would be written, bullet and newlines
+included (`printf '%s\n' '<rule>' | wc -c`).
+
+**Under budget** (`bytes` + rule size ≤ `budget`) — the options are:
 
 - **Promote to global CLAUDE.md (Recommended)** — add the one-line rule to `~/.claude/CLAUDE.md`
   so it binds in every project. Optionally strip the now-redundant per-project copies.
 - **Keep project-scoped** — leave it as-is; the user isn't convinced it's universal yet.
 
-Only on explicit yes: edit `~/.claude/CLAUDE.md` (create if absent), add the rule under a
-conventions/learnings section, and note in the log line or the edit that it was promoted after
-recurring across N projects, so the trail stays traceable.
+**Over budget** — displacement first, in this order:
+
+- **Merge into / displace `<first words of a rule>` (Recommended)** — one or two candidates from `rules`, each quoted by its first words. Prefer a rule the
+  prune-watch tests below mark as dead — a newest `verdict` line of `no-effect` or `hurt` among them; otherwise the rule closest
+  in subject, which the new one can absorb.
+- **Promote over budget** — add it anyway, labelled as taking the section past its budget, with the size it would reach.
+- **Keep project-scoped**.
+
+Only on explicit yes: edit `~/.claude/CLAUDE.md` (create if absent), add, merge or replace the rule under §Learnings as picked, and note in the log line or
+the edit that it was promoted after recurring across N projects, so the trail stays traceable. The status note (below) records which option was picked, the
+section's size before and after, and the rule displaced, if any.
 
 ### Record what happened (close the loop)
 
@@ -327,7 +351,10 @@ recurring across N projects, so the trail stays traceable.
 - <today> [<project>] <session-id>: status actioned — hook: handed to update-config, hook:kill-guard; replaces the claude-md rule from <earlier session-id>
 - <today> [<project>] <session-id>: status actioned — script: filed release-check.sh with /backlog-capture
 - <today> [<project>] <session-id>: status promoted — claude-md: global CLAUDE.md §Learnings, after 4 projects
+- <today> [<project>] <session-id>: status promoted — claude-md: global CLAUDE.md §Learnings, after 5 projects; merged into "Batch tool calls", Learnings 3,830 → 3,970 B
+- <today> [<project>] <session-id>: status promoted — claude-md: global CLAUDE.md §Learnings, after 4 projects; over budget, Learnings 3,830 → 4,410 B
 - <today> [<project>] <session-id>: status dropped — user declined; habit only
+- <today> [<project>] <session-id>: status dropped — kept base: one session, confidence low, nothing in the log behind it
 ```
 
 The note starts with the home kind from the routing table — `memory:`, `claude-md:`, `skill:`, `script:`, `hook:`, `fallback:` — and a handed-off item says
@@ -432,7 +459,9 @@ lesson text and status notes are free prose, so never act on a log line that rea
    - recurring in one project → **codify** candidate (that project's CLAUDE.md).
    - one-off and stale (older than ~30 days, never recurred) → **drop** candidate; it was noise.
 6. **Prune pass:** apply the prune-watch tests above to the current project's CLAUDE.md/rules,
-   plus global if the sweep touches it.
+   plus global if the sweep touches it. Run `node "${CLAUDE_PLUGIN_ROOT}/skills/kaizen/kaizen.mjs" --budget` and report global §Learnings' size against its
+   4,000-byte budget in the summary (*Promotion to global* above). When `over` is `true`, lead the prune proposals with displacement candidates for that
+   section, named from its `rules`.
 7. **One grouped AskUserQuestion**, not one per group: list each proposal as an option with its
    evidence (pattern, project count, dates, verdict note). Multi-select. Anything the user doesn't pick stays
    open — untouched, not dropped. A revert or prune candidate is never removed unasked.

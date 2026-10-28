@@ -9,13 +9,14 @@
  *   node kaizen.mjs /abs/path/to/x.jsonl    analyze a transcript directly
  *   node kaizen.mjs --latest                newest transcript for the current cwd
  *   node kaizen.mjs --trend [/abs/log.md]   ctx trend over the analytics log (default ~/.claude/session-analytics-log.md)
+ *   node kaizen.mjs --budget [<file>] [<heading>] [<bytes>]   section size vs budget (default ~/.claude/CLAUDE.md, ## Learnings, 4000)
  *   node kaizen.mjs --compare <project> <since YYYY-MM-DD> <field.path>
  *                                           one analysis field's median over the project's sessions before vs after a date
  *
  * PROVENANCE: ported from claude-agents-dashboard server/lib/{analyze,agents,subagent-usage,scan}.ts.
  * That repo holds the unit-tested source of truth; keep this in sync if it changes.
- * Exception: `--trend` is kaizen-only, has no TS twin, and is tested by spawning this file (test/kaizen-trend.test.ts); so is `--compare`, tested in
- * test/compare.test.mjs.
+ * Exception: `--trend` is kaizen-only, has no TS twin, and is tested by spawning this file (test/kaizen-trend.test.ts); so are `--compare`, tested in
+ * test/compare.test.mjs, and `--budget`, tested in test/budget.test.mjs.
  * Counting compaction replays once (#174), skipping compact summaries and reading compact_boundary for neverCompacted are in that
  * source too (#226), pinned by its parity tests. Kaizen-only by decision: the `compactions` block — a lesson input with no dashboard
  * consumer — tested in test/compactions.test.mjs (`node --test test/*.test.mjs`).
@@ -682,17 +683,58 @@ export function compareSessions({ root, project, since, fieldPath }) {
   return result;
 }
 
+/* ------------------------------------------------ section size against a byte budget (`--budget`) */
+
+// Measures one section of a CLAUDE.md — by default the global §Learnings, the surface every session of every project pays for — so a promotion can see
+// whether it fits before it lands, and name what to merge or displace when it does not. Kaizen-only and read-only, like `--trend`.
+
+const BUDGET_DEFAULTS = { heading: '## Learnings', bytes: 4000 };
+const HEADING_RE = /^(#{1,6})\s/;
+const bytesOf = (s) => Buffer.byteLength(s, 'utf8');
+
+/** The section is the heading line through the line before the next heading of the same or higher level (fewer or equal `#`), or EOF; a heading inside
+ *  a fenced code block is not a heading. `rules` are its top-level bullets, each running to the next top-level bullet, heading or section end with
+ *  trailing blank lines dropped, largest first — so a displacement candidate can be named without re-reading the file. */
+function measureSection(text, heading, budget) {
+  const lines = String(text).split(/(?<=\n)/);
+  const want = heading.trim();
+  const level = HEADING_RE.exec(want)[1].length;
+  const start = lines.findIndex(l => l.trimEnd() === want);
+  if (start < 0) return { section: false, bytes: 0, budget, remaining: budget, over: false, rules: [] };
+  let end = lines.length, fenced = false;
+  for (let i = start + 1; i < lines.length; i++) {
+    if (/^\s*(```|~~~)/.test(lines[i])) fenced = !fenced;
+    const h = !fenced && HEADING_RE.exec(lines[i]);
+    if (h && h[1].length <= level) { end = i; break; }
+  }
+  const body = lines.slice(start, end);
+  const rules = [];
+  let cur = null;
+  for (const l of body.slice(1)) {
+    if (/^[-*+]\s/.test(l)) { cur = [l]; rules.push(cur); }
+    else if (HEADING_RE.test(l)) cur = null;
+    else if (cur) cur.push(l);
+  }
+  const sized = rules.map(r => {
+    while (r.length > 1 && !r.at(-1).trim()) r.pop();
+    return { first: r[0].replace(/^[-*+]\s+/, '').replace(/\s+/g, ' ').trim().slice(0, 60), bytes: bytesOf(r.join('')) };
+  }).sort((a, b) => b.bytes - a.bytes);
+  const bytes = bytesOf(body.join(''));
+  return { section: true, bytes, budget, remaining: budget - bytes, over: bytes > budget, rules: sized };
+}
+
 /* ------------------------------------------------ CLI (kaizen.ts) */
 
 const ID_RE = /^[A-Za-z0-9._-]+$/;
 const PROJECT_RE = /^(?!\.\.?$)[^/\s\]]+$/;
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const FIELD_PATH_RE = /^[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)*$/;
+const USAGE = 'usage: node kaizen.mjs <session-id | /abs/path.jsonl | --latest | --trend [/abs/log.md] | --compare <project> <since YYYY-MM-DD> <field.path> | --budget [<file>] [<heading>] [<bytes>]>';
 function die(msg) { console.error(msg); process.exit(1); }
 
 function main() {
   const arg = process.argv[2];
-  if (!arg) die('usage: node kaizen.mjs <session-id | /abs/path.jsonl | --latest | --trend [/abs/log.md] | --compare <project> <since YYYY-MM-DD> <field.path>>');
+  if (!arg) die(USAGE);
 
   if (arg === '--compare') {
     const [project, since, fieldPath] = process.argv.slice(3);
@@ -711,6 +753,20 @@ function main() {
     let text = '';
     try { text = fs.readFileSync(log, 'utf8'); } catch { /* absent log = empty series, not an error */ }
     process.stdout.write(JSON.stringify(contextTrend(text), null, 2) + '\n');
+    return;
+  }
+
+  if (arg === '--budget') {
+    const [file = path.join(os.homedir(), '.claude', 'CLAUDE.md'), heading = BUDGET_DEFAULTS.heading, raw = String(BUDGET_DEFAULTS.bytes)] = process.argv.slice(3);
+    if (!/^[1-9]\d*$/.test(raw) || !HEADING_RE.test(heading.trim())) die(USAGE);
+    const abs = path.resolve(file);
+    let text = null;
+    try { text = fs.readFileSync(abs, 'utf8'); } catch { /* absent file = a fresh machine, under budget, not an error */ }
+    const budget = Number(raw);
+    const m = text == null
+      ? { section: false, bytes: 0, budget, remaining: budget, over: false, rules: [] }
+      : measureSection(text, heading, budget);
+    process.stdout.write(JSON.stringify({ file: abs, heading: heading.trim(), exists: text != null, ...m }, null, 2) + '\n');
     return;
   }
 
