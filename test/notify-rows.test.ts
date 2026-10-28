@@ -18,9 +18,22 @@ export function run(): number {
   let p = 0, f = 0;
   console.log('\n=== notifyRows.ts ===\n');
 
-  if (test('the two usage rows follow Routine failed, copy verbatim', () => {
+  if (test('Backlog tick blocked follows Routine failed, copy verbatim, and is disabled only by a missing topic', () => {
     const keys = NOTIFY_EVENT_ROWS.map(r => r.key);
-    assert.deepStrictEqual(keys.slice(keys.indexOf('routine-failed')), ['routine-failed', 'usage-limit', 'usage-reset']);
+    assert.strictEqual(keys[keys.indexOf('routine-failed') + 1], 'tick-capped');
+    const row = NOTIFY_EVENT_ROWS.find(r => r.key === 'tick-capped')!;
+    assert.deepStrictEqual({ name: row.name, hint: row.hint }, {
+      name: 'Backlog tick blocked',
+      hint: 'A backlog-tick job stopped grooming: its plans awaiting review reached the cap. Ignores the three conditions below.'
+    });
+    assert.deepStrictEqual(notifyRowState('tick-capped', { notifyAvailable: true, usageAvailable: false, recordUsageHistory: false }),
+      { disabled: false, note: null });
+    assert.deepStrictEqual(notifyRowState('tick-capped', { ...ON, notifyAvailable: false }), { disabled: true, note: null });
+  })) p++; else f++;
+
+  if (test('the two usage rows follow Backlog tick blocked, copy verbatim', () => {
+    const keys = NOTIFY_EVENT_ROWS.map(r => r.key);
+    assert.deepStrictEqual(keys.slice(keys.indexOf('routine-failed')), ['routine-failed', 'tick-capped', 'usage-limit', 'usage-reset']);
     const [limit, reset] = NOTIFY_EVENT_ROWS.slice(-2);
     assert.deepStrictEqual({ name: limit.name, hint: limit.hint }, {
       name: 'Usage limit reached',

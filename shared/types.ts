@@ -979,10 +979,11 @@ export type ConnectionOrigin = 'local' | 'lan' | 'tailnet' | 'unknown';
 export type WriteAccess = 'open' | 'token' | 'none';
 
 /**
- * What a push notification can announce: four session events, a failed routine, and the 5-hour usage window reaching its limit
- * (`usage-limit`) or resetting after one (`usage-reset`). The last three ignore the session-only `require*` conditions.
+ * What a push notification can announce: four session events, a failed routine, a backlog tick that stopped grooming at its plan-review cap
+ * (`tick-capped`), and the 5-hour usage window reaching its limit (`usage-limit`) or resetting after one (`usage-reset`). The last four ignore the
+ * session-only `require*` conditions.
  */
-export type NotifyEvent = 'question' | 'stop' | 'permission' | 'plan' | 'routine-failed' | 'usage-limit' | 'usage-reset';
+export type NotifyEvent = 'question' | 'stop' | 'permission' | 'plan' | 'routine-failed' | 'tick-capped' | 'usage-limit' | 'usage-reset';
 
 /**
  * When to send a push. Every clause is AND-ed, and every layer is independently
