@@ -9,10 +9,13 @@
  *   node kaizen.mjs /abs/path/to/x.jsonl    analyze a transcript directly
  *   node kaizen.mjs --latest                newest transcript for the current cwd
  *   node kaizen.mjs --trend [/abs/log.md]   ctx trend over the analytics log (default ~/.claude/session-analytics-log.md)
+ *   node kaizen.mjs --compare <project> <since YYYY-MM-DD> <field.path>
+ *                                           one analysis field's median over the project's sessions before vs after a date
  *
  * PROVENANCE: ported from claude-agents-dashboard server/lib/{analyze,agents,subagent-usage,scan}.ts.
  * That repo holds the unit-tested source of truth; keep this in sync if it changes.
- * Exception: `--trend` is kaizen-only, has no TS twin, and is tested by spawning this file (test/kaizen-trend.test.ts).
+ * Exception: `--trend` is kaizen-only, has no TS twin, and is tested by spawning this file (test/kaizen-trend.test.ts); so is `--compare`, tested in
+ * test/compare.test.mjs.
  * Counting compaction replays once (#174), skipping compact summaries and reading compact_boundary for neverCompacted are in that
  * source too (#226), pinned by its parity tests. Kaizen-only by decision: the `compactions` block — a lesson input with no dashboard
  * consumer — tested in test/compactions.test.mjs (`node --test test/*.test.mjs`).
@@ -577,14 +580,131 @@ function contextTrend(text) {
   };
 }
 
+/* ------------------------------------------------ before/after comparison for one project (`--compare`) */
+
+// `/kaizen review` judges an actioned/promoted lesson by re-running analyzeSession over the project's sessions on each side of the status date and
+// comparing one field's median. Kaizen-only, like `--trend`: the dashboard reads the verdict line review writes, never this output.
+
+const COMPARE_CAP = 10;
+const COMPARE_MIN_BEFORE = 3;
+const DAY_MS = 86400000;
+const HEAD_BYTES = 64 * 1024;
+
+// Claude Code names a project dir after the cwd with every non-alphanumeric character turned into `-`; normalising both sides the same way keeps
+// the prefilter from depending on exactly which characters it replaces. It only narrows the candidates — the cwd basename still decides.
+const dirKey = (s) => s.replace(/[^A-Za-z0-9]/g, '-');
+
+/** First timestamp and first cwd from the head of a transcript, without reading the rest; null when the head has neither. */
+function sessionHead(file) {
+  let fd;
+  try {
+    fd = fs.openSync(file, 'r');
+    const buf = Buffer.alloc(HEAD_BYTES);
+    const text = buf.toString('utf8', 0, fs.readSync(fd, buf, 0, HEAD_BYTES, 0));
+    let ts = null, cwd = null;
+    for (const line of text.split('\n')) {
+      let rec;
+      try { rec = JSON.parse(line); } catch { continue; }
+      if (!ts && typeof rec.timestamp === 'string') ts = rec.timestamp;
+      if (!cwd && typeof rec.cwd === 'string') cwd = rec.cwd;
+      if (ts && cwd) break;
+    }
+    return ts && cwd ? { ts, cwd } : null;
+  } catch { return null; } finally { if (fd !== undefined) fs.closeSync(fd); }
+}
+
+/**
+ * A dotted path into a SessionAnalysis. An array segment is a numeric index or, for the keyed lists, the element whose `tool` (byTool) or `type`
+ * (bySubagent) equals it — `byTool.Bash.count`. Null unless it lands on a finite number, so a tool the session never called is missing, never 0.
+ */
+export function resolveField(obj, fieldPath) {
+  let cur = obj;
+  for (const seg of fieldPath.split('.')) {
+    if (Array.isArray(cur)) cur = /^\d+$/.test(seg) ? cur[Number(seg)] : cur.find(e => e && (e.tool === seg || e.type === seg));
+    else cur = cur && typeof cur === 'object' ? cur[seg] : undefined;
+    if (cur === undefined || cur === null) return null;
+  }
+  return typeof cur === 'number' && Number.isFinite(cur) ? cur : null;
+}
+
+/**
+ * The project's main-session transcripts on each side of `since` (YYYY-MM-DD, UTC), with `fieldPath` read from each. After = sessions starting
+ * after the end of that day, oldest first, capped at COMPARE_CAP; before = as many sessions as after has (at least COMPARE_MIN_BEFORE, same cap)
+ * immediately preceding it — a session starting on `since` itself is before. Throws when no session yields a number for the path.
+ *
+ * Only `<root>/<dir>/*.jsonl` is listed, so subagent transcripts (under `<dir>/<session>/subagents/`) never count. The dir-name prefilter and
+ * the head read keep it to one full analysis per selected session: for claude-agents-dashboard (353 of 2,291 transcripts on this machine) 0.7–2.5 s warm,
+ * 12 s on a cold disk cache, measured 2026-10-28.
+ */
+export function compareSessions({ root, project, since, fieldPath }) {
+  const sinceEnd = Date.parse(`${since}T00:00:00Z`) + DAY_MS;
+  const key = '-' + dirKey(project);
+  const sessions = [];
+  let dirs;
+  try { dirs = fs.readdirSync(root, { withFileTypes: true }); } catch { dirs = []; }
+  for (const d of dirs) {
+    if (!d.isDirectory() || !dirKey(d.name).endsWith(key)) continue;
+    const dir = path.join(root, d.name);
+    let names;
+    try { names = fs.readdirSync(dir); } catch { continue; }
+    for (const name of names) {
+      if (!name.endsWith('.jsonl')) continue;
+      const file = path.join(dir, name);
+      const head = sessionHead(file);
+      const start = head ? Date.parse(head.ts) : NaN;
+      if (!head || !Number.isFinite(start) || path.basename(normCwd(head.cwd)) !== project) continue;
+      sessions.push({ file, id: name.replace(/\.jsonl$/, ''), start, startedAt: head.ts });
+    }
+  }
+  sessions.sort((a, b) => a.start - b.start || a.id.localeCompare(b.id));
+
+  const afterAll = sessions.filter(s => s.start >= sinceEnd);
+  const beforeAll = sessions.filter(s => s.start < sinceEnd);
+  const after = afterAll.slice(0, COMPARE_CAP);
+  const before = beforeAll.slice(-Math.min(COMPARE_CAP, Math.max(after.length, COMPARE_MIN_BEFORE)));
+
+  const side = (picked) => {
+    const values = [], missing = [];
+    for (const s of picked) {
+      const a = analyzeSession(s.file, s.id);
+      const v = a ? resolveField(a, fieldPath) : null;
+      if (v == null) missing.push({ session: s.id, date: s.startedAt.slice(0, 10) });
+      else values.push({ session: s.id, date: s.startedAt.slice(0, 10), value: v });
+    }
+    return { n: values.length, median: values.length ? median(values.map(v => v.value)) : null, values, missing };
+  };
+  const result = { project, since, field: fieldPath, cap: COMPARE_CAP, before: side(before), after: side(after) };
+  if (!result.before.n && !result.after.n) {
+    throw new Error(sessions.length
+      ? `field path ${fieldPath} resolved to a number in none of the ${before.length + after.length} sessions compared`
+      : `no main-session transcripts found for project ${project}`);
+  }
+  return result;
+}
+
 /* ------------------------------------------------ CLI (kaizen.ts) */
 
 const ID_RE = /^[A-Za-z0-9._-]+$/;
+const PROJECT_RE = /^(?!\.\.?$)[^/\s\]]+$/;
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+const FIELD_PATH_RE = /^[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)*$/;
 function die(msg) { console.error(msg); process.exit(1); }
 
 function main() {
   const arg = process.argv[2];
-  if (!arg) die('usage: node kaizen.mjs <session-id | /abs/path.jsonl | --latest | --trend [/abs/log.md]>');
+  if (!arg) die('usage: node kaizen.mjs <session-id | /abs/path.jsonl | --latest | --trend [/abs/log.md] | --compare <project> <since YYYY-MM-DD> <field.path>>');
+
+  if (arg === '--compare') {
+    const [project, since, fieldPath] = process.argv.slice(3);
+    if (!project || !since || !fieldPath) die('usage: node kaizen.mjs --compare <project> <since YYYY-MM-DD> <field.path>');
+    if (!PROJECT_RE.test(project)) die(`invalid project tag: ${project}`);
+    if (!DATE_RE.test(since) || !Number.isFinite(Date.parse(`${since}T00:00:00Z`))) die(`invalid date (want YYYY-MM-DD): ${since}`);
+    if (!FIELD_PATH_RE.test(fieldPath)) die(`invalid field path: ${fieldPath}`);
+    let result;
+    try { result = compareSessions({ root: projectsRoot(), project, since, fieldPath }); } catch (e) { die(e.message); }
+    process.stdout.write(JSON.stringify(result, null, 2) + '\n');
+    return;
+  }
 
   if (arg === '--trend') {
     const log = process.argv[3] ?? path.join(os.homedir(), '.claude', 'session-analytics-log.md');

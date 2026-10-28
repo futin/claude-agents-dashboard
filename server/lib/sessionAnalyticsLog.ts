@@ -2,11 +2,15 @@
  * sessionAnalyticsLog.ts — parse `~/.claude/session-analytics-log.md`, the append-only learning log
  * the `/kaizen` skill writes (one line per analyzed session, across all projects).
  *
- * Three line shapes (see the kaizen skill — this parser and that skill are the
+ * Four line shapes (see the kaizen skill — this parser and that skill are the
  * two halves of one contract; never change one alone):
  *   - <date> [<project>] <session-id>: <billable> billable (<ctx>), top cost <x>. Lesson: <text>.
  *   - <date> [<project>] <session-id>: status actioned — added to project CLAUDE.md
+ *   - <date> [<project>] <session-id>: verdict helped — errorSignals.retries median 4 → 1 over 5 sessions (before 5)
  *   - <date> review: swept 12 lessons, promoted 1, pruned 2
+ *
+ * A `verdict` line records whether an actioned/promoted lesson's rule worked (`helped|hurt|no-effect|confounded`); only `/kaizen review` writes one,
+ * and it never changes whether the lesson is open — that is still the status line's job.
  *
  * A lesson may carry a tail — `Lesson: <text>. ‖ cue: … · component: … · evidence: … · confidence: high (<why>)` — or be
  * `Lesson: none — <reason>.`, which is born closed and never gets a status line.
@@ -28,7 +32,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 import { claudeHome } from './paths.js';
-import type { LessonFields, LessonStatus } from '../../shared/types.js';
+import type { LessonFields, LessonStatus, LessonVerdict } from '../../shared/types.js';
 
 /** One parsed session-analytics-log entry. */
 export interface SessionAnalyticsLesson {
@@ -56,12 +60,22 @@ export interface SessionAnalyticsStatus extends LessonStatus {
   idPrefix: string;
 }
 
+/** A `verdict` line: whether one session's actioned/promoted lesson worked. */
+export interface SessionAnalyticsVerdict extends LessonVerdict {
+  /** Project tag (`[project]`). */
+  project: string;
+  /** Session-id prefix as written — a prefix of the full transcript UUID. */
+  idPrefix: string;
+}
+
 /** Everything the log carries, in one pass. */
 export interface SessionAnalyticsEvents {
   /** Lesson lines, file order (oldest-first). */
   lessons: SessionAnalyticsLesson[];
   /** Status lines, file order (oldest-first). */
   statuses: SessionAnalyticsStatus[];
+  /** Verdict lines, file order (oldest-first). */
+  verdicts: SessionAnalyticsVerdict[];
   /** Newest `review:` marker date (YYYY-MM-DD), or null if the log has none. */
   lastReviewDate: string | null;
 }
@@ -77,6 +91,10 @@ const LINE_RE = /^-\s+(\d{4}-\d{2}-\d{2})\s+\[([^\]]+)\]\s+(\S+?):\s+.*?\bLesson
 // - <date> [<project>] <id>: status actioned — <note>   (note optional)
 const STATUS_RE =
   /^-\s+(\d{4}-\d{2}-\d{2})\s+\[([^\]]+)\]\s+(\S+?):\s+status\s+(actioned|promoted|dropped)\b\s*(?:[—–-]\s*(.*))?$/i;
+
+// - <date> [<project>] <id>: verdict helped — <note>   (note optional; the value must end at whitespace, so `helpedx` is no verdict)
+const VERDICT_RE =
+  /^-\s+(\d{4}-\d{2}-\d{2})\s+\[([^\]]+)\]\s+(\S+?):\s+verdict\s+(helped|hurt|no-effect|confounded)(?=\s|$)\s*(?:[—–-]\s*(.*))?$/i;
 
 // - <date> review: <summary>
 const REVIEW_RE = /^-\s+(\d{4}-\d{2}-\d{2})\s+review\b\s*:?/i;
@@ -127,7 +145,10 @@ export function parseSessionAnalyticsLog(text: string): SessionAnalyticsLesson[]
   if (typeof text !== 'string') return [];
   const out: SessionAnalyticsLesson[] = [];
   for (const raw of text.split('\n')) {
-    const m = LINE_RE.exec(raw.trim());
+    const line = raw.trim();
+    // A status or verdict note is free text and may quote `Lesson:` — the same guard parseLogEvents gets from its classification order.
+    if (STATUS_RE.test(line) || VERDICT_RE.test(line)) continue;
+    const m = LINE_RE.exec(line);
     if (!m) continue;
     out.push(lessonEntry(m));
   }
@@ -136,16 +157,29 @@ export function parseSessionAnalyticsLog(text: string): SessionAnalyticsLesson[]
 
 /**
  * Parse every line shape in one pass. A line is classified by the first pattern
- * it matches (status → review → lesson), so a status note containing the word
- * `Lesson:` can never be mistaken for a lesson. Malformed lines are skipped, as
+ * it matches (verdict → status → review → lesson), so a verdict or status note
+ * containing the word `Lesson:` can never be mistaken for a lesson. Malformed lines are skipped, as
  * everywhere else here.
  */
 export function parseLogEvents(text: string): SessionAnalyticsEvents {
-  const out: SessionAnalyticsEvents = { lessons: [], statuses: [], lastReviewDate: null };
+  const out: SessionAnalyticsEvents = { lessons: [], statuses: [], verdicts: [], lastReviewDate: null };
   if (typeof text !== 'string') return out;
 
   for (const raw of text.split('\n')) {
     const line = raw.trim();
+
+    const v = VERDICT_RE.exec(line);
+    if (v) {
+      const note = (v[5] ?? '').trim();
+      out.verdicts.push({
+        date: v[1],
+        project: v[2],
+        idPrefix: v[3],
+        verdict: v[4].toLowerCase() as LessonVerdict['verdict'],
+        ...(note ? { note } : {})
+      });
+      continue;
+    }
 
     const s = STATUS_RE.exec(line);
     if (s) {
@@ -191,13 +225,26 @@ export function statusForSession(
   return null;
 }
 
+/** The newest verdict recorded for a session, or null. Prefix match + newest-wins, mirroring {@link statusForSession}. */
+export function verdictForSession(
+  verdicts: SessionAnalyticsVerdict[], sessionId: string
+): LessonVerdict | null {
+  if (!sessionId) return null;
+  for (let i = verdicts.length - 1; i >= 0; i--) {
+    const v = verdicts[i];
+    if (!sessionId.startsWith(v.idPrefix)) continue;
+    return v.note ? { verdict: v.verdict, date: v.date, note: v.note } : { verdict: v.verdict, date: v.date };
+  }
+  return null;
+}
+
 /** Read + parse every line shape at `logPath` (default: global). Empty if unreadable. */
 export function readLogEvents(logPath = sessionAnalyticsLogPath()): SessionAnalyticsEvents {
   let text: string;
   try {
     text = fs.readFileSync(logPath, 'utf8');
   } catch {
-    return { lessons: [], statuses: [], lastReviewDate: null };
+    return { lessons: [], statuses: [], verdicts: [], lastReviewDate: null };
   }
   return parseLogEvents(text);
 }

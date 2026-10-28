@@ -133,6 +133,24 @@ export function run(): number {
     assert.equal(byId['dddd4444'].lessonStatus, null);
   });
 
+  t('verdict line rides along on the report; a session without one carries null', () => {
+    const home = fakeHome({
+      sessionAnalyticsLog: [
+        logLine('2026-07-12', 'demo', 'abc12345', 'keep it tight.'),
+        logLine('2026-07-13', 'demo', 'dddd4444', 'no verdict for this one.'),
+        '- 2026-08-01 [demo] abc12345: status actioned — added to project CLAUDE.md',
+        '- 2026-08-20 [demo] abc12345: verdict helped — errorSignals.retries median 4 → 1 over 5 sessions (before 5)'
+      ].join('\n'),
+      transcripts: { 'abc12345-0000-1111-2222-333344445555': [turn('/tmp/demo', '2026-07-12T10:00:00.000Z')] }
+    });
+    const byId = Object.fromEntries(listReports(5, { homeDir: home }).map(r => [r.sessionId.slice(0, 8), r]));
+    assert.deepEqual(byId['abc12345'].lessonVerdict, {
+      verdict: 'helped', date: '2026-08-20', note: 'errorSignals.retries median 4 → 1 over 5 sessions (before 5)'
+    });
+    assert.equal(byId['abc12345'].lessonStatus?.status, 'actioned');
+    assert.equal(byId['dddd4444'].lessonVerdict, null);
+  });
+
   t('a status line alone never creates a report', () => {
     const home = fakeHome({ sessionAnalyticsLog: '- 2026-08-01 [demo] abc12345: status actioned — no lesson logged' });
     assert.deepEqual(listReports(5, { homeDir: home }), []);
