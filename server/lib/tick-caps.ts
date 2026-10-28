@@ -127,16 +127,14 @@ export function readTickReadings(home: string = tickHome()): TickReading[] {
 
 /* -------------------------------------------------- the I/O shell */
 
-/** The fold runs on every Routines poll; one pass per this long is plenty for a cap that moves when a person approves a plan. */
-const THROTTLE_MS = 30_000;
-
 let fileOverride: string | null = null;
 let ownerOverride: (() => boolean) | null = null;
 /** The last ledger this process decided on: the base when the file cannot be read, so a failed write still stops a repeat. */
 let memory: TickCapLedger | null = null;
 /** The last write failed: a missing file then means "never landed", not "deleted by hand", so memory stays the base. */
 let writeFailed = false;
-let lastPass: number | null = null;
+/** What every `last-decide.json` looked like at the last pass; a pass with nothing changed since cannot push, so it is skipped. */
+let lastSeen: string | null = null;
 
 /** Test seam: the ledger file. */
 export function setTickCapsFile(file: string | null): void {
@@ -148,11 +146,11 @@ export function setTickCapsOwner(fn: (() => boolean) | null): void {
   ownerOverride = fn;
 }
 
-/** Test seam: forget the in-memory ledger and the throttle, as a restart would. */
+/** Test seam: forget the in-memory ledger and the last pass's file stats, as a restart would. */
 export function resetTickCapsMemory(): void {
   memory = null;
   writeFailed = false;
-  lastPass = null;
+  lastSeen = null;
 }
 
 function ledgerFile(config: Config): string {
@@ -176,6 +174,29 @@ function readLedger(file: string): TickCapLedger {
   return memory ?? { projects: {} };
 }
 
+/**
+ * Every `last-decide.json`'s identity, mtime and size, one stat each. A clock throttle would drop the pass at the end of the very run that hits the cap,
+ * which comes seconds after the pass at its start; this skips only a pass that has nothing new to read.
+ */
+function decideStats(home: string): string {
+  let dirs: string[];
+  try {
+    dirs = fs.readdirSync(home);
+  } catch {
+    return '';
+  }
+  const out: string[] = [];
+  for (const dir of dirs.sort()) {
+    try {
+      const st = fs.statSync(path.join(home, dir, 'last-decide.json'));
+      out.push(`${dir}:${st.ino}:${st.mtimeMs}:${st.size}`);
+    } catch {
+      /* no file: nothing to read */
+    }
+  }
+  return out.join('\n');
+}
+
 /** tmp + rename, so a reader never sees half a ledger. Returns false on failure; the caller sends anyway. */
 function writeLedger(file: string, ledger: TickCapLedger): boolean {
   const tmp = `${file}.${process.pid}.tmp`;
@@ -191,19 +212,21 @@ function writeLedger(file: string, ledger: TickCapLedger): boolean {
 }
 
 /**
- * One pass over every project's last `decide`. Only the routines owner pushes, so two dashboards on one machine never both send. Throttled to one pass
- * per {@link THROTTLE_MS}; never throws, since it runs inside the routine push fold.
+ * One pass over every project's last `decide`. Only the routines owner pushes, so two dashboards on one machine never both send. A pass with no
+ * `last-decide.json` changed since the last one reads nothing more; never throws, since it runs inside the routine push fold.
  */
 export function foldTickCaps(config: Config, now: number = Date.now()): void {
   try {
     if (!(ownerOverride ?? isOwner)()) return;
-    if (lastPass !== null && now - lastPass < THROTTLE_MS) return;
-    lastPass = now;
+    const home = tickHome();
+    const seen = decideStats(home);
+    if (seen === lastSeen) return;
 
     const file = ledgerFile(config);
     const before = readLedger(file);
-    const { ledger, pushes } = decideTickCapped(before, readTickReadings(), tickCanSend(config), now);
+    const { ledger, pushes } = decideTickCapped(before, readTickReadings(home), tickCanSend(config), now);
     memory = ledger;
+    lastSeen = seen;
     // Claim before send; a failed write keeps the claim in memory and still sends.
     if (JSON.stringify(ledger) !== JSON.stringify(before)) writeFailed = !writeLedger(file, ledger);
     for (const p of pushes) sendTickCappedEvent(p, config);

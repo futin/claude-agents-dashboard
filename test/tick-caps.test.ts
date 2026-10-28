@@ -207,12 +207,18 @@ export function run(): number {
     assert.strictEqual(fs.existsSync(file), false);
   })) p++; else f++;
 
-  if (shell('shell: two calls 10 s apart make one pass', ({ sent, home }) => {
+  if (shell('shell: a decide written 15 s after a pass (the capping run ending) is read by the next pass', ({ sent, home }) => {
     foldTickCaps(conf(), NOW);
     writeDecide(home, ROOT, decide(3));
-    foldTickCaps(conf(), NOW + 10_000);
-    assert.strictEqual(sent.length, 0, 'the second call was throttled');
-    foldTickCaps(conf(), NOW + 31_000);
+    foldTickCaps(conf(), NOW + 15_000);
+    assert.strictEqual(sent.length, 1);
+  })) p++; else f++;
+
+  if (shell('shell: a pass with no last-decide.json changed since the last one reads nothing', ({ sent, home, file }) => {
+    writeDecide(home, ROOT, decide(3));
+    foldTickCaps(conf(), NOW);
+    fs.rmSync(file); // a pass that ran would read an empty ledger and push again
+    foldTickCaps(conf(), NOW + MIN);
     assert.strictEqual(sent.length, 1);
   })) p++; else f++;
 
@@ -232,7 +238,9 @@ export function run(): number {
     try {
       writeDecide(home, ROOT, decide(3));
       foldTickCaps(conf(), NOW);
+      writeDecide(home, ROOT, decide(3, 3, new Date(NOW).toISOString())); // a changed file, so each later pass runs
       foldTickCaps(conf(), NOW + MIN);
+      writeDecide(home, ROOT, decide(3, 3, new Date(NOW + MIN).toISOString()));
       foldTickCaps(conf(), NOW + 2 * MIN);
       assert.strictEqual(sent.length, 1);
       assert.strictEqual(fs.existsSync(file), false);
@@ -246,6 +254,7 @@ export function run(): number {
     writeDecide(home, ROOT, decide(3));
     foldTickCaps(conf(), NOW);
     setSettings({ notify: { events: { 'tick-capped': true } } });
+    writeDecide(home, ROOT, decide(3, 3, new Date(NOW).toISOString())); // still capped, and a changed file, so the pass runs
     foldTickCaps(conf(), NOW + MIN);
     assert.strictEqual(sent.length, 0);
   })) p++; else f++;

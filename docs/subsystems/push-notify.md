@@ -309,7 +309,8 @@ routing and the transport, **exempt from `requireAfk`, `requireRemoteAnswer` and
   every run; the tick home is `$BM_TICK_HOME`, else `~/.backlog-manager/tick` (`tickHome` in `lib/tick-caps.ts`, a hand twin of backlog-manager's). The
   dashboard only reads it. A missing home or a malformed file skips that project.
 - **When it checks.** `foldTickCaps` runs inside the routine push fold (`foldForPush`), so on every write to the run log (which is when a tick routine's run
-  ends) and on every Routines poll, throttled to one pass per 30 s. Only the routines owner checks, so two dashboards on one machine never both push.
+  ends) and on every Routines poll. A pass stats each `last-decide.json` first and reads nothing when none changed since the last pass; a clock throttle
+  would drop the pass at the end of the run that hits the cap, which comes seconds after the pass at its start. Only the routines owner checks, so two dashboards on one machine never both push.
 - **Capped** is `maxPlans > 0 && planReview >= maxPlans`, the cap read from the file, never assumed. A `--max-plans 0` job never grooms by choice and
   never pushes.
 - **Once per episode.** The ledger `<routine state root>/tick-capped.json` holds an entry per capped project; the first capped reading adds it and pushes,
