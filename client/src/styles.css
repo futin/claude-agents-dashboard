@@ -1473,6 +1473,9 @@ code,kbd,samp,pre{font-family:inherit}
 .an-status.actioned{background:var(--green-tint);color:var(--green)}
 .an-status.promoted{background:var(--ink);color:var(--strip)}
 .an-status.open{color:var(--ink3)}
+/* `none`: settled with nothing to act on — a hollow dot and an unfilled badge, quieter still than open */
+.an-dot.none{background:none;border:1.5px solid var(--hairline2)}
+.an-status.none{background:none;color:var(--ink3)}
 /* the row's second line is dense — match what `.spill` gets there */
 .lrow .act-line .an-status{padding:1px 7px}
 
@@ -1526,6 +1529,11 @@ code,kbd,samp,pre{font-family:inherit}
 .an-lesson-body{font-size:13px;line-height:1.5;color:var(--ink);max-width:74ch;margin-top:10px;overflow-wrap:anywhere}
 .an-lesson-body.muted{font-size:12px;margin-top:8px}
 .an-lesson-body code{font-size:12px;font-weight:500;color:var(--ink);background:var(--strip-hi);border-radius:4px;padding:1px 5px}
+/* the lesson line's ` ‖ ` tail: the .cg-facts label/value grid, set small under the lesson */
+.an-lesson-fields{display:grid;grid-template-columns:max-content minmax(0,1fr);gap:4px 14px;max-width:74ch;margin-top:8px;font-size:12px;line-height:1.45}
+.an-lesson-field{display:contents}
+.an-lesson-fields dt{color:var(--ink3)}
+.an-lesson-fields dd{color:var(--ink2);overflow-wrap:anywhere}
 @media (min-width:768px){
   .an-cols{grid-template-columns:repeat(2,minmax(0,1fr))}
 }

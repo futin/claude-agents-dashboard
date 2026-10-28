@@ -146,6 +146,96 @@ export function run(): number {
     }
   });
 
+  // The structured tail (#332): ` ‖ ` then `key: value` fields split at ` · ` + a known key.
+  const PREFIX = '- 2026-07-12 [dashboard] d04e9b52: 210k billable (1.4M ctx), top cost Explore. ';
+  const one = (line: string) => {
+    const ev = parseLogEvents(line);
+    assert.equal(ev.lessons.length, 1, `one lesson from: ${line}`);
+    assert.deepEqual(parseSessionAnalyticsLog(line), ev.lessons, 'both parsers return the same shape');
+    return ev.lessons[0];
+  };
+
+  t('tail: a legacy line parses exactly as before — no fields, no none', () => {
+    const l = one(PREFIX + 'Lesson: keep subagents terse.');
+    assert.deepEqual(l, { date: '2026-07-12', project: 'dashboard', idPrefix: 'd04e9b52', lesson: 'keep subagents terse.' });
+  });
+
+  t('tail: a full tail splits into the four fields and leaves the lesson clean', () => {
+    const l = one(PREFIX + 'Lesson: read the doc before editing the status machine. ‖ cue: editing a state machine with a rules doc · component: project '
+      + 'CLAUDE.md §Code rules · evidence: errorSignals.retries=4 on Edit · confidence: high (three retries, same file)');
+    assert.equal(l.lesson, 'read the doc before editing the status machine.');
+    assert.deepEqual(l.fields, {
+      cue: 'editing a state machine with a rules doc',
+      component: 'project CLAUDE.md §Code rules',
+      evidence: 'errorSignals.retries=4 on Edit',
+      confidence: 'high',
+      confidenceReason: 'three retries, same file'
+    });
+    assert.equal(l.none, undefined);
+  });
+
+  t('tail: a ` · ` inside a value that is not followed by a key survives', () => {
+    const l = one(PREFIX + 'Lesson: read less. ‖ cue: big reads · component: habit · evidence: byTool[Read] · 31k avg: whole-file reads · confidence: medium');
+    assert.equal(l.fields?.evidence, 'byTool[Read] · 31k avg: whole-file reads');
+    assert.equal(l.fields?.confidence, 'medium');
+  });
+
+  t('tail: keys in any order and any case; confidence stored lower-case', () => {
+    const l = one(PREFIX + 'Lesson: x. ‖ Confidence: LOW · Cue: x · Component: habit');
+    assert.deepEqual(l.fields, { confidence: 'low', cue: 'x', component: 'habit' });
+  });
+
+  t('tail: a confidence outside high|medium|low is dropped, the rest kept', () => {
+    const l = one(PREFIX + 'Lesson: x. ‖ cue: c · component: habit · evidence: e · confidence: sure');
+    assert.deepEqual(l.fields, { cue: 'c', component: 'habit', evidence: 'e' });
+  });
+
+  t('tail: a tail with no known key yields no fields, and the lesson is still cut', () => {
+    const l = one(PREFIX + 'Lesson: foo. ‖ whatever');
+    assert.equal(l.lesson, 'foo.');
+    assert.equal(l.fields, undefined);
+  });
+
+  t('none: `none —` / `None -` flag a born-closed lesson; `nonetheless` does not', () => {
+    const l = one(PREFIX + 'Lesson: none — routine docs-sync, nothing new.');
+    assert.equal(l.none, true);
+    assert.equal(l.noneReason, 'routine docs-sync, nothing new.');
+    assert.equal(l.lesson, 'none — routine docs-sync, nothing new.');
+    assert.equal(one(PREFIX + 'Lesson: None - x').none, true);
+    assert.equal(one(PREFIX + 'Lesson: none – en dash').none, true);
+    const not = one(PREFIX + 'Lesson: nonetheless keep going');
+    assert.equal(not.none, undefined);
+    assert.equal(not.noneReason, undefined);
+  });
+
+  t('none: a none line ignores any tail', () => {
+    const l = one(PREFIX + 'Lesson: none — nothing new. ‖ cue: c · component: habit · confidence: high');
+    assert.equal(l.none, true);
+    assert.equal(l.lesson, 'none — nothing new.');
+    assert.equal(l.fields, undefined);
+  });
+
+  t('tail: the mid-session capture shape keeps the whole quoted correction as evidence', () => {
+    const l = one('- 2026-10-28 [dashboard] abc123: mid-session observation. Lesson: check X first. ‖ cue: c · component: habit · evidence: '
+      + 'user correction: "you should have checked X first" · confidence: medium (one observation)');
+    assert.equal(l.lesson, 'check X first.');
+    assert.equal(l.fields?.evidence, 'user correction: "you should have checked X first"');
+    assert.equal(l.fields?.confidence, 'medium');
+    assert.equal(l.fields?.confidenceReason, 'one observation');
+  });
+
+  t('tail: a status note containing ` ‖ ` still classifies as a status line', () => {
+    const ev = parseLogEvents('- 2026-08-01 [p] abcd1234: status actioned — Lesson: x ‖ cue: y');
+    assert.equal(ev.lessons.length, 0);
+    assert.equal(ev.statuses.length, 1);
+    assert.equal(ev.statuses[0].note, 'Lesson: x ‖ cue: y');
+  });
+
+  t('tail: lessonForSession returns the clean lesson text only', () => {
+    const lessons = parseSessionAnalyticsLog(PREFIX + 'Lesson: read less. ‖ cue: c · component: habit');
+    assert.equal(lessonForSession(lessons, 'd04e9b52-0000'), 'read less.');
+  });
+
   console.log(`  ${ok}/${n}`);
   return n - ok;
 }

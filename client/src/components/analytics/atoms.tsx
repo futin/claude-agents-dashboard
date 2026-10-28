@@ -1,4 +1,4 @@
-import type { AnalyticsReport, LessonStatus, SessionAnalysis, SubagentTotals } from '../../../../shared/types';
+import type { AnalyticsReport, LessonFields, LessonStatus, SessionAnalysis, SubagentTotals } from '../../../../shared/types';
 import { agentLineName } from '../../lib/agentLabel';
 import { fmtTok } from '../../lib/format';
 
@@ -22,18 +22,21 @@ const STATUS_MARK: Record<LessonStatus['status'], string> = {
 /**
  * What became of this session's lesson, as the lead dot — the place the
  * Sessions split states a session's status. Open is the quiet one: it is the
- * default, and a loud default would make every fresh entry shout.
+ * default, and a loud default would make every fresh entry shout. A `none`
+ * lesson is settled from birth, so it is never drawn as open.
  */
-export function LessonDot({ s }: { s?: LessonStatus | null }) {
-  return <span className={`an-dot ${s ? s.status : 'open'}`} aria-hidden="true" />;
+export function LessonDot({ s, none }: { s?: LessonStatus | null; none?: boolean }) {
+  return <span className={`an-dot ${s ? s.status : none ? 'none' : 'open'}`} aria-hidden="true" />;
 }
 
 /**
  * The same fact spelled out, from the log's `status` lines. A lesson with no
  * status line is still open — shown as such, since "which lessons have I
- * actually acted on" is the question the badge exists to answer.
+ * actually acted on" is the question the badge exists to answer — unless it
+ * is a `none` lesson, which had nothing to act on.
  */
-export function StatusBadge({ s }: { s?: LessonStatus | null }) {
+export function StatusBadge({ s, none }: { s?: LessonStatus | null; none?: boolean }) {
+  if (!s && none) return <span className="an-status none">— none</span>;
   if (!s) return <span className="an-status open" title="No status line yet — still open.">○ open</span>;
   return (
     <span className={`an-status ${s.status}`} title={`${s.note ? `${s.note} — ` : ''}${s.date}`}>
@@ -79,9 +82,28 @@ export function ReportBody({ r }: { r: AnalyticsReport }) {
             the same place: naming the block under the facts. */}
         <div className="mdetail-label">Research &amp; suggestions</div>
         <p className="an-lesson-body">{r.lesson}</p>
+        {r.lessonFields && <LessonFieldList f={r.lessonFields} />}
         <LessonOutcome s={r.lessonStatus} />
       </div>
     </>
+  );
+}
+
+/** The lesson's tail, one labelled row per field the line carries. */
+function LessonFieldList({ f }: { f: LessonFields }) {
+  const confidence = f.confidence && `${f.confidence}${f.confidenceReason ? ` — ${f.confidenceReason}` : ''}`;
+  const rows: [string, string | undefined][] = [
+    ['cue', f.cue], ['component', f.component], ['evidence', f.evidence], ['confidence', confidence]
+  ];
+  return (
+    <dl className="an-lesson-fields">
+      {rows.filter(([, v]) => v).map(([k, v]) => (
+        <div key={k} className="an-lesson-field">
+          <dt>{k}</dt>
+          <dd>{v}</dd>
+        </div>
+      ))}
+    </dl>
   );
 }
 

@@ -135,6 +135,17 @@ export function run(): number {
     assert.deepStrictEqual(r.overall.series, [2_000_000, 3_000_000]);
   });
 
+  t('a tailed lesson and a `none` lesson each still yield their point', () => {
+    const r = trend([
+      '- 2026-08-01 [proj-a] aaaa1111: 100k billable (1M ctx), top cost Read. Lesson: read less. ‖ cue: big reads · component: habit · '
+        + 'evidence: byTool[Read] · confidence: high (three sessions)',
+      '- 2026-08-02 [proj-a] bbbb2222: 200k billable (2M ctx), top cost Read. Lesson: none — routine, nothing new.'
+    ]);
+    assert.strictEqual(r.sessions, 2);
+    assert.strictEqual(r.withoutCtx, 0);
+    assert.deepStrictEqual(r.overall.series, [1_000_000, 2_000_000]);
+  });
+
   console.log(`  ${ok}/${n}`);
   return n - ok;
 }

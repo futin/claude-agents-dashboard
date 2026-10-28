@@ -58,14 +58,14 @@ function LogRow({ r, selected, onSelect }: { r: AnalyticsReport; selected: boole
       role="button"
       aria-pressed={selected}
     >
-      <LessonDot s={r.lessonStatus} />
+      <LessonDot s={r.lessonStatus} none={r.lessonNone} />
       {/* project only, as the Sessions row carries name + project and no more:
           the models are a filter facet and belong in the inspector, where a
           long model id does not eat the name */}
       <span className="nm"><span className="t">{r.project}</span></span>
       <span className="pct">{a ? fmtTok(a.totals.billableApprox) : '—'}</span>
       <span className="act-line">
-        <StatusBadge s={r.lessonStatus} />
+        <StatusBadge s={r.lessonStatus} none={r.lessonNone} />
         {/* One fact, because the column's measure only ever shows one before
             ellipsising: the id, or — when there is no analysis to open — why
             the figure beside it is a dash. Both are spelled out again in the
@@ -86,8 +86,8 @@ function Inspector({ r }: { r: AnalyticsReport }) {
         <div className="who2">
           <div className="ct">{r.project}</div>
           <div className="ins-meta">
-            <LessonDot s={r.lessonStatus} />
-            <StatusBadge s={r.lessonStatus} />
+            <LessonDot s={r.lessonStatus} none={r.lessonNone} />
+            <StatusBadge s={r.lessonStatus} none={r.lessonNone} />
             {r.models.map(m => <span key={m} className="model">{m}</span>)}
             <span className="an-id">{shortId(r.sessionId)}</span>
             <span className="an-when">
