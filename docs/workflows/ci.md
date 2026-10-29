@@ -1,6 +1,6 @@
 # CI gate
 
-Every PR into `main` runs `.github/workflows/ci.yml`, a thin caller of release-kit's reusable `ci-node.yml` (`futin/release-kit`, pinned at `@v1.4.0`, with `kit-ref: v1.4.0` kept equal to that ref).
+Every PR into `main` runs `.github/workflows/ci.yml`, a thin caller of release-kit's reusable `ci-node.yml` (`futin/release-kit`, referenced at `@v1`, with `kit-ref: v1` kept equal to that ref).
 Design: `docs/superpowers/specs/2026-10-15-release-pipeline-design.md` §Phase A.
 
 ## What runs
@@ -53,7 +53,7 @@ futin/backlog-manager#279).
 
 ## Releases
 
-`.github/workflows/release.yml` is a thin caller of release-kit's reusable `release.yml` (`@v1.4.0`, with `kit-ref: v1.4.0` kept equal to that ref) in
+`.github/workflows/release.yml` is a thin caller of release-kit's reusable `release.yml` (`@v1`, with `kit-ref: v1` kept equal to that ref) in
 `mode: rollup`, run each night at 04:00 UTC (`schedule`, `0 4 * * *`) and on `workflow_dispatch`. A merge into `main` releases nothing by itself. Designs:
 `docs/superpowers/specs/2026-10-15-release-pipeline-design.md` §Phase C, and `docs/superpowers/specs/2026-10-29-batched-releases-design.md` for the
 nightly rollup. It needs both `contents: write` (the tag push and the Release) and `pull-requests: read` — setting `contents` alone drops `pull-requests`
