@@ -399,6 +399,9 @@ scripts/          install-hooks.sh (`pnpm hooks:install`), ask-remote-hook.sh,
                   plugin from GitHub's main when plugin/ differs from the installed copy;
                   refuses a tree that is off main, dirty, unpushed or can't fast-forward;
                   after a reinstall POSTs `/api/routines/reconcile` to a running server,
+                  ci-scope.ts — CI's one check command: full typecheck/build/test, or on a
+                  docs-only PR just the suites that read the changed docs, run through
+                  test/run-some.ts (workflows/ci.md §Scoped checks),
                   gen-plugin-lib.ts (`pnpm plugin:gen`) — transpiles shared/{cron,frontmatter,
                   routine-file}.ts into plugin/lib/*.mjs; test/plugin-manifest.test.ts
                   regenerates and compares,

@@ -40,7 +40,8 @@ read it (plus the relevant `docs/subsystems/*.md`) *before* changing an area. `d
   `test/plugin-manifest.test.ts` fails (`scripts/gen-plugin-lib.ts`).
 - `pnpm typecheck` — `tsc --noEmit`.
 - CI (`.github/workflows/ci.yml`) runs `pnpm typecheck`, `pnpm build`, `pnpm test` on every PR into `main`, plus `pnpm test:skills` when the PR touches
-  `plugin/skills/git-sync/**` (`docs/workflows/ci.md`). **CI is the full-suite gate — never re-run the whole `pnpm test` locally just before a push.** Push
+  `plugin/skills/git-sync/**` (`docs/workflows/ci.md`). A docs-only PR runs only the suites that read the changed docs (`scripts/ci-scope.ts`,
+  `docs/workflows/ci.md` §Scoped checks). **CI is the full-suite gate — never re-run the whole `pnpm test` locally just before a push.** Push
   and let CI run it; locally run only the suites the change (or a merge of `main`) touched. Why: `~/.claude/session-analytics-log.md`, 2026-10-15.
 - `pnpm hooks:install` — symlinks the six hook scripts into `~/.claude/hooks`, merges the
   seven `settings.json` entries. Idempotent; `-- --dry-run` / `-- --uninstall` / `-- --force`.

@@ -23,9 +23,10 @@ jobs:
       kit-ref: v1
       # A feat|fix|perf PR fails `ci / pr-title` while its What's new section is empty; `None` on its own line opts out.
       require-notes: true
+      # One command that picks what the PR's diff can break (docs/workflows/ci.md §Scoped checks): a docs-only PR runs the suites that read the changed
+      # docs and skips typecheck and build; anything else — and every push to main — runs `pnpm typecheck`, `pnpm build` and `pnpm test`. The scope is
+      # decided inside the step from the diff alone, never by skipping the job, so an `edited` re-run reaches the same verdict.
       check-commands: |
-        pnpm typecheck
-        pnpm build
-        pnpm test
+        pnpm exec tsx scripts/ci-scope.ts
       skills-command: pnpm test:skills
       skills-paths: plugin/skills/git-sync/**
