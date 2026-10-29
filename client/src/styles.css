@@ -13,6 +13,7 @@
   --steel:#131a2b;            /* recessed wells: inputs, tracks, inactive controls */
   --strip:#182238;            /* strip paper — every card surface */
   --strip-hi:#1e2a44;         /* raised/tinted paper (user msgs, active tab) */
+  --tile-hover:#1e2a44;       /* hover fill of --strip paper sitting on --board (see daylight) */
   --edge:rgba(255,255,255,.05);/* 1px paper catch-light */
   --hairline:#2a3752;         /* printed rule on paper */
   --hairline2:#354463;        /* hover/strong rule */
@@ -66,7 +67,7 @@
    the navy too warm-shifted on a wide-gamut display. */
 [data-theme="graphite"]{
   color-scheme:dark;
-  --board:#111214;--steel:#191b1e;--strip:#1f2124;--strip-hi:#282b2f;
+  --board:#111214;--steel:#191b1e;--strip:#1f2124;--strip-hi:#282b2f;--tile-hover:#282b2f;
   --edge:rgba(255,255,255,.05);--hairline:#33363b;--hairline2:#43474e;
   --ink:#e4e5e7;--ink2:#a6a9ae;--ink3:#6d7176;
   --green:#5ac98a;--amber:#e6a445;--mustard:#c8b45e;--cyan:#6fc5cf;
@@ -78,7 +79,7 @@
    tints rather than hues, which is the point: a monochrome tube. */
 [data-theme="amber"]{
   color-scheme:dark;
-  --board:#0a0805;--steel:#141009;--strip:#1a150c;--strip-hi:#241d10;
+  --board:#0a0805;--steel:#141009;--strip:#1a150c;--strip-hi:#241d10;--tile-hover:#241d10;
   --edge:rgba(255,176,58,.07);--hairline:#3a2f18;--hairline2:#544425;
   --ink:#ffcf7a;--ink2:#c69a4f;--ink3:#8a6a35;
   --green:#c8d24a;--amber:#ffb03a;--mustard:#e0a63c;--cyan:#ffc76b;
@@ -89,7 +90,7 @@
 /* Nightshift — a deep green scope. Easiest of the dark set on a dim room. */
 [data-theme="nightshift"]{
   color-scheme:dark;
-  --board:#07120d;--steel:#0d1c15;--strip:#12251b;--strip-hi:#193225;
+  --board:#07120d;--steel:#0d1c15;--strip:#12251b;--strip-hi:#193225;--tile-hover:#193225;
   --edge:rgba(255,255,255,.05);--hairline:#204030;--hairline2:#2d5641;
   --ink:#d7ecdf;--ink2:#94b7a4;--ink3:#5e7e6c;
   --green:#4fe09a;--amber:#ffbe52;--mustard:#cfc55e;--cyan:#54cfba;
@@ -126,6 +127,10 @@
 [data-theme="daylight"]{
   color-scheme:light;
   --board:#f4f4f3;--steel:#ededec;--strip:#ffffff;--strip-hi:#f2f2f1;
+  /* On the dark boards --strip-hi is lighter than --strip, so a hovered card lifts off the page; here it is a tint between white and the board (~1.02:1
+     against it), and a white card hovering onto it dissolved into the ground. --tile-hover is that hover's own token, one step darker than the board, so
+     the card still reads as a card; --strip-hi keeps its other jobs (rows inside a card, active fills), which sit on --strip and read fine. */
+  --tile-hover:#e8e8e6;
   --edge:rgba(0,0,0,.03);--hairline:#eaeae8;--hairline2:#dcdcda;
   --ink:#131313;--ink2:#525252;--ink3:#6b6b6b;
   --green:#38631a;--mustard:#5f530b;--cyan:#306c0f;
@@ -2952,9 +2957,10 @@ button.chip[aria-pressed="true"]{color:var(--ink);background:var(--strip-hi)}
    from the chip's right edge and is capped to the viewport. */
 .git-toolbar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;position:relative}
 .git-clock-root{position:relative;margin-left:auto}
-/* --strip paper, no ring and no lift: the --strip-hi fill it had all but vanished on the board. */
+/* --strip paper, no ring and no lift: the --strip-hi fill it had all but vanished on the board. Its hover and open state are --tile-hover for the same
+   reason — on daylight --strip-hi is two points off the board, and the chip went see-through under the pointer. */
 .git-clock{display:inline-flex;align-items:center;gap:10px;height:38px;padding:0 10px 0 12px;border:0;border-radius:12px;background:var(--strip);color:var(--ink);font:inherit;font-family:var(--font);cursor:pointer;transition:background .15s}
-.git-clock:hover,.git-clock[aria-expanded="true"]{background:var(--strip-hi)}
+.git-clock:hover,.git-clock[aria-expanded="true"]{background:var(--tile-hover)}
 .git-clock:focus-visible,.git-pop-key:focus-visible{outline:2px solid var(--cyan);outline-offset:2px}
 /* At an 11px label `fetching…` is wider than a fixed track, so the chip's meters grow to their content rather than wrap: a two-line head would change the
    chip's height the moment a clock changes state. */
@@ -3313,7 +3319,9 @@ button.chip[aria-pressed="true"]{color:var(--ink);background:var(--strip-hi)}
 .git-chip.rtn-mach{font-size:11px;padding:0 7px}
 .git-chip.rtn-here{color:var(--ink);border-color:var(--ink3)}
 .rtn-btn{font-family:var(--font);font-size:13px;font-weight:500;color:var(--ink);background:var(--strip);border:1px solid var(--hairline2);border-radius:999px;padding:6px 14px;cursor:pointer;white-space:nowrap}
-.rtn-btn:hover:not(:disabled){background:var(--strip-hi)}
+/* --tile-hover, not --strip-hi: Reconcile sits on the board in the toolbar, where daylight's --strip-hi is all but the board itself. In the drawer, the
+   popover and a folded row the darker grey still reads, and on the dark boards the two tokens are the same hex. */
+.rtn-btn:hover:not(:disabled){background:var(--tile-hover)}
 .rtn-btn:disabled{opacity:.5;cursor:default}
 .rtn-btn.rtn-primary{background:var(--ink);border-color:transparent;color:var(--strip);transition:opacity .15s}
 .rtn-btn.rtn-primary:hover:not(:disabled){background:var(--ink);opacity:.88}
