@@ -148,14 +148,26 @@ app's "delete" — and that one *is* now read: `scan.ts` takes an `archivedIds`
 set and filters those transcripts out of its candidate pool
 ([sessions](sessions.md#phantom-rows-a-session-that-doesnt-exist-yet)).
 
+## The desktop app's `claude://` links — the way in that does exist
+
+Found 2026-10-29 by reading the URL handler in the app bundle (desktop app 4.4212.0) and then firing each link with `open` on this Mac. Both are
+undocumented, so an app update can change or drop them; re-probe before building on either.
+
+| Link | What it did, live |
+|---|---|
+| `claude://code/new?folder=<abs path>&q=<prompt>` (`prompt=` is an alias of `q=`) | Opened the Code tab on a new session in that folder **and sent the prompt** — the user record landed ~1s after `open`, nobody pressed Enter — and the app wrote a registry row (`local_<uuid>`, `cliSessionId` = the transcript id) like any desktop session's. The only other params the handler reads are `environment`, `runner_pool` and `ssh_host`/`ssh_port`; there is **no** model, effort or permission-mode param, so the session takes the app's defaults (it came up `opus`, `high`, `default`). |
+| `claude://resume?session=<uuid>` | Ran the app's `importCliSession` on a headless `claude -p` transcript stamped `claude-agents-dashboard` (spawn.ts's own entrypoint): a registry row `local_<same uuid>` appeared, `cliSessionId` equal to the transcript id. A message sent to that row continued the **same** transcript file — new records stamped `claude-desktop`, prefixed by a "now continuing in the Claude desktop app" reminder — no fork. |
+
+Fired through `open` on the server, either link acts on this Mac whichever device asked; an `<a href="claude://…">` in the page would instead hand the link to
+the *viewing* device's own Claude app. `lib/open-folder.ts` already launches `open`, so neither needs a new outbound kind.
+
 ## The two boundaries that will not move from this repo
 
-- **Nothing external can add a row to the desktop app's local sidebar.** Its registry
-  turns out to be *readable* — the JSON tree in the section above — but no supported
-  path writes to it: the management surface (`ccd_session_mgmt`) has list/get/send and
-  no create/import, and whether a hand-written row would be picked up is *untested*
-  (the files are user-owned, so the filesystem would not stop you). A spawned session —
-  RC or not — will never appear there through any documented route.
+- **No *documented* route adds a row to the desktop app's local sidebar.** Its registry
+  turns out to be *readable* — the JSON tree in the section above — and the management
+  surface (`ccd_session_mgmt`) has list/get/send and no create/import. The undocumented
+  `claude://resume` link above is the one way in: it imports an existing transcript,
+  spawned or not. Writing a registry row by hand is still *untested* and unneeded.
 - **No cloud + teleport sequence can put a *local* session in that sidebar.** Tested
   end to end (`claude --cloud` → sidebar row → `claude --teleport`): the row is bound to
   the cloud session for its whole life. It survives the teleport, but it keeps talking to
@@ -169,12 +181,12 @@ set and filters those transcripts out of its candidate pool
   durable artifact is a session you could have created directly.
 
   The missing primitive is small and specific — a way to register an existing local
-  transcript with the desktop app's session store. Until that exists (or teleport hands
-  its row over), no arrangement of the current flags gets there.
+  transcript with the desktop app's session store. No arrangement of the CLI flags gets
+  there; the app's `claude://resume` link (above) does, without any cloud detour.
 - **The desktop app does not show remote-control sessions anywhere** (tested with one
   running and visible on the phone) — even though it *does* merge cloud sessions into
-  its sidebar. The exclusion is specifically RC. Until the app grows that view,
-  "continue in the desktop app UI" for a spawned session means `claude --resume`.
+  its sidebar. The exclusion is specifically RC. "Continue in the desktop app UI" for a
+  spawned session means `claude://resume?session=<id>` (above), or `claude --resume` in a terminal.
 
 ## So what is remote control *for*?
 
