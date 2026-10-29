@@ -35,13 +35,14 @@ Rollup tag message:
   Example: items scoped `kaizen, routines, kaizen` → `Kaizen, Routines — 3 changes`.
 - **Body:** one group per scope in subject order, unscoped last. A group is a `### <Capitalised scope>` line (unscoped: `### Other`), a blank line, then
   its items oldest first, separated by blank lines. An item is its notes (or its title without the `type(scope)!: ` prefix when it has none), with
-  ` (#N)` appended to its last line.
+  ` (#N)` appended to its last line. A trailing ` (#N)` the author already wrote for the item's **own** PR is stripped first, so it is never doubled and
+  never ends the item early.
 - **Trailers:** `Release-Type: <highest>`, `Release-Breaking: true` (only when any item breaks), and one `Release-Items:` line: comma-separated entries
-  `<pr>:<type>[!][:<scope>][:t]` in body order. `!` marks breaking; `:t` marks a title-only item (no notes).
-  Example: `Release-Items: 336:feat:kaizen, 337:feat!:kaizen:t, 320:fix:routines`.
+  `[~]<pr>:<type>[!][:<scope>]` in body order. `!` marks breaking; a leading `~` marks a title-only item (no notes) — `~` is outside the scope
+  alphabet `[a-z0-9-]`, so no scope can be mistaken for the flag. Example: `Release-Items: 336:feat:kaizen, ~337:feat!:kaizen, 320:fix:routines`.
 - **Parse:** a message with `Release-Items` is a rollup; with `Release-PR` it is per-PR (one item); with neither and no `Release-Type` it is baseline.
   The rollup reader walks the body: `###` lines are group headings, and an item ends at the first line ending ` (#N)` where N is the next PR in
-  `Release-Items` order. Item text before that marker (marker stripped, trimmed) is its `notes`, or its `title` when the entry has `:t`.
+  `Release-Items` order. Item text before that marker (marker stripped, trimmed) is its `notes`, or its `title` when the entry has `~`.
 
 `ReleaseItem` (release-kit, exported): `{ pr: number; type: ReleaseType; scope?: string; breaking: boolean; title?: string; notes: string; url?: string }`.
 `Release` gains `items: ReleaseItem[]` (release-kit: required; ui-kit and the dashboard's `shared/types.ts`: optional, since an older server omits it).
@@ -101,12 +102,16 @@ Test `test/conventional.test.ts`, `test/pr-title.test.mjs`, `test/workflows.test
 
 **Interfaces — Produces:** `RollupItem = { pr: number; title: string; type: ReleaseType; scope?: string; breaking: boolean; notes: string }`;
 `formatRollupMessage(items: RollupItem[]): string` (items oldest first, length ≥ 1); `ParsedTag` gains `items: ParsedItem[]` with
-`ParsedItem = Omit<ReleaseItem, 'url'>`; `parseTagMessage` fills it per the three-case table (baseline `[]`, per-PR one item carrying `title`, rollup N).
+`ParsedItem = { pr: number; type: ReleaseType; scope?: string; breaking: boolean; title?: string; notes: string }`, defined standalone in
+`src/conventional.ts` and exported (A5 derives `ReleaseItem` from it); `parseTagMessage` fills it per the three-case table (baseline `[]`, per-PR one item
+carrying `title`, rollup N).
 
 - [ ] **Step 1: failing tests** (fixture: items `336 feat kaizen notes "- Lessons show a verdict badge."`, `337 feat! kaizen no notes title
   "feat(kaizen)!: drop legacy log"`, `320 fix routines notes "Timeouts show how long a run lasted."`, `341 perf no scope notes "Faster scan."`)
   - subject `Kaizen, Routines — 4 changes`; body groups in order `### Kaizen`, `### Routines`, `### Other`; `337` renders as `drop legacy log (#337)`.
-  - trailers exactly `Release-Type: feat`, `Release-Breaking: true`, `Release-Items: 336:feat:kaizen, 337:feat!:kaizen:t, 320:fix:routines, 341:perf`.
+  - trailers exactly `Release-Type: feat`, `Release-Breaking: true`, `Release-Items: 336:feat:kaizen, ~337:feat!:kaizen, 320:fix:routines, 341:perf`.
+  - a scope literally named `t` (`feat(t): x`, notes present) round-trips with `scope: 't'` and its notes, not as title-only.
+  - an item whose notes already end ` (#336)` (its own PR) → body line ends ` (#336)` once, and every later item still parses.
   - one item only → subject `Kaizen — 1 change`; all unscoped → `2 changes`. `Release-Type` ranks `feat` > `fix` > `perf` (a `fix` + `perf` mix →
     `fix`, in either order); breaking never changes the type, only adds `Release-Breaking`.
   - round trip: `parseTagMessage(formatRollupMessage(fx))` → `type: 'feat'`, `breaking: true`, `pr`/`scope` undefined, `title` = subject, `notes` =
@@ -149,7 +154,8 @@ Test `test/conventional.test.ts`, `test/pr-title.test.mjs`, `test/workflows.test
 
 **Files:** Modify `src/read-releases.ts`, `src/index.ts`. Test `test/read-releases.test.ts`.
 
-**Interfaces — Produces:** exported `ReleaseItem`; `Release.items: ReleaseItem[]`; each item's `url` is `<base>/pull/<pr>` when the origin is GitHub.
+**Interfaces — Consumes:** `ParsedItem` (A3). **Produces:** exported `ReleaseItem = ParsedItem & { url?: string }`; `Release.items: ReleaseItem[]`; each
+item's `url` is `<base>/pull/<pr>` when the origin is GitHub.
 
 - [ ] **Step 1: failing tests** — a repo with baseline, two per-PR tags and one rollup tag (fixture from A3) → baseline `items: []`; per-PR releases one
   item each, equal to their release-level fields, with `url`; the rollup release `items.length === 4`, each with its own `url`, release-level `pr`/`url`
@@ -174,7 +180,10 @@ Test `test/conventional.test.ts`, `test/pr-title.test.mjs`, `test/workflows.test
 - [ ] **Step 4:** `pnpm build && pnpm test && pnpm typecheck` → PASS.
 - [ ] **Step 5:** commit `feat: release.yml takes mode: rollup and runs from a schedule`.
 
-**Held after Part A:** push `feat/rollup-releases`, PR, merge, tag `v1.4.0`, later move `v1`.
+**Held after Part A:** push `feat/rollup-releases` and open a PR titled `feat: …` (the squash title decides the bump). Merging it **is** the release:
+release-kit's `self.yml` cuts `v1.4.0` from that title, and `bump-consumers` then opens `chore(deps): bump release-kit to v1.4.0` PRs, with auto-merge
+where a consumer enables it, in every consumer. The dashboard's bump PR stays red until C2, because `test/api-releases.test.ts` pins whole release
+objects and `items` is new; close it in favour of C2. Moving `v1` stays a manual step after that.
 
 ## Part B — ui-kit (worktree `../ui-kit-rollup`, branch `feat/grouped-releases` from `main`)
 
@@ -212,11 +221,12 @@ across 2 scopes, one item title-only, one breaking) plus `mixed` gaining a per-P
 - [ ] **Step 2–4:** fail, implement, `pnpm build && pnpm test && pnpm typecheck` → PASS.
 - [ ] **Step 5:** commit `feat: the drawer groups a rolled-up release by scope`.
 
-**Held after Part B:** bump the `release-kit` devDependency to `#v1.4.0` once tagged, push, PR, merge, tag `v0.4.0`.
+**Held after Part B:** bump the `release-kit` devDependency to `#v1.4.0` once it exists, push, open a PR titled `feat: …`; merging it cuts `v0.4.0`
+through ui-kit's `release.yml` and opens its own bump PRs in consumers.
 
-## Part C — dashboard (worktree `../claude-agents-dashboard-rollup`, branch `feat/batched-releases` from `main`)
+## Part C — dashboard
 
-### Task C1: notes guide (ships now)
+### Task C1: notes guide (ships now — its own `docs:` PR: worktree `../claude-agents-dashboard-notes-guide`, branch `docs/whats-new-guide` from `main`)
 
 **Files:** Modify `.github/pull_request_template.md` (`## What's new` comment), `.claude/CLAUDE.md` (§PR rules, one bullet).
 
@@ -227,10 +237,13 @@ across 2 scopes, one item title-only, one breaking) plus `mixed` gaining a per-P
 - [ ] Verify: `pnpm test` for `test/` suites that read the template or CLAUDE.md, if any (`grep -rl pull_request_template test/`); otherwise none.
 - [ ] Commit `docs: What's new is written for the maintainer catching up`.
 
-### Task C2: adoption (blocked on `release-kit v1.4.0` and `ui-kit v0.4.0` existing on GitHub — held)
+### Task C2: adoption (blocked on `release-kit v1.4.0` and `ui-kit v0.4.0` existing on GitHub — held; later branch `feat/batched-releases` from `main`)
 
 **Files:** `package.json` + lockfile (pins), `.github/workflows/release.yml`, `.github/workflows/ci.yml`, `shared/types.ts` (`ReleaseItem`, optional
-`Release.items`), `.github/pull_request_template.md` (add the `None` opt-out), `docs/workflows/ci.md` §Releases, `docs/subsystems/releases.md`.
+`Release.items`), `.github/pull_request_template.md` (add the `None` opt-out), `docs/workflows/ci.md` §Releases, `docs/subsystems/releases.md`,
+`test/api-releases.test.ts` (its whole-object `deepStrictEqual`s at `:87` and `:113-121` gain `items`: the baseline `items: []`; the `0.2.0` release one
+item `{ pr: 216, type: 'feat', scope: 'releases', breaking: false, title: "feat(releases): version chip and What's new panel", notes: '- The rail shows
+the version.\n- Every release, newest first.', url: 'https://github.com/futin/claude-agents-dashboard/pull/216' }`).
 
 - [ ] `release.yml`: `on:` = `schedule` `0 4 * * *` + `workflow_dispatch` (keep `sha`); keep `permissions` and `concurrency`; `uses: …@v1.4.0`,
   `kit-ref: v1.4.0`, `mode: rollup`.
