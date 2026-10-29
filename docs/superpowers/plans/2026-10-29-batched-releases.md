@@ -35,8 +35,8 @@ Rollup tag message:
   Example: items scoped `kaizen, routines, kaizen` → `Kaizen, Routines — 3 changes`.
 - **Body:** one group per scope in subject order, unscoped last. A group is a `### <Capitalised scope>` line (unscoped: `### Other`), a blank line, then
   its items oldest first, separated by blank lines. An item is its notes (or its title without the `type(scope)!: ` prefix when it has none), with
-  ` (#N)` appended to its last line. A trailing ` (#N)` the author already wrote for the item's **own** PR is stripped first, so it is never doubled and
-  never ends the item early.
+  ` (#N)` appended to its last line. A line-ending ` (#N)` the author already wrote for the item's **own** PR is stripped from **every** line of its
+  notes first (the appended marker still carries the link), so it is never doubled and never ends the item early.
 - **Trailers:** `Release-Type: <highest>`, `Release-Breaking: true` (only when any item breaks), and one `Release-Items:` line: comma-separated entries
   `[~]<pr>:<type>[!][:<scope>]` in body order. `!` marks breaking; a leading `~` marks a title-only item (no notes) — `~` is outside the scope
   alphabet `[a-z0-9-]`, so no scope can be mistaken for the flag. Example: `Release-Items: 336:feat:kaizen, ~337:feat!:kaizen, 320:fix:routines`.
@@ -112,6 +112,8 @@ carrying `title`, rollup N).
   - trailers exactly `Release-Type: feat`, `Release-Breaking: true`, `Release-Items: 336:feat:kaizen, ~337:feat!:kaizen, 320:fix:routines, 341:perf`.
   - a scope literally named `t` (`feat(t): x`, notes present) round-trips with `scope: 't'` and its notes, not as title-only.
   - an item whose notes already end ` (#336)` (its own PR) → body line ends ` (#336)` once, and every later item still parses.
+  - an item whose notes are `see (#336)\nmore` (own marker mid-notes) → written `see\nmore (#336)`; parses back as one item with notes `see\nmore`, and
+    every later item still parses.
   - one item only → subject `Kaizen — 1 change`; all unscoped → `2 changes`. `Release-Type` ranks `feat` > `fix` > `perf` (a `fix` + `perf` mix →
     `fix`, in either order); breaking never changes the type, only adds `Release-Breaking`.
   - round trip: `parseTagMessage(formatRollupMessage(fx))` → `type: 'feat'`, `breaking: true`, `pr`/`scope` undefined, `title` = subject, `notes` =
