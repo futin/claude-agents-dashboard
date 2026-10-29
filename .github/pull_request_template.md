@@ -17,7 +17,16 @@ Spec: `docs/superpowers/specs/YYYY-MM-DD-<name>-design.md` · Plan: `docs/superp
 
 ## What's new
 
-<!-- 1–3 lines in user terms: what someone using the app can now do. Delete this section for PRs with nothing user-visible. -->
+<!-- Required on feat / fix / perf, and `ci / pr-title` fails while it is empty: these lines become the release notes in the What's new drawer.
+     Nothing user-visible on a feat / fix / perf? Write `None` (or `None — <reason>`) on its own line; it is never shown. Other types may delete this section.
+     The reader is the maintainer catching up a day or a week later: "what changed in my tool since I last looked?". A whole version should scan in
+     about ten seconds.
+       • One bullet per user-visible change, at feature level, recognisable without opening the PR.
+       • The change first, in plain words.
+       • No area prefix: the drawer already groups by the title's scope, so "Routines:" would repeat its own heading.
+       • No file paths, flags, field names or function names.
+     Good: - A run that times out now shows how long it ran before it was stopped.
+     Bad:  - `--compare` prints JSON with median, values and missing per side. -->
 
 ## Why this shape
 
