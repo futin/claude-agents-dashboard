@@ -39,7 +39,7 @@
     "lookout-widgets": "github:futin/lookout-widgets#v0.1.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
-    "release-kit": "github:futin/release-kit#v1.3.0",
+    "release-kit": "github:futin/release-kit#v1.4.0",
     "ui-kit": "github:futin/ui-kit#v0.4.0"
   },
   "devDependencies": {

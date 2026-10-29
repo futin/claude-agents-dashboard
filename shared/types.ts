@@ -808,6 +808,24 @@ export interface Release {
   notes: string;
   /** The PR page, present only when `pr` is and `origin` is a GitHub remote. */
   url?: string;
+  /**
+   * The PRs this release carries: none for the baseline, one for a per-PR tag, every rolled-up PR in body order for a nightly rollup tag (which has no
+   * `pr`). Optional because a server on release-kit before v1.4.0 never sends it.
+   */
+  items?: ReleaseItem[];
+}
+
+/** One PR inside a release, as release-kit's `ReleaseItem` carries it. */
+export interface ReleaseItem {
+  pr: number;
+  type: Exclude<ReleaseType, 'baseline'>;
+  scope?: string;
+  breaking: boolean;
+  /** A per-PR tag's item keeps the full PR title; a rollup item has one, prefix stripped, only when it has no notes. */
+  title?: string;
+  notes: string;
+  /** The PR page when `origin` is a GitHub remote. */
+  url?: string;
 }
 
 /**

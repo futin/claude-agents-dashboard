@@ -18,8 +18,11 @@ concurrency:
 
 jobs:
   ci:
-    uses: futin/release-kit/.github/workflows/ci-node.yml@v1
+    uses: futin/release-kit/.github/workflows/ci-node.yml@v1.4.0
     with:
+      kit-ref: v1.4.0
+      # A feat|fix|perf PR fails `ci / pr-title` while its What's new section is empty; `None` on its own line opts out.
+      require-notes: true
       check-commands: |
         pnpm typecheck
         pnpm build

@@ -84,7 +84,7 @@ export async function run(): Promise<number> {
       assert.equal(body.releases.length, 1);
       const { date, ...rest } = body.releases[0];
       assert.ok(!Number.isNaN(Date.parse(date)), `date ${date} parses`);
-      assert.deepStrictEqual(rest, { version: '0.1.0', title: BASELINE, type: 'baseline', breaking: false, notes: '' });
+      assert.deepStrictEqual(rest, { version: '0.1.0', title: BASELINE, type: 'baseline', breaking: false, notes: '', items: [] });
     });
   }));
 
@@ -119,6 +119,15 @@ export async function run(): Promise<number> {
         breaking: false,
         notes: '- The rail shows the version.\n- Every release, newest first.',
         url: 'https://github.com/futin/claude-agents-dashboard/pull/216',
+        items: [{
+          pr: 216,
+          type: 'feat',
+          scope: 'releases',
+          breaking: false,
+          title: "feat(releases): version chip and What's new panel",
+          notes: '- The rail shows the version.\n- Every release, newest first.',
+          url: 'https://github.com/futin/claude-agents-dashboard/pull/216',
+        }],
       });
     });
   }));
