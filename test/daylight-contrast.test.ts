@@ -8,6 +8,8 @@
  * the token — a new pill at a heavier tint is a new pair, and a hand list would not see it.
  * Amber is the one accent split in two: `--amber-solid` is a mark held to 3:1 (and the dark boards' `--amber` is checked as both mark and text), while
  * daylight's `--amber-text` is the ink.
+ * One check is not text at all and runs on all five palettes: a `--strip` card hovering onto `--tile-hover` must stay at least as distinct from the board
+ * as it was at rest — daylight's `--strip-hi`, the fill those hovers used to take, sits ~1.02:1 off its board and the hovered card vanished.
  */
 import assert from 'node:assert';
 import fs from 'node:fs';
@@ -183,6 +185,25 @@ export function run(): number {
       check(x.token, `its ${pct} tint over --${under} (${x.selector}, styles.css:${x.line})`, fill, fails);
     }
     assert.deepStrictEqual(fails, []);
+  })) p++; else f++;
+
+  // Not a WCAG pair — neither fill is text — so the bar is relative: the hover may not make a card *less* distinct from the page than the resting card
+  // already is. Dark boards meet it by lifting (--tile-hover is their --strip-hi, lighter than --strip); daylight by going one step darker than the board.
+  if (test('on every palette a hovered board card stands off --board at least as far as a resting --strip card', () => {
+    const themes = darkThemes(CSS);
+    const fails: string[] = [];
+    for (const [id, tok] of [...Object.entries(themes).map(([id, own]) => [id, { ...themes.midnight, ...own }] as const), ['daylight', t] as const]) {
+      assert.ok(tok['tile-hover'], `${id} declares no --tile-hover as a #rrggbb literal`);
+      const rest = ratio(rgb(tok.strip), rgb(tok.board));
+      const hover = ratio(rgb(tok['tile-hover']), rgb(tok.board));
+      if (hover < rest) fails.push(`${id}: --tile-hover ${tok['tile-hover']} on --board ${tok.board} is ${hover.toFixed(2)}:1, a resting --strip card ${rest.toFixed(2)}:1`);
+    }
+    assert.deepStrictEqual(fails, []);
+    // the hovers that put --strip paper on the board must read the token, or a later edit back to --strip-hi brings the see-through card back
+    for (const sel of ['.git-clock:hover,.git-clock[aria-expanded="true"]', '.rtn-btn:hover:not(:disabled)']) {
+      const rule = CSS.split('\n').find((l) => l.startsWith(sel + '{'));
+      assert.ok(rule && rule.includes('background:var(--tile-hover)'), `${sel} no longer fills with var(--tile-hover)`);
+    }
   })) p++; else f++;
 
   if (test('--ink2 stays darker than --ink3, so the secondary/tertiary order holds', () => {
