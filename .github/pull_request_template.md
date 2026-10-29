@@ -17,7 +17,8 @@ Spec: `docs/superpowers/specs/YYYY-MM-DD-<name>-design.md` · Plan: `docs/superp
 
 ## What's new
 
-<!-- Required on feat / fix / perf: these lines become the release notes in the What's new drawer. Delete this section for PRs with nothing user-visible.
+<!-- Required on feat / fix / perf, and `ci / pr-title` fails while it is empty: these lines become the release notes in the What's new drawer.
+     Nothing user-visible on a feat / fix / perf? Write `None` (or `None — <reason>`) on its own line; it is never shown. Other types may delete this section.
      The reader is the maintainer catching up a day or a week later: "what changed in my tool since I last looked?". A whole version should scan in
      about ten seconds.
        • One bullet per user-visible change, at feature level, recognisable without opening the PR.

@@ -1,11 +1,11 @@
 # Releases
 
 The dashboard shows its own release history: a version chip at the foot of the side rail, and behind it a **What's new** drawer listing every release,
-newest first. The record is the checkout's annotated `vX.Y.Z` tags, which the release workflow cuts on every releasing merge into `main`
-([ci](../workflows/ci.md) §Releases). Design: [the release pipeline spec](../superpowers/specs/2026-10-15-release-pipeline-design.md) §App.
+newest first. The record is the checkout's annotated `vX.Y.Z` tags, which the release workflow cuts once a night from every releasing PR merged into
+`main` since the last one ([ci](../workflows/ci.md) §Releases). Design: [the release pipeline spec](../superpowers/specs/2026-10-15-release-pipeline-design.md) §App.
 
 Code: `server/lib/releases.ts` (points release-kit's memoised reader at the checkout), `serveReleases` in `server/api.ts`, and on the client [ui-kit](https://github.com/futin/ui-kit)
-(pinned to `v0.3.1` as of 2026-10-24): its `useWhatsNew` hook, `VersionChip` and `ReleasesDrawer` own the read, the dot, the chip and the drawer. What is
+(pinned to `v0.4.0` as of 2026-10-29): its `useWhatsNew` hook, `VersionChip` and `ReleasesDrawer` own the read, the dot, the chip and the drawer. What is
 this app's own: `client/src/lib/releases.ts` (the storage key), `client/src/components/ReleasesDrawer.tsx` (the wrapper adding the back gesture and `narrow`;
 the notes are ui-kit's own renderer), the chip's placement (the `.rel-chip` wrapper, and its `narrow`, in `SideRail.tsx`), the wiring in `AppShell`
 (`App.tsx`), the `--uk-*` token mapping in `styles.css` and its import of `ui-kit/styles.css` in `main.tsx`.
@@ -13,10 +13,16 @@ the notes are ui-kit's own renderer), the chip's placement (the `.rel-chip` wrap
 ## `GET /api/releases`
 
 Answers `ReleasesResponse` (`shared/types.ts`): `current` is the newest release tag reachable from HEAD and how many commits HEAD is past it, `releases`
-every release tag, newest first. Parsing the tag messages (subject, notes, `Release-Type` / `Release-Scope` / `Release-PR` / `Release-Breaking`
-trailers) is [release-kit](https://github.com/futin/release-kit)'s `createReleasesReader`, pinned to an exact `vX.Y.Z` tag (`v1.3.0` as of 2026-10-24) — the second of the two packages `server/` may import
+every release tag, newest first. Parsing the tag messages (subject, notes, `Release-Type` / `Release-Scope` / `Release-PR` / `Release-Breaking` /
+`Release-Items` trailers) is [release-kit](https://github.com/futin/release-kit)'s `createReleasesReader`, pinned to an exact `vX.Y.Z` tag (`v1.4.0` as of 2026-10-29) — the second of the two packages `server/` may import
 (`test/server-deps.test.ts`). It runs `git` and reads nothing else, so it adds no outbound call. A tag with no `Release-Type` trailer is the **baseline**:
-where numbering starts, not a release of anything. Lightweight tags and names that are not exactly `vX.Y.Z` are ignored.
+where numbering starts, not a release of anything.
+
+**Items.** Each release carries `items`, the PRs it shipped: none for the baseline, one for a tag cut per PR (built from its own trailers), and one per
+`Release-Items` entry for a nightly rollup, in body order, each with its own type, scope, breaking flag, title, notes and PR link. A rollup has no
+release-level `pr`. The field is optional in `shared/types.ts` only so a client can talk to a server older than release-kit v1.4.0.
+
+Lightweight tags and names that are not exactly `vX.Y.Z` are ignored.
 
 **The empty shape.** A folder that is not a checkout, a checkout with no tags, or any git failure answers `{ current: null, releases: [] }`, with 200.
 The reader never rejects, so the route has no error branch.
@@ -53,7 +59,9 @@ state — the next load then reseeds it, still without a dot.
 Opened from the chip, which refetches first; the list is also fetched once on load. There is no poll — a new release reaches the server only when someone
 pulls or fetches tags, and the chip is rarely looked at. Each entry: version, type badge (Feature / Fix / Performance), a separate Breaking badge, date,
 the title without its `type(scope)!: ` prefix (the badge already says it), the notes as markdown when there are any, and `PR #N` when the origin is on
-GitHub. The baseline renders as a divider with its date: `Versioning starts here · v0.1.0`.
+GitHub. A rollup — more than one item, or one item with no release-level PR — renders grouped instead: the version's badges and date, then one
+heading per scope with each item's notes (or its title when it has none) and its own `PR #N`. A release with a single per-PR item renders exactly as before.
+The baseline renders as a divider with its date: `Versioning starts here · v0.1.0`.
 
 Full screen below `md` (768px), like the chat drawer, with the back gesture closing it; a 400px right-hand panel over the scrim from `md` up. Escape, the ✕
 and a scrim click close it. It is rendered in `AppShell`, outside `.nav`: the phone menu hides itself with a `transform`, which makes it the containing
