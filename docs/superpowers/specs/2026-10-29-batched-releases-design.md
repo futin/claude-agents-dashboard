@@ -88,7 +88,8 @@ per-PR output is the `None` drop (§1), which touches no existing tag and no PR 
 - **Otherwise one tag** on the target commit, with one GitHub Release mirroring it.
 - **Version bump** is the largest any PR in the range would have caused under the existing table: breaking > `feat` > `fix`/`perf`.
 - **Items.** Each releasable PR in the range is one item carrying its type, scope, breaking flag, PR number, title, and notes. Notes are its `What's new`
-  section as extracted today; an empty section or a `None` opt-out means the item shows its title alone.
+  section as extracted today; an empty section or a `None` opt-out means the item shows its title alone. So the tag message carries an item's PR title
+  only when the item has no notes, and the reader's item `title` is required only then (an item with notes may omit it).
 - **Grouping** is by the PR title's conventional-commit scope. A PR whose notes span two areas is filed under its title's scope alone.
 - **Tag message.** Human-readable on its own (it is also the GitHub Release body and what `git show <tag>` prints): items grouped by scope, unscoped
   items last, each item's notes followed by its PR number. A subject line for the version as a whole (*my call:* the scopes it touches and the item
@@ -112,9 +113,18 @@ per-PR output is the `None` drop (§1), which touches no existing tag and no PR 
 
 ### 3. Reader and API shape
 
-release-kit's `createReleasesReader` returns, per release, its list of items alongside the existing release-level fields. A per-PR tag reads as a release
-with exactly one item, so consumers handle one shape. Release-level `type`/`breaking` stay meaningful (the highest/any across items) for consumers that
-only show a badge. `shared/types.ts` `ReleasesResponse` follows whatever release-kit exports; `shared/types.ts` changes first, per the repo's
+release-kit's `createReleasesReader` returns, per release, its list of items alongside the existing release-level fields. Three cases:
+
+| Tag | `type` | `items` |
+|---|---|---|
+| baseline (no `Release-Type`) | `baseline` | `[]`; the drawer's baseline divider is untouched |
+| per-PR (`Release-PR` present) | its type | exactly one item |
+| rollup | the highest type | one per PR, N ≥ 1 |
+
+Release-level `type`/`breaking` stay meaningful (the highest/any across items) for consumers that only show a badge. A rollup's release-level `title` and
+`notes` stay exactly what `parseTagMessage` returns today (the subject and the pre-trailer body); `items` is parsed in addition. That keeps the GitHub
+Release body whole, since `release.ts:82-83` builds it from `parseTagMessage().subject/.notes`, and keeps old readers showing the grouped list. The drawer
+renders `items`, never release-level `notes`, for a rollup. `shared/types.ts` `ReleasesResponse` follows whatever release-kit exports; `shared/types.ts` changes first, per the repo's
 add-an-API-field rule.
 
 *Versioning, my call:* the writer change is opt-in and the reader change is additive (old tags parse the same), so this is a release-kit minor (`v1.x`),
