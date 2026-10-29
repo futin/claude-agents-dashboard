@@ -27,8 +27,8 @@ concurrency:
 
 jobs:
   release:
-    uses: futin/release-kit/.github/workflows/release.yml@v1.4.0
+    uses: futin/release-kit/.github/workflows/release.yml@v1
     with:
       sha: ${{ inputs.sha }}
-      kit-ref: v1.4.0
+      kit-ref: v1
       mode: rollup
