@@ -111,6 +111,8 @@ in the chat drawer, and a Shared setting for the default.
   - probe: `overrideDesktop({platform:'linux', appPath:<existing tmp dir>})` → false; `{platform:'darwin', appPath:<missing path>}` → false;
     `{platform:'darwin', appPath:<existing tmp dir>}` → true.
   - `openDesktopUrl(u)` with a fake runner records exactly `['open', [u]]`; a rejecting runner → the promise rejects.
+  - Every rail/mark case below asserts the returned `.status`; an `ok` answer also carries `at`: `reserveDesktopLaunch(null, 1000)` →
+    `{status:'ok', at:1000}` (deep-equal).
   - rail with fixed `now`: four `reserveDesktopLaunch(null, 1000)` → `'ok'`; fifth → `'rail-full'`;
     `reserveDesktopLaunch(null, 1000 + 5001)` → `'ok'` (window expired).
   - marks: `reserveDesktopLaunch('s1', 0)` → `'ok'`; again at 10 → `'in-flight'`; `handOverInFlight('s1', 10)` true; at 5001 → false;
@@ -295,8 +297,8 @@ in the chat drawer, and a Shared setting for the default.
 ### Task 7: Settings row for the default
 
 **Files:**
-- Modify: `client/src/components/settings/SettingsView.tsx` (Shared section, beside `gitFetchSecs`), `client/src/hooks/useServerSettings.ts`
-  (`SavingKey` and `save`, following `gitFetchSecs` end to end)
+- Modify: `client/src/components/settings/SettingsView.tsx` (Shared section, beside `gitFetchSecs`). `client/src/hooks/useServerSettings.ts` needs no
+  edit: `SavingKey` and `save` derive from `ServerSettingsPatch`, which Task 1 extends; typecheck confirms.
 - Test: none; `test/client-settings.test.ts` does not cover the server-settings patch, so typecheck + build are the gate.
 
 **Interfaces:**
