@@ -75,6 +75,11 @@ export interface Session {
   sessionName: string | null;
   gitBranch: string | null;
   model: string;
+  /**
+   * The effort the newest main-chain assistant turn ran at (`low` … `max`), verbatim off the transcript record's `effort` field. Null when no such record
+   * was read: a transcript older than the field, or one whose newest assistant record lacks it.
+   */
+  effort: string | null;
   tokens: number;
   contextWindow: number;
   contextWindowLabel: string;

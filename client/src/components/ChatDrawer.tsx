@@ -109,7 +109,7 @@ function SessionIdCopy({ id }: { id: string }) {
  * live-tailed every 3s, "load older" walking backwards through the transcript.
  *
  * Layout is the sidecar of `.claude/DESIGN.md` §8.6 — a 290px left column
- * carrying the session's facts (context gauge, project, branch, model, session id, surface,
+ * carrying the session's facts (context gauge, project, branch, model, effort, session id, surface,
  * messages loaded, current tool), with the All / Text / You filter down in the
  * foot beside the count it changes. The modal floats over the
  * scrim with air on every side, so the scrim is a real exit at every width
@@ -315,6 +315,7 @@ export default function ChatDrawer({ session, onClose, spawnAvailable, desktopAv
                 <div className="f"><span>Branch</span><b title={session.gitBranch}>{session.gitBranch}</b></div>
               )}
               <div className="f"><span>Model</span><b>{session.model}</b></div>
+              {session.effort && <div className="f"><span>Effort</span><b>{session.effort}</b></div>}
               {/* keyed by id: a drawer reused for another session remounts it, dropping a pending `copied` and its timer */}
               <div className="f"><span>Session</span><SessionIdCopy key={session.id} id={session.id} /></div>
               {/* repeated from the row on purpose: a drawer opened straight from

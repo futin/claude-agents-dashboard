@@ -497,6 +497,45 @@ export function run(): number {
     assert.strictEqual(tr.readTranscript(fixture([IDENT('claude-haiku-4-5-20251001'), ...pad]), { tailBytes })!.contextWindow, 200000);
   })) p++; else f++;
 
+  // #352: the drawer's Effort fact. Every assistant record carries `effort` (measured 2026-10-30: 1521/1521 across this machine's newest 40
+  // transcripts), so the newest main-chain one is read inside the existing scan.
+  const EFF = (effort: unknown, extra: Record<string, unknown> = {}) => ({
+    type: 'assistant', effort, ...extra,
+    message: { role: 'assistant', model: 'claude-opus-5-5', stop_reason: 'end_turn', content: [{ type: 'text', text: 'x' }], usage: { input_tokens: 100 } }
+  });
+
+  if (test('readTranscript: effort is the newest main-chain assistant record\'s', () => {
+    assert.strictEqual(tr.readTranscript(fixture([EFF('low'), EFF('high')]))!.effort, 'high');
+  })) p++; else f++;
+
+  if (test('readTranscript: a sidechain record\'s effort is skipped for the main chain\'s', () => {
+    assert.strictEqual(tr.readTranscript(fixture([EFF('medium'), EFF('max', { isSidechain: true })]))!.effort, 'medium');
+  })) p++; else f++;
+
+  if (test('readTranscript: a sidechain record alone carrying effort yields null', () => {
+    assert.strictEqual(tr.readTranscript(fixture([EFF(undefined), EFF('max', { isSidechain: true })]))!.effort, null);
+  })) p++; else f++;
+
+  if (test('readTranscript: a non-assistant record carrying effort is ignored', () => {
+    const userEff = { type: 'user', effort: 'max', message: { role: 'user', content: 'hi' } };
+    assert.strictEqual(tr.readTranscript(fixture([EFF('low'), userEff]))!.effort, 'low');
+  })) p++; else f++;
+
+  if (test('readTranscript: a non-string effort falls through to an older one, else null', () => {
+    assert.strictEqual(tr.readTranscript(fixture([EFF('low'), EFF({ level: 'high' }), EFF(3)]))!.effort, 'low');
+    assert.strictEqual(tr.readTranscript(fixture([EFF({ level: 'high' }), EFF(3)]))!.effort, null);
+  })) p++; else f++;
+
+  if (test('readTranscript: no effort anywhere → null, the other fields as before', () => {
+    const s = tr.readTranscript(fixture([
+      { type: 'assistant', message: { role: 'assistant', model: 'claude-opus-5-5', content: [{ type: 'tool_use', name: 'Bash', input: { command: 'ls' } }], usage: { input_tokens: 4200 } } }
+    ]))!;
+    assert.strictEqual(s.effort, null);
+    assert.strictEqual(s.tokens, 4200);
+    assert.strictEqual(s.model, 'claude-opus-5-5');
+    assert.deepStrictEqual(s.activity, { tool: 'Bash', detail: 'ls' });
+  })) p++; else f++;
+
   cw.setCompactWindowHome(null);
   cw.setManagedSettingsPath(null);
   cw.resetCompactWindowCache();

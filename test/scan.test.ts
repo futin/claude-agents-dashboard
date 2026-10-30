@@ -1029,6 +1029,19 @@ export function run(): number {
   })) p++; else f++;
 
 
+  if (test('effort: the row carries the transcript\'s effort, null (never undefined) when it records none', () => {
+    const now = 1_700_000_000_000;
+    const root = makeRoot([
+      { dirName: '-a-eff', id: 'eff', mtimeMs: now - 60 * 1000, records: [metaRec('/a/eff', 'main'), { ...entryRec('cli'), effort: 'high' }] },
+      { dirName: '-a-old', id: 'old', mtimeMs: now - 2 * 60 * 1000, records: [metaRec('/a/old', 'main'), entryRec('cli')] }
+    ]);
+    const out = scan.scanSessions({ maxSessions: 5, activeWindowMin: 5, lookbackHours: 24 }, { root, now, skipProcScan: true });
+    const byId = new Map(out.sessions.map(s => [s.id, s]));
+    assert.strictEqual(byId.get('eff')!.effort, 'high');
+    assert.ok('effort' in byId.get('old')!, 'the field is present on an old-shape row');
+    assert.strictEqual(byId.get('old')!.effort, null);
+  })) p++; else f++;
+
   /* ------------------------------------------------------------ processLive */
 
   {

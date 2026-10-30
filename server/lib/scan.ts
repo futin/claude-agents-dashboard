@@ -665,6 +665,7 @@ export function sessionFromRef(ref: TranscriptRef, opts: RowOptions): Session | 
     sessionName: parsed.sessionName || null,
     gitBranch: parsed.gitBranch || null,
     model: parsed.model || '',
+    effort: parsed.effort,
     tokens: parsed.tokens,
     contextWindow: parsed.contextWindow,
     contextWindowLabel: parsed.contextWindowLabel,
