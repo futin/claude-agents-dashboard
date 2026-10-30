@@ -14,7 +14,7 @@ finished-turn [push](docs/subsystems/push-notify.md) and
 [remote messages](docs/subsystems/remote-message.md)). Two runtime dependencies on the backend, [`lookout-widgets`](docs/subsystems/hub-widgets.md#the-dependency-exception)
 and `release-kit` (the rest is Node built-ins), and exactly two kinds of outbound call — the ntfy push and the usage-bar read
 from Anthropic's API — plus `git fetch` on the pinned repos when you turn the Git fetch timer on, and the fetch and push behind the Git Sync menu's
-Pull and Push when you press them.
+Pull and Push when you press them, and `gh pr view` behind the chat drawer's PR card.
 
 ## Quick start
 
@@ -52,10 +52,12 @@ That's the whole basic setup. Everything below is optional.
   dot (working / question / incomplete / idle), project + branch, model, context bar,
   current tool activity, expandable subagent detail, filter + sort toolbar, and a
   `Chat` button on every session that opens the chat — and names the hold
-  (`Answer` / `Plan?` / `Reply?` / `Allow?`) when a session is waiting on you.
+  (`Answer` / `Plan?` / `Reply?` / `Allow?`) when a session is waiting on you. A session you deleted (archived) in the Claude desktop app drops off the
+  list too, though its transcript stays on disk.
 - **[Chat drawer](docs/subsystems/chat.md)** — read any session's conversation:
   live-tailed, pageable back through the whole transcript, with an all/text/you filter
-  and markdown rendering.
+  and markdown rendering. A session that ran `gh pr create` gets a **PR card** in the drawer's sidecar: state pill, `head → base`, checks, review and
+  merge rows, read live through `gh`; with `gh` missing or signed out it keeps the number and title from the transcript.
 - **[Remote answers](docs/subsystems/remote-answer.md)** — answer a session's
   `AskUserQuestion` from your phone; the pick is delivered into the live session. The first
   of the app's four session write paths, and the reason the hook install exists.
@@ -86,6 +88,10 @@ That's the whole basic setup. Everything below is optional.
   (`Stop session` → `Really stop?`, with `Force stop` if the graceful signal doesn't
   land). Off by default (empty `CLAUDE_BIN`); how much a launch can do unattended is
   bounded by the `SPAWN_MAX_PERMISSION` ceiling on the host, never by the browser.
+  On macOS with the Claude desktop app installed, the launch form also offers **Desktop**: the first turn runs headless and the drawer follows it, then
+  the session hands over to the desktop app on its own. A finished dashboard session can be moved there too, with **Open in desktop app** in its chat.
+  `SPAWN_OWN_ENTRYPOINT=true` makes spawns and routine runs stamp the dashboard's own entrypoint label instead of `sdk-cli`
+  ([why, and why it is unsupported](docs/subsystems/spawn.md#own-entrypoint-label)).
 - **[Routines](docs/subsystems/routines.md)** — scheduled jobs as markdown files in a git-synced folder (default `~/claude-global/routines/`), installed
   as launchd jobs (macOS) or crontab lines (WSL), with a Jobs ledger, an editor drawer (a Form view or the raw file) and the Runs log; a failed run sends
   a push. No scheduler runs in the server: the OS fires the plugin's wrapper, so a job still runs while the dashboard is down.
@@ -95,13 +101,14 @@ That's the whole basic setup. Everything below is optional.
   Its menu also offers a fast-forward-only **Pull** and a **Push** of that one repo, never forced. **CodeGraph** ([codegraph](docs/subsystems/codegraph.md)):
   the `codegraph` CLI's index state of each pinned repo, with Sync and Reindex keys. The tab opens on Git.
 - **[What's new](docs/subsystems/releases.md)** — the version chip at the foot of the side rail opens every release of the dashboard, newest first, read
-  from the checkout's own release tags.
+  from the checkout's own release tags. Releases are cut once a night: one version per day, its notes grouped by area with a link to each PR.
 - **[Claude Configs tab](docs/subsystems/configs.md)** — read-only browser for all Claude
   config on the machine: skills, agents, commands, rules, hooks, settings, plugins, MCP
   servers (secrets redacted), per scope. A skill that ships more than `SKILL.md` opens its whole directory in a file rail
   beside the viewer.
 - **[Analytics tab](docs/subsystems/analytics.md)** — per-session post-mortem cards
-  (tokens, priciest tools/subagents) paired with the lesson the `/kaizen` skill logged.
+  (tokens, priciest tools/subagents) paired with the lesson the `/kaizen` skill logged, and a verdict badge (`helped` / `hurt` / `no-effect` /
+  `confounded`) once `/kaizen review` has measured whether that lesson's rule worked.
 - **[Usage bars and forecast](docs/subsystems/usage-limits.md)** — the 5h / Week account rate-limit bars, in the
   [account chip](docs/subsystems/account-header.md) above every section (who the CLI is signed in as, with the full bars in its popover),
   same numbers as `/usage` in the CLI, each with a time strip
@@ -120,7 +127,8 @@ That's the whole basic setup. Everything below is optional.
   types only — no currency anywhere. A third, **History**, charts the recorded 5h and weekly utilization over the last N days.
 - **[Push notifications](docs/subsystems/push-notify.md)** — the server publishes to an
   [ntfy](https://ntfy.sh) topic when a session needs you (question, plan, permission
-  dialog, finished turn), when a routine fails, and when the 5-hour usage limit is reached and resets; tapping a session push opens that
+  dialog, finished turn), when a routine fails, when a backlog-tick job stops grooming at its review cap, and when the 5-hour usage limit is reached
+  and resets; tapping a session push opens that
   session's chat. Off by default, and
   the only channel that reaches you with the browser closed — which is why the old
   in-browser alert layer was deleted rather than kept: WebKit has no `Notification` API in
@@ -132,11 +140,13 @@ That's the whole basic setup. Everything below is optional.
   per device and only while that tab is open on Sessions.
 - **[Settings tab](docs/subsystems/settings.md)** — themes, density and text scale, which
   section the app lands on, refresh rate, the scan knobs, the default model and effort for
-  the launch panel, the browser-notification switch, the push-notification policy,
+  the launch panel and whether it starts on Dashboard or Desktop, the browser-notification switch, the push-notification policy,
   usage-history recording, tailnet write trust, and the remote-answer idle threshold and answer window — all
   editable in the app, no `.env` edit or rebuild. Two pages, one per store: Local (this
   browser) and Shared (the server's settings file). It also names any `.env` key edited
   since the server started, because those are read once, at startup.
+- **[Lookout tiles](docs/subsystems/hub-widgets.md)** — `GET /api/hub/widgets` serves three tiles to Lookout, the sibling hub app, through the
+  `lookout-widgets` package.
 - **[Phone access & origin badge](docs/subsystems/remote-access.md)** — reach the
   dashboard over LAN, Tailscale, or a tunnel; a pill on the Board card shows which route you're on.
 
@@ -217,5 +227,5 @@ dictation setup, CI and releases) in
     - scripts/
     - package.json
   kind: readme
-  verified: 24f8d773dd459e02b1e4ef4a093aed285939555c
+  verified: 63928e8542d76a069156779c62844c25e6fa8e9a
 -->
