@@ -100,10 +100,17 @@ export async function run(): Promise<number> {
   }));
 
   check(await test('release clears only its own entry', () => {
-    reserveDesktopLaunch('s1', 0);
+    // The released entry sits after the one that must survive, so a release that matched on `at` alone would take the wrong one.
     reserveDesktopLaunch('s2', 0);
+    reserveDesktopLaunch('s1', 0);
     releaseDesktopLaunch('s1', 0);
     assert.equal(handOverInFlight('s2', 1), true);
+    assert.equal(handOverInFlight('s1', 1), false);
+    resetDesktopRail();
+    reserveDesktopLaunch('s3', 0);
+    reserveDesktopLaunch(null, 0);
+    releaseDesktopLaunch(null, 0);
+    assert.equal(handOverInFlight('s3', 1), true);
     resetDesktopRail();
     for (let i = 0; i < 4; i++) assert.equal(reserveDesktopLaunch(null, 0).status, 'ok');
     releaseDesktopLaunch(null, 0);
