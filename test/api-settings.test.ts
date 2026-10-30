@@ -84,6 +84,32 @@ export async function run(): Promise<number> {
     });
   }));
 
+  check(await testAsync('POST /api/settings with launchSurfaceDefault desktop is 200 and echoes it', async () => {
+    await withSettings(ENV, async h => {
+      const reply = await post(h, { launchSurfaceDefault: 'desktop' });
+      assert.equal(reply.status, 200);
+      assert.equal(reply.json?.launchSurfaceDefault, 'desktop');
+      assert.equal(getSettings().launchSurfaceDefault, 'desktop');
+    });
+  }));
+
+  check(await testAsync('POST /api/settings with an unknown launchSurfaceDefault is 400 and the error names the allowed values', async () => {
+    await withSettings(ENV, async h => {
+      const reply = await post(h, { launchSurfaceDefault: 'x' });
+      assert.equal(reply.status, 400);
+      assert.ok(String(reply.json?.error).includes("launchSurfaceDefault?: 'dashboard'|'desktop'"), reply.raw);
+      assert.equal(getSettings().launchSurfaceDefault, 'dashboard');
+    });
+  }));
+
+  check(await testAsync('GET /api/health carries the launchSurfaceDefault in force', async () => {
+    await withSettings(ENV, async h => {
+      assert.equal((await h.req('/api/health')).json?.launchSurfaceDefault, 'dashboard');
+      await post(h, { launchSurfaceDefault: 'desktop' });
+      assert.equal((await h.req('/api/health')).json?.launchSurfaceDefault, 'desktop');
+    });
+  }));
+
   console.log(`\n  ${ok}/${total} passed`);
   return total - ok;
 }

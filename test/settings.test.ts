@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 
 import {
-  DEFAULT_ANSWER_SECS, DEFAULT_GIT_FETCH_SECS, DEFAULT_IDLE_SECS, DEFAULT_NOTIFY, DEFAULT_TRUST_TAILNET, GIT_FETCH_SECS, MAX_ANSWER_SECS, MAX_IDLE_SECS,
+  DEFAULT_ANSWER_SECS, DEFAULT_GIT_FETCH_SECS, DEFAULT_IDLE_SECS, DEFAULT_LAUNCH_SURFACE, DEFAULT_NOTIFY, DEFAULT_TRUST_TAILNET, GIT_FETCH_SECS, MAX_ANSWER_SECS, MAX_IDLE_SECS,
   MAX_PINNED_PROJECTS, MIN_ANSWER_SECS, NOTIFY_EVENTS, SETTINGS_FILE,
   clampAnswerSecs, clampIdleSecs, clampPinned, detectAnswerOverride, detectIdleOverride,
   getGitFetchSecs, getPinnedProjects, getSettings, parseGitFetchSecs, resetSettings, setPinned, setPinOrder, setSettings
@@ -512,6 +512,41 @@ export function run(): number {
         assert.strictEqual(s.answerSecs, DEFAULT_ANSWER_SECS);
         assert.deepStrictEqual(s.notify, DEFAULT_NOTIFY);
         assert.strictEqual(getGitFetchSecs(), 0);
+      }
+    });
+  })) p++; else f++;
+
+  if (test('launchSurfaceDefault: a fresh store reads dashboard', () => {
+    inTmpCwd(() => {
+      assert.strictEqual(getSettings().launchSurfaceDefault, 'dashboard');
+      assert.strictEqual(DEFAULT_LAUNCH_SURFACE, 'dashboard');
+    });
+  })) p++; else f++;
+
+  if (test('launchSurfaceDefault: a patch is returned and survives a restart', () => {
+    inTmpCwd(() => {
+      assert.strictEqual(setSettings({ launchSurfaceDefault: 'desktop' })?.launchSurfaceDefault, 'desktop');
+      resetSettings(); // simulate the server restarting
+      assert.strictEqual(getSettings().launchSurfaceDefault, 'desktop');
+    });
+  })) p++; else f++;
+
+  if (test('launchSurfaceDefault: an unknown value rejects the whole patch, including its siblings', () => {
+    inTmpCwd(() => {
+      assert.strictEqual(setSettings({ launchSurfaceDefault: 'terminal' } as never), null);
+      assert.strictEqual(setSettings({ idleSecs: 30, launchSurfaceDefault: 'terminal' } as never), null);
+      assert.strictEqual(getSettings().idleSecs, DEFAULT_IDLE_SECS);
+      assert.strictEqual(getSettings().launchSurfaceDefault, 'dashboard');
+    });
+  })) p++; else f++;
+
+  if (test('launchSurfaceDefault: a hand-edited non-literal value reads back as dashboard and the other keys keep theirs', () => {
+    inTmpCwd(dir => {
+      for (const bad of [42, 'terminal', null]) {
+        fs.writeFileSync(path.join(dir, SETTINGS_FILE), JSON.stringify({ idleSecs: 15, launchSurfaceDefault: bad }), 'utf8');
+        resetSettings();
+        assert.strictEqual(getSettings().launchSurfaceDefault, 'dashboard', String(bad));
+        assert.strictEqual(getSettings().idleSecs, 15);
       }
     });
   })) p++; else f++;

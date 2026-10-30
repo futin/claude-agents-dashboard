@@ -33,7 +33,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 import { claudeHome } from './paths.js';
-import type { EnvOverride, NotifyEvent, NotifyPolicy, ServerSettings, ServerSettingsPatch } from '../../shared/types.js';
+import type { EnvOverride, LaunchSurface, NotifyEvent, NotifyPolicy, ServerSettings, ServerSettingsPatch } from '../../shared/types.js';
 
 /** Gitignored, repo-local — never inside `~/.claude` (read-only under Docker). */
 export const SETTINGS_FILE = '.dashboard-settings.json';
@@ -76,6 +76,8 @@ export const DEFAULT_RECORD_USAGE_HISTORY = false;
 export const GIT_FETCH_SECS: readonly number[] = [0, 30, 60, 120, 300, 600];
 /** Off by default — fetching makes the server talk to every pinned repo's remote unattended. */
 export const DEFAULT_GIT_FETCH_SECS = 0;
+/** The launch form preselects the dashboard's own headless launch; the desktop app is opt-in. */
+export const DEFAULT_LAUNCH_SURFACE: LaunchSurface = 'dashboard';
 /** On by default — the point of the switch is a phone on the tailnet that writes with nothing stored on it. */
 export const DEFAULT_TRUST_TAILNET = true;
 
@@ -91,6 +93,7 @@ interface Stored {
   notify: NotifyPolicy;
   recordUsageHistory: boolean;
   gitFetchSecs: number;
+  launchSurfaceDefault: LaunchSurface;
   trustTailnet: boolean;
   /**
    * Encoded project dir names that stay listed past `LOOKBACK_HOURS` (#161).
@@ -128,6 +131,11 @@ export function clampAnswerSecs(value: unknown): number | null {
 /** The value itself when it is one of {@link GIT_FETCH_SECS}, else null — a stray 45 or "300" is refused, not rounded to a neighbour. */
 export function parseGitFetchSecs(value: unknown): number | null {
   return typeof value === 'number' && GIT_FETCH_SECS.includes(value) ? value : null;
+}
+
+/** The value itself when it is one of the two {@link LaunchSurface} literals, else null — a stray `42` or `"terminal"` is refused, not coerced. */
+export function parseLaunchSurface(value: unknown): LaunchSurface | null {
+  return value === 'dashboard' || value === 'desktop' ? value : null;
 }
 
 /** Keep only dir-name strings, deduped in first-seen order, at most {@link MAX_PINNED_PROJECTS}. */
@@ -191,6 +199,7 @@ function readStored(): Stored {
     notify: DEFAULT_NOTIFY,
     recordUsageHistory: DEFAULT_RECORD_USAGE_HISTORY,
     gitFetchSecs: DEFAULT_GIT_FETCH_SECS,
+    launchSurfaceDefault: DEFAULT_LAUNCH_SURFACE,
     trustTailnet: DEFAULT_TRUST_TAILNET,
     pinnedProjects: []
   };
@@ -206,6 +215,7 @@ function readStored(): Stored {
           ? raw.recordUsageHistory
           : fallback.recordUsageHistory,
       gitFetchSecs: parseGitFetchSecs(raw.gitFetchSecs) ?? DEFAULT_GIT_FETCH_SECS,
+      launchSurfaceDefault: parseLaunchSurface(raw.launchSurfaceDefault) ?? DEFAULT_LAUNCH_SURFACE,
       trustTailnet: typeof raw.trustTailnet === 'boolean' ? raw.trustTailnet : fallback.trustTailnet,
       pinnedProjects: clampPinned(raw.pinnedProjects)
     };
@@ -308,6 +318,11 @@ export function setSettings(patch: unknown): ServerSettings | null {
     const gitFetchSecs = parseGitFetchSecs(body.gitFetchSecs);
     if (gitFetchSecs === null) return null;
     next.gitFetchSecs = gitFetchSecs;
+  }
+  if (body.launchSurfaceDefault !== undefined) {
+    const launchSurfaceDefault = parseLaunchSurface(body.launchSurfaceDefault);
+    if (launchSurfaceDefault === null) return null;
+    next.launchSurfaceDefault = launchSurfaceDefault;
   }
   if (body.trustTailnet !== undefined) {
     if (typeof body.trustTailnet !== 'boolean') return null;

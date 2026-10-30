@@ -517,6 +517,7 @@ export function serveHealth(config: Config, res: ServerResponse, req: IncomingMe
     ...getState(config),
     idleSecs: settings.idleSecs,
     answerSecs: settings.answerSecs,
+    launchSurfaceDefault: settings.launchSurfaceDefault,
     origin: classifyOrigin(req.socket?.remoteAddress, req.headers),
     writeAccess: access,
     tokenRequired: access === 'token',
@@ -720,7 +721,7 @@ export async function serveSettingsWrite(
   const next = setSettings(body);
   if (!next) {
     return sendBadBody(res, {
-      error: 'expected {idleSecs?: number, answerSecs?: number, notify?: NotifyPolicy, recordUsageHistory?: boolean, gitFetchSecs?: 0|30|60|120|300|600, trustTailnet?: boolean}'
+      error: "expected {idleSecs?: number, answerSecs?: number, notify?: NotifyPolicy, recordUsageHistory?: boolean, gitFetchSecs?: 0|30|60|120|300|600, trustTailnet?: boolean, launchSurfaceDefault?: 'dashboard'|'desktop'}"
     });
   }
   sendJson(res, 200, settingsBody(config, next));
