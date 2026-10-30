@@ -6,9 +6,10 @@
 name: release
 
 on:
-  # 04:00 UTC, so the night's version is waiting in the morning. A dispatch releases on demand; the concurrency group below keeps the two from overlapping.
+  # 04:17 UTC, so the night's version is waiting in the morning. Off the hour on purpose: GitHub delays and drops scheduled runs under the top-of-hour
+  # load, and the 04:00 schedule never fired once. A dispatch releases on demand; the concurrency group below keeps the two from overlapping.
   schedule:
-    - cron: '0 4 * * *'
+    - cron: '17 4 * * *'
   workflow_dispatch:
     inputs:
       sha:

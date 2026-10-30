@@ -7,7 +7,7 @@ Design: `docs/superpowers/specs/2026-10-15-release-pipeline-design.md` §Phase A
 
 | Context | What it does | When it is green without running anything |
 |---|---|---|
-| `ci / checks` | `pnpm install --frozen-lockfile`, then `pnpm typecheck`, `pnpm build`, `pnpm test`, each reported on its own | never |
+| `ci / checks` | `pnpm install --frozen-lockfile`, then `scripts/ci-scope.ts`: `pnpm typecheck`, `pnpm build`, `pnpm test`, each reported on its own — or, on a docs-only PR, only the suites that read the changed docs (§Scoped checks) | never |
 | `ci / pr-title` | the PR title must match the Conventional Commits rule in release-kit's `scripts/pr-title.mjs`; a `feat`/`fix`/`perf` PR also needs its What's new notes (§Releases) | on `push` (no title) |
 | `ci / skills` | `pnpm test:skills` (~4 min, 2026-10-01) when the PR touches `plugin/skills/git-sync/**` | any PR that does not touch it, and every `push` |
 
@@ -16,6 +16,37 @@ unmatched path (#214), so the order of `pnpm build` and `pnpm test` here is inci
 
 Allowed title types: `feat`, `fix`, `perf` (these may carry `!`), and `docs`, `chore`, `test`, `refactor`, `ci`, `build` (these may not). The scope, if
 any, is lowercase `[a-z0-9-]`. A GitHub "Revert …" title fails until it is retitled.
+
+## Scoped checks
+
+`scripts/ci-scope.ts` is the one check command, ported from backlog-manager's `scripts/ci-scope.mjs`. It reads the PR's changed files and runs only what
+they can break: a PR that touches only docs never needs `tsc` or `vite build` (no client or server module imports a `.md`), and most suites never read a doc.
+
+| The PR changes only…                                                                                          | Runs                                                                                                                 |
+| ------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| docs — `docs/**` and any other `*.md` (`CLAUDE.md`, a `SKILL.md`, `backlog/**`)                                 | the `run-all.ts` suites (through `test/run-some.ts`) and kaizen `node --test` suites whose code names a changed file; no typecheck, no build |
+| anything else — `server/`, `client/`, `shared/`, `plugin/` code, configs, the lockfile, and always `scripts/**`, `test/**`, `.github/**` | everything: `pnpm typecheck`, `pnpm build`, `pnpm test`                                                          |
+
+- **Docs are not test-free.** `docs-links.test.ts` walks `docs/` for dead links, `plugin-manifest.test.ts` pins what lives under `plugin/`,
+  kaizen's `skill.test.mjs` reads its `SKILL.md`, and a handful more read `CLAUDE.md`. A docs-only PR still runs those, so a doc that breaks a guard is red
+  on the PR, not on `main`.
+- **Which suites "name" a file** is found by scanning the suites' source at run time — no hand-kept list. A path piece counts when it is bounded by quotes or
+  slashes on a code line (comment lines are dropped): the file's top-level directory (`'docs'`, which `docs-links` joins from), its parent, the file
+  itself, its basename (`'../SKILL.md'`) or its parent's name. The suite lists are read too: `run-all.ts`'s imports, and the `*.test.mjs` glob in
+  `package.json`'s `test` script. It is a heuristic, generous on purpose: a suite picked wrongly costs seconds.
+- **Every doubt runs the full suite**: a push to `main`, a PR merge commit that is not two-parented, a failed fetch, an empty diff, and any path that is
+  not a doc. `scripts/**`, `test/**` and `.github/**` are full even when they are markdown, because they change how the suites run.
+- **The push run on `main` is the backstop.** A suite the scan misses — one that reaches a doc through a helper or a computed path — passes the PR and fails
+  the push run after the merge. That is the price of the scoped run; it shows up as a red `main` and is fixed by the next PR.
+- **How the diff is read.** The PR checkout is the merge ref at depth 1; the script fetches that merge commit's first parent (the base tip) and diffs the two
+  with `--no-renames`, so a file moved from `server/` into `docs/` lists both paths and runs full.
+- **The job is never skipped.** release-kit's rule — a skipped job reports success for the same head sha — is why the scope is decided inside the step,
+  from the diff alone: a title edit's re-run reaches the same verdict, red stays red.
+- **`ci / skills` is unchanged.** The git-sync suite keeps its own path gate, so there is no skills scope here, unlike backlog-manager.
+- The scope is posted as a `ci scope` notice on the run's summary page. To check one by hand:
+  `pnpm exec tsx scripts/ci-scope.ts --dry-run --files docs/overview.md` prints the plan without running it.
+
+Local `pnpm test` is unchanged — it always runs everything.
 
 ## Why the names look like `ci / …`
 
@@ -54,7 +85,8 @@ futin/backlog-manager#279).
 ## Releases
 
 `.github/workflows/release.yml` is a thin caller of release-kit's reusable `release.yml` (`@v1`, with `kit-ref: v1` kept equal to that ref) in
-`mode: rollup`, run each night at 04:00 UTC (`schedule`, `0 4 * * *`) and on `workflow_dispatch`. A merge into `main` releases nothing by itself. Designs:
+`mode: rollup`, run each night at 04:17 UTC (`schedule`, `17 4 * * *`; off the hour, since GitHub delays and drops scheduled runs under top-of-hour load) and on
+`workflow_dispatch`. A merge into `main` releases nothing by itself. Designs:
 `docs/superpowers/specs/2026-10-15-release-pipeline-design.md` §Phase C, and `docs/superpowers/specs/2026-10-29-batched-releases-design.md` for the
 nightly rollup. It needs both `contents: write` (the tag push and the Release) and `pull-requests: read` — setting `contents` alone drops `pull-requests`
 to none and the PR lookup then fails on a private repo. The group is `release` with `cancel-in-progress: false`, so a dispatch and the nightly run never tag
