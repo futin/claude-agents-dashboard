@@ -224,7 +224,7 @@ export default function RoutinesView() {
       )}
       {chat && (
         <Suspense fallback={null}>
-          <ChatDrawer key={chat.id} session={chat} onClose={() => setChat(null)} spawnAvailable={remote.state?.spawnAvailable === true} />
+          <ChatDrawer key={chat.id} session={chat} onClose={() => setChat(null)} spawnAvailable={remote.state?.spawnAvailable === true} desktopAvailable={remote.state?.desktopAvailable === true} />
         </Suspense>
       )}
     </div>

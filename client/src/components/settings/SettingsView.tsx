@@ -22,6 +22,8 @@ import { GIT_FETCH_OPTIONS } from '../../lib/gitClock';
 import { READ_ONLY_TEXT } from '../../lib/writeRefusal';
 import { writeStatusLine } from '../../lib/writeStatus';
 import { EFFORTS, MODELS, PERMISSION_MODE_LABEL } from '../../lib/spawnOptions';
+import { LAUNCH_DEFAULT_DESKTOP_MISSING, LAUNCH_DEFAULT_DESKTOP_NOTE, LAUNCH_DEFAULT_HINT } from '../../lib/launchSurface';
+import type { LaunchSurface } from '../../../../shared/types';
 
 /**
  * Preview colors per theme — board / strip / accent, in that order. A mirror of
@@ -458,6 +460,21 @@ export default function SettingsView() {
                   className="git-fetch-seg"
                   onChange={v => void server.save({ gitFetchSecs: v })}
                 />
+              </SettingsRow>
+            </SettingsGroup>
+
+            <SettingsGroup title="New sessions" sub="Where the launch form opens a session unless you pick otherwise">
+              <SettingsRow
+                name="New sessions open in"
+                hint={`${LAUNCH_DEFAULT_HINT} ${remote.state?.desktopAvailable === true ? LAUNCH_DEFAULT_DESKTOP_NOTE : LAUNCH_DEFAULT_DESKTOP_MISSING}`}
+              >
+                <Select
+                  value={server.state?.launchSurfaceDefault ?? 'dashboard'}
+                  onChange={e => void server.save({ launchSurfaceDefault: e.target.value as LaunchSurface })}
+                >
+                  <option value="dashboard">Dashboard</option>
+                  <option value="desktop">Desktop</option>
+                </Select>
               </SettingsRow>
             </SettingsGroup>
           </div>

@@ -141,6 +141,11 @@ export interface Session {
    * failed. Display only: this server cannot signal that process, so it offers no Stop for it.
    */
   processLive?: true;
+  /**
+   * `true` when the desktop app owns this session's live process: it was launched there, or resumed there, and the server holds no handle for it. **Absent,
+   * never `false`**, the encoding `processLive` uses. The drawer shows it in place of a resume the server would refuse.
+   */
+  desktopOwned?: true;
   activity: Activity | null;
   lastTimestamp: string | null;
   updatedMs: number;
@@ -1083,6 +1088,11 @@ export interface ServerSettings {
    */
   gitFetchSecs: number;
   /**
+   * Which surface the launch form preselects. Shared, not per-device, and only a preselection: the form always sends its own `surface`, and a request
+   * with none is a dashboard launch whatever this says (an API caller never inherits it).
+   */
+  launchSurfaceDefault: LaunchSurface;
+  /**
    * Writes from a tailnet peer pass without `ANSWER_TOKEN`. On by default. Shared because the write gate on the server reads it; turning it off from a
    * tailnet device locks that device out of its own next write. See docs/subsystems/remote-access.md.
    */
@@ -1131,7 +1141,7 @@ export interface ServerSettings {
  * `ServerSettings` so a renamed field breaks the build on both sides; the server-derived fields (`notifyAvailable`, `usageAvailable`, …) are not in it.
  */
 export type ServerSettingsPatch =
-  Partial<Pick<ServerSettings, 'idleSecs' | 'answerSecs' | 'recordUsageHistory' | 'gitFetchSecs' | 'trustTailnet'>> & { notify?: NotifyPatch };
+  Partial<Pick<ServerSettings, 'idleSecs' | 'answerSecs' | 'recordUsageHistory' | 'gitFetchSecs' | 'trustTailnet' | 'launchSurfaceDefault'>> & { notify?: NotifyPatch };
 
 /** Where an overriding `CLAUDE_DASHBOARD_*` variable was found. */
 export interface EnvOverride {
@@ -1166,6 +1176,10 @@ export interface HealthResponse extends RemoteAnswerState {
    * `remote-decision-hook.sh` treats a missing field as `false` and stays quiet rather than warning wrongly.
    */
   tokenRequired?: boolean;
+  /** True when the Claude desktop app can be launched from here (macOS with `/Applications/Claude.app`). Absent on an older server. */
+  desktopAvailable?: boolean;
+  /** Mirrors `ServerSettings.launchSurfaceDefault`, so the launch form can preselect without a second fetch. Absent on an older server. */
+  launchSurfaceDefault?: LaunchSurface;
   /**
    * True when a whisper model and CLI are both present. Engine availability
    * only — it deliberately does not fold in `remoteAnswer`, even though the
@@ -2061,6 +2075,9 @@ export interface LaunchingSession {
   resume?: boolean;
 }
 
+/** Where a launch runs: the dashboard's own headless `claude`, or the Claude desktop app opened through its `claude://` URL. */
+export type LaunchSurface = 'dashboard' | 'desktop';
+
 /**
  * Body of `POST /api/spawn` — the launch form's request. `project` is a
  * {@link ProjectRef.dirName}, resolved server-side against the enumerated
@@ -2076,6 +2093,8 @@ export interface SpawnRequest {
   model?: string;
   effort?: string;
   permissionMode?: PermissionMode;
+  /** Where to launch. Absent means `dashboard` — never the `launchSurfaceDefault` setting, which only preselects the form. */
+  surface?: LaunchSurface;
   /**
    * Launch with `--remote-control`: the session registers with the account, so
    * the phone app can see and drive it. Anything but literal `true` means off.
@@ -2094,21 +2113,22 @@ export interface SpawnRequest {
    * `--resume <id>` in the session's own cwd and appends to the same
    * transcript under the same id. Only sessions whose transcript says
    * `sdk-cli` (the `dashboard` pill) qualify; malformed-when-present is a 400,
-   * never a silent fresh launch.
+   * never a silent fresh launch. With `surface: 'desktop'` it is the hand-over to the desktop app, and `prompt` is ignored (the link carries none).
    */
   resume?: string;
 }
 
 /**
- * 200 body of `POST /api/spawn`. The id is minted before the child is spawned
- * (`--session-id <uuid>` is honored end to end, see docs/subsystems/spawn.md),
- * so it is valid the instant this response lands — the transcript it names does
- * not exist yet, which is why the client can set its chat-drawer deep link from
- * it but the drawer itself still waits for the id to appear in a poll.
+ * 200 body of `POST /api/spawn`, one branch per surface.
+ *
+ * `dashboard`: the id is minted before the child is spawned (`--session-id <uuid>` is honored end to end, see docs/subsystems/spawn.md), so it is valid
+ * the instant this response lands — the transcript it names does not exist yet, which is why the client can set its chat-drawer deep link from it but
+ * the drawer itself still waits for the id to appear in a poll.
+ *
+ * `desktop`: no id at all. The app mints its own for a fresh launch, and the row appears on a later scan; a hand-over keeps the id the caller sent.
+ * An older server answers a bare `{sessionId}`, which a client reads as `dashboard` (`client/src/lib/spawnResponse.ts`).
  */
-export interface SpawnResponse {
-  sessionId: string;
-}
+export type SpawnResponse = { surface: 'dashboard'; sessionId: string } | { surface: 'desktop' };
 
 /** Full payload of `GET /api/sessions`. */
 export interface SessionsResponse {

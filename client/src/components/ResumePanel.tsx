@@ -45,8 +45,8 @@ export default function ResumePanel({ session, suggestion }: {
   }, [sent]);
 
   async function onSend() {
-    const id = await launch({ prompt: text, resume: session.id });
-    if (id) {
+    const result = await launch({ prompt: text, resume: session.id });
+    if (result?.surface === 'dashboard') {
       setSent(true);
       setText('');
     }

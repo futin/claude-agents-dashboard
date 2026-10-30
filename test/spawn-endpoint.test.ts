@@ -8,10 +8,11 @@
  *   2. `MAX_LAUNCHING`, the concurrency cap that answers 429.
  *
  * Both are exercised against the real handler over a real socket. No test here
- * spawns a `claude` binary: the launch store is pre-filled through `launch()`
- * with the `setSpawner` fake, and every request either stops at a gate or dies
- * on a deliberately malformed body — so nothing reaches `resolveProject`, the
- * filesystem, or a child process.
+ * spawns a `claude` binary or runs `open`: the launch store is pre-filled through
+ * `launch()` with the `setSpawner` fake, and the desktop app's opener is a recording
+ * fake (`overrideDesktop`). The body is read and parsed before the cap is counted
+ * (the chosen surface picks the rail), so a cap case posts a well-formed body naming
+ * a project that does not exist: past the cap it can only become 400 `unknown project`.
  */
 
 import assert from 'node:assert';
@@ -26,10 +27,12 @@ import { loadConfig } from '../server/lib/config.js';
 import { register as registerMessage, resetStore as resetMessages } from '../server/lib/messages.js';
 import { resetState } from '../server/lib/remoteState.js';
 import {
-  LAUNCH_TTL_MS, MAX_LAUNCHING, adoptLaunched, launch, listLaunching, resetLaunches,
+  LAUNCH_TTL_MS, MAX_LAUNCHING, adoptLaunched, launch, listLaunching, probeSpawn, resetLaunches,
   resetSpawnProbe, setGroupKiller, setSpawner
 } from '../server/lib/spawn.js';
 import { setPsRunner } from '../server/lib/scan.js';
+import { resetArchivedCache } from '../server/lib/archived.js';
+import { overrideDesktop, resetDesktopProbe, resetDesktopRail } from '../server/lib/desktop.js';
 import { withServer } from './api-harness.js';
 import type { Spawner } from '../server/lib/spawn.js';
 import type { ChildProcess } from 'node:child_process';
@@ -96,14 +99,18 @@ async function withEnv(body: string, fn: (cfg: ReturnType<typeof loadConfig>) =>
   const envPath = path.join(dir, '.env');
   fs.writeFileSync(envPath, body);
   const prevCwd = process.cwd();
+  const prevHome = process.env.HOME;
   try {
     process.chdir(dir);
+    // HOME too: a request past the gates resolves projects under `os.homedir()`, and the developer's real transcripts must not decide a case.
+    process.env.HOME = dir;
     resetState();
     resetLaunches();
     resetSpawnProbe();
     await fn(loadConfig({ envPath }));
   } finally {
     process.chdir(prevCwd);
+    if (prevHome === undefined) delete process.env.HOME; else process.env.HOME = prevHome;
     resetState();
     resetLaunches();
     resetSpawnProbe();
@@ -153,8 +160,11 @@ const REF: ProjectRef = {
   dirName: 'enc-demo', name: 'demo-project', path: os.tmpdir(), lastActiveMs: Date.now()
 };
 
-/** Malformed on purpose: every request below must be decided before the body matters. */
+/** Malformed on purpose: the toggle cases must be decided before the body matters. */
 const BAD_BODY = '{not json';
+
+/** Well-formed, naming no project: a request that gets past the cap ends in 400 `unknown project`, one that doesn't in 429. */
+const CAP_BODY = JSON.stringify({ prompt: 'x', project: 'no-such-project' });
 
 export async function run(): Promise<number> {
   console.log('\n=== spawn endpoints (api.ts) ===\n');
@@ -216,10 +226,10 @@ export async function run(): Promise<number> {
       }
       assert.equal(listLaunching().length, MAX_LAUNCHING - 1);
 
-      const reply = await post((req, res) => void serveSpawn(cfg, req, res), BAD_BODY);
-      // It fails on the malformed body instead — i.e. it got past the cap.
+      const reply = await post((req, res) => void serveSpawn(cfg, req, res), CAP_BODY);
+      // It fails on the unknown project instead — i.e. it got past the cap.
       assert.equal(reply.status, 400);
-      assert.equal(reply.json?.error, 'bad body');
+      assert.equal(reply.json?.error, 'unknown project: no-such-project');
     });
   }));
 
@@ -231,7 +241,7 @@ export async function run(): Promise<number> {
       }
       assert.equal(listLaunching().length, MAX_LAUNCHING);
 
-      const reply = await post((req, res) => void serveSpawn(cfg, req, res), BAD_BODY);
+      const reply = await post((req, res) => void serveSpawn(cfg, req, res), CAP_BODY);
       assert.equal(reply.status, 429);
       assert.equal(reply.json?.error, 'too many launches in flight');
     });
@@ -255,9 +265,9 @@ export async function run(): Promise<number> {
       assert.equal(listLaunching().length, MAX_LAUNCHING);
       assert.equal(listLaunching().filter(e => e.state === 'failed').length, 1);
 
-      const reply = await post((req, res) => void serveSpawn(cfg, req, res), BAD_BODY);
+      const reply = await post((req, res) => void serveSpawn(cfg, req, res), CAP_BODY);
       assert.equal(reply.status, 400, 'the failed row must not hold a slot');
-      assert.equal(reply.json?.error, 'bad body');
+      assert.equal(reply.json?.error, 'unknown project: no-such-project');
     });
   }));
 
@@ -268,13 +278,13 @@ export async function run(): Promise<number> {
       for (let i = 0; i < MAX_LAUNCHING; i++) {
         launch(cfg, REF, { prompt: `slot ${i}`, permissionMode: 'auto' });
       }
-      const capped = await post((req, res) => void serveSpawn(cfg, req, res), BAD_BODY);
+      const capped = await post((req, res) => void serveSpawn(cfg, req, res), CAP_BODY);
       assert.equal(capped.status, 429, 'four live children do cap it');
 
       for (const child of children) child.emit('exit', 1, null);
       assert.equal(listLaunching().filter(e => e.state === 'launching').length, 0);
 
-      const reply = await post((req, res) => void serveSpawn(cfg, req, res), BAD_BODY);
+      const reply = await post((req, res) => void serveSpawn(cfg, req, res), CAP_BODY);
       assert.equal(reply.status, 400, 'no live launches left, so nothing to cap');
     });
   }));
@@ -469,7 +479,7 @@ export async function run(): Promise<number> {
       const body = JSON.stringify({ prompt: 'pick it back up', resume: RES_ID });
       const reply = await post((req, res) => void serveSpawn(cfg, req, res), body);
       assert.equal(reply.status, 200);
-      assert.equal((reply.json as { sessionId?: string })?.sessionId, RES_ID);
+      assert.deepEqual(reply.json, { surface: 'dashboard', sessionId: RES_ID });
       assert.deepEqual(calls[0].args.slice(0, 3), ['-p', '--resume', RES_ID]);
       assert.equal(calls[0].options.cwd, process.cwd(), "child cwd is the session transcript's cwd");
       assert.ok(!calls[0].args.includes('--effort'), 'a transcript with no recorded effort adds no flag');
@@ -529,6 +539,206 @@ export async function run(): Promise<number> {
     });
   }));
 
+  /* ---------------------------------------------------------- surface: desktop */
+
+  /** What the fake opener saw, and a switch that makes its next calls reject. */
+  interface DesktopSeam { calls: Array<{ cmd: string; args: string[] }>; reject: boolean; }
+
+  /**
+   * {@link withResumeHome} plus the desktop app's seams: a recording opener in place of `open`, the given platform, and an app path that exists (the
+   * fixture HOME itself), so `desktopAvailable` answers from `platform` alone. Rail, probe memo and registry cache start empty and are put back after.
+   */
+  async function withDesktop(
+    envBody: string, platform: string, fn: (cfg: ReturnType<typeof loadConfig>, d: DesktopSeam) => Promise<void>
+  ): Promise<void> {
+    await withResumeHome(envBody, async cfg => {
+      const d: DesktopSeam = { calls: [], reject: false };
+      overrideDesktop({
+        run: async (cmd, args) => {
+          d.calls.push({ cmd, args: args.slice() });
+          if (d.reject) throw new Error('LSOpenURLsWithRole() failed');
+        },
+        platform,
+        appPath: process.cwd()
+      });
+      resetDesktopRail();
+      resetDesktopProbe();
+      resetArchivedCache();
+      try { await fn(cfg, d); } finally {
+        overrideDesktop({ run: null, platform: null, appPath: null });
+        resetDesktopRail();
+        resetDesktopProbe();
+        resetArchivedCache();
+      }
+    });
+  }
+
+  /** A non-archived desktop-app registry record naming `id`, where `appSessionsRoot()` looks under the fixture HOME. */
+  function plantRegistry(id: string): void {
+    const dir = path.join(process.cwd(), 'Library', 'Application Support', 'Claude', 'claude-code-sessions', 'inst', 'acct');
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, 'local_aaaa.json'), JSON.stringify({ cliSessionId: id, isArchived: false }));
+  }
+
+  const spawnReq = (cfg: ReturnType<typeof loadConfig>, body: object): Promise<Reply> =>
+    post((req, res) => void serveSpawn(cfg, req, res), JSON.stringify(body));
+  const HAND_OVER = { resume: RES_ID, surface: 'desktop' };
+
+  check(await testAsync('desktop fresh launch: 200 {surface:"desktop"}, one `open` of a link carrying the project path and the prompt', async () => {
+    await withDesktop('CLAUDE_BIN=/bin/echo\n', 'darwin', async (cfg, d) => {
+      const children: FakeChild[] = [];
+      setSpawner(fakeSpawner(children));
+      const reply = await spawnReq(cfg, { project: '-fake-proj', prompt: 'build the thing', surface: 'desktop' });
+      assert.equal(reply.status, 200);
+      assert.deepEqual(reply.json, { surface: 'desktop' });
+      assert.equal(d.calls.length, 1);
+      assert.equal(d.calls[0].cmd, 'open');
+      assert.equal(d.calls[0].args.length, 1, 'the link is one argv entry');
+      const url = new URL(d.calls[0].args[0]);
+      assert.equal(url.protocol, 'claude:');
+      assert.equal(url.searchParams.get('folder'), process.cwd());
+      assert.equal(url.searchParams.get('q'), 'build the thing');
+      assert.equal(children.length, 0, 'no headless child');
+      assert.equal(listLaunching().length, 0, 'a desktop launch never enters the launch store');
+    });
+  }));
+
+  check(await testAsync('desktop off macOS is 501 "desktop app unavailable", and nothing is opened', async () => {
+    await withDesktop('CLAUDE_BIN=/bin/echo\n', 'linux', async (cfg, d) => {
+      const reply = await spawnReq(cfg, { project: '-fake-proj', prompt: 'x', surface: 'desktop' });
+      assert.equal(reply.status, 501);
+      assert.equal(reply.json?.error, 'desktop app unavailable');
+      assert.equal(d.calls.length, 0);
+    });
+  }));
+
+  check(await testAsync('the headless probe does not gate desktop: no claude CLI, desktop still 200, headless 404', async () => {
+    await withDesktop('', 'darwin', async (cfg, d) => {
+      assert.equal(probeSpawn(cfg), false, 'the fixture must have no spawnable CLI');
+      const desk = await spawnReq(cfg, { project: '-fake-proj', prompt: 'x', surface: 'desktop' });
+      assert.equal(desk.status, 200);
+      assert.equal(d.calls.length, 1);
+      const head = await spawnReq(cfg, { project: '-fake-proj', prompt: 'x' });
+      assert.equal(head.status, 404);
+      assert.equal(head.json?.error, 'spawn unavailable');
+    });
+  }));
+
+  check(await testAsync('headless while the desktop app is unavailable is unaffected: 200 {surface:"dashboard", sessionId}', async () => {
+    await withDesktop('CLAUDE_BIN=/bin/echo\n', 'linux', async (cfg, d) => {
+      setSpawner(fakeSpawner());
+      const reply = await spawnReq(cfg, { project: '-fake-proj', prompt: 'x' });
+      assert.equal(reply.status, 200);
+      const json = reply.json as { surface?: string; sessionId?: string } | null;
+      assert.equal(json?.surface, 'dashboard');
+      assert.equal(typeof json?.sessionId, 'string');
+      assert.equal(d.calls.length, 0);
+    });
+  }));
+
+  check(await testAsync('the desktop rail: four fresh launches back to back are 200, the fifth 429 "too many launches in flight"', async () => {
+    await withDesktop('CLAUDE_BIN=/bin/echo\n', 'darwin', async (cfg, d) => {
+      const statuses: number[] = [];
+      let last: Reply | null = null;
+      for (let i = 0; i < 5; i++) {
+        last = await spawnReq(cfg, { project: '-fake-proj', prompt: `go ${i}`, surface: 'desktop' });
+        statuses.push(last.status);
+      }
+      assert.deepEqual(statuses, [200, 200, 200, 200, 429]);
+      assert.equal(last?.json?.error, 'too many launches in flight');
+      assert.equal(d.calls.length, 4, 'the refused launch opens nothing');
+    });
+  }));
+
+  check(await testAsync('hand-over twice back to back: 200, then 409 "already resuming"; one `open` of the resume link', async () => {
+    await withDesktop('CLAUDE_BIN=/bin/echo\n', 'darwin', async (cfg, d) => {
+      const first = await spawnReq(cfg, HAND_OVER);
+      assert.equal(first.status, 200);
+      assert.deepEqual(first.json, { surface: 'desktop' });
+      const second = await spawnReq(cfg, HAND_OVER);
+      assert.equal(second.status, 409);
+      assert.equal(second.json?.error, 'already resuming');
+      assert.deepEqual(d.calls.map(c => c.args), [[`claude://resume?session=${RES_ID}`]]);
+    });
+  }));
+
+  check(await testAsync('a headless resume of a session just handed over is 409 "already resuming" — the mark, not the launch store', async () => {
+    await withDesktop('CLAUDE_BIN=/bin/echo\n', 'darwin', async cfg => {
+      const children: FakeChild[] = [];
+      setSpawner(fakeSpawner(children));
+      assert.equal((await spawnReq(cfg, HAND_OVER)).status, 200);
+      const reply = await spawnReq(cfg, { prompt: 'continue', resume: RES_ID });
+      assert.equal(reply.status, 409);
+      assert.equal(reply.json?.error, 'already resuming');
+      assert.equal(children.length, 0, 'no second writer');
+    });
+  }));
+
+  check(await testAsync('a failed `open` is 500 "open failed" and gives back its slot and mark: the retry is 200', async () => {
+    await withDesktop('CLAUDE_BIN=/bin/echo\n', 'darwin', async (cfg, d) => {
+      d.reject = true;
+      const prevError = console.error;
+      const logged: unknown[][] = [];
+      console.error = (...a: unknown[]) => { logged.push(a); };
+      const failed = await spawnReq(cfg, HAND_OVER).finally(() => { console.error = prevError; });
+      assert.equal(failed.status, 500);
+      assert.equal(failed.json?.error, 'open failed');
+      assert.equal(logged.length, 1, 'one log line');
+      d.reject = false;
+      const retry = await spawnReq(cfg, HAND_OVER);
+      assert.equal(retry.status, 200, 'the failed attempt must not hold the mark');
+      assert.equal(d.calls.length, 2);
+    });
+  }));
+
+  check(await testAsync('a session the desktop app holds is 409 "session is open in the desktop app", for a hand-over and a headless resume', async () => {
+    await withDesktop('CLAUDE_BIN=/bin/echo\n', 'darwin', async (cfg, d) => {
+      const children: FakeChild[] = [];
+      setSpawner(fakeSpawner(children));
+      plantRegistry(RES_ID);
+      resetArchivedCache();
+      const over = await spawnReq(cfg, HAND_OVER);
+      assert.equal(over.status, 409);
+      assert.equal(over.json?.error, 'session is open in the desktop app');
+      const head = await spawnReq(cfg, { prompt: 'continue', resume: RES_ID });
+      assert.equal(head.status, 409);
+      assert.equal(head.json?.error, 'session is open in the desktop app');
+      assert.equal(d.calls.length, 0);
+      assert.equal(children.length, 0);
+    });
+  }));
+
+  check(await testAsync('a hand-over keeps the resume validation: a terminal session is 400, an unknown one 400', async () => {
+    await withDesktop('CLAUDE_BIN=/bin/echo\n', 'darwin', async (cfg, d) => {
+      const term = await spawnReq(cfg, { resume: LOCAL_ID, surface: 'desktop' });
+      assert.equal(term.status, 400);
+      assert.equal(term.json?.error, 'only dashboard sessions can be resumed');
+      const unknown = await spawnReq(cfg, { resume: '44444444-4444-4444-8444-444444444444', surface: 'desktop' });
+      assert.equal(unknown.status, 400);
+      assert.equal(unknown.json?.error, 'unknown session');
+      assert.equal(d.calls.length, 0);
+    });
+  }));
+
+  check(await testAsync('fields a desktop launch ignores are accepted, not refused', async () => {
+    await withDesktop('CLAUDE_BIN=/bin/echo\n', 'darwin', async (cfg, d) => {
+      const reply = await spawnReq(cfg, {
+        project: '-fake-proj', prompt: 'x', surface: 'desktop', name: 'my run', model: 'opus', oneShot: true, remoteControl: true
+      });
+      assert.equal(reply.status, 200);
+      assert.equal(d.calls.length, 1);
+    });
+  }));
+
+  check(await testAsync('an unknown surface is 400 "bad surface"', async () => {
+    await withDesktop('CLAUDE_BIN=/bin/echo\n', 'darwin', async (cfg, d) => {
+      const reply = await spawnReq(cfg, { project: '-fake-proj', prompt: 'x', surface: 'nope' });
+      assert.equal(reply.status, 400);
+      assert.equal(reply.json?.error, 'bad surface');
+      assert.equal(d.calls.length, 0);
+    });
+  }));
+
   check(await testAsync('the cap frees up as entries leave the store (adopted or stopped)', async () => {
     await withEnv('CLAUDE_BIN=/bin/echo\n', async cfg => {
       setSpawner(fakeSpawner());
@@ -536,16 +746,16 @@ export async function run(): Promise<number> {
       for (let i = 0; i < MAX_LAUNCHING; i++) {
         ids.push(launch(cfg, REF, { prompt: `slot ${i}`, permissionMode: 'auto' }));
       }
-      const capped = await post((req, res) => void serveSpawn(cfg, req, res), BAD_BODY);
+      const capped = await post((req, res) => void serveSpawn(cfg, req, res), CAP_BODY);
       assert.equal(capped.status, 429);
 
       // One session shows up on disk — the ordinary way an entry leaves.
       assert.equal(listLaunching().length, MAX_LAUNCHING);
-      const freed = await post((req, res) => void serveSpawn(cfg, req, res), BAD_BODY);
+      const freed = await post((req, res) => void serveSpawn(cfg, req, res), CAP_BODY);
       assert.equal(freed.status, 429, 'still capped until something is adopted');
 
       assert.equal(adoptLaunched([ids[0]]), 1);
-      const after = await post((req, res) => void serveSpawn(cfg, req, res), BAD_BODY);
+      const after = await post((req, res) => void serveSpawn(cfg, req, res), CAP_BODY);
       assert.equal(after.status, 400, 'a freed slot lets the next launch through');
     });
   }));

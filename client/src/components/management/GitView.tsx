@@ -95,7 +95,7 @@ export default function GitView() {
       {sync.chat && (
         <Suspense fallback={null}>
           {/* keyed by id, as in SessionsView: another sync's chat remounts the tail cleanly */}
-          <ChatDrawer key={sync.chat.id} session={sync.chat} onClose={sync.closeChat} spawnAvailable={sync.available} />
+          <ChatDrawer key={sync.chat.id} session={sync.chat} onClose={sync.closeChat} spawnAvailable={sync.available} desktopAvailable={sync.desktopAvailable} />
         </Suspense>
       )}
     </div>

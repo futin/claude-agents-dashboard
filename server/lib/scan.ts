@@ -77,6 +77,11 @@ interface ScanOptions {
    */
   archivedIds?: ReadonlySet<string> | null;
   /**
+   * Transcript ids the desktop app holds in a non-archived record (`archived.ts` `desktopLiveSessionIds()`), injected like `archivedIds`. A `dashboard`
+   * row in the set carries `desktopOwned`; omitted/null ⇒ none does.
+   */
+  desktopOwnedIds?: ReadonlySet<string> | null;
+  /**
    * Sessions this server spawned and still holds a live child handle for
    * (`spawn.ts` `stopStates()`), as `sessionId → StopState`, injected by the
    * handler so this module stays free of the launch store. A Map rather than a
@@ -546,7 +551,7 @@ export function liveSessionIds(): Set<string> | null {
 }
 
 /** What one row needs beyond its transcript: the clock, the activity window and the injected sets `scanSessions` documents on {@link ScanOptions}. */
-export interface RowOptions extends Pick<ScanOptions, 'homeDir' | 'pendingIds' | 'planIds' | 'messageIds' | 'permissionWaits' | 'stopStates'> {
+export interface RowOptions extends Pick<ScanOptions, 'homeDir' | 'pendingIds' | 'planIds' | 'messageIds' | 'permissionWaits' | 'stopStates' | 'desktopOwnedIds'> {
   now: number;
   activeWindowMin: number;
   /** The live-cwd set; null fails open, as `skipProcScan` does. */
@@ -649,6 +654,8 @@ export function sessionFromRef(ref: TranscriptRef, opts: RowOptions): Session | 
   const surface = sessionSurface(parsed.entrypoint);
   // A process this server cannot signal but the process table shows (see `processLive`): the same absent-not-false encoding.
   const processLive = surface === 'dashboard' && !stopState && !!opts.liveSessionIds?.has(ref.id);
+  // Imported into the desktop app but not yet continued there, so the transcript still reads `dashboard`; a `local` row needs no flag.
+  const desktopOwned = surface === 'dashboard' && !!opts.desktopOwnedIds?.has(ref.id);
   const taskState = readSessionTasks(ref.file, projectPath);
   return {
     id: ref.id,
@@ -670,6 +677,7 @@ export function sessionFromRef(ref: TranscriptRef, opts: RowOptions): Session | 
     permissionWait,
     ...(stopState ? { stopState } : {}),
     ...(processLive ? { processLive: true as const } : {}),
+    ...(desktopOwned ? { desktopOwned: true as const } : {}),
     activity: parsed.activity,
     lastTimestamp: parsed.lastTimestamp,
     updatedMs: ref.mtimeMs,
@@ -765,7 +773,7 @@ export function scanSessions(config: Partial<Config>, options: ScanOptions = {})
   const rowOptions: RowOptions = {
     homeDir: options.homeDir, now, activeWindowMin, liveCwds: live, liveSessionIds: liveIds, lessons, scanSkips: true,
     pendingIds: options.pendingIds, planIds: options.planIds, messageIds: options.messageIds,
-    permissionWaits: options.permissionWaits, stopStates: options.stopStates
+    permissionWaits: options.permissionWaits, stopStates: options.stopStates, desktopOwnedIds: options.desktopOwnedIds
   };
   const sessions: Session[] = [];
   for (const c of candidates) {

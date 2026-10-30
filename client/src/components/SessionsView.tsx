@@ -17,10 +17,14 @@ import { useSessions } from '../hooks/useSessions';
 import { useSettings } from '../hooks/useSettings';
 import { useWebNotify } from '../hooks/useWebNotify';
 import { applyView, availableProjects, clearFilters, describeEmpty, drawableLayout, pruneProjects, DEFAULT_LAYOUT, DEFAULT_VIEW, type Layout, type View } from '../lib/filterSort';
+import { DESKTOP_LAUNCHED_TEXT } from '../lib/launchSurface';
 import { resolveLayout } from '../lib/settings';
 
 /** Own chunk — the drawer only loads the first time a chat is opened. */
 const ChatDrawer = lazy(() => import('./ChatDrawer'));
+/** How long the desktop-launch line stays before clearing itself; long enough to read, short enough not to outlive the row it announces. */
+const DESKTOP_LAUNCHED_SHOWN_MS = 8000;
+
 /** Own chunk, same reasoning — most sessions never spawn one of these. */
 const SpawnPanel = lazy(() => import('./SpawnPanel'));
 
@@ -83,6 +87,13 @@ export function SessionsView({ onLink }: {
   const [chatId, setChatId] = useState<string | null>(() => deepLinkSession());
   // Not persisted either: a one-shot form, not a view setting.
   const [spawnOpen, setSpawnOpen] = useState(false);
+  // What a desktop launch leaves behind: it opens no chat drawer (the app minted the session, there is no id), so this line is the answer.
+  const [desktopLaunched, setDesktopLaunched] = useState(false);
+  useEffect(() => {
+    if (!desktopLaunched) return;
+    const t = setTimeout(() => setDesktopLaunched(false), DESKTOP_LAUNCHED_SHOWN_MS);
+    return () => clearTimeout(t);
+  }, [desktopLaunched]);
   // One `/api/health` poll, owned here so the Board card (badge, switch, the
   // New session gate) and the spawn panel (its permission-mode ceiling) read
   // the same snapshot instead of each starting their own.
@@ -169,10 +180,23 @@ export function SessionsView({ onLink }: {
           <Suspense fallback={null}>
             <SpawnPanel
               onClose={() => setSpawnOpen(false)}
-              onLaunched={id => { setChatId(id); setSpawnOpen(false); }}
+              onLaunched={r => {
+                if (r.surface === 'dashboard') setChatId(r.sessionId);
+                else setDesktopLaunched(true);
+                setSpawnOpen(false);
+              }}
               spawnMaxPermission={remoteAnswer.state?.spawnMaxPermission}
+              spawnAvailable={remoteAnswer.state?.spawnAvailable}
+              desktopAvailable={remoteAnswer.state?.desktopAvailable}
+              launchSurfaceDefault={remoteAnswer.state?.launchSurfaceDefault}
             />
           </Suspense>
+        )}
+        {desktopLaunched && (
+          <div className="spawn-done" role="status">
+            <span>{DESKTOP_LAUNCHED_TEXT}</span>
+            <button type="button" className="spawn-done-x" onClick={() => setDesktopLaunched(false)} aria-label="Dismiss">✕</button>
+          </div>
         )}
         <div className="s-body">{body}</div>
       </div>
@@ -184,6 +208,7 @@ export function SessionsView({ onLink }: {
             session={chatSession}
             onClose={() => setChatId(null)}
             spawnAvailable={remoteAnswer.state?.spawnAvailable}
+            desktopAvailable={remoteAnswer.state?.desktopAvailable}
           />
         </Suspense>
       )}

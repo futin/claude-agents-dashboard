@@ -14,7 +14,7 @@ import type { HubHandler } from 'lookout-widgets';
 import { listTranscripts, findTranscript, liveSessionIds, projectsRoot, sessionFromRef, sessionSurface } from './lib/scan.js';
 import { scanSnapshot } from './lib/scan-snapshot.js';
 import { readSessionAnalyticsLog } from './lib/sessionAnalyticsLog.js';
-import { archivedSessionIds } from './lib/archived.js';
+import { archivedSessionIds, desktopLiveSessionIds } from './lib/archived.js';
 import { lastSessionEffort, readTranscript } from './lib/transcript.js';
 import { readAgentsCached } from './lib/agents-cache.js';
 import { getCachedUsageState } from './lib/usage.js';
@@ -51,6 +51,9 @@ import { maybeSend, sendTest } from './lib/notify.js';
 import { getState, setEnabled } from './lib/remoteState.js';
 import { getPinnedProjects, getSettings, setPinOrder, setPinned, setSettings } from './lib/settings.js';
 import { fetchAll, markGitWatched } from './lib/git-fetch.js';
+import {
+  desktopAvailable, handOverInFlight, newSessionUrl, openDesktopUrl, releaseDesktopLaunch, reserveDesktopLaunch, resumeUrl
+} from './lib/desktop.js';
 import { openFolder, openFolderPlatform, revealFile } from './lib/open-folder.js';
 import { runQuickOp } from './lib/git-quick.js';
 import { readSessionPr } from './lib/pr-detect.js';
@@ -62,7 +65,7 @@ import { releasesPayload } from './lib/releases.js';
 import { extForMime, isTranscribing, probeTranscribe, transcribe } from './lib/transcribe.js';
 import {
   EFFORTS, MAX_LAUNCHING, adoptLaunched, clampPermission, forceStopSession, hasLiveChild, launch, listLaunching, parseSpawnRequest,
-  probeSpawn, stopSession
+  probeSpawn, stopSession, type ParseResult
 } from './lib/spawn.js';
 import { staleEnvKeys, toPosInt, type Config } from './lib/config.js';
 import { describeCron, isManualCron, nextAfter, parseCron } from '../shared/cron.js';
@@ -77,7 +80,7 @@ import { RoutineStoreError, deleteJob, isOwner, readJobs, writeJob, writePinsSna
 import type {
   AnalyticsResponse, GitQuickRequest, ManagementIndex, MessageWaitResult, OpenFolderResponse, PinsResponse, PlanWaitResult, ScopeConfig,
   SessionMessage, SessionPlan, SessionPrInfo, SessionPrResponse, SessionQuestion, SessionsResponse, SessionChat, SessionDetail, SpawnRequest,
-  ServerSettings, SpawnResponse,
+  ProjectRef, ServerSettings, SpawnResponse,
   UsageHistoryResponse, UsageProfileResponse, WaitResult, ConnectionOrigin, WriteAccess,
   ReconcileReport, RoutineFile, RoutineJob, RoutineJobRow, RoutineRunsResponse, RoutinesResponse, RoutineValidateResponse, Session,
   AccountResponse, GitFetchResponse, HealthResponse, NotifyTestResponse, OkResponse, RemoteAnswerToggleResponse, RoutineErrorsResponse,
@@ -353,8 +356,8 @@ function send413(res: ServerResponse, body: unknown): void {
  * an unauthenticated caller gets no further than 403 on a path that spawns
  * processes — not to hide the capability itself: `GET /api/health` already
  * publishes `transcribe` with no auth at all, by design. `serveSpawn` below
- * runs those two the other way round; the paragraph there explains why that is
- * harmless, so don't "fix" either one into matching the other. See
+ * runs those two in the same order but for a different reason (its probe depends on the body), and buffers the body before probing where this
+ * refuses first; the paragraph there explains why, so read both before reordering either. See
  * docs/subsystems/dictation.md.
  */
 export async function serveTranscribe(
@@ -517,11 +520,13 @@ export function serveHealth(config: Config, res: ServerResponse, req: IncomingMe
     ...getState(config),
     idleSecs: settings.idleSecs,
     answerSecs: settings.answerSecs,
+    launchSurfaceDefault: settings.launchSurfaceDefault,
     origin: classifyOrigin(req.socket?.remoteAddress, req.headers),
     writeAccess: access,
     tokenRequired: access === 'token',
     transcribe: probeTranscribe(config),
     spawnAvailable: probeSpawn(config),
+    desktopAvailable: desktopAvailable(),
     spawnMaxPermission: config.spawnMaxPermission,
     syncPermissionMode: clampPermission(config.syncPermissionMode, config.spawnMaxPermission)
   } satisfies HealthResponse);
@@ -720,7 +725,7 @@ export async function serveSettingsWrite(
   const next = setSettings(body);
   if (!next) {
     return sendBadBody(res, {
-      error: 'expected {idleSecs?: number, answerSecs?: number, notify?: NotifyPolicy, recordUsageHistory?: boolean, gitFetchSecs?: 0|30|60|120|300|600, trustTailnet?: boolean}'
+      error: "expected {idleSecs?: number, answerSecs?: number, notify?: NotifyPolicy, recordUsageHistory?: boolean, gitFetchSecs?: 0|30|60|120|300|600, trustTailnet?: boolean, launchSurfaceDefault?: 'dashboard'|'desktop'}"
     });
   }
   sendJson(res, 200, settingsBody(config, next));
@@ -1086,8 +1091,9 @@ export async function serveNotifyTest(
 /* -------------------------------------------------- spawn endpoints */
 
 /**
- * `POST /api/spawn` — start a new headless `claude -p` session in an existing
- * recent or pinned project.
+ * `POST /api/spawn` — start a session in an existing recent or pinned project: a headless `claude -p` child (`surface` absent or `dashboard`), or a
+ * `claude://` link handed to the desktop app (`surface: 'desktop'`). `resume` continues an existing dashboard session the same two ways; with
+ * `desktop` that is the hand-over.
  *
  * Gated on the remote-answer toggle exactly like `serveTranscribe` above, and
  * for the stronger version of its reason: spawn writes a whole new session on
@@ -1095,43 +1101,49 @@ export async function serveNotifyTest(
  * is restart-scoped), so a switch that silently excluded the widest session write path
  * would be worse than none — the user infers coverage. It is not an auth
  * boundary: `REMOTE_ANSWER` defaults to true and whoever can flip the pill off
- * can flip it back on. `HealthResponse.spawnAvailable` stays a pure capability
- * probe regardless, the same split `transcribe` uses on that payload.
+ * can flip it back on. `HealthResponse.spawnAvailable` and `desktopAvailable` stay pure capability
+ * probes regardless, the same split `transcribe` uses on that payload. Both gates cover a desktop launch too: they decide who may make this Mac do
+ * things, whichever program then does them.
  *
- * Check order, and the one part of it that is *not* about leaking less: the
- * probe runs before `refuseWrite`, unlike `serveTranscribe` above, which documents
- * the opposite order for itself. That divergence is harmless here rather than
- * principled — `GET /api/health` already publishes `spawnAvailable`
- * unauthenticated and already calls the same memoised `probeSpawn`, so
- * probe-first through this route reveals nothing new and spawns no extra
- * process. Cross-referenced in both directions on purpose: neither ordering
- * should be "corrected" to match the other without reading this paragraph.
- * From there the order does earn itself — who's asking, then how many launches
- * are already in flight (before a body is read, the same pre-buffer refusal
- * `serveTranscribe` does), then whether the request is usable
- * (`parseSpawnRequest`, pure, which also decides fresh-vs-resume), then the
- * filesystem step for the chosen shape.
+ * Check order: toggle, `refuseWrite`, read the body, `parseSpawnRequest`, the chosen surface's probe, the chosen surface's rail, launch. The write gate
+ * now precedes the probe, as `serveTranscribe` above documents for itself — but here because the probe cannot run earlier, not as a correction: which
+ * probe applies (`probeSpawn` for headless, `desktopAvailable` for desktop) is in the body, and so is which rail. That does mean the probe no longer
+ * refuses before the body is buffered; it was never hiding anything, since `GET /api/health` publishes both answers unauthenticated from the same
+ * memoised probes, and the 64KB body cap bounds the buffering. Cross-referenced from `serveTranscribe` on purpose: read both paragraphs before
+ * reordering either. Parse runs before any filesystem work — it is pure and decides the shape (fresh vs resume, headless vs desktop) — so a fresh
+ * request sees parse errors before `unknown project`. A headless request still gets the codes it always got; only their precedence moved — a
+ * malformed body is 400 where 404 or 429 used to win, and an unauthenticated caller 403 where 404 `spawn unavailable` used to.
  *
  * Neither `body.project` nor `body.resume` ever reaches the filesystem by
  * being joined into a path — the former resolves through `resolveProject`'s
  * membership check against the enumerated recent-or-pinned project list (the same
  * reasoning `serveConfigsProject` documents for its `dirName` query param),
  * the latter through an exact-id match against the enumerated transcripts.
- * Resume additionally requires the target to be a `dashboard`-surface
+ * Resume, headless or hand-over, additionally requires the target to be a `dashboard`-surface
  * (`sdk-cli`) session that is not still running. Three checks answer that, and
  * none of them covers the whole set: a held question/plan/reply socket, the
  * launch store (`hasLiveChild` — exact, but only for children *this* process
  * spawned), and a `ps` argv scan (`liveSessionIds` — inexact, but the only one
  * that can see a session started from a terminal, by a second dashboard, or
- * before the last restart). See docs/subsystems/spawn.md.
+ * before the last restart). Two more see the desktop app, whose `claude` child carries no id in its argv: its live registry records
+ * (`desktopLiveSessionIds`, 409 `session is open in the desktop app`) and, for the seconds before the app writes one, the hand-over mark in
+ * `desktop.ts` (409 `already resuming`). See docs/subsystems/spawn.md.
  */
 export async function serveSpawn(config: Config, req: IncomingMessage, res: ServerResponse): Promise<void> {
   if (!getState(config).remoteAnswer) return sendJson(res, 404, { error: 'remote answers disabled' });
-  if (!probeSpawn(config)) return sendJson(res, 404, { error: 'spawn unavailable' });
   if (refuseWrite(config, req, res)) return;
+
+  const body = await readJsonBody(req) as Partial<SpawnRequest> | null;
+  if (!body || typeof body !== 'object') return sendBadBody(res, { error: 'bad body' });
+
+  const parsed = parseSpawnRequest(body, config.spawnMaxPermission);
+  if (!parsed.ok) return sendBadBody(res, { error: parsed.error });
+
+  if (parsed.surface === 'desktop') return spawnDesktop(config, body, parsed, res);
+
+  if (!probeSpawn(config)) return sendJson(res, 404, { error: 'spawn unavailable' });
   // The accident rail (see MAX_LAUNCHING in server/lib/spawn.ts): N POSTs would
-  // otherwise be N live `claude` processes on the account's real quota. Counted
-  // before the body is read, like transcribe's `isTranscribing()` peek — and
+  // otherwise be N live `claude` processes on the account's real quota.
   // `listLaunching()` is also what expires stale entries, so a burst that has
   // already aged out doesn't hold the door shut. Only `'launching'` rows count:
   // a `failed` one lingers for FAIL_TTL_MS (5 min) so the UI can explain
@@ -1139,15 +1151,6 @@ export async function serveSpawn(config: Config, req: IncomingMessage, res: Serv
   if (listLaunching().filter(e => e.state === 'launching').length >= MAX_LAUNCHING) {
     return sendJson(res, 429, { error: 'too many launches in flight' });
   }
-
-  const body = await readJsonBody(req) as Partial<SpawnRequest> | null;
-  if (!body || typeof body !== 'object') return sendBadBody(res, { error: 'bad body' });
-
-  // Parse before any filesystem work — it is pure and decides which of the two
-  // launch shapes this is (fresh vs resume). Fresh requests therefore see
-  // parse errors before `unknown project`, a deliberate reordering.
-  const parsed = parseSpawnRequest(body, config.spawnMaxPermission);
-  if (!parsed.ok) return sendBadBody(res, { error: parsed.error });
 
   // resolveProject / the transcript hunt read disk and launch() spawns a
   // process — all can throw on an unexpected failure, and this handler is
@@ -1157,48 +1160,13 @@ export async function serveSpawn(config: Config, req: IncomingMessage, res: Serv
   try {
     if (parsed.resumeId) {
       const rid = parsed.resumeId;
-      // Membership check against the enumerated transcripts, same posture as
-      // resolveProject below: the id never becomes a path by joining.
-      const t = findTranscript(projectsRoot(), rid);
-      if (!t) return sendJson(res, 400, { error: 'unknown session' });
-      const tr = readTranscript(t.file);
-      // Only headless (`sdk-cli` → the `dashboard` pill) sessions: a terminal
-      // session is terminal-owned, and resuming one here could race a still-
-      // open interactive session on the same transcript.
-      if (!tr || sessionSurface(tr.entrypoint) !== 'dashboard') {
-        return sendJson(res, 400, { error: 'only dashboard sessions can be resumed' });
-      }
-      if (!tr.cwd) return sendJson(res, 400, { error: 'session has no working directory' });
-      // A held question, plan, or reply window means the process is alive —
-      // resuming now would put a second writer on the same session.
-      if (getPending(rid) || getPendingPlan(rid) || getPendingMessage(rid)) {
-        return sendJson(res, 409, { error: 'session is still running' });
-      }
-      // A held socket is only *one* way to be alive. A session this server
-      // spawned can be mid-tool-call, or lingering after its turn (measured at
-      // 90s+), holding nothing at all — and the row shows `incomplete`, which
-      // the resume composer offers. Launching then would put a second `claude`
-      // on one transcript AND replace the live entry in the store, dropping the
-      // first child's kill handle. The store knows, so ask it.
-      if (hasLiveChild(rid)) {
-        return sendJson(res, 409, { error: 'session is still running' });
-      }
-      // And the store can only answer for children *this* process spawned. A
-      // session started from a terminal, by a second dashboard, or before the
-      // last restart still reads `dashboard` and still offers resume, so the
-      // fallback is the argv itself: `--session-id` / `--resume` carry the id.
-      // Ordered second because the store is free and exact while this costs a
-      // `ps`. A `null` probe means "could not answer" — never a refusal.
-      const live = liveSessionIds();
-      if (live?.has(rid)) {
-        return sendJson(res, 409, { error: 'session is still running' });
-      }
-      // `'launching'` only, as at the cap above: a `failed` row for this id lingers
-      // FAIL_TTL_MS for display, holds no process, and must not refuse a retry.
-      if (listLaunching().some(e => e.sessionId === rid && e.state === 'launching')) {
-        return sendJson(res, 409, { error: 'already resuming' });
-      }
-      const ref = { dirName: t.dirName, name: nodePath.basename(tr.cwd), path: tr.cwd, lastActiveMs: t.mtimeMs };
+      const target = resumeTarget(rid, true);
+      if ('refuse' in target) return sendJson(res, target.refuse.status, { error: target.refuse.error });
+      // A hand-over leaves no trace in the launch store, and until the app writes its registry record nothing above can see it.
+      if (handOverInFlight(rid)) return sendJson(res, 409, { error: 'already resuming' });
+      const { t, tr } = target;
+      const cwd = tr.cwd as string;
+      const ref = { dirName: t.dirName, name: nodePath.basename(cwd), path: cwd, lastActiveMs: t.mtimeMs };
       // `claude -p --resume` with no `--effort` runs at the CLI's own default (medium on 2.1.295 and 2.1.303, read off this machine's transcripts 2026-10-25), not the effort the session ran at, so a
       // follow-up from the resume composer used to drop a high-effort session to medium mid-task. Carry the transcript's own value unless the
       // request named one.
@@ -1206,19 +1174,118 @@ export async function serveSpawn(config: Config, req: IncomingMessage, res: Serv
       const effort = recorded && (EFFORTS as readonly string[]).includes(recorded) ? recorded : parsed.input.effort;
       sessionId = launch(config, ref, { ...parsed.input, effort }, rid);
     } else {
-      const projectName = typeof body.project === 'string' ? body.project : '';
-      const ref = resolveProject(config, projectName, pinOptions());
-      // Named, but bounded: the body cap is 64KB, and every other rejection in
-      // this file answers with a fixed string.
-      if (!ref) return sendJson(res, 400, { error: `unknown project: ${projectName.slice(0, 60)}` });
-
+      const ref = resolveSpawnProject(config, body);
+      if ('refuse' in ref) return sendJson(res, 400, { error: ref.refuse });
       sessionId = launch(config, ref, parsed.input);
     }
   } catch (e) {
     console.error('[dashboard] spawn failed:', (e as Error).message);
     return sendJson(res, 500, { error: 'spawn failed' });
   }
-  sendJson(res, 200, { sessionId } satisfies SpawnResponse);
+  sendJson(res, 200, { surface: 'dashboard', sessionId } satisfies SpawnResponse);
+}
+
+/**
+ * The desktop half of {@link serveSpawn}, past parse: probe, then the project or the resume checks, then a rail slot, then `open`. The slot is taken
+ * only once the request is known to be launchable, so a refused one never holds a place the next request needs (the headless rail is a count of live
+ * children, so its peek has no such order to keep). Fields the app has no way to receive — name, model, effort, permission mode, remote control,
+ * one-shot — were parsed and are dropped here, never refused: an old client must not break.
+ */
+async function spawnDesktop(
+  config: Config, body: Partial<SpawnRequest>, parsed: Extract<ParseResult, { ok: true }>, res: ServerResponse
+): Promise<void> {
+  if (!desktopAvailable()) return sendJson(res, 501, { error: 'desktop app unavailable' });
+
+  let url: string;
+  let handOverId: string | null = null;
+  try {
+    if (parsed.resumeId) {
+      const rid = parsed.resumeId;
+      // No cwd needed: the resume link names the session, not a folder.
+      const target = resumeTarget(rid, false);
+      if ('refuse' in target) return sendJson(res, target.refuse.status, { error: target.refuse.error });
+      handOverId = rid;
+      url = resumeUrl(rid);
+    } else {
+      const ref = resolveSpawnProject(config, body);
+      if ('refuse' in ref) return sendJson(res, 400, { error: ref.refuse });
+      url = newSessionUrl(ref.path, parsed.input.prompt);
+    }
+  } catch (e) {
+    console.error('[dashboard] spawn failed:', (e as Error).message);
+    return sendJson(res, 500, { error: 'spawn failed' });
+  }
+
+  // `in-flight` is the hand-over mark: a second tap, or a second device, in the seconds before the app writes the registry record.
+  const slot = reserveDesktopLaunch(handOverId);
+  if (slot.status !== 'ok') {
+    return slot.status === 'in-flight'
+      ? sendJson(res, 409, { error: 'already resuming' })
+      : sendJson(res, 429, { error: 'too many launches in flight' });
+  }
+
+  try {
+    await openDesktopUrl(url);
+  } catch (e) {
+    // A launch that never reached the app holds neither a slot nor the mark, so the retry the failure line invites is not refused.
+    releaseDesktopLaunch(handOverId, slot.at);
+    console.error('[dashboard] desktop open failed:', (e as Error).message);
+    return sendJson(res, 500, { error: 'open failed' });
+  }
+  sendJson(res, 200, { surface: 'desktop' } satisfies SpawnResponse);
+}
+
+/** `body.project` through `resolveProject`'s membership check, or the 400 text naming it. */
+function resolveSpawnProject(config: Config, body: Partial<SpawnRequest>): ProjectRef | { refuse: string } {
+  const projectName = typeof body.project === 'string' ? body.project : '';
+  const ref = resolveProject(config, projectName, pinOptions());
+  // Named, but bounded: the body cap is 64KB, and every other rejection in
+  // this file answers with a fixed string.
+  return ref ?? { refuse: `unknown project: ${projectName.slice(0, 60)}` };
+}
+
+/**
+ * The checks a headless resume and a hand-over share, in order, ending at the first refusal; otherwise the transcript to resume. `requireCwd` is the
+ * headless resume's: its child runs in the session's cwd, while a hand-over's link carries no folder.
+ */
+function resumeTarget(rid: string, requireCwd: boolean):
+  | { refuse: { status: number; error: string } }
+  | { t: NonNullable<ReturnType<typeof findTranscript>>; tr: NonNullable<ReturnType<typeof readTranscript>> } {
+  const refuse = (status: number, error: string) => ({ refuse: { status, error } });
+  // Membership check against the enumerated transcripts, same posture as
+  // resolveProject: the id never becomes a path by joining.
+  const t = findTranscript(projectsRoot(), rid);
+  if (!t) return refuse(400, 'unknown session');
+  const tr = readTranscript(t.file);
+  // Only headless (`sdk-cli` → the `dashboard` pill) sessions: a terminal
+  // session is terminal-owned, and resuming one here could race a still-
+  // open interactive session on the same transcript.
+  if (!tr || sessionSurface(tr.entrypoint) !== 'dashboard') return refuse(400, 'only dashboard sessions can be resumed');
+  if (requireCwd && !tr.cwd) return refuse(400, 'session has no working directory');
+  // A held question, plan, or reply window means the process is alive —
+  // resuming now would put a second writer on the same session.
+  if (getPending(rid) || getPendingPlan(rid) || getPendingMessage(rid)) return refuse(409, 'session is still running');
+  // A held socket is only *one* way to be alive. A session this server
+  // spawned can be mid-tool-call, or lingering after its turn (measured at
+  // 90s+), holding nothing at all — and the row shows `incomplete`, which
+  // the resume composer offers. Launching then would put a second `claude`
+  // on one transcript AND replace the live entry in the store, dropping the
+  // first child's kill handle. The store knows, so ask it.
+  if (hasLiveChild(rid)) return refuse(409, 'session is still running');
+  // And the store can only answer for children *this* process spawned. A
+  // session started from a terminal, by a second dashboard, or before the
+  // last restart still reads `dashboard` and still offers resume, so the
+  // fallback is the argv itself: `--session-id` / `--resume` carry the id.
+  // Ordered second because the store is free and exact while this costs a
+  // `ps`. A `null` probe means "could not answer" — never a refusal.
+  if (liveSessionIds()?.has(rid)) return refuse(409, 'session is still running');
+  // `'launching'` only, as at the cap: a `failed` row for this id lingers
+  // FAIL_TTL_MS for display, holds no process, and must not refuse a retry.
+  if (listLaunching().some(e => e.sessionId === rid && e.state === 'launching')) return refuse(409, 'already resuming');
+  // Imported into the desktop app but not yet continued there: the transcript still reads `dashboard` and the app's child carries no id in its argv,
+  // so only the app's own registry can say so (archived.ts).
+  if (desktopLiveSessionIds().has(rid)) return refuse(409, 'session is open in the desktop app');
+  return { t, tr };
 }
 
 /**
@@ -1904,7 +1971,7 @@ export function serveSessionRow(config: Config, id: string, res: ServerResponse)
     if (!ref) return sendJson(res, 404, { error: 'no such session' });
     const row = sessionFromRef(ref, {
       now: Date.now(), activeWindowMin: config.activeWindowMin, liveCwds: null,
-      lessons: config.showAnalytics === false ? null : readSessionAnalyticsLog()
+      lessons: config.showAnalytics === false ? null : readSessionAnalyticsLog(), desktopOwnedIds: desktopLiveSessionIds()
     });
     if (!row) return sendJson(res, 500, { error: 'transcript unreadable' });
     sendJson(res, 200, row satisfies Session);

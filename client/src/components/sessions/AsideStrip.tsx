@@ -3,6 +3,7 @@ import { useState } from 'react';
 import type { SessionsResponse } from '../../../../shared/types';
 import type { RemoteAnswerControl } from '../../hooks/useRemoteAnswer';
 import { useStuckStrip } from '../../hooks/useStuckStrip';
+import { canOpenLaunchForm } from '../../lib/launchSurface';
 import { BoardBody, boardClock, boardHolds, hasBoard } from '../AsideBoard';
 
 /**
@@ -65,7 +66,7 @@ export function AsideStrip({ data, remoteAnswer, onOpenSpawn }: {
             {data && <span className="s-strip-clock">{boardClock(data)}</span>}
             <Caret />
           </button>
-          {remoteAnswer.state?.spawnAvailable && (
+          {canOpenLaunchForm(remoteAnswer.state?.spawnAvailable, remoteAnswer.state?.desktopAvailable) && (
             <button type="button" className="s-plus" onClick={onOpenSpawn} aria-label="New session">
               {/* Drawn, not typed. A text "+" is centred by its line box, and
                   the glyph's ink sits above that centre — it read high in the

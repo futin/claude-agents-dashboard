@@ -1249,6 +1249,53 @@ export function run(): number {
     if (r.ok) assert.strictEqual(r.resumeId, undefined);
   })) p++; else f++;
 
+  /* ---------------------------------------------------------------- surface */
+
+  const parseErr = (body: unknown): string | null => {
+    const r = parseSpawnRequest(body, 'auto');
+    return r.ok ? null : r.error;
+  };
+
+  if (test('parseSpawnRequest: {resume, surface:"desktop"} with no prompt is the hand-over — ok', () => {
+    const r = parseSpawnRequest({ resume: 'abc', surface: 'desktop' }, 'auto');
+    assert.ok(r.ok, 'the claude://resume link carries no prompt, so the body has none');
+    if (r.ok) {
+      assert.strictEqual(r.surface, 'desktop');
+      assert.strictEqual(r.resumeId, 'abc');
+      assert.strictEqual(r.input.prompt, '');
+    }
+  })) p++; else f++;
+
+  if (test('parseSpawnRequest: the prompt relaxation is that exact shape only — resume alone or dashboard still needs one', () => {
+    assert.strictEqual(parseErr({ resume: 'abc' }), 'prompt is required');
+    assert.strictEqual(parseErr({ resume: 'abc', surface: 'dashboard' }), 'prompt is required');
+  })) p++; else f++;
+
+  if (test('parseSpawnRequest: surface defaults to dashboard and passes desktop through', () => {
+    const fresh = parseSpawnRequest({ prompt: 'x' }, 'auto');
+    assert.ok(fresh.ok);
+    if (fresh.ok) assert.strictEqual(fresh.surface, 'dashboard');
+    const desk = parseSpawnRequest({ prompt: 'x', surface: 'desktop' }, 'auto');
+    assert.ok(desk.ok);
+    if (desk.ok) assert.strictEqual(desk.surface, 'desktop');
+  })) p++; else f++;
+
+  if (test('parseSpawnRequest: a present-but-unknown surface REJECTS — never a silent headless launch', () => {
+    assert.strictEqual(parseErr({ prompt: 'x', surface: 'Desktop' }), 'bad surface');
+    assert.strictEqual(parseErr({ surface: 'Desktop' }), 'bad surface', 'surface is checked before the prompt');
+  })) p++; else f++;
+
+  if (test('parseSpawnRequest: a fresh desktop launch keeps the prompt cap — refused, never cut', () => {
+    assert.strictEqual(parseErr({ prompt: 'x'.repeat(4001), surface: 'desktop' }), 'prompt must be at most 4000 characters');
+  })) p++; else f++;
+
+  if (test('parseSpawnRequest: a hand-over ignores the prompt entirely, and keeps the resume rule', () => {
+    const r = parseSpawnRequest({ resume: 'abc', surface: 'desktop', prompt: 42 }, 'auto');
+    assert.ok(r.ok);
+    if (r.ok) assert.strictEqual(r.input.prompt, '');
+    assert.strictEqual(parseErr({ resume: 'a b', surface: 'desktop' }), 'bad resume id');
+  })) p++; else f++;
+
   if (test('launch with a resume id: reuses that id, spawns --resume, and flags the entry', () => {
     resetLaunches();
     const calls: SpawnCall[] = [];

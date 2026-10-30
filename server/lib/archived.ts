@@ -22,6 +22,12 @@
  * Fail open, always: a missing directory (every non-macOS host), an unreadable
  * file, malformed JSON, an absent flag — all return "not archived" and hide
  * nothing. Wrongly hiding a live session is the harmful direction.
+ *
+ * `desktopLiveSessionIds` is a second reader of the same files with the **inverse** failure direction. It names the sessions the app holds open, so a
+ * session the dashboard must not resume or hand over (a second writer on one transcript, spec decision 11 of the desktop-launch design). A false "not
+ * owned" admits that second writer, so a record is live unless `isArchived` is exactly `true` — an absent or odd flag counts as live — and every
+ * shortcut may only ever add a live id, never drop one. What it cannot read it cannot attribute: a missing root, an unreadable or malformed record, or
+ * one with no string `cliSessionId` contributes nothing, and the rest are still read.
  */
 
 import fs from 'node:fs';
@@ -50,12 +56,16 @@ export function appSessionsRoot(homeDir?: string): string {
  */
 const cache = new Map<string, { mtimeMs: number; archivedId: string | null }>();
 
+/** Same keying as `cache`, for the live reader: `liveId` is the `cliSessionId` of a non-archived record, null otherwise. Separate map, separate verdict. */
+const liveCache = new Map<string, { mtimeMs: number; liveId: string | null }>();
+
 /** Bytes read to *rule out* an archive without parsing the whole record. */
 const PREFIX_BYTES = 8192;
 
 /** Reset the verdict cache (tests). */
 export function resetArchivedCache(): void {
   cache.clear();
+  liveCache.clear();
 }
 
 /** Every `local_*.json` under `<root>/<install>/<account>/`, with its mtime. */
@@ -121,6 +131,28 @@ function classify(file: string): string | null {
   return typeof id === 'string' && id ? id : null;
 }
 
+/**
+ * The `cliSessionId` this record keeps live, or null: the mirror of {@link classify}. The prefix scan is trusted only to confirm a live record whose id it
+ * shows exactly once, so it can add an id but never drop one; anything it cannot settle — an archive flag in view, no id, two ids — takes a full parse.
+ */
+function classifyLive(file: string): string | null {
+  const prefix = readPrefix(file);
+  if (prefix && /"isArchived"\s*:\s*false/.test(prefix) && !/"isArchived"\s*:\s*true/.test(prefix)) {
+    const ids = [...prefix.matchAll(/"cliSessionId"\s*:\s*"([^"\\]+)"/g)];
+    if (ids.length === 1 && !/"cliSessionId"\s*:\s*(?!")/.test(prefix)) return ids[0]![1]!;
+  }
+
+  let record: { isArchived?: unknown; cliSessionId?: unknown };
+  try {
+    record = JSON.parse(fs.readFileSync(file, 'utf8'));
+  } catch {
+    return null;
+  }
+  if (record?.isArchived === true) return null;
+  const id = record?.cliSessionId;
+  return typeof id === 'string' && id ? id : null;
+}
+
 /** First `PREFIX_BYTES` of a file as text, or null if unreadable. */
 function readPrefix(file: string): string | null {
   let fd: number;
@@ -167,6 +199,34 @@ export function archivedSessionIds(options: ArchivedOptions = {}): ReadonlySet<s
   const ids = new Set<string>();
   for (const [file, v] of cache) {
     if (v.archivedId && file.startsWith(root + path.sep)) ids.add(v.archivedId);
+  }
+  return ids;
+}
+
+/**
+ * Transcript ids (`cliSessionId`) of every session the app holds in a non-archived record: the sessions a second writer must not touch.
+ *
+ * Empty when the store is absent. Same cost profile as {@link archivedSessionIds}: a stat sweep plus a re-read of only the records whose mtime advanced.
+ * HOME is resolved at call time (`appSessionsRoot`), so a test can point it at a fixture.
+ */
+export function desktopLiveSessionIds(options: ArchivedOptions = {}): ReadonlySet<string> {
+  const root = options.root || appSessionsRoot(options.homeDir);
+  const seen = new Set<string>();
+
+  for (const rec of listRecords(root)) {
+    seen.add(rec.file);
+    const cached = liveCache.get(rec.file);
+    if (cached && cached.mtimeMs === rec.mtimeMs) continue;
+    liveCache.set(rec.file, { mtimeMs: rec.mtimeMs, liveId: classifyLive(rec.file) });
+  }
+
+  for (const file of liveCache.keys()) {
+    if (!seen.has(file) && file.startsWith(root + path.sep)) liveCache.delete(file);
+  }
+
+  const ids = new Set<string>();
+  for (const [file, v] of liveCache) {
+    if (v.liveId && file.startsWith(root + path.sep)) ids.add(v.liveId);
   }
   return ids;
 }

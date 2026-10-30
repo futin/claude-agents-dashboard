@@ -52,7 +52,7 @@ import { randomUUID } from 'node:crypto';
 
 import type { Config } from './config.js';
 import { DASHBOARD_ENTRYPOINT } from './entrypoint.js';
-import type { LaunchingSession, PermissionMode, ProjectRef, StopState } from '../../shared/types.js';
+import type { LaunchSurface, LaunchingSession, PermissionMode, ProjectRef, StopState } from '../../shared/types.js';
 
 /** The permission ladder, lowest to highest. Array index order IS the ordering. */
 export const PERMISSION_MODES = ['plan', 'acceptEdits', 'auto', 'bypassPermissions'] as const;
@@ -139,7 +139,7 @@ const RESUME_ID_RE = /^[A-Za-z0-9._-]+$/;
 
 /** Result of validating an untrusted POST body against {@link SpawnInput}. */
 export type ParseResult =
-  | { ok: true; input: Omit<SpawnInput, 'sessionId'>; resumeId?: string }
+  | { ok: true; input: Omit<SpawnInput, 'sessionId'>; resumeId?: string; surface: LaunchSurface }
   | { ok: false; error: string };
 
 /**
@@ -148,7 +148,7 @@ export type ParseResult =
  * needs config and the filesystem, which a pure function doesn't have — the
  * handler (Task 3) resolves it separately.
  *
- * Only the prompt can fail the request outright. Everything else fails soft —
+ * Only the prompt, `surface` and `resume` can fail the request outright. Everything else fails soft —
  * an unrecognized `model`, `effort` or `name`, or a `permissionMode` outside
  * the enum, is dropped or clamped rather than rejected, so a client sending a
  * field this server doesn't recognize (an old build, a future one) can still
@@ -159,6 +159,27 @@ export function parseSpawnRequest(body: unknown, ceiling: PermissionMode): Parse
     return { ok: false, error: 'request body must be a JSON object' };
   }
   const b = body as Record<string, unknown>;
+
+  // Rejects rather than drops, for the reason `resume` does below: a headless launch the user believed was going to the desktop app is worse than a 400.
+  // Absent is `dashboard` — never the default setting, which only preselects the form (desktop-launch spec, decision 1).
+  if (b.surface !== undefined && b.surface !== 'dashboard' && b.surface !== 'desktop') {
+    return { ok: false, error: 'bad surface' };
+  }
+  const surface: LaunchSurface = b.surface === 'desktop' ? 'desktop' : 'dashboard';
+
+  // The hand-over: `claude://resume` carries no prompt, so this one shape ignores `prompt` entirely, whatever it holds. Parsed before the prompt checks
+  // so they never see it; every other shape keeps their errors in their order.
+  if (b.resume !== undefined && surface === 'desktop') {
+    if (typeof b.resume !== 'string' || b.resume === '' || !RESUME_ID_RE.test(b.resume)) {
+      return { ok: false, error: 'bad resume id' };
+    }
+    return {
+      ok: true,
+      input: { prompt: '', permissionMode: clampPermission(b.permissionMode, ceiling), remoteControl: false, oneShot: false },
+      resumeId: b.resume,
+      surface
+    };
+  }
 
   if (typeof b.prompt !== 'string') {
     return { ok: false, error: 'prompt is required' };
@@ -200,11 +221,12 @@ export function parseSpawnRequest(body: unknown, ceiling: PermissionMode): Parse
     return {
       ok: true,
       input: { prompt, permissionMode, name: undefined, model, effort, remoteControl: false, oneShot: false },
-      resumeId: b.resume
+      resumeId: b.resume,
+      surface
     };
   }
 
-  return { ok: true, input: { prompt, permissionMode, name, model, effort, remoteControl, oneShot } };
+  return { ok: true, input: { prompt, permissionMode, name, model, effort, remoteControl, oneShot }, surface };
 }
 
 /**

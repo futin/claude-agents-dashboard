@@ -564,6 +564,46 @@ permission triplet carries a line under it naming that ceiling
 (`host ceiling · <mode> or below (SPAWN_MAX_PERMISSION)`) instead of hiding the reason in
 a `title` attribute.
 
+## Launching in the desktop app
+
+`SpawnRequest.surface` is `'dashboard'` (headless `claude -p`, everything above) or `'desktop'`: the same route hands the work to the Claude desktop app
+through its `claude://` links instead, and `SpawnResponse` is the union `{surface:'dashboard'; sessionId} | {surface:'desktop'}`. Spec:
+`docs/superpowers/specs/2026-10-29-desktop-launch-design.md`; the links themselves are mapped in
+[session-surfaces](session-surfaces.md#the-desktop-apps-claude-links--the-way-in-that-does-exist).
+
+- **Absent `surface` is `dashboard`, always.** The `launchSurfaceDefault` setting only preselects the launch form; the server never applies it to a
+  request, so an API caller never inherits it. A present-but-unknown value is 400 `bad surface`, not a silent headless launch.
+- **Two shapes.** A fresh launch fires `claude://code/new?folder=<project path>&q=<prompt>` (`newSessionUrl`), the project resolved through the same
+  membership check as a headless one. A `resume` fires `claude://resume?session=<id>` (`resumeUrl`) — the **hand-over**, which carries no prompt and no
+  folder, so `prompt` is ignored and the target's cwd is not required. `parseSpawnRequest` still validates the id (400 `bad resume id`).
+- **What the app cannot receive is dropped, not refused:** `name`, `model`, `effort`, `permissionMode`, `remoteControl` and `oneShot` are parsed and
+  ignored, so an old client never breaks. The prompt cap is `PROMPT_CAP` (4000), the same as headless; the app's own cut is 14336 characters (app 4.4212.0,
+  read 2026-10-29), recorded as a comment in `desktop.ts`, so the cap must stay below it.
+- **The link goes through `open` as one argv entry** (`execFile('open', [url])`, 5s timeout, no shell): these routes are reachable from LAN and the
+  tailnet, and the prompt is user text. This is a launched local program, not a new outbound kind (`.claude/CLAUDE.md` Code rules).
+- **Check order** is `desktopAvailable` → project resolution or `resumeTarget` → rail. The slot is taken only after the request is known to be launchable,
+  so a refused request never holds a place the next one needs. `resumeTarget` is the headless resume's check chain extracted and shared, plus one more
+  409 at its end (below); a hand-over additionally checks the mark, see next.
+- **Availability.** `desktopAvailable()` is true on macOS (`process.platform === 'darwin'`) **and** a `stat` of `/Applications/Claude.app` succeeding,
+  memoised for the process; it deliberately avoids `open -Ra`, so the probe launches nothing. Off macOS, or without the app, the route answers 501
+  `desktop app unavailable`, and `HealthResponse.desktopAvailable` is false so the launch form never offers the surface. The probe is capability only,
+  like `spawnAvailable`: the remote-answer toggle and the write gate cover a desktop launch too, because they decide who may make this Mac do things.
+- **The rail** (`server/lib/desktop.ts`): at most `DESKTOP_RAIL_MAX` (4) launches inside `DESKTOP_WINDOW_MS` (5000), in memory. A fifth is 429 `too many
+  launches in flight`. It is a separate count from `MAX_LAUNCHING` because there is no child to count: the app opens a window per link, so an unbounded
+  burst would flood the screen, and a failed `open` gives its place back (`releaseDesktopLaunch`).
+- **The hand-over mark.** Each hand-over also marks its session id for the same window (`handOverInFlight`), checked *before* the rail, so a second tap
+  or a second device in the seconds before the app writes its registry record is 409 `already resuming` rather than a second `open`. Headless resume
+  answers the same text from the launch store (`listLaunching`); a hand-over leaves nothing there, hence the mark. A failed `open` releases the mark too,
+  so the retry the failure line invites is not refused.
+- **409 `session is open in the desktop app`.** The last check in `resumeTarget`, and it therefore also refuses a *headless* resume: `desktopLiveSessionIds()`
+  (`server/lib/archived.ts`) names the sessions the app holds in a non-archived registry record. The app's `claude` child carries no id in its argv, so
+  the `ps` scan cannot see it, and a second writer on the transcript is what both paths must avoid ([session-surfaces](session-surfaces.md)). The client
+  mirrors it: `resumeEligible` is false for `Session.desktopOwned`, and the drawer's hand-over button reads `Already open in the desktop app`.
+- **500 `open failed`** when `open` rejects or times out; the client shows the fixed line `Couldn't open the desktop app.` (`handOverErrorText`).
+  Any other throw before it (project resolution, transcript read) is 500 `spawn failed`, as headless.
+- **No launch-store entry, no phantom row.** The row appears on a later scan once the app writes its transcript, so the client says so in the `.spawn-done`
+  line instead. Real `open claude://…` from the UI is unverified end to end (the code is tested against a stub runner).
+
 ## Routine runs: the other detached launch
 
 [Routines](routines.md)' **Run now** (`POST /api/routines/:name/run`, `server/lib/routine-run.ts`) is the second thing the dashboard initiates, and it is
@@ -586,30 +626,34 @@ one seam for it, and nothing about `launch`'s own contract changes. Three differ
 |---|---|
 | `server/lib/spawn.ts` | pure `buildSpawnArgs`/`clampPermission`/`parseSpawnRequest`, plus the impure `probeSpawn`/`launch`/`listLaunching`/`adoptLaunched`/`stopSession`/`forceStopSession`/`escalateStop`/`stopStates`/`hasLiveChild` and the RAM-only store |
 | `spawnProcess` (`server/lib/spawn.ts`) | the `Spawner` seam as a function, exported for `routine-run.ts`'s wrapper launch; see [Routine runs](#routine-runs-the-other-detached-launch) |
-| `POST /api/spawn` | `serveSpawn` — validates, resolves the project, launches, returns `{sessionId}` immediately |
+| `POST /api/spawn` | `serveSpawn` — validates, then on `surface` absent or `dashboard` resolves the project, launches and returns `{surface:'dashboard', sessionId}` immediately; on `desktop` hands off to `spawnDesktop` ([§Launching in the desktop app](#launching-in-the-desktop-app)) and returns `{surface:'desktop'}` |
+| `server/lib/desktop.ts` | the desktop half's one module: `newSessionUrl`/`resumeUrl`, the memoised `desktopAvailable` probe, `openDesktopUrl` (`open <url>` via `execFile`, no shell), the in-memory rail and per-id hand-over mark (`reserveDesktopLaunch`/`releaseDesktopLaunch`/`handOverInFlight`), and the `overrideDesktop` test seam |
 | `POST /api/spawn/:id/stop` | `serveSpawnStop` — SIGTERM + delete for a `launching` entry; delegates to `stopSession` |
 | `POST /api/sessions/:id/stop` | `serveSessionStop` — the row button's route; graceful by default, `{force:true}` for SIGKILL |
 | `client/src/lib/stopControl.ts` | the pure decision function behind the Stop control: render or not, the label, and which POST it sends |
 | `client/src/components/sessions/SessionStopControl.tsx` | the Stop control itself, rendered by the expanded row and the chat drawer's sidecar |
 | `client/src/hooks/useStopSession.ts` | POSTs the stop, same bearer-token pattern as `useSpawn`, read-only 403 included (`READ_ONLY_TEXT`, no token prompt) |
 | `serveSessions` wiring | calls `adoptLaunched(ids)` then `listLaunching()` before every `/api/sessions` response, so `launching` rides the poll the client already makes |
-| `serveHealth` wiring | publishes `spawnAvailable` (`probeSpawn`) and `spawnMaxPermission` (`config.spawnMaxPermission`) |
-| `client/src/components/SpawnPanel.tsx` | the launch form, as a **modal** (below) — project picker, prompt textarea with the reply composer's own `MicButton` in the foot, name on its own line, then model/effort/permission as a triplet (model and effort start at the per-device Settings defaults, `spawnDefaultModel`/`spawnDefaultEffort` in `client/src/lib/settings.ts`, where `''` still means "send no flag and let the CLI decide"), and remote control and Close when done as the board's pill switch; own lazy chunk, cyan chrome (a compose surface opened on purpose, not a hold waiting on you) |
+| `serveHealth` wiring | publishes `spawnAvailable` (`probeSpawn`), `desktopAvailable` (`desktopAvailable()`), `launchSurfaceDefault` (the [Shared setting](settings.md)) and `spawnMaxPermission` (`config.spawnMaxPermission`) |
+| `client/src/components/SpawnPanel.tsx` | the launch form, as a **modal** (below) — project picker, prompt textarea with the reply composer's own `MicButton` in the foot, name on its own line, then model/effort/permission as a triplet (model and effort start at the per-device Settings defaults, `spawnDefaultModel`/`spawnDefaultEffort` in `client/src/lib/settings.ts`, where `''` still means "send no flag and let the CLI decide"), and remote control and Close when done as the board's pill switch; a **Dashboard | Desktop** pick at the top when the host offers both (`offeredSurfaces`/`initialSurface`, `client/src/lib/launchSurface.ts`), which greys the fields a desktop launch ignores under the note `The desktop app's own defaults apply to these.`; own lazy chunk, cyan chrome (a compose surface opened on purpose, not a hold waiting on you) |
 | Management › Git's Sync button | a second launcher (`client/src/hooks/useGitSync.ts`): `useSpawn().launch` with no sheet, the body built by `syncRequest` (`client/src/lib/gitSync.ts`) from the Settings › Git Sync model and effort, the host's `SYNC_PERMISSION_MODE` (`HealthResponse.syncPermissionMode`, clamped to the ceiling) and Remote answers' state, always `oneShot`; `docs/subsystems/git-stats.md` §Client |
+| `client/src/lib/spawnResponse.ts` | `parseSpawnResponse` — reads a 200 body into the `SpawnResponse` union, or `null`. A `{surface:'desktop'}` body has no id and is still a success; a bare `{sessionId}` (an older server) reads as `dashboard` |
+| `client/src/lib/launchSurface.ts` | `offeredSurfaces` (a surface is offered only on a literal `true` from `/api/health`), `initialSurface`, `canOpenLaunchForm` (the two `New session` entry points hide when nothing is offered), and the fixed copy for the desktop success/failure/hand-over lines and the Settings hint |
+| `.spawn-done` line (`client/src/components/SessionsView.tsx`) | the line over the session list after a launch-form desktop launch, `Opened in the desktop app — the row appears in a few seconds.`; there is no phantom row to show, since a desktop launch writes nothing to the launch store |
 | `client/src/hooks/useSpawn.ts` | POSTs the request through `postWrite` (`client/src/lib/postWrite.ts`), the same bearer-token pattern as `useRemoteAnswer`'s toggle; a 403 `read-only from this network` (`refusalKind`, `client/src/lib/writeRefusal.ts`) sets `readOnly` and `READ_ONLY_TEXT` as the error instead of `needsToken` |
 | `client/src/lib/spawnOptions.ts` | the client's copy of `MODELS`/`EFFORTS`/`PERMISSION_MODES` (duplicated, not imported — the FE/BE boundary is `shared/types.ts` alone — kept honest by `test/spawn-options.test.ts` asserting byte-for-byte equality against the server's arrays) and `allowedPermissionModes` |
 | The Board card's `+ New session` | rendered only when `spawnAvailable` is true on the one `/api/health` poll `SessionsView` already owns |
 | each view's phantom row | renders each `launching` entry at the head of its list — project, truncated prompt, `starting…` or (for `failed`) the error — and disappears on its own once the real row adopts the id; never interactive |
 | `sessionSurface` (`server/lib/scan.ts`) | maps the transcript's `entrypoint` → `Session.surface`; `sdk-cli` or `claude-agents-dashboard` ⇒ `dashboard`, everything else ⇒ `local` |
 | `client/src/components/ResumePanel.tsx` | the resume composer pinned in an ended dashboard session's chat drawer — textarea + mic + *resume session*, POSTing `useSpawn().launch({prompt, resume: id})`; Enter sends and Tab takes the last turn's suggested reply (`ComposerSuggestion.tsx`, see [chat](chat.md)) |
-| `client/src/lib/resume.ts` | `resumeEligible` — the pure gate deciding when the drawer offers that composer (dashboard surface, nothing pending, turn over, spawn available, no `stopState` or `processLive`); `stillRunningNote` and `resumeErrorText` for the [still-running note](#processlive-the-live-process-this-server-cannot-signal); unit-tested like every other client lib |
+| `client/src/lib/resume.ts` | `resumeEligible` — the pure gate deciding when the drawer offers that composer (dashboard surface, not `desktopOwned`, nothing pending, turn over, spawn available, no `stopState` or `processLive`); `handOverState` and `handOverErrorText` for the drawer's [hand-over button](chat.md); `stillRunningNote` and `resumeErrorText` for the [still-running note](#processlive-the-live-process-this-server-cannot-signal); unit-tested like every other client lib |
 | `client/src/lib/surface.ts` | the pill's label + tooltip, one copy shared by the session views (`sessions/atoms.tsx`) and the `ChatDrawer` header |
 
 ## Endpoints
 
 | Method | Path | Codes |
 |---|---|---|
-| `POST` | `/api/spawn` | Body is `SpawnRequest` (`project`, `prompt`, optional `name`/`model`/`effort`/`permissionMode`/`remoteControl`/`oneShot`/`resume`). 200 `{sessionId}` (`SpawnResponse`); 400 malformed body / unknown project / empty or oversized prompt / bad or unknown `resume` id / non-dashboard resume target / resume target with no recorded cwd; 403 refused by the write gate (`bad token`, or `read-only from this network`); 404 remote answers off *or* feature off; 409 resume of a still-running or already-resuming session; 429 `MAX_LAUNCHING` launches already in flight; 500 spawn threw |
+| `POST` | `/api/spawn` | Body is `SpawnRequest` (`project`, `prompt`, optional `name`/`model`/`effort`/`permissionMode`/`remoteControl`/`oneShot`/`resume`/`surface`). 200 `{surface:'dashboard', sessionId}` or `{surface:'desktop'}` (`SpawnResponse`); 400 malformed body / `bad surface` / unknown project / empty or oversized prompt / bad or unknown `resume` id / non-dashboard resume target / resume target with no recorded cwd (headless resume only); 403 refused by the write gate (`bad token`, or `read-only from this network`); 404 remote answers off *or* (headless) feature off; 409 resume of a still-running, already-resuming or desktop-held session (`session is still running`, `already resuming`, `session is open in the desktop app`); 429 `MAX_LAUNCHING` launches already in flight (headless) or the desktop rail full; 500 spawn threw, or (desktop) `open failed`; 501 `desktop app unavailable` |
 | `POST` | `/api/spawn/:id/stop` | 200 `{stopped: true}` for a still-`launching` entry, or `{stopping: true}` if that id has since become a running session (it delegates to `stopSession`); 400 bad id shape; 403 refused by the write gate (`bad token`, or `read-only from this network`); 404 remote answers off *or* no live launch for that id |
 | `POST` | `/api/sessions/:id/stop` | 200 `{stopping: true}` (graceful) or `{stopped: true}` (`{"force": true}`); 400 bad id shape, bad path encoding, *or* a present-but-unparseable body — an absent/empty body is normal; 403 refused by the write gate (`bad token`, or `read-only from this network`); 404 remote answers off *or* no live session for that id; 405 + `Allow: POST` for any other method |
 
@@ -618,8 +662,9 @@ uses — this machine and a trusted tailnet pass with no token, anyone else need
 `ANSWER_TOKEN` (read-only when none is set) — and behind the same remote-answer toggle (below).
 
 **The concurrency cap.** `MAX_LAUNCHING` (4, in `server/lib/spawn.ts` beside the other
-caps) is checked before the request body is even read, the same pre-buffer refusal
-`serveTranscribe` makes with `isTranscribing()`. It is **not** a security boundary — a
+caps) is the headless rail, checked once the request is parsed and before any project or transcript work (it used to run before the body was read; the
+`surface` in the body now decides which rail applies, so the body comes first). The desktop surface has its own rail,
+[below](#launching-in-the-desktop-app). It is **not** a security boundary — a
 caller with launch rights can simply prompt one session into spawning more — it is the
 only rail against an *accident*: a retry loop, a flaky phone connection, a double-tap
 that beats React's re-render. Each launch is a real `claude` process on the account's real
@@ -638,19 +683,21 @@ What it counts is narrow on both axes, and both are deliberate:
   succeed, because each has left the store before the next arrives. Capping live sessions
   would need the session registry this store deliberately is not.
 
-`serveSpawn`'s check order: is the switch on (`getState`) → is the feature configured
-(`probeSpawn`) → who's asking (`refuseWrite`) → is anything already in flight
-(`MAX_LAUNCHING`) → is the request usable (`parseSpawnRequest`, pure — it also decides
-fresh-vs-resume) → then the filesystem step for the chosen shape: `resolveProject` for a
-fresh launch, the transcript hunt plus liveness checks for a resume. Parse moving ahead
-of `resolveProject` is deliberate (cheapest first), so a fresh request with both a bad
-prompt and an unknown project now reports the prompt. Note that the probe runs *before* the token check,
-which is the opposite of `serveTranscribe`'s documented order — and that divergence is
-harmless rather than principled, so **neither one should be "corrected" into matching the
-other**: `GET /api/health` already publishes `spawnAvailable` unauthenticated and already
-calls the same memoised `probeSpawn`, so probe-first here reveals nothing that route
-doesn't and spawns no extra process. Both handlers carry a comment saying so. From the
-token check onward the order does earn itself, cheapest and least-revealing first.
+`serveSpawn`'s check order: is the switch on (`getState`) → who's asking (`refuseWrite`) → read the body → is the request usable (`parseSpawnRequest`,
+pure — it decides fresh-vs-resume *and* headless-vs-desktop) → then, per surface:
+
+- **Headless:** is the feature configured (`probeSpawn`, 404 `spawn unavailable`) → is anything already in flight (`MAX_LAUNCHING`, 429) → the filesystem
+  step for the chosen shape: `resolveSpawnProject` (`resolveProject`) for a fresh launch, `resumeTarget` (the transcript hunt plus liveness checks) for a
+  resume.
+- **Desktop:** `spawnDesktop` — `desktopAvailable` (501) → `resolveSpawnProject` or `resumeTarget` → the rail slot (`reserveDesktopLaunch`: 409 / 429) →
+  `open`.
+
+The write gate used to come *after* the probe, the opposite of `serveTranscribe`'s order; it now comes first, because which probe applies (and which rail)
+is in the body. That moves precedence for a headless request, not its codes: a malformed body is 400 where 404 or 429 used to win, and an unauthenticated
+caller gets 403 where 404 `spawn unavailable` used to answer. It reveals nothing: `GET /api/health` publishes `spawnAvailable` and `desktopAvailable`
+unauthenticated from the same memoised probes, and the 64KB body cap bounds the buffering. Both handlers carry a comment saying so; read both before
+reordering either. Parse still runs before any filesystem work (cheapest first), so a fresh request with both a bad prompt and an unknown project reports
+the prompt.
 
 Only the prompt can fail the request outright — non-blank after trimming, and at most
 `PROMPT_CAP` (4000 characters, the same cap `messages.ts`'s `TEXT_CAP` sets for a reply).

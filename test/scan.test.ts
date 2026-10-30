@@ -1080,6 +1080,45 @@ export function run(): number {
     })) p++; else f++;
   }
 
+  /* ----------------------------------------------------------- desktopOwned */
+
+  {
+    const DO_NOW = 1_700_000_000_000;
+    const doRoot = () => makeRoot([
+      { dirName: '-a-s1', id: 's1', mtimeMs: DO_NOW - 60 * 1000, records: [metaRec('/a/s1', 'main'), entryRec('claude-agents-dashboard')] },
+      { dirName: '-a-app', id: 'app', mtimeMs: DO_NOW - 90 * 1000, records: [metaRec('/a/app', 'main'), entryRec('claude-desktop')] }
+    ]);
+    const doScan = (extra: Record<string, unknown>) =>
+      scan.scanSessions({ maxSessions: 5, activeWindowMin: 5, lookbackHours: 24 }, { root: doRoot(), now: DO_NOW, liveCwds: null, ...extra } as any);
+    const doRow = (out: ReturnType<typeof doScan>, id: string) => out.sessions.find(s => s.id === id)!;
+
+    if (test('desktopOwned: a dashboard row whose id is in desktopOwnedIds carries true', () => {
+      const row = doRow(doScan({ desktopOwnedIds: new Set(['s1']) }), 's1');
+      assert.strictEqual(row.surface, 'dashboard');
+      assert.strictEqual(row.desktopOwned, true);
+    })) p++; else f++;
+
+    if (test('desktopOwned: absent for an empty set, an omitted set and a null set', () => {
+      for (const extra of [{ desktopOwnedIds: new Set<string>() }, {}, { desktopOwnedIds: null }]) {
+        assert.strictEqual('desktopOwned' in doRow(doScan(extra), 's1'), false);
+      }
+    })) p++; else f++;
+
+    if (test('desktopOwned: a claude-desktop row needs no flag even when its id is in the set', () => {
+      const row = doRow(doScan({ desktopOwnedIds: new Set(['app', 's1']) }), 'app');
+      assert.strictEqual(row.surface, 'local');
+      assert.strictEqual('desktopOwned' in row, false);
+    })) p++; else f++;
+
+    if (test('desktopOwned: sessionFromRef (the row-by-id path) honours the same set', () => {
+      const root = doRoot();
+      const ref = scan.findTranscript(root, 's1')!;
+      const base = { now: DO_NOW, activeWindowMin: 5, liveCwds: null, lessons: null };
+      assert.strictEqual(scan.sessionFromRef(ref, { ...base, desktopOwnedIds: new Set(['s1']) })!.desktopOwned, true);
+      assert.strictEqual('desktopOwned' in scan.sessionFromRef(ref, base)!, false);
+    })) p++; else f++;
+  }
+
   /* --------------------------------------------------------- lastMessageMs */
 
   if (test('lastMessageMs reports the newest conversational timestamp in ms', () => {

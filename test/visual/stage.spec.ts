@@ -1,6 +1,8 @@
 /** Proves `stage` reaches the state every shot depends on, and that the harness fails a case on a mock-api refusal. */
 import { SECTIONS } from '../../client/src/lib/sections.js';
 
+import { DESKTOP_DEFAULTS_NOTE } from '../../client/src/lib/launchSurface.js';
+
 import { EPOCH } from './fixtures/epoch.js';
 import { FIXTURE_FIRST_MESSAGE, FIXTURE_SESSION_ID } from './fixtures/index.js';
 import { SESSION_IDS, sessions } from './fixtures/sessions.js';
@@ -97,6 +99,87 @@ test('the drawer has no stop control for a session this dashboard did not spawn'
   await expect(drawer).toBeVisible();
   await expect(drawer.locator('.stop-ctl')).toHaveCount(0);
 });
+
+// The idle fixture session, made a headless one with a name long enough to crowd the head: the case the hand-over button's wrap once overflowed in (the nowrap
+// button spilled left over the pill and the title at 375). The title and the pill must give way instead, and the head's items must not overlap.
+const handedOverSessions = {
+  ...sessions,
+  sessions: sessions.sessions.map(s => s.id === SESSION_IDS.idle
+    ? { ...s, surface: 'dashboard' as const, sessionName: 'Orders rate limiting with sliding window buckets and a long tail' }
+    : s)
+};
+
+for (const width of [1280, 375]) {
+  test(`the drawer head holds the hand-over button without overflow or overlap at ${width}`, async ({ page }) => {
+    await stage(page, { ...BASE, width, query: '?session=' + SESSION_IDS.idle, fixtures: { '/api/sessions': handedOverSessions } });
+    const head = page.locator('aside.chat .chat-head');
+    const button = head.locator('.chat-desktop');
+    await expect(button).toHaveText('Open in desktop app');
+    await expect(button).toBeEnabled();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
+
+    const boxes = await page.evaluate(() => {
+      const rect = (sel: string) => {
+        const r = document.querySelector(sel)!.getBoundingClientRect();
+        return { left: r.left, right: r.right };
+      };
+      return {
+        head: rect('aside.chat .chat-head'),
+        items: ['.chat-title', '.proj-pill', '.chat-desktop-wrap', '.chat-x'].map(sel => rect('aside.chat .chat-head ' + sel)),
+        button: rect('aside.chat .chat-desktop'),
+        wrap: rect('aside.chat .chat-desktop-wrap')
+      };
+    });
+    // The wrap is exactly the button's width: the button sits inside it, and no note sets the wrap's size.
+    expect(boxes.button.left).toBeGreaterThanOrEqual(boxes.wrap.left - 0.5);
+    expect(boxes.button.right).toBeLessThanOrEqual(boxes.wrap.right + 0.5);
+    for (let i = 0; i < boxes.items.length - 1; i++) {
+      expect(boxes.items[i].right, `head item ${i} runs into item ${i + 1}`).toBeLessThanOrEqual(boxes.items[i + 1].left + 0.5);
+    }
+    expect(boxes.items[boxes.items.length - 1].right).toBeLessThanOrEqual(boxes.head.right + 0.5);
+    expect(mockApiFailures(page)).toEqual([]);
+  });
+}
+
+// A session mid-turn gets the button disabled with its note: the note must wrap to the button's width, not push the head wider.
+test('the hand-over note on a working session stays inside the head at 375', async ({ page }) => {
+  await stage(page, { ...BASE, width: 375, query: '?session=' + FIXTURE_SESSION_ID });
+  const head = page.locator('aside.chat .chat-head');
+  await expect(head.locator('.chat-desktop')).toBeDisabled();
+  await expect(head.locator('.chat-desktop-note')).toHaveText('Stop it first');
+  const widths = await page.evaluate(() => ({
+    wrap: document.querySelector('aside.chat .chat-desktop-wrap')!.getBoundingClientRect().width,
+    button: document.querySelector('aside.chat .chat-desktop')!.getBoundingClientRect().width
+  }));
+  expect(widths.wrap).toBeCloseTo(widths.button, 0);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(375);
+});
+
+// The launch form's target picker. 1280 opens it from the board's `+ New session`, 375 from the strip's `+`.
+for (const { width, open } of [{ width: 1280, open: '.newbtn' }, { width: 375, open: '.s-plus' }]) {
+  test(`the launch form offers Dashboard | Desktop and greys out the ignored fields at ${width}`, async ({ page }) => {
+    await stage(page, { ...BASE, width });
+    await page.locator(open).click();
+    const form = page.locator('.spawn');
+    await expect(form).toBeVisible();
+    const name = form.locator('.sp-field .qp-other');
+    await expect(form.locator('.sp-surface button')).toHaveText(['Dashboard', 'Desktop']);
+    await expect(form.locator('.sp-surface button.on')).toHaveText('Dashboard');
+    await expect(name).toBeEnabled();
+    await expect(form.getByText('SPAWN_MAX_PERMISSION')).toHaveCount(1);
+
+    await form.locator('.sp-surface button', { hasText: 'Desktop' }).click();
+    await expect(form.locator('.sp-surface button.on')).toHaveText('Desktop');
+    await expect(name).toBeDisabled();
+    expect(await name.evaluate(el => getComputedStyle(el).opacity)).toBe('0.55');
+    await expect(form.locator('.sp-note', { hasText: DESKTOP_DEFAULTS_NOTE })).toBeVisible();
+    await expect(form.getByText('SPAWN_MAX_PERMISSION')).toHaveCount(0);
+
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
+    expect(await form.evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
+    expect(mockApiFailures(page)).toEqual([]);
+  });
+}
 
 for (const { id, label } of SECTIONS) {
   test(`stages the ${id} section`, async ({ page }) => {

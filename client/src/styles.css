@@ -568,6 +568,11 @@ code,kbd,samp,pre{font-family:inherit}
    table cell, a list row and a tile. */
 .sessions{position:relative;display:grid;grid-template-columns:1fr;gap:16px;align-items:start}
 .s-main,.s-aside,.s-body{display:flex;flex-direction:column;gap:16px;min-width:0}
+/* the line a desktop launch leaves over the list (SessionsView): cyan like the rest of the launch thread, dismissible, clears itself after 8s */
+.spawn-done{display:flex;align-items:center;gap:12px;min-width:0;padding:10px 12px 10px 16px;background:var(--strip);border-radius:12px;border-left:3px solid var(--cyan);font-size:13px;line-height:1.45;color:var(--ink)}
+.spawn-done>span{flex:1;min-width:0}
+.spawn-done-x{width:28px;height:28px;flex:none;display:grid;place-items:center;font-family:var(--font);font-size:12px;line-height:1;color:var(--ink2);background:none;border:0;border-radius:8px;cursor:pointer;transition:color .15s}
+.spawn-done-x:hover{color:var(--ink)}
 /* the aside is first in the DOM (it reads first on a phone and to a screen
    reader — the gauges before the list, as the plate did) and second on a
    desktop, where it takes the narrow column */
@@ -1625,6 +1630,13 @@ code,kbd,samp,pre{font-family:inherit}
 .chat-head .proj-pill{flex-shrink:1;min-width:0;max-width:38%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .chat-x{width:32px;height:32px;flex:none;display:grid;place-items:center;font-family:var(--font);font-size:12px;line-height:1;color:var(--ink2);background:var(--strip);border:1px solid var(--hairline2);border-radius:12px;cursor:pointer;transition:color .15s,border-color .15s}
 .chat-x:hover{color:var(--ink);border-color:var(--ink3)}
+/* the hand-over control: the button, with its status line stacked under it. The wrap never shrinks (the nowrap button would spill out of it onto the pill and
+   title); the title and the pill give way instead. `contain:inline-size` keeps the note out of the wrap's width, so the button sets it and the note wraps to it. */
+.chat-desktop-wrap{display:flex;flex-direction:column;align-items:flex-end;gap:2px;flex:none}
+.chat-desktop{flex:none;height:32px;padding:0 12px;font-family:var(--font);font-size:12px;white-space:nowrap;color:var(--ink2);background:var(--strip);border:1px solid var(--hairline2);border-radius:12px;cursor:pointer;transition:color .15s,border-color .15s}
+.chat-desktop:hover:not(:disabled){color:var(--ink);border-color:var(--ink3)}
+.chat-desktop:disabled{cursor:default;opacity:.6}
+.chat-desktop-note{align-self:stretch;contain:inline-size;font-size:11px;line-height:1.3;text-align:right;color:var(--ink3);overflow-wrap:anywhere}
 
 /* the sidecar: facts left, transcript right */
 .chat-split{display:grid;grid-template-columns:290px minmax(0,1fr);flex:1;min-height:0}
@@ -1904,11 +1916,14 @@ button.qp-min:hover,.qp-minrow:hover .qp-min,.qp-minrow:hover .qp-hint{color:var
 .sp-select{position:relative;display:inline-flex;width:100%}
 .sp-select select{appearance:none;-webkit-appearance:none;width:100%;height:36px;padding:0 34px 0 12px;font-family:var(--font);font-size:13px;font-weight:500;color:var(--ink);background:var(--strip);border:1px solid var(--hairline2);border-radius:12px;cursor:pointer;transition:border-color .15s}
 .sp-select select:hover:not(:disabled){border-color:var(--ink3)}
-.sp-select select:disabled{cursor:default;opacity:.55}
+.sp-select select:disabled,.spawn .sp-field .qp-other:disabled{cursor:default;opacity:.55}
 .sp-select::after{content:"";position:absolute;right:15px;top:50%;width:6px;height:6px;border-right:1.5px solid var(--ink2);border-bottom:1.5px solid var(--ink2);transform:translateY(-70%) rotate(45deg);pointer-events:none}
 .sp-count{align-self:flex-end;font-size:11px;color:var(--ink3);font-variant-numeric:tabular-nums}
 .sp-note{font-size:12px;line-height:1.45;color:var(--ink3)}
 .sp-error{color:var(--red)}
+/* the Dashboard | Desktop pick is Settings' own segmented control (`.set-seg`): full width below `md`, so both targets stay a thumb wide at 375px; this
+   only keeps it inside the sheet */
+.sp-surface{max-width:100%}
 /* the remote-control row is a Settings row in miniature — name and reason on
    the left, the board's pill switch on the right (DESIGN.md §8.2's boolean, so
    this modal introduces no second shape for on/off) */
@@ -2075,6 +2090,7 @@ body.pj-dragging,body.pj-dragging *{cursor:grabbing!important;user-select:none}
 .chat-title{font-size:15px}
 /* the only exit left once the scrim is gone — give it a thumb, not a pointer */
 .chat-x{width:40px;height:40px}
+.chat-desktop{height:40px}
 /* The sidecar lies down into a band over the transcript: the gauge, then the
    facts as a wrapping meta line — nothing is dropped, they just stop being a
    column — then the filter. */
@@ -2193,6 +2209,7 @@ body.pj-dragging,body.pj-dragging *{cursor:grabbing!important;user-select:none}
   .chat-head{padding:20px 24px;gap:10px}
   .chat-title{font-size:17px}
   .chat-x{width:32px;height:32px}
+  .chat-desktop{height:32px}
   /* rebuild the two-pane sidecar: fixed rail beside the fluid transcript,
      one row — not the phone's stacked band-over-transcript rows */
   .chat-split{grid-template-columns:290px minmax(0,1fr);grid-template-rows:none}

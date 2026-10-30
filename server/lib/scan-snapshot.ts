@@ -4,7 +4,7 @@
  * not in the router: a lib module importing `api.ts` would close a cycle through every route the router pulls in.
  */
 
-import { archivedSessionIds } from './archived.js';
+import { archivedSessionIds, desktopLiveSessionIds } from './archived.js';
 import type { Config } from './config.js';
 import { messageSessionIds } from './messages.js';
 import { pendingSessionIds, sweepDecided as sweepDecidedPending } from './pending.js';
@@ -65,6 +65,7 @@ export function scanSnapshot(config: Config, projects?: ReadonlySet<string> | nu
     messageIds: messageSessionIds(),
     permissionWaits: permissionWaits(),
     archivedIds: archivedSessionIds(),
+    desktopOwnedIds: desktopLiveSessionIds(),
     // stopStates is the same injection again, and the only one that is not a
     // hint about a wait: it says which rows this server can actually signal,
     // so the Stop control is offered only where it would work.

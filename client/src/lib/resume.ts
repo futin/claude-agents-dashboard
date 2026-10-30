@@ -1,3 +1,4 @@
+import { DESKTOP_FAILED_TEXT } from './launchSurface';
 import type { Session } from '../../../shared/types';
 
 /**
@@ -22,21 +23,49 @@ import type { Session } from '../../../shared/types';
  *  - the turn is over (`idle`), or was cut short (`incomplete`) — never
  *    `working` (resuming would double-run it) or `question` (alive, waiting).
  *
+ *  - not `desktopOwned`: the desktop app holds the session, and `claude -p --resume` beside it would put a second writer on its transcript.
+ *
  * The server re-checks liveness on POST (409) — the launch store for its own
  * children, a `ps` argv scan for everyone else's — so this gate is UX, not the
  * safety boundary.
  */
 export function resumeEligible(
-  session: Pick<Session, 'surface' | 'status' | 'stopState' | 'processLive'>,
+  session: Pick<Session, 'surface' | 'status' | 'stopState' | 'processLive' | 'desktopOwned'>,
   holds: { question: boolean; plan: boolean; message: boolean },
   spawnAvailable: boolean | undefined
 ): boolean {
   if (spawnAvailable !== true) return false;
   if (session.surface !== 'dashboard') return false;
+  if (session.desktopOwned) return false;
   if (holds.question || holds.plan || holds.message) return false;
   if (session.stopState) return false;
   if (session.processLive) return false;
   return session.status === 'idle' || session.status === 'incomplete';
+}
+
+/**
+ * What the drawer's "Open in desktop app" control does for this session. `hidden` unless the host can open the app (strict `true`, like `resumeEligible`)
+ * and the session is a headless `dashboard` one — terminal and cloud sessions have no `claude -p` transcript to hand over. `owned` once the app already
+ * holds it. Otherwise the same liveness facts that keep the resume composer away say `stop-first`, and so does every status but the two that mean the
+ * turn is over: handing over a `working` or `question` session would open a second writer on a transcript still being written. The server re-checks
+ * (409) — this is UX, not the safety boundary.
+ */
+export function handOverState(
+  session: Pick<Session, 'surface' | 'status' | 'stopState' | 'processLive' | 'desktopOwned'>,
+  holds: { question: boolean; plan: boolean; message: boolean },
+  desktopAvailable: boolean | undefined
+): 'hidden' | 'offer' | 'stop-first' | 'owned' {
+  if (desktopAvailable !== true) return 'hidden';
+  if (session.surface !== 'dashboard') return 'hidden';
+  if (session.desktopOwned) return 'owned';
+  if (holds.question || holds.plan || holds.message) return 'stop-first';
+  if (session.stopState || session.processLive) return 'stop-first';
+  return session.status === 'idle' || session.status === 'incomplete' ? 'offer' : 'stop-first';
+}
+
+/** A hand-over's failure as the line beside the button: the 500 `open failed` becomes the fixed copy, every other server text (409s) passes through. */
+export function handOverErrorText(error: string): string {
+  return error === 'open failed' ? DESKTOP_FAILED_TEXT : error;
 }
 
 /**
