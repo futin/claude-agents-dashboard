@@ -16,6 +16,8 @@ import { useSpawn } from './useSpawn';
 export interface GitSyncControl {
   /** The host can spawn (`HealthResponse.spawnAvailable`); no button draws until it says so. */
   available: boolean;
+  /** The host can open the desktop app (`HealthResponse.desktopAvailable`); the drawer a sync's chat opens gates its hand-over button on it. */
+  desktopAvailable: boolean;
   /** The server wants an Answer token on writes (`HealthResponse.tokenRequired`); undefined until health answers or on an older server. The chip's Fetch all key reads it. */
   tokenRequired: boolean | undefined;
   /** This browser's write access (`HealthResponse.writeAccess`); `'none'` disables the Fetch all key. Undefined as `tokenRequired` is. */
@@ -88,6 +90,7 @@ export function useGitSync(onEnded: () => void): GitSyncControl {
   }, [pending]);
 
   const available = remote.state?.spawnAvailable === true;
+  const desktopAvailable = remote.state?.desktopAvailable === true;
   const syncPermissionMode = remote.state?.syncPermissionMode;
   const remoteAnswer = remote.state?.remoteAnswer;
 
@@ -114,6 +117,7 @@ export function useGitSync(onEnded: () => void): GitSyncControl {
 
   return {
     available,
+    desktopAvailable,
     tokenRequired: remote.state?.tokenRequired,
     writeAccess: remote.state?.writeAccess,
     phaseFor,

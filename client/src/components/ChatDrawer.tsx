@@ -142,11 +142,13 @@ export default function ChatDrawer({ session, onClose, spawnAvailable, desktopAv
   const pullRequest = usePullRequest(session.id);
   const message = usePendingMessage(session.id);
   const holds = { question: !!question.pending, plan: !!plan.pending, message: !!message.pending };
-  const canResume = resumeEligible(session, holds, spawnAvailable);
   const showStillRunning = stillRunningNote(session, holds);
   const handOver = handOverState(session, holds, desktopAvailable);
   const handOverSpawn = useSpawn();
   const [handedOver, setHandedOver] = useState(false);
+  // Gated here, not in `resumeEligible`: a successful hand-over is this drawer's own state, and the row only turns `desktopOwned` once the app writes its
+  // registry record (seconds later). Until then the resume composer would be a second writer one tap away.
+  const canResume = resumeEligible(session, holds, spawnAvailable) && !handedOver;
   async function onHandOver() {
     setHandedOver(false);
     // `prompt` stays a required string in SpawnRequest; the server ignores it on a hand-over.

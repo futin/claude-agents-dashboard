@@ -24,6 +24,8 @@ export interface SpawnControl {
    * other hook mounted beside this one.
    */
   setToken: (t: string) => void;
+  /** Drops the shown `error` — for a caller whose own state change makes it stale (the launch form flipping its target). */
+  clearError: () => void;
 }
 
 /**
@@ -68,5 +70,7 @@ export function useSpawn(): SpawnControl {
     }
   }, [pending, token]);
 
-  return { launch, pending, error, needsToken, readOnly, setToken };
+  const clearError = useCallback(() => setError(null), []);
+
+  return { launch, pending, error, needsToken, readOnly, setToken, clearError };
 }

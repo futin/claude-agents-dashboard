@@ -67,7 +67,7 @@ interface Props {
  * pin re-fetches the index and selects the project it just pinned.
  */
 export default function SpawnPanel({ onClose, onLaunched, spawnMaxPermission, spawnAvailable, desktopAvailable, launchSurfaceDefault }: Props) {
-  const { launch, pending, error, needsToken, setToken } = useSpawn();
+  const { launch, pending, error, needsToken, setToken, clearError } = useSpawn();
   const [indexKey, setIndexKey] = useState(0);
   const { index, loading } = useConfigsIndex(indexKey);
   const { settings } = useSettings();
@@ -184,7 +184,7 @@ export default function SpawnPanel({ onClose, onLaunched, spawnMaxPermission, sp
             <div className="sp-field">
               <span className="sp-label">open in</span>
               <span className="set-seg sp-surface" role="group" aria-label="Open in">
-                <button type="button" className={desktop ? '' : 'on'} aria-pressed={!desktop} disabled={pending} onClick={() => setPicked('dashboard')}>
+                <button type="button" className={desktop ? '' : 'on'} aria-pressed={!desktop} disabled={pending} onClick={() => { setPicked('dashboard'); clearError(); }}>
                   Dashboard
                 </button>
                 <button type="button" className={desktop ? 'on' : ''} aria-pressed={desktop} disabled={pending} onClick={() => setPicked('desktop')}>
@@ -296,7 +296,8 @@ export default function SpawnPanel({ onClose, onLaunched, spawnMaxPermission, sp
             </label>
           </div>
 
-          {ceilingLimited && (
+          {/* the ceiling clamps a headless launch; the desktop app applies its own permission mode */}
+          {ceilingLimited && !desktop && (
             <span className="sp-note">
               host ceiling · {ceilingLabel} or below (SPAWN_MAX_PERMISSION)
             </span>

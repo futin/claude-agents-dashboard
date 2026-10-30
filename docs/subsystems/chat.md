@@ -83,8 +83,12 @@ the composer is replaced by a `still running` note on the same `qpanel` classes 
 question/plan/reply, `stopState`, `processLive`, or any status but `idle`/`incomplete`) and `owned` (`Session.desktopOwned`). Only `offer` enables it. A
 `role="status"` line (`.chat-desktop-note`) sits beside it: `Stop it first` or `Already open in the desktop app` for the two disabled states,
 `Opened in the desktop app.` after a 200, `Couldn't open the desktop app.` for the 500 `open failed` (`handOverErrorText`), and any other refusal as the
-server worded it (the 409s). It is UX, not the boundary: the server re-checks and 409s. The button is separate from the resume composer on purpose; the
-two are never both live, since `resumeEligible` is false for a `desktopOwned` session.
+server worded it (the 409s). It is UX, not the boundary: the server re-checks and 409s. The button is separate from the resume composer on purpose. For an
+idle, unowned `dashboard` row both show, so the user picks the surface; once the session is `desktopOwned` neither is offered (`resumeEligible` is false, and
+`handOverState` says `owned`). The composer is also withdrawn the moment a hand-over succeeds, before the row turns `desktopOwned` (the app writes its
+registry record seconds later), so a second writer is never one tap away. The Sessions, Git and Routines drawers all pass `desktopAvailable` from the health
+poll. At phone width the button's wrap never shrinks (`.chat-desktop-wrap{flex:none}`, its note wraps to the button's width through `contain:inline-size`);
+the title and the project pill give way.
 
 **A pinned panel floats over the transcript; it does not push it.** The transcript body and a
 single `.chat-pinned` layer are siblings in `.chat-stack`, a relative box that fills the
