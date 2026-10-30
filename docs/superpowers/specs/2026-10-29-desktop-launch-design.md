@@ -122,7 +122,7 @@ default**.
 10. **The response is a discriminated union**: `SpawnResponse` becomes `{ surface: 'dashboard'; sessionId: string } | { surface: 'desktop' }`
     (`shared/types.ts`). An old client reading `sessionId` still works for headless. `useSpawn.launch` today resolves `sessionId ?? null` and every
     caller reads `null` as failure (`client/src/hooks/useSpawn.ts`), so its contract changes to return the union (or `null` on failure), and the callers
-    branch on `surface`; the ones typed against the old `{sessionId}` (`client/src/components/ResumePanel.tsx`, `client/src/lib/gitSync.ts`) narrow on it.
+    branch on `surface`; the ones typed against the old `{sessionId}` (`client/src/components/ResumePanel.tsx`, `client/src/hooks/useGitSync.ts`) narrow on it.
     Test case: a desktop 200 → decision 12's launch-form line, never `Launch failed`.
 11. **A handed-over session is desktop-owned.** Two cases, split by what the transcript already says.
     - **Continued in the app.** The scanner reports the **newest** `entrypoint` in the 256 KB tail (`readTranscript`, `server/lib/transcript.ts`, a
