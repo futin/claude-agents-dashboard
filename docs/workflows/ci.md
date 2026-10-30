@@ -85,7 +85,8 @@ futin/backlog-manager#279).
 ## Releases
 
 `.github/workflows/release.yml` is a thin caller of release-kit's reusable `release.yml` (`@v1`, with `kit-ref: v1` kept equal to that ref) in
-`mode: rollup`, run each night at 04:00 UTC (`schedule`, `0 4 * * *`) and on `workflow_dispatch`. A merge into `main` releases nothing by itself. Designs:
+`mode: rollup`, run each night at 04:17 UTC (`schedule`, `17 4 * * *`; off the hour, since GitHub delays and drops scheduled runs under top-of-hour load) and on
+`workflow_dispatch`. A merge into `main` releases nothing by itself. Designs:
 `docs/superpowers/specs/2026-10-15-release-pipeline-design.md` §Phase C, and `docs/superpowers/specs/2026-10-29-batched-releases-design.md` for the
 nightly rollup. It needs both `contents: write` (the tag push and the Release) and `pull-requests: read` — setting `contents` alone drops `pull-requests`
 to none and the PR lookup then fails on a private repo. The group is `release` with `cancel-in-progress: false`, so a dispatch and the nightly run never tag
