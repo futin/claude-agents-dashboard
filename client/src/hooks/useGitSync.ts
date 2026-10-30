@@ -96,8 +96,10 @@ export function useGitSync(onEnded: () => void): GitSyncControl {
     setNote(null);
     startedName.current = repo.name;
     setStarting(repo.toplevel);
-    void launch(syncRequest(repo, settings, { syncPermissionMode, remoteAnswer })).then(sessionId => {
-      if (!sessionId) return;
+    void launch(syncRequest(repo, settings, { syncPermissionMode, remoteAnswer })).then(result => {
+      // A sync request sends no `surface`, so only a headless answer can come back; it alone carries the id the run is tracked by.
+      if (result?.surface !== 'dashboard') return;
+      const { sessionId } = result;
       setStored((cur: unknown) => ({
         ...parseSyncRuns(cur),
         [repo.toplevel]: { sessionId, dirName: repo.dirName, name: repo.name, launchedAtMs: Date.now(), seen: false },

@@ -140,8 +140,8 @@ export default function SpawnPanel({ onClose, onLaunched, spawnMaxPermission }: 
     if (model) req.model = model;
     if (effort) req.effort = effort;
     if (oneShot) req.oneShot = true;
-    const sessionId = await launch(req);
-    if (sessionId) onLaunched(sessionId);
+    const result = await launch(req);
+    if (result?.surface === 'dashboard') onLaunched(result.sessionId);
   }
 
   return (

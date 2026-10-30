@@ -2113,21 +2113,22 @@ export interface SpawnRequest {
    * `--resume <id>` in the session's own cwd and appends to the same
    * transcript under the same id. Only sessions whose transcript says
    * `sdk-cli` (the `dashboard` pill) qualify; malformed-when-present is a 400,
-   * never a silent fresh launch.
+   * never a silent fresh launch. With `surface: 'desktop'` it is the hand-over to the desktop app, and `prompt` is ignored (the link carries none).
    */
   resume?: string;
 }
 
 /**
- * 200 body of `POST /api/spawn`. The id is minted before the child is spawned
- * (`--session-id <uuid>` is honored end to end, see docs/subsystems/spawn.md),
- * so it is valid the instant this response lands — the transcript it names does
- * not exist yet, which is why the client can set its chat-drawer deep link from
- * it but the drawer itself still waits for the id to appear in a poll.
+ * 200 body of `POST /api/spawn`, one branch per surface.
+ *
+ * `dashboard`: the id is minted before the child is spawned (`--session-id <uuid>` is honored end to end, see docs/subsystems/spawn.md), so it is valid
+ * the instant this response lands — the transcript it names does not exist yet, which is why the client can set its chat-drawer deep link from it but
+ * the drawer itself still waits for the id to appear in a poll.
+ *
+ * `desktop`: no id at all. The app mints its own for a fresh launch, and the row appears on a later scan; a hand-over keeps the id the caller sent.
+ * An older server answers a bare `{sessionId}`, which a client reads as `dashboard` (`client/src/lib/spawnResponse.ts`).
  */
-export interface SpawnResponse {
-  sessionId: string;
-}
+export type SpawnResponse = { surface: 'dashboard'; sessionId: string } | { surface: 'desktop' };
 
 /** Full payload of `GET /api/sessions`. */
 export interface SessionsResponse {

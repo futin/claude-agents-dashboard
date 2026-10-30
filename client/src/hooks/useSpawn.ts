@@ -2,12 +2,16 @@ import { useCallback, useState } from 'react';
 
 import { useAnswerToken } from './useAnswerToken';
 import { postWrite, replyError } from '../lib/postWrite';
+import { parseSpawnResponse } from '../lib/spawnResponse';
 import { READ_ONLY_TEXT } from '../lib/writeRefusal';
 import type { SpawnRequest, SpawnResponse } from '../../../shared/types';
 
 export interface SpawnControl {
-  /** POSTs `req` to `/api/spawn`. Resolves the new session id on success, `null` otherwise — never throws. */
-  launch: (req: SpawnRequest) => Promise<string | null>;
+  /**
+   * POSTs `req` to `/api/spawn`. Resolves the server's answer on success — `{surface:'dashboard', sessionId}` for a headless launch, `{surface:'desktop'}`
+   * (no id: the app mints its own) for one handed to the desktop app — and `null` otherwise. Never throws. Callers branch on `surface`.
+   */
+  launch: (req: SpawnRequest) => Promise<SpawnResponse | null>;
   pending: boolean;
   /** A reason to show the user — a validation error from the server, or a network failure. Cleared on the next attempt. */
   error: string | null;
@@ -23,7 +27,7 @@ export interface SpawnControl {
 }
 
 /**
- * Starts a new headless `claude -p` session: `POST /api/spawn`, with the same
+ * Starts a session — headless `claude -p`, or in the desktop app when `req.surface` says so: `POST /api/spawn`, with the same
  * Bearer-token pattern as `useRemoteAnswer`'s `toggle` — the shared `useAnswerToken`
  * copy, and a `403 → needsToken` branch. Unlike `toggle`, a failed
  * launch has a reason worth showing (unknown project, empty prompt, spawn
@@ -37,7 +41,7 @@ export function useSpawn(): SpawnControl {
   const [readOnly, setReadOnly] = useState(false);
   const [token, setToken] = useAnswerToken();
 
-  const launch = useCallback(async (req: SpawnRequest): Promise<string | null> => {
+  const launch = useCallback(async (req: SpawnRequest): Promise<SpawnResponse | null> => {
     if (pending) return null;
     setPending(true);
     setError(null);
@@ -56,7 +60,7 @@ export function useSpawn(): SpawnControl {
       }
       setNeedsToken(false);
       setReadOnly(false);
-      if (result.ok) return (result.body as SpawnResponse | undefined)?.sessionId ?? null;
+      if (result.ok) return parseSpawnResponse(result.body);
       setError(replyError(result.body) ?? `Launch failed (${result.status}).`);
       return null;
     } finally {
