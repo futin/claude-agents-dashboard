@@ -1,5 +1,6 @@
 import type { SessionsResponse } from '../../../shared/types';
 import type { RemoteAnswerControl } from '../hooks/useRemoteAnswer';
+import { canOpenLaunchForm } from '../lib/launchSurface';
 import { triageGroups } from '../lib/triage';
 import { OriginBadge } from './OriginBadge';
 import { RemoteAnswerToggle } from './RemoteAnswerToggle';
@@ -92,7 +93,7 @@ export function BoardBody({ data, remoteAnswer, onOpenSpawn, launch = true }: {
       )}
       <RemoteAnswerToggle control={remoteAnswer} />
       {launch && <div className="board-rule" />}
-      {launch && remoteAnswer.state?.spawnAvailable && (
+      {launch && canOpenLaunchForm(remoteAnswer.state?.spawnAvailable, remoteAnswer.state?.desktopAvailable) && (
         <button type="button" className="newbtn" onClick={onOpenSpawn}>+ New session</button>
       )}
     </>

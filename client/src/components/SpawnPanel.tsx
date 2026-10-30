@@ -8,16 +8,20 @@ import { usePins } from '../hooks/usePins';
 import { useSettings } from '../hooks/useSettings';
 import { useSpawn } from '../hooks/useSpawn';
 import { appendTranscript } from '../lib/dictation';
+import { DESKTOP_DEFAULTS_NOTE, DESKTOP_FAILED_TEXT, initialSurface, offeredSurfaces } from '../lib/launchSurface';
 import {
   EFFORTS, MODELS, NAME_CAP, PERMISSION_MODE_LABEL, PERMISSION_MODES, PROMPT_CAP,
   allowedPermissionModes
 } from '../lib/spawnOptions';
-import type { PermissionMode, SpawnRequest } from '../../../shared/types';
+import type { LaunchSurface, PermissionMode, SpawnRequest, SpawnResponse } from '../../../shared/types';
 
 interface Props {
   onClose: () => void;
-  /** A launch succeeded — the caller opens the chat drawer for it (and closes this panel). */
-  onLaunched: (sessionId: string) => void;
+  /**
+   * A launch succeeded. A `dashboard` answer carries the new session's id, which the caller opens in the chat drawer; a `desktop` one carries none (the app
+   * mints its own), so the caller says where it went instead. Either way the caller closes this panel.
+   */
+  onLaunched: (r: SpawnResponse) => void;
   /**
    * The host's permission-mode ceiling (`HealthResponse.spawnMaxPermission`),
    * lifted from the one `/api/health` poll `SessionsView` owns. Absent while
@@ -26,6 +30,14 @@ interface Props {
    * treats a real `'auto'` ceiling.
    */
   spawnMaxPermission?: PermissionMode;
+  /**
+   * `HealthResponse.spawnAvailable` / `desktopAvailable` off the same poll: which surfaces the form offers. The picker shows only when both are true, and
+   * the form opens on one of them whatever a stale default says.
+   */
+  spawnAvailable?: boolean;
+  desktopAvailable?: boolean;
+  /** `HealthResponse.launchSurfaceDefault`. Only preselects the pick — the request carries `surface` solely when Desktop is chosen. */
+  launchSurfaceDefault?: LaunchSurface;
 }
 
 /**
@@ -54,7 +66,7 @@ interface Props {
  * expands in place, inside the sheet, rather than opening a second surface. A
  * pin re-fetches the index and selects the project it just pinned.
  */
-export default function SpawnPanel({ onClose, onLaunched, spawnMaxPermission }: Props) {
+export default function SpawnPanel({ onClose, onLaunched, spawnMaxPermission, spawnAvailable, desktopAvailable, launchSurfaceDefault }: Props) {
   const { launch, pending, error, needsToken, setToken } = useSpawn();
   const [indexKey, setIndexKey] = useState(0);
   const { index, loading } = useConfigsIndex(indexKey);
@@ -84,6 +96,13 @@ export default function SpawnPanel({ onClose, onLaunched, spawnMaxPermission }: 
   // Default OFF: a free-typed prompt is the launch most likely to want a follow-up.
   const [oneShot, setOneShot] = useState(false);
   const [tokenDraft, setTokenDraft] = useState('');
+  // null = untouched, like `project`: the health poll may still be answering when the form opens, so the preselect is derived on every render.
+  const [picked, setPicked] = useState<LaunchSurface | null>(null);
+  const offered = offeredSurfaces(spawnAvailable, desktopAvailable);
+  const surface = picked && offered.includes(picked) ? picked : initialSurface(offered, launchSurfaceDefault);
+  const desktop = surface === 'desktop';
+  // Locked while a launch is in flight, and for every control a desktop launch ignores (the app applies its own).
+  const lockDefaults = pending || desktop;
 
   const selectedProject = project ?? projects[0]?.dirName ?? '';
 
@@ -102,7 +121,7 @@ export default function SpawnPanel({ onClose, onLaunched, spawnMaxPermission }: 
     ? `This host limits launches to '${ceilingLabel}' or below (SPAWN_MAX_PERMISSION).`
     : undefined;
 
-  const canLaunch = !pending && prompt.trim() !== '' && selectedProject !== '';
+  const canLaunch = !pending && surface !== null && prompt.trim() !== '' && selectedProject !== '';
 
   // Every exit is the cancel button's exit: refused mid-launch, so a stray tap
   // on the scrim can't unmount the request's own `pending` guard.
@@ -136,12 +155,16 @@ export default function SpawnPanel({ onClose, onLaunched, spawnMaxPermission }: 
     const req: SpawnRequest = {
       project: selectedProject, prompt: prompt.trim(), permissionMode: selectedMode, remoteControl
     };
-    if (name.trim()) req.name = name.trim();
-    if (model) req.model = model;
-    if (effort) req.effort = effort;
-    if (oneShot) req.oneShot = true;
+    if (desktop) {
+      req.surface = 'desktop';
+    } else {
+      if (name.trim()) req.name = name.trim();
+      if (model) req.model = model;
+      if (effort) req.effort = effort;
+      if (oneShot) req.oneShot = true;
+    }
     const result = await launch(req);
-    if (result?.surface === 'dashboard') onLaunched(result.sessionId);
+    if (result) onLaunched(result);
   }
 
   return (
@@ -149,12 +172,28 @@ export default function SpawnPanel({ onClose, onLaunched, spawnMaxPermission }: 
       <div className="spawn" role="dialog" aria-label="New session" onClick={e => e.stopPropagation()}>
         <div className="spawn-head">
           <span className="qp-badge">new session</span>
-          <span className="qp-hint">spawns a headless session in the picked project</span>
+          <span className="qp-hint">
+            {desktop ? 'opens in the desktop app on this Mac' : 'spawns a headless session in the picked project'}
+          </span>
           <span className="spacer" />
           <button type="button" className="chat-x" onClick={close} disabled={pending} aria-label="Close">✕</button>
         </div>
 
         <div className="spawn-body">
+          {offered.length > 1 && (
+            <div className="sp-field">
+              <span className="sp-label">open in</span>
+              <span className="set-seg sp-surface" role="group" aria-label="Open in">
+                <button type="button" className={desktop ? '' : 'on'} aria-pressed={!desktop} disabled={pending} onClick={() => setPicked('dashboard')}>
+                  Dashboard
+                </button>
+                <button type="button" className={desktop ? 'on' : ''} aria-pressed={desktop} disabled={pending} onClick={() => setPicked('desktop')}>
+                  Desktop
+                </button>
+              </span>
+            </div>
+          )}
+
           <label className="sp-field">
             <span className="sp-label">project</span>
             <span className="sp-select">
@@ -218,7 +257,7 @@ export default function SpawnPanel({ onClose, onLaunched, spawnMaxPermission }: 
               maxLength={NAME_CAP}
               placeholder="optional"
               value={name}
-              disabled={pending}
+              disabled={lockDefaults}
               onChange={e => setName(e.target.value)}
             />
           </label>
@@ -227,7 +266,7 @@ export default function SpawnPanel({ onClose, onLaunched, spawnMaxPermission }: 
             <label className="sp-field">
               <span className="sp-label">model</span>
               <span className="sp-select">
-                <select value={model} disabled={pending} onChange={e => setModel(e.target.value)}>
+                <select value={model} disabled={lockDefaults} onChange={e => setModel(e.target.value)}>
                   <option value="">default</option>
                   {MODELS.map(m => <option key={m} value={m}>{m}</option>)}
                 </select>
@@ -236,7 +275,7 @@ export default function SpawnPanel({ onClose, onLaunched, spawnMaxPermission }: 
             <label className="sp-field">
               <span className="sp-label">effort</span>
               <span className="sp-select">
-                <select value={effort} disabled={pending} onChange={e => setEffort(e.target.value)}>
+                <select value={effort} disabled={lockDefaults} onChange={e => setEffort(e.target.value)}>
                   <option value="">default</option>
                   {EFFORTS.map(f => <option key={f} value={f}>{f}</option>)}
                 </select>
@@ -247,7 +286,7 @@ export default function SpawnPanel({ onClose, onLaunched, spawnMaxPermission }: 
               <span className="sp-select">
                 <select
                   value={selectedMode}
-                  disabled={pending}
+                  disabled={lockDefaults}
                   title={permissionTitle}
                   onChange={e => setPermissionMode(e.target.value as PermissionMode)}
                 >
@@ -277,7 +316,7 @@ export default function SpawnPanel({ onClose, onLaunched, spawnMaxPermission }: 
                 type="button"
                 className={remoteControl ? '' : 'on'}
                 aria-pressed={!remoteControl}
-                disabled={pending}
+                disabled={lockDefaults}
                 onClick={() => setRemoteControl(false)}
               >
                 Off
@@ -286,7 +325,7 @@ export default function SpawnPanel({ onClose, onLaunched, spawnMaxPermission }: 
                 type="button"
                 className={remoteControl ? 'on' : ''}
                 aria-pressed={remoteControl}
-                disabled={pending}
+                disabled={lockDefaults}
                 onClick={() => setRemoteControl(true)}
               >
                 On
@@ -306,7 +345,7 @@ export default function SpawnPanel({ onClose, onLaunched, spawnMaxPermission }: 
                 type="button"
                 className={oneShot ? '' : 'on'}
                 aria-pressed={!oneShot}
-                disabled={pending}
+                disabled={lockDefaults}
                 onClick={() => setOneShot(false)}
               >
                 Off
@@ -315,13 +354,15 @@ export default function SpawnPanel({ onClose, onLaunched, spawnMaxPermission }: 
                 type="button"
                 className={oneShot ? 'on' : ''}
                 aria-pressed={oneShot}
-                disabled={pending}
+                disabled={lockDefaults}
                 onClick={() => setOneShot(true)}
               >
                 On
               </button>
             </span>
           </div>
+
+          {desktop && <span className="sp-note">{DESKTOP_DEFAULTS_NOTE}</span>}
 
           {needsToken && (
             <div className="qp-token">
@@ -339,7 +380,8 @@ export default function SpawnPanel({ onClose, onLaunched, spawnMaxPermission }: 
             </div>
           )}
 
-          {error && <span className="qp-note sp-error">{error}</span>}
+          {/* The server's `open failed` is a fixed body with nothing to act on; the line names what happened (spec decision 12). */}
+          {error && <span className="qp-note sp-error">{desktop && error === 'open failed' ? DESKTOP_FAILED_TEXT : error}</span>}
         </div>
 
         <div className="spawn-foot">

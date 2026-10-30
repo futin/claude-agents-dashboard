@@ -568,6 +568,11 @@ code,kbd,samp,pre{font-family:inherit}
    table cell, a list row and a tile. */
 .sessions{position:relative;display:grid;grid-template-columns:1fr;gap:16px;align-items:start}
 .s-main,.s-aside,.s-body{display:flex;flex-direction:column;gap:16px;min-width:0}
+/* the line a desktop launch leaves over the list (SessionsView): cyan like the rest of the launch thread, dismissible, clears itself after 8s */
+.spawn-done{display:flex;align-items:center;gap:12px;min-width:0;padding:10px 12px 10px 16px;background:var(--strip);border-radius:12px;border-left:3px solid var(--cyan);font-size:13px;line-height:1.45;color:var(--ink)}
+.spawn-done>span{flex:1;min-width:0}
+.spawn-done-x{width:28px;height:28px;flex:none;display:grid;place-items:center;font-family:var(--font);font-size:12px;line-height:1;color:var(--ink2);background:none;border:0;border-radius:8px;cursor:pointer;transition:color .15s}
+.spawn-done-x:hover{color:var(--ink)}
 /* the aside is first in the DOM (it reads first on a phone and to a screen
    reader — the gauges before the list, as the plate did) and second on a
    desktop, where it takes the narrow column */
@@ -1909,6 +1914,9 @@ button.qp-min:hover,.qp-minrow:hover .qp-min,.qp-minrow:hover .qp-hint{color:var
 .sp-count{align-self:flex-end;font-size:11px;color:var(--ink3);font-variant-numeric:tabular-nums}
 .sp-note{font-size:12px;line-height:1.45;color:var(--ink3)}
 .sp-error{color:var(--red)}
+/* the Dashboard | Desktop pick is Settings' own segmented control (`.set-seg`): full width below `md`, so both targets stay a thumb wide at 375px; this
+   only keeps it inside the sheet */
+.sp-surface{max-width:100%}
 /* the remote-control row is a Settings row in miniature — name and reason on
    the left, the board's pill switch on the right (DESIGN.md §8.2's boolean, so
    this modal introduces no second shape for on/off) */

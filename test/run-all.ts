@@ -176,6 +176,7 @@ import { run as runRoutinesView } from './routines-view.test.js';
 import { run as runRoutineForm } from './routine-form.test.js';
 import { run as runClipboard } from './clipboard.test.js';
 import { run as runDesktop } from './desktop.test.js';
+import { run as runLaunchSurface } from './launch-surface.test.js';
 import { run as runSyncPlugin } from './sync-plugin.test.js';
 
 let failed = 0;
@@ -355,6 +356,7 @@ failed += runRoutinesView();
 failed += runRoutineForm();
 failed += await runClipboard();
 failed += await runDesktop();
+failed += runLaunchSurface();
 
 console.log(failed > 0 ? `FAILED (${failed})` : 'ALL PASS');
 process.exit(failed > 0 ? 1 : 0);
