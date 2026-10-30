@@ -105,6 +105,8 @@ export interface ParsedTranscript {
    * maps it to `Session.surface`; this stays the raw value.
    */
   entrypoint: string | null;
+  /** The newest main-chain assistant record's `effort`, verbatim; null when the scan met none. `scan.ts` maps it to `Session.effort`. */
+  effort: string | null;
   /** User-set custom title (newest custom-title record); null when unnamed or placeholder. */
   sessionName: string | null;
   lastTimestamp: string | null;
@@ -409,6 +411,7 @@ export function readTranscript(
   let activity: Activity | null = null;
   let cwd: string | null = null, gitBranch: string | null = null, version: string | null = null, lastTs: string | null = null;
   let entrypoint: string | null = null;
+  let effort: string | null = null;
   const sessionName = resolveSessionTitle(
     filePath, findSessionName(lines, first), tail.start, tail.size
   );
@@ -439,6 +442,8 @@ export function readTranscript(
     if (!version && typeof rec.version === 'string') version = rec.version;
     if (!entrypoint && typeof rec.entrypoint === 'string') entrypoint = rec.entrypoint;
     if (!lastTs && typeof rec.timestamp === 'string') lastTs = rec.timestamp;
+    // Every assistant record carries it, so the record that sets `tokens` below already has — no break condition needed, as for `entrypoint`.
+    if (!effort && rec.type === 'assistant' && !rec.isSidechain && typeof rec.effort === 'string') effort = rec.effort;
 
     if (!tokens) {
       const t = usageTokens(rec);
@@ -506,6 +511,7 @@ export function readTranscript(
     gitBranch,
     version,
     entrypoint,
+    effort,
     sessionName,
     lastTimestamp: lastTs,
     lastMessageTs,
@@ -518,8 +524,8 @@ export function readTranscript(
 
 /**
  * The effort the session's newest main-chain assistant turn ran at — the record's `effort` field, verbatim — or null when the tail window holds none.
- * Kept out of `readTranscript` on purpose: only a resume needs it, and that runs once per click, not on every 3s poll. The caller validates the
- * value; this never interprets it.
+ * `readTranscript` reports the same value as `effort`, but only from the records its scan reaches before it breaks early; a resume reads the whole tail
+ * here instead, once per click rather than on every 3s poll. The caller validates the value; this never interprets it.
  */
 export function lastSessionEffort(filePath: string): string | null {
   const tail = readTail(filePath, DEFAULT_TAIL_BYTES);

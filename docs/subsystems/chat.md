@@ -11,7 +11,7 @@ that it is full-screen, because a 1080px modal with margins does not fit a phone
 carries the session name, the project pill and ✕. A 290px **sidecar** on the subtle ground
 carries everything the head used to: the live context reading as a metric block (percent,
 `tokens / window`, a track, amber at the same 70% threshold the list row uses), then a facts
-list — project, branch, model, session, surface, messages loaded, current tool. Below `md` the sidecar
+list — project, branch, model, effort (`Session.effort`: the newest main-chain assistant record's `effort`, omitted when null), session, surface, messages loaded, current tool. Below `md` the sidecar
 becomes a band over the transcript and drops project, messages and current tool: the head pill,
 the foot count and the transcript's last turn already carry them. The context reading
 is off the same 3s poll rather than a second read, and it is there because a modal opened

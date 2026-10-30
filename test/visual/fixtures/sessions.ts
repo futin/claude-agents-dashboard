@@ -26,6 +26,7 @@ function session(over: Partial<Session> & Pick<Session, 'id' | 'status' | 'model
     repo: null,
     sessionName: null,
     gitBranch: 'main',
+    effort: null,
     contextWindowLabel: over.contextWindow >= 1_000_000 ? `${over.contextWindow / 1_000_000}M` : `${Math.round(over.contextWindow / 1000)}k`,
     contextPct: Math.round((over.tokens / over.contextWindow) * 1000) / 10,
     surface: 'local',

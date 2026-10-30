@@ -19,6 +19,7 @@ function sess(p: Partial<Session>): Session {
     sessionName: null,
     gitBranch: null,
     model: 'claude-opus-5',
+    effort: null,
     tokens: 0,
     contextWindow: 200_000,
     contextWindowLabel: '200k',
