@@ -35,3 +35,10 @@ export const DESKTOP_STOP_FIRST_TEXT = 'Stop it first';
 export const DESKTOP_OWNED_TEXT = 'Already open in the desktop app';
 /** Under the launch-form controls a desktop launch ignores. */
 export const DESKTOP_DEFAULTS_NOTE = "The desktop app's own defaults apply to these.";
+
+/** Settings row hint, first sentence — the default is the server's, so every device's launch form starts on it. */
+export const LAUNCH_DEFAULT_HINT = 'Preselects the launch form on every device.';
+/** Settings row hint, second sentence when the Mac running the dashboard has the app. */
+export const LAUNCH_DEFAULT_DESKTOP_NOTE = 'The desktop app is only on this Mac.';
+/** Replaces the second sentence when the health poll does not report the app; the row stays because the setting is shared. */
+export const LAUNCH_DEFAULT_DESKTOP_MISSING = 'The desktop app was not found on the Mac running this dashboard.';
