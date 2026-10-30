@@ -1,6 +1,7 @@
 import assert from 'node:assert';
 
-import { resumeEligible, resumeErrorText, stillRunningNote, STILL_RUNNING_DETAIL } from '../client/src/lib/resume.js';
+import { handOverErrorText, handOverState, resumeEligible, resumeErrorText, stillRunningNote, STILL_RUNNING_DETAIL } from '../client/src/lib/resume.js';
+import { DESKTOP_FAILED_TEXT } from '../client/src/lib/launchSurface.js';
 
 function test(name: string, fn: () => void): boolean {
   try { fn(); console.log('  ✓ ' + name); return true; }
@@ -79,6 +80,49 @@ export function run(): number {
     assert.strictEqual(resumeErrorText('session is still running'), STILL_RUNNING_DETAIL);
     assert.strictEqual(resumeErrorText('already resuming'), 'already resuming');
     assert.strictEqual(resumeErrorText('unknown session'), 'unknown session');
+  })) p++; else f++;
+
+  if (test('a desktop-owned session is not resume-eligible; the same row without it is', () => {
+    const s = { surface: 'dashboard', status: 'idle' } as const;
+    assert.strictEqual(resumeEligible({ ...s, desktopOwned: true }, NO_HOLDS, true), false);
+    assert.strictEqual(resumeEligible(s, NO_HOLDS, true), true);
+  })) p++; else f++;
+
+  if (test('handOverState: hidden unless the desktop is available (strict true) and the session is dashboard-surface', () => {
+    const d = { surface: 'dashboard', status: 'idle' } as const;
+    assert.strictEqual(handOverState({ surface: 'local', status: 'idle' }, NO_HOLDS, true), 'hidden');
+    assert.strictEqual(handOverState({ surface: 'cloud', status: 'idle' }, NO_HOLDS, true), 'hidden');
+    assert.strictEqual(handOverState(d, NO_HOLDS, undefined), 'hidden');
+    assert.strictEqual(handOverState(d, NO_HOLDS, false), 'hidden');
+    assert.strictEqual(handOverState(d, NO_HOLDS, true), 'offer');
+  })) p++; else f++;
+
+  if (test('handOverState: a desktop-owned session is owned, even when otherwise busy', () => {
+    assert.strictEqual(handOverState({ surface: 'dashboard', status: 'idle', desktopOwned: true }, NO_HOLDS, true), 'owned');
+    assert.strictEqual(handOverState({ surface: 'dashboard', status: 'working', desktopOwned: true }, NO_HOLDS, true), 'owned');
+    assert.strictEqual(handOverState({ surface: 'dashboard', status: 'idle', desktopOwned: true }, { ...NO_HOLDS, plan: true }, true), 'owned');
+  })) p++; else f++;
+
+  if (test('handOverState: a live process, held panel, or stopState says stop it first', () => {
+    const s = { surface: 'dashboard', status: 'idle' } as const;
+    assert.strictEqual(handOverState({ ...s, processLive: true }, NO_HOLDS, true), 'stop-first');
+    assert.strictEqual(handOverState({ ...s, stopState: 'ready' }, NO_HOLDS, true), 'stop-first');
+    assert.strictEqual(handOverState(s, { ...NO_HOLDS, question: true }, true), 'stop-first');
+    assert.strictEqual(handOverState(s, { ...NO_HOLDS, plan: true }, true), 'stop-first');
+    assert.strictEqual(handOverState(s, { ...NO_HOLDS, message: true }, true), 'stop-first');
+  })) p++; else f++;
+
+  if (test('handOverState: only idle and incomplete offer; working, question and any other status say stop it first', () => {
+    assert.strictEqual(handOverState({ surface: 'dashboard', status: 'idle' }, NO_HOLDS, true), 'offer');
+    assert.strictEqual(handOverState({ surface: 'dashboard', status: 'incomplete' }, NO_HOLDS, true), 'offer');
+    assert.strictEqual(handOverState({ surface: 'dashboard', status: 'working' }, NO_HOLDS, true), 'stop-first');
+    assert.strictEqual(handOverState({ surface: 'dashboard', status: 'question' }, NO_HOLDS, true), 'stop-first');
+  })) p++; else f++;
+
+  if (test('handOverErrorText: the 500 reads as the fixed copy; every other server text passes through', () => {
+    assert.strictEqual(handOverErrorText('open failed'), DESKTOP_FAILED_TEXT);
+    assert.strictEqual(handOverErrorText('already resuming'), 'already resuming');
+    assert.strictEqual(handOverErrorText('session is open in the desktop app'), 'session is open in the desktop app');
   })) p++; else f++;
 
   console.log(`\n  ${p} passed, ${f} failed`);

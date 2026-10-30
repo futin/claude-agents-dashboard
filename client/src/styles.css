@@ -1630,6 +1630,12 @@ code,kbd,samp,pre{font-family:inherit}
 .chat-head .proj-pill{flex-shrink:1;min-width:0;max-width:38%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .chat-x{width:32px;height:32px;flex:none;display:grid;place-items:center;font-family:var(--font);font-size:12px;line-height:1;color:var(--ink2);background:var(--strip);border:1px solid var(--hairline2);border-radius:12px;cursor:pointer;transition:color .15s,border-color .15s}
 .chat-x:hover{color:var(--ink);border-color:var(--ink3)}
+/* the hand-over control: the button, with its status line stacked under it so a 375px head wraps the note instead of overflowing */
+.chat-desktop-wrap{display:flex;flex-direction:column;align-items:flex-end;gap:2px;flex:0 1 auto;min-width:0}
+.chat-desktop{flex:none;height:32px;padding:0 12px;font-family:var(--font);font-size:12px;white-space:nowrap;color:var(--ink2);background:var(--strip);border:1px solid var(--hairline2);border-radius:12px;cursor:pointer;transition:color .15s,border-color .15s}
+.chat-desktop:hover:not(:disabled){color:var(--ink);border-color:var(--ink3)}
+.chat-desktop:disabled{cursor:default;opacity:.6}
+.chat-desktop-note{max-width:100%;font-size:11px;line-height:1.3;text-align:right;color:var(--ink3);overflow-wrap:anywhere}
 
 /* the sidecar: facts left, transcript right */
 .chat-split{display:grid;grid-template-columns:290px minmax(0,1fr);flex:1;min-height:0}
@@ -2083,6 +2089,7 @@ body.pj-dragging,body.pj-dragging *{cursor:grabbing!important;user-select:none}
 .chat-title{font-size:15px}
 /* the only exit left once the scrim is gone — give it a thumb, not a pointer */
 .chat-x{width:40px;height:40px}
+.chat-desktop{height:40px}
 /* The sidecar lies down into a band over the transcript: the gauge, then the
    facts as a wrapping meta line — nothing is dropped, they just stop being a
    column — then the filter. */
@@ -2201,6 +2208,7 @@ body.pj-dragging,body.pj-dragging *{cursor:grabbing!important;user-select:none}
   .chat-head{padding:20px 24px;gap:10px}
   .chat-title{font-size:17px}
   .chat-x{width:32px;height:32px}
+  .chat-desktop{height:32px}
   /* rebuild the two-pane sidecar: fixed rail beside the fluid transcript,
      one row — not the phone's stacked band-over-transcript rows */
   .chat-split{grid-template-columns:290px minmax(0,1fr);grid-template-rows:none}

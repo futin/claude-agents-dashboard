@@ -16,11 +16,13 @@ import { usePendingQuestion } from '../hooks/usePendingQuestion';
 import { usePendingPlan } from '../hooks/usePendingPlan';
 import { usePullRequest } from '../hooks/usePullRequest';
 import { usePendingMessage } from '../hooks/usePendingMessage';
+import { useSpawn } from '../hooks/useSpawn';
 import { usePersistedState } from '../hooks/usePersistedState';
 import { useSettings } from '../hooks/useSettings';
 import { CHAT_FILTERS, filterMessages, isChatFilter, type ChatFilter } from '../lib/chatFilter';
 import { fmtTok } from '../lib/format';
-import { resumeEligible, stillRunningNote, STILL_RUNNING_DETAIL, STILL_RUNNING_HINT } from '../lib/resume';
+import { DESKTOP_OPENED_TEXT, DESKTOP_OWNED_TEXT, DESKTOP_STOP_FIRST_TEXT } from '../lib/launchSurface';
+import { handOverErrorText, handOverState, resumeEligible, stillRunningNote, STILL_RUNNING_DETAIL, STILL_RUNNING_HINT } from '../lib/resume';
 import { heldBodyUuid } from '../lib/heldBody';
 import { latestSuggestion } from '../lib/composer';
 import { formatInterval } from '../lib/settings';
@@ -127,10 +129,12 @@ function SessionIdCopy({ id }: { id: string }) {
  * turn can always be scrolled out from under a composer, which is otherwise
  * tall enough to swallow it whole.
  */
-export default function ChatDrawer({ session, onClose, spawnAvailable }: {
+export default function ChatDrawer({ session, onClose, spawnAvailable, desktopAvailable }: {
   session: Session; onClose: () => void;
   /** From the health poll SessionsView owns — gates the resume composer. */
   spawnAvailable?: boolean;
+  /** Same poll — gates the "Open in desktop app" control. */
+  desktopAvailable?: boolean;
 }) {
   const { messages, hasMore, loading, loadingOlder, error, loadOlder } = useSessionChat(session.id);
   const question = usePendingQuestion(session.id);
@@ -140,6 +144,22 @@ export default function ChatDrawer({ session, onClose, spawnAvailable }: {
   const holds = { question: !!question.pending, plan: !!plan.pending, message: !!message.pending };
   const canResume = resumeEligible(session, holds, spawnAvailable);
   const showStillRunning = stillRunningNote(session, holds);
+  const handOver = handOverState(session, holds, desktopAvailable);
+  const handOverSpawn = useSpawn();
+  const [handedOver, setHandedOver] = useState(false);
+  async function onHandOver() {
+    setHandedOver(false);
+    // `prompt` stays a required string in SpawnRequest; the server ignores it on a hand-over.
+    const result = await handOverSpawn.launch({ resume: session.id, surface: 'desktop', prompt: '' });
+    if (result?.surface === 'desktop') setHandedOver(true);
+  }
+  const handOverNote =
+    handOver === 'stop-first' ? DESKTOP_STOP_FIRST_TEXT
+    : handOver === 'owned' ? DESKTOP_OWNED_TEXT
+    : handOverSpawn.needsToken ? 'This dashboard needs its answer token.'
+    : handOverSpawn.error ? handOverErrorText(handOverSpawn.error)
+    : handedOver ? DESKTOP_OPENED_TEXT
+    : null;
   const [filter, setFilter] = usePersistedState<ChatFilter>('dashboard.chatFilter', 'all');
   const { settings: { refreshMs } } = useSettings();
   const mode = isChatFilter(filter) ? filter : 'all'; // guard a stale stored value
@@ -240,6 +260,17 @@ export default function ChatDrawer({ session, onClose, spawnAvailable }: {
           <span className="chat-title">{session.sessionName || session.project}</span>
           {session.sessionName && <span className="proj-pill">{session.project}</span>}
           <span className="spacer" />
+          {handOver !== 'hidden' && (
+            <div className="chat-desktop-wrap">
+              <button
+                type="button"
+                className="chat-desktop"
+                disabled={handOver !== 'offer' || handOverSpawn.pending}
+                onClick={onHandOver}
+              >Open in desktop app</button>
+              {handOverNote && <span className="chat-desktop-note" role="status">{handOverNote}</span>}
+            </div>
+          )}
           <button className="chat-x" onClick={onClose} aria-label="Close">✕</button>
         </div>
 

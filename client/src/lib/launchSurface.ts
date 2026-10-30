@@ -29,5 +29,9 @@ export const DESKTOP_LAUNCHED_TEXT = 'Opened in the desktop app — the row appe
 export const DESKTOP_OPENED_TEXT = 'Opened in the desktop app.';
 /** Where the success line would show, on a 500 `open failed`. */
 export const DESKTOP_FAILED_TEXT = "Couldn't open the desktop app.";
+/** Beside the disabled hand-over button while the session is alive. */
+export const DESKTOP_STOP_FIRST_TEXT = 'Stop it first';
+/** Beside the disabled hand-over button once the app already holds the session. */
+export const DESKTOP_OWNED_TEXT = 'Already open in the desktop app';
 /** Under the launch-form controls a desktop launch ignores. */
 export const DESKTOP_DEFAULTS_NOTE = "The desktop app's own defaults apply to these.";

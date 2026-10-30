@@ -208,6 +208,7 @@ export function SessionsView({ onLink }: {
             session={chatSession}
             onClose={() => setChatId(null)}
             spawnAvailable={remoteAnswer.state?.spawnAvailable}
+            desktopAvailable={remoteAnswer.state?.desktopAvailable}
           />
         </Suspense>
       )}
