@@ -57,6 +57,7 @@ in the chat drawer, and a Shared setting for the default.
 - Modify: `shared/types.ts` (`SpawnRequest`, `ServerSettings`, `ServerSettingsPatch`, `HealthResponse`, `Session`; new `LaunchSurface`)
 - Modify: `server/lib/settings.ts` (`Stored`, `readStored`, `setSettings`, `getSettings`)
 - Modify: `server/api.ts` (`serveHealth`; the 400 text in `serveSettingsWrite`)
+- Modify: `test/visual/fixtures/settings.ts` (its full `ServerSettings` literal gains `launchSurfaceDefault: 'dashboard'`, or Task 1 fails typecheck)
 - Test: `test/settings.test.ts`, `test/api-settings.test.ts`
 
 **Interfaces:**
@@ -67,8 +68,8 @@ in the chat drawer, and a Shared setting for the default.
 - `serveHealth` sets `launchSurfaceDefault` from settings now; `desktopAvailable` is wired in Task 2.
 
 - [ ] **Step 1: Write failing tests** in `test/settings.test.ts`: fresh store → `getSettings().launchSurfaceDefault === 'dashboard'`;
-  `setSettings({ launchSurfaceDefault: 'desktop' })` → returns settings with `'desktop'` and a fresh `readStored` (reset the cache the way the file's other
-  cases do) reads `'desktop'`; `setSettings({ launchSurfaceDefault: 'terminal' })` → `null`; a stored file with `launchSurfaceDefault: 42` → reads
+  `setSettings({ launchSurfaceDefault: 'desktop' })` → returns settings with `'desktop'`, and after `resetSettings()` `getSettings()` still reads
+  `'desktop'` from disk; `setSettings({ launchSurfaceDefault: 'terminal' })` → `null`; a stored file with `launchSurfaceDefault: 42` → reads
   `'dashboard'`. In `test/api-settings.test.ts`: POST `{launchSurfaceDefault:'desktop'}` → 200 with that value; POST `{launchSurfaceDefault:'x'}` → 400 whose
   error text names `launchSurfaceDefault?: 'dashboard'|'desktop'`.
 - [ ] **Step 2: Run both files, expect FAIL** (property missing).
@@ -93,10 +94,11 @@ in the chat drawer, and a Shared setting for the default.
   - `overrideDesktop(o: { run?: OpenRunner | null; platform?: string | null; appPath?: string | null }): void` — test seam, same `undefined`=leave /
     `null`=restore semantics as `overrideOpenFolder`; changing `platform` or `appPath` also drops the memo. Reuse the `OpenRunner` type from `open-folder.ts`.
   - `DESKTOP_RAIL_MAX = 4`, `DESKTOP_WINDOW_MS = 5000`.
-  - `reserveDesktopLaunch(handOverId: string | null, now?: number): 'ok' | 'rail-full' | 'in-flight'` — prunes entries older than the window, then:
-    `in-flight` if `handOverId` already has a live mark; `rail-full` if live entries ≥ `DESKTOP_RAIL_MAX`; else records `{at: now, id: handOverId}` and `ok`.
-    `in-flight` is checked before `rail-full`.
-  - `releaseDesktopLaunch(handOverId: string | null, at: number): void` — removes exactly the entry reserved at `at` (used when `open` fails).
+  - `reserveDesktopLaunch(handOverId: string | null, now?: number): { status: 'ok'; at: number } | { status: 'rail-full' | 'in-flight' }` — prunes
+    entries older than the window, then: `in-flight` if `handOverId` already has a live mark; `rail-full` if live entries ≥ `DESKTOP_RAIL_MAX`; else
+    records `{at: now, id: handOverId}` and answers `{status:'ok', at}`. `in-flight` is checked before `rail-full`.
+  - `releaseDesktopLaunch(handOverId: string | null, at: number): void` — removes exactly the one entry with that `id` and `at` (used when `open` fails),
+    never another entry, even one with the same `at`.
   - `handOverInFlight(id: string, now?: number): boolean` — a live mark exists for `id`.
   - `resetDesktopRail(): void` — tests.
 - A comment beside `newSessionUrl` records: the app cuts `q` at 14336 characters (app 4.4212.0, `app.asar`, read 2026-10-29); `PROMPT_CAP` (4000) must
@@ -113,6 +115,8 @@ in the chat drawer, and a Shared setting for the default.
     `reserveDesktopLaunch(null, 1000 + 5001)` → `'ok'` (window expired).
   - marks: `reserveDesktopLaunch('s1', 0)` → `'ok'`; again at 10 → `'in-flight'`; `handOverInFlight('s1', 10)` true; at 5001 → false;
     `releaseDesktopLaunch('s1', 0)` right after reserving → `handOverInFlight('s1', 1)` false and a new reserve → `'ok'`.
+  - release clears only its own entry: reserve `'s1'` and `'s2'` both at 0, `releaseDesktopLaunch('s1', 0)` → `handOverInFlight('s2', 1)` still true;
+    reserve `null` at 0 four times, release one `(null, 0)` → exactly one more `'ok'` fits, then `'rail-full'`.
   - `in-flight` beats `rail-full`: fill 3 `null` + 1 `'s1'` at 0, then `reserveDesktopLaunch('s1', 1)` → `'in-flight'`.
 - [ ] **Step 2: Run, expect FAIL** (module missing).
 - [ ] **Step 3: Implement** the module and the health field.
@@ -123,9 +127,10 @@ in the chat drawer, and a Shared setting for the default.
 
 **Files:**
 - Modify: `server/lib/archived.ts` (new sibling reader; `classify` untouched)
-- Modify: `server/lib/scan.ts` (`ScanOptions`/`RowOptions` gain `desktopOwnedIds`; row sets `desktopOwned`)
-- Modify: `server/api.ts` (the sessions list's `scanSessions` options, which inject `archivedIds`, and the row-by-id route's `sessionFromRef` options both
-  gain `desktopOwnedIds: desktopLiveSessionIds()`)
+- Modify: `server/lib/scan.ts` (`ScanOptions` gains `desktopOwnedIds`, `RowOptions`' `Pick` lists it, and the `rowOptions` literal inside `scanSessions`
+  passes it on; the row sets `desktopOwned`)
+- Modify: `server/lib/scan-snapshot.ts` (the sessions list's `scanSessions` call, beside `archivedIds`, gains `desktopOwnedIds: desktopLiveSessionIds()`)
+- Modify: `server/api.ts` (`serveSessionRow`'s `sessionFromRef` options gain `desktopOwnedIds: desktopLiveSessionIds()`)
 - Test: `test/archived.test.ts`, `test/scan.test.ts`
 
 **Interfaces:**
@@ -159,16 +164,20 @@ in the chat drawer, and a Shared setting for the default.
 - Modify: `shared/types.ts` (`SpawnResponse` union)
 - Modify: `client/src/hooks/useSpawn.ts`, `client/src/components/SpawnPanel.tsx`, `client/src/components/ResumePanel.tsx`, `client/src/hooks/useGitSync.ts`
   (consumers narrow; behaviour unchanged for headless)
-- Test: `test/spawn.test.ts`, `test/spawn-endpoint.test.ts`
+- Create: `client/src/lib/spawnResponse.ts`
+- Test: `test/spawn.test.ts`, `test/spawn-endpoint.test.ts`, `test/spawn-response.test.ts` (new; register in `run-all.ts`)
 
 **Interfaces:**
 - Consumes: Task 2's `newSessionUrl`, `resumeUrl`, `desktopAvailable`, `openDesktopUrl`, `reserveDesktopLaunch`, `releaseDesktopLaunch`, `handOverInFlight`,
   `overrideDesktop`, `resetDesktopRail`; Task 3's `desktopLiveSessionIds`.
+- Produces: `parseSpawnResponse(body: unknown): SpawnResponse | null` in a new `client/src/lib/spawnResponse.ts` (pure; `useSpawn` uses it).
 - Produces: `ParseResult`'s ok branch gains `surface: LaunchSurface`. `SpawnResponse = { surface: 'dashboard'; sessionId: string } | { surface: 'desktop' }`.
   `SpawnControl.launch(req): Promise<SpawnResponse | null>` (null = failure, as today; doc comment updated).
 - Parse rules: `surface` absent → `'dashboard'`; `'dashboard'`/`'desktop'` → itself; anything else present → `{ok:false, error:'bad surface'}` (a silent
-  headless launch the user believed was desktop is worse than a 400 — the same reasoning as `resume`). The prompt check is skipped for exactly
-  `resume` valid + `surface === 'desktop'`; the input's `prompt` is then `''`. All other prompt rules unchanged.
+  headless launch the user believed was desktop is worse than a 400 — the same reasoning as `resume`). For exactly `resume` present +
+  `surface === 'desktop'` the prompt is **ignored entirely** — absent, a number, empty or over the cap all pass — and the input's `prompt` is `''`; this
+  needs `surface` and `resume` parsed **before** the prompt checks (today prompt runs first, `server/lib/spawn.ts` ~163-172 vs ~196). `resume` keeps its
+  own rule on that shape (malformed → `bad resume id`). All other prompt rules and their order of errors are unchanged.
 - Handler order (rewrite the doc comment to match, keeping the two cross-referenced paragraphs' substance): remote-answer toggle (404) → `refuseWrite` →
   read body → `parseSpawnRequest` → surface probe (`probeSpawn` → 404 `spawn unavailable`; `desktopAvailable` → 501 `desktop app unavailable`) →
   surface rail (headless: `MAX_LAUNCHING` as today; desktop: `reserveDesktopLaunch`) → launch.
@@ -186,7 +195,9 @@ in the chat drawer, and a Shared setting for the default.
 - [ ] **Step 1: Write failing parse tests** in `test/spawn.test.ts`: `{resume:'abc', surface:'desktop'}` (no prompt) → ok, `surface:'desktop'`,
   `resumeId:'abc'`; `{resume:'abc'}` (no prompt) → `prompt is required`; `{resume:'abc', surface:'dashboard'}` (no prompt) → `prompt is required`;
   `{prompt:'x', surface:'desktop'}` → ok, `surface:'desktop'`; `{prompt:'x'}` → `surface:'dashboard'`; `{prompt:'x', surface:'Desktop'}` → `bad surface`;
-  `{prompt:'x'.repeat(4001), surface:'desktop'}` → the existing `prompt must be at most 4000 characters`.
+  `{prompt:'x'.repeat(4001), surface:'desktop'}` → the existing `prompt must be at most 4000 characters`;
+  `{resume:'abc', surface:'desktop', prompt:42}` → ok, `prompt:''`; `{resume:'a b', surface:'desktop'}` → `bad resume id`;
+  `{surface:'Desktop'}` with no prompt → `bad surface` (surface is checked first).
 - [ ] **Step 2: Write failing endpoint tests** in `test/spawn-endpoint.test.ts` (fake runner via `overrideDesktop({run, platform:'darwin', appPath:<tmp dir>})`,
   `resetDesktopRail()` + `resetDesktopProbe()` between cases; resume cases need a tmpdir transcript with a `dashboard` entrypoint: the file already
   points `os.homedir()` at a fixture HOME for `projectsRoot()` (its comment near line 289), and `appSessionsRoot()` reads the same HOME, so registry
@@ -205,13 +216,17 @@ in the chat drawer, and a Shared setting for the default.
   - `surface:'nope'` → 400 `bad surface`.
   - Existing cases that relied on the old order (429 or 404 returned **before** the body is read, posted with a malformed body) are updated to post a
     well-formed body; each such edit is listed in the commit body.
-- [ ] **Step 3: Run both files, expect FAIL.**
-- [ ] **Step 4: Implement** parse, handler, union type, and the consumers: `useSpawn.launch` returns the parsed body when it has a valid `surface`
-  (a body with a string `sessionId` and no `surface` — an older server — maps to `{surface:'dashboard', sessionId}`), else null; `SpawnPanel` and
+- [ ] **Step 3: Write failing `test/spawn-response.test.ts`**: `parseSpawnResponse({surface:'desktop'})` → `{surface:'desktop'}` (a desktop 200 is a
+  success, never `Launch failed`); `({surface:'dashboard', sessionId:'s1'})` → that; `({sessionId:'s2'})` (older server) → `{surface:'dashboard',
+  sessionId:'s2'}`; `({surface:'dashboard'})` → null; `({surface:'x'})` → null; `(null)` → null.
+- [ ] **Step 4: Run the three files, expect FAIL.**
+- [ ] **Step 5: Implement** parse, handler, union type, `parseSpawnResponse`, and the consumers: `useSpawn.launch` returns `parseSpawnResponse(body)` on a
+  2xx, null otherwise; `SpawnPanel` and
   `ResumePanel` treat only `surface === 'dashboard'` as today's success (Task 5/6 add the desktop branch); `useGitSync` takes `sessionId` only from a
   dashboard result.
-- [ ] **Step 5: Run `test/spawn.test.ts`, `test/spawn-endpoint.test.ts`, `test/spawn-stop.test.ts` + `pnpm typecheck`, expect PASS.**
-- [ ] **Step 6: Commit** `feat(spawn): launch and hand over sessions in the desktop app`.
+- [ ] **Step 6: Run `test/spawn.test.ts`, `test/spawn-endpoint.test.ts`, `test/spawn-stop.test.ts`, `test/spawn-response.test.ts` + `pnpm typecheck`,
+  expect PASS.**
+- [ ] **Step 7: Commit** `feat(spawn): launch and hand over sessions in the desktop app`.
 
 ### Task 5: Launch form — Dashboard | Desktop pick and the after-launch line
 
@@ -260,7 +275,7 @@ in the chat drawer, and a Shared setting for the default.
 - Produces: `handOverState(session: Pick<Session,'surface'|'status'|'stopState'|'processLive'|'desktopOwned'>, holds: {question:boolean; plan:boolean;
   message:boolean}, desktopAvailable: boolean | undefined): 'hidden' | 'offer' | 'stop-first' | 'owned'` —
   `hidden` unless `desktopAvailable === true` and `surface === 'dashboard'`; then `owned` if `desktopOwned`; then `stop-first` if any hold, `stopState`,
-  `processLive`, or `status === 'working'`; else `offer`.
+  `processLive`; then `offer` only for `status` `idle` or `incomplete`, `stop-first` for every other status (`working`, `question`, …).
 - `resumeEligible`'s `Pick` gains `desktopOwned`; a desktop-owned session is not eligible.
 - ChatDrawer: a button `.chat-desktop` in `.chat-head`, before `.chat-x`, label "Open in desktop app", rendered unless `hidden`; disabled for `stop-first`
   / `owned` with the hint (`Stop it first` / `Already open in the desktop app`) as visible text beside it (no `title` attribute — memory rule); on click
@@ -269,7 +284,8 @@ in the chat drawer, and a Shared setting for the default.
 
 - [ ] **Step 1: Write failing tests**: `handOverState` for `{surface:'local'}` + available → `hidden`; `{surface:'dashboard'}` + `desktopAvailable` undefined
   → `hidden`; `{surface:'dashboard', status:'idle', desktopOwned:true}` → `owned`; `{…, status:'idle', processLive:true}` → `stop-first`;
-  `{…, status:'working'}` → `stop-first`; holds.question true → `stop-first`; `{surface:'dashboard', status:'idle'}`, no holds → `offer`;
+  `{…, status:'working'}` → `stop-first`; `{…, status:'question'}`, no holds → `stop-first`; holds.question true → `stop-first`;
+  `{surface:'dashboard', status:'idle'}`, no holds → `offer`;
   `{…, status:'incomplete'}` → `offer`. `resumeEligible` with an otherwise-eligible session plus `desktopOwned:true` → false.
 - [ ] **Step 2: Run, expect FAIL.**
 - [ ] **Step 3: Implement.**
@@ -279,9 +295,9 @@ in the chat drawer, and a Shared setting for the default.
 ### Task 7: Settings row for the default
 
 **Files:**
-- Modify: `client/src/components/settings/SettingsView.tsx` (Shared section, beside `gitFetchSecs`), and whatever client settings hook types the server
-  patch (follow `gitFetchSecs`'s path end to end)
-- Test: `test/client-settings.test.ts` if it covers the server-settings patch shape; otherwise none (typecheck is the gate) — say which in the report.
+- Modify: `client/src/components/settings/SettingsView.tsx` (Shared section, beside `gitFetchSecs`), `client/src/hooks/useServerSettings.ts`
+  (`SavingKey` and `save`, following `gitFetchSecs` end to end)
+- Test: none; `test/client-settings.test.ts` does not cover the server-settings patch, so typecheck + build are the gate.
 
 **Interfaces:**
 - Consumes: Task 1's `launchSurfaceDefault`.
@@ -289,11 +305,9 @@ in the chat drawer, and a Shared setting for the default.
   The desktop app is only on this Mac." When the health poll says `desktopAvailable !== true`, the row still shows (the setting is shared) with the helper
   line's second sentence replaced by "The desktop app was not found on the Mac running this dashboard."
 
-- [ ] **Step 1: Write the failing test if the file covers patch shapes; else skip to Step 3 and note it.**
-- [ ] **Step 2: Run, expect FAIL.**
-- [ ] **Step 3: Implement.**
-- [ ] **Step 4: `pnpm typecheck` + `pnpm build` (+ the test), expect PASS.**
-- [ ] **Step 5: Commit** `feat(settings): choose where new sessions open by default`.
+- [ ] **Step 1: Implement.**
+- [ ] **Step 2: `pnpm typecheck` + `pnpm build`, expect PASS.**
+- [ ] **Step 3: Commit** `feat(settings): choose where new sessions open by default`.
 
 ### Task 8: Docs
 
