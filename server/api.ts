@@ -52,8 +52,9 @@ import { getState, setEnabled } from './lib/remoteState.js';
 import { getPinnedProjects, getSettings, setPinOrder, setPinned, setSettings } from './lib/settings.js';
 import { fetchAll, markGitWatched } from './lib/git-fetch.js';
 import {
-  desktopAvailable, handOverInFlight, newSessionUrl, openDesktopUrl, releaseDesktopLaunch, reserveDesktopLaunch, resumeUrl
+  desktopAvailable, handOverInFlight, openDesktopUrl, releaseDesktopLaunch, reserveDesktopLaunch, resumeUrl
 } from './lib/desktop.js';
+import { watchHandOver } from './lib/handover.js';
 import { openFolder, openFolderPlatform, revealFile } from './lib/open-folder.js';
 import { runQuickOp } from './lib/git-quick.js';
 import { readSessionPr } from './lib/pr-detect.js';
@@ -1186,38 +1187,30 @@ export async function serveSpawn(config: Config, req: IncomingMessage, res: Serv
 }
 
 /**
- * The desktop half of {@link serveSpawn}, past parse: probe, then the project or the resume checks, then a rail slot, then `open`. The slot is taken
- * only once the request is known to be launchable, so a refused one never holds a place the next request needs (the headless rail is a count of live
- * children, so its peek has no such order to keep). Fields the app has no way to receive — name, model, effort, permission mode, remote control,
- * one-shot — were parsed and are dropped here, never refused: an old client must not break.
+ * The desktop half of {@link serveSpawn}, past parse. A fresh launch is headless first: the app's `claude://code/new` link leaves the prompt as an unsent
+ * draft behind its own trust prompt, so the first turn runs here as a one-shot `claude -p` and `watchHandOver` (`lib/handover.ts`) fires the resume link
+ * once that turn ends. The headless gates apply to it, and so do model, effort, permission mode and name; remote control is forced off and one-shot on,
+ * since the session leaves this dashboard after its first turn. A hand-over (`resume`) is the link alone: probe, the resume checks, a rail slot, `open`.
+ * The slot is taken only once the request is known to be launchable, so a refused one never holds a place the next request needs.
  */
 async function spawnDesktop(
   config: Config, body: Partial<SpawnRequest>, parsed: Extract<ParseResult, { ok: true }>, res: ServerResponse
 ): Promise<void> {
   if (!desktopAvailable()) return sendJson(res, 501, { error: 'desktop app unavailable' });
+  const rid = parsed.resumeId;
+  if (!rid) return launchForDesktop(config, body, parsed, res);
 
-  let url: string;
-  let handOverId: string | null = null;
   try {
-    if (parsed.resumeId) {
-      const rid = parsed.resumeId;
-      // No cwd needed: the resume link names the session, not a folder.
-      const target = resumeTarget(rid, false);
-      if ('refuse' in target) return sendJson(res, target.refuse.status, { error: target.refuse.error });
-      handOverId = rid;
-      url = resumeUrl(rid);
-    } else {
-      const ref = resolveSpawnProject(config, body);
-      if ('refuse' in ref) return sendJson(res, 400, { error: ref.refuse });
-      url = newSessionUrl(ref.path, parsed.input.prompt);
-    }
+    // No cwd needed: the resume link names the session, not a folder.
+    const target = resumeTarget(rid, false);
+    if ('refuse' in target) return sendJson(res, target.refuse.status, { error: target.refuse.error });
   } catch (e) {
     console.error('[dashboard] spawn failed:', (e as Error).message);
     return sendJson(res, 500, { error: 'spawn failed' });
   }
 
   // `in-flight` is the hand-over mark: a second tap, or a second device, in the seconds before the app writes the registry record.
-  const slot = reserveDesktopLaunch(handOverId);
+  const slot = reserveDesktopLaunch(rid);
   if (slot.status !== 'ok') {
     return slot.status === 'in-flight'
       ? sendJson(res, 409, { error: 'already resuming' })
@@ -1225,14 +1218,35 @@ async function spawnDesktop(
   }
 
   try {
-    await openDesktopUrl(url);
+    await openDesktopUrl(resumeUrl(rid));
   } catch (e) {
     // A launch that never reached the app holds neither a slot nor the mark, so the retry the failure line invites is not refused.
-    releaseDesktopLaunch(handOverId, slot.at);
+    releaseDesktopLaunch(rid, slot.at);
     console.error('[dashboard] desktop open failed:', (e as Error).message);
     return sendJson(res, 500, { error: 'open failed' });
   }
   sendJson(res, 200, { surface: 'desktop' } satisfies SpawnResponse);
+}
+
+/** A fresh desktop launch: the headless launch's own gates and `launch()`, then the hand-over watch. Answers with the id so the chat drawer can follow the first turn. */
+function launchForDesktop(
+  config: Config, body: Partial<SpawnRequest>, parsed: Extract<ParseResult, { ok: true }>, res: ServerResponse
+): void {
+  if (!probeSpawn(config)) return sendJson(res, 404, { error: 'spawn unavailable' });
+  if (listLaunching().filter(e => e.state === 'launching').length >= MAX_LAUNCHING) {
+    return sendJson(res, 429, { error: 'too many launches in flight' });
+  }
+  let sessionId: string;
+  try {
+    const ref = resolveSpawnProject(config, body);
+    if ('refuse' in ref) return sendJson(res, 400, { error: ref.refuse });
+    sessionId = launch(config, ref, { ...parsed.input, oneShot: true, remoteControl: false });
+  } catch (e) {
+    console.error('[dashboard] spawn failed:', (e as Error).message);
+    return sendJson(res, 500, { error: 'spawn failed' });
+  }
+  watchHandOver(sessionId);
+  sendJson(res, 200, { surface: 'desktop', sessionId } satisfies SpawnResponse);
 }
 
 /** `body.project` through `resolveProject`'s membership check, or the 400 text naming it. */

@@ -8,7 +8,7 @@ import { usePins } from '../hooks/usePins';
 import { useSettings } from '../hooks/useSettings';
 import { useSpawn } from '../hooks/useSpawn';
 import { appendTranscript } from '../lib/dictation';
-import { DESKTOP_DEFAULTS_NOTE, DESKTOP_FAILED_TEXT, initialSurface, offeredSurfaces } from '../lib/launchSurface';
+import { DESKTOP_FAILED_TEXT, DESKTOP_HANDOVER_NOTE, initialSurface, offeredSurfaces } from '../lib/launchSurface';
 import {
   EFFORTS, MODELS, NAME_CAP, PERMISSION_MODE_LABEL, PERMISSION_MODES, PROMPT_CAP,
   allowedPermissionModes
@@ -18,8 +18,8 @@ import type { LaunchSurface, PermissionMode, SpawnRequest, SpawnResponse } from 
 interface Props {
   onClose: () => void;
   /**
-   * A launch succeeded. A `dashboard` answer carries the new session's id, which the caller opens in the chat drawer; a `desktop` one carries none (the app
-   * mints its own), so the caller says where it went instead. Either way the caller closes this panel.
+   * A launch succeeded. The answer carries the new session's id, which the caller opens in the chat drawer; a `desktop` one also says the session moves
+   * to the app after its first turn. Either way the caller closes this panel.
    */
   onLaunched: (r: SpawnResponse) => void;
   /**
@@ -101,8 +101,11 @@ export default function SpawnPanel({ onClose, onLaunched, spawnMaxPermission, sp
   const offered = offeredSurfaces(spawnAvailable, desktopAvailable);
   const surface = picked && offered.includes(picked) ? picked : initialSurface(offered, launchSurfaceDefault);
   const desktop = surface === 'desktop';
-  // Locked while a launch is in flight, and for every control a desktop launch ignores (the app applies its own).
-  const lockDefaults = pending || desktop;
+  const lockDefaults = pending;
+  // A desktop launch fixes both toggles (`spawnDesktop`): remote control is moot once the app holds the session, and the first turn must end for it to move.
+  const lockToggles = pending || desktop;
+  const remoteShown = desktop ? false : remoteControl;
+  const oneShotShown = desktop ? true : oneShot;
 
   const selectedProject = project ?? projects[0]?.dirName ?? '';
 
@@ -153,16 +156,13 @@ export default function SpawnPanel({ onClose, onLaunched, spawnMaxPermission, sp
   async function doLaunch(): Promise<void> {
     if (!canLaunch) return;
     const req: SpawnRequest = {
-      project: selectedProject, prompt: prompt.trim(), permissionMode: selectedMode, remoteControl
+      project: selectedProject, prompt: prompt.trim(), permissionMode: selectedMode, remoteControl: remoteShown
     };
-    if (desktop) {
-      req.surface = 'desktop';
-    } else {
-      if (name.trim()) req.name = name.trim();
-      if (model) req.model = model;
-      if (effort) req.effort = effort;
-      if (oneShot) req.oneShot = true;
-    }
+    if (desktop) req.surface = 'desktop';
+    if (name.trim()) req.name = name.trim();
+    if (model) req.model = model;
+    if (effort) req.effort = effort;
+    if (oneShotShown) req.oneShot = true;
     const result = await launch(req);
     if (result) onLaunched(result);
   }
@@ -173,7 +173,7 @@ export default function SpawnPanel({ onClose, onLaunched, spawnMaxPermission, sp
         <div className="spawn-head">
           <span className="qp-badge">new session</span>
           <span className="qp-hint">
-            {desktop ? 'opens in the desktop app on this Mac' : 'spawns a headless session in the picked project'}
+            {desktop ? 'runs here, then moves to the desktop app on this Mac' : 'spawns a headless session in the picked project'}
           </span>
           <span className="spacer" />
           <button type="button" className="chat-x" onClick={close} disabled={pending} aria-label="Close">✕</button>
@@ -296,8 +296,8 @@ export default function SpawnPanel({ onClose, onLaunched, spawnMaxPermission, sp
             </label>
           </div>
 
-          {/* the ceiling clamps a headless launch; the desktop app applies its own permission mode */}
-          {ceilingLimited && !desktop && (
+          {/* the ceiling clamps every launch: a desktop one runs its first turn headless too */}
+          {ceilingLimited && (
             <span className="sp-note">
               host ceiling · {ceilingLabel} or below (SPAWN_MAX_PERMISSION)
             </span>
@@ -315,18 +315,18 @@ export default function SpawnPanel({ onClose, onLaunched, spawnMaxPermission, sp
             <span className="set-seg" role="group" aria-label="Remote control">
               <button
                 type="button"
-                className={remoteControl ? '' : 'on'}
-                aria-pressed={!remoteControl}
-                disabled={lockDefaults}
+                className={remoteShown ? '' : 'on'}
+                aria-pressed={!remoteShown}
+                disabled={lockToggles}
                 onClick={() => setRemoteControl(false)}
               >
                 Off
               </button>
               <button
                 type="button"
-                className={remoteControl ? 'on' : ''}
-                aria-pressed={remoteControl}
-                disabled={lockDefaults}
+                className={remoteShown ? 'on' : ''}
+                aria-pressed={remoteShown}
+                disabled={lockToggles}
                 onClick={() => setRemoteControl(true)}
               >
                 On
@@ -344,18 +344,18 @@ export default function SpawnPanel({ onClose, onLaunched, spawnMaxPermission, sp
             <span className="set-seg" role="group" aria-label="Close when done">
               <button
                 type="button"
-                className={oneShot ? '' : 'on'}
-                aria-pressed={!oneShot}
-                disabled={lockDefaults}
+                className={oneShotShown ? '' : 'on'}
+                aria-pressed={!oneShotShown}
+                disabled={lockToggles}
                 onClick={() => setOneShot(false)}
               >
                 Off
               </button>
               <button
                 type="button"
-                className={oneShot ? 'on' : ''}
-                aria-pressed={oneShot}
-                disabled={lockDefaults}
+                className={oneShotShown ? 'on' : ''}
+                aria-pressed={oneShotShown}
+                disabled={lockToggles}
                 onClick={() => setOneShot(true)}
               >
                 On
@@ -363,7 +363,7 @@ export default function SpawnPanel({ onClose, onLaunched, spawnMaxPermission, sp
             </span>
           </div>
 
-          {desktop && <span className="sp-note">{DESKTOP_DEFAULTS_NOTE}</span>}
+          {desktop && <span className="sp-note">{DESKTOP_HANDOVER_NOTE}</span>}
 
           {needsToken && (
             <div className="qp-token">

@@ -566,31 +566,46 @@ a `title` attribute.
 
 ## Launching in the desktop app
 
-`SpawnRequest.surface` is `'dashboard'` (headless `claude -p`, everything above) or `'desktop'`: the same route hands the work to the Claude desktop app
-through its `claude://` links instead, and `SpawnResponse` is the union `{surface:'dashboard'; sessionId} | {surface:'desktop'}`. Spec:
+`SpawnRequest.surface` is `'dashboard'` (headless `claude -p`, everything above) or `'desktop'`: the same route ends with the work in the Claude desktop
+app, through its `claude://resume` link, and `SpawnResponse` is the union `{surface:'dashboard'; sessionId} | {surface:'desktop'; sessionId?}`. Spec:
 `docs/superpowers/specs/2026-10-29-desktop-launch-design.md`; the links themselves are mapped in
 [session-surfaces](session-surfaces.md#the-desktop-apps-claude-links--the-way-in-that-does-exist).
 
 - **Absent `surface` is `dashboard`, always.** The `launchSurfaceDefault` setting only preselects the launch form; the server never applies it to a
   request, so an API caller never inherits it. A present-but-unknown value is 400 `bad surface`, not a silent headless launch.
-- **Two shapes.** A fresh launch fires `claude://code/new?folder=<project path>&q=<prompt>` (`newSessionUrl`), the project resolved through the same
-  membership check as a headless one. A `resume` fires `claude://resume?session=<id>` (`resumeUrl`) — the **hand-over**, which carries no prompt and no
-  folder, so `prompt` is ignored and the target's cwd is not required. `parseSpawnRequest` still validates the id (400 `bad resume id`).
-- **What the app cannot receive is dropped, not refused:** `name`, `model`, `effort`, `permissionMode`, `remoteControl` and `oneShot` are parsed and
-  ignored, so an old client never breaks. The prompt cap is `PROMPT_CAP` (4000), the same as headless; the app's own cut is 14336 characters (app 4.4212.0,
-  read 2026-10-29), recorded as a comment in `desktop.ts`, so the cap must stay below it.
+- **Two shapes.** A `resume` fires `claude://resume?session=<id>` (`resumeUrl`) — the **hand-over**, which carries no prompt and no folder, so `prompt`
+  is ignored and the target's cwd is not required. `parseSpawnRequest` still validates the id (400 `bad resume id`). A fresh launch runs headless first,
+  next.
+- **A fresh launch runs its first turn here, then hands over** (`launchForDesktop` in `server/api.ts`, `server/lib/handover.ts`). The app's
+  `claude://code/new?folder=&q=` link cannot start work unattended: on app 4.4212.0 it puts the prompt in the composer as an unsent draft, behind the app's
+  own per-folder "Trust this workspace?" prompt, which is separate from the CLI's `hasTrustDialogAccepted` (measured 2026-10-30 in
+  `~/Library/Logs/Claude/main.log`; the 2026-10-29 probe that saw it send was a folder the app already trusted). So the launch is an ordinary headless one
+  — `probeSpawn` 404, `MAX_LAUNCHING` 429, `resolveSpawnProject` 400, `launch()` — with `oneShot` forced on and `remoteControl` forced off, while `name`,
+  `model`, `effort` and `permissionMode` (under the ceiling) apply as they do headless. The 200 carries the `sessionId`, so the client opens the chat drawer
+  on the first turn. `watchHandOver(id)` then polls every `HANDOVER_POLL_MS` (3000): once the transcript's newest message is an `end_turn`
+  (`readTranscript().turnComplete`, `hasMessages`) and the file is unchanged on the next poll, it takes a rail slot and the hand-over mark
+  (`reserveDesktopLaunch(id)`) and fires `claude://resume?session=<id>`, which the app imports with no trust prompt.
+  - **The settle poll** is there for a Stop hook that blocks the stop: that starts another turn right after the `end_turn` record, and the link fired then
+    would put the app's writer on a transcript mid-turn, which forks it ([§Two writers](#two-writers-on-one-transcript-2259)). After the settle, the child
+    is in its post-turn linger, where the second writer is benign; the watch never signals it.
+  - **It gives up**, leaving an ordinary dashboard session the drawer can hand over by hand, when: the launch entry is `failed`; the entry has left the
+    store with no finished turn (stopped from the dashboard, or crashed — the store is read *before* the transcript, so a child that finished and exited
+    still hands over); the mark is already held (the drawer's hand-over got there first); `open` fails (the mark is released); or `HANDOVER_MAX_MS` (2 h)
+    passes. A full rail waits for the next poll instead.
+  - **In memory only.** A server restart drops every watch; the session then stays a dashboard one.
 - **The link goes through `open` as one argv entry** (`execFile('open', [url])`, 5s timeout, no shell): these routes are reachable from LAN and the
-  tailnet, and the prompt is user text. This is a launched local program, not a new outbound kind (`.claude/CLAUDE.md` Code rules).
-- **Check order** is `desktopAvailable` → project resolution or `resumeTarget` → rail. The slot is taken only after the request is known to be launchable,
-  so a refused request never holds a place the next one needs. `resumeTarget` is the headless resume's check chain extracted and shared, plus one more
-  409 at its end (below); a hand-over additionally checks the mark, see next.
+  tailnet. This is a launched local program, not a new outbound kind (`.claude/CLAUDE.md` Code rules).
+- **Check order** is `desktopAvailable` (501) first for both shapes. A hand-over then runs `resumeTarget` → rail; the slot is taken only after the request is
+  known to be launchable, so a refused request never holds a place the next one needs. `resumeTarget` is the headless resume's check chain extracted and
+  shared, plus one more 409 at its end (below); a hand-over additionally checks the mark, see next.
 - **Availability.** `desktopAvailable()` is true on macOS (`process.platform === 'darwin'`) **and** a `stat` of `/Applications/Claude.app` succeeding,
   memoised for the process; it deliberately avoids `open -Ra`, so the probe launches nothing. Off macOS, or without the app, the route answers 501
   `desktop app unavailable`, and `HealthResponse.desktopAvailable` is false so the launch form never offers the surface. The probe is capability only,
   like `spawnAvailable`: the remote-answer toggle and the write gate cover a desktop launch too, because they decide who may make this Mac do things.
-- **The rail** (`server/lib/desktop.ts`): at most `DESKTOP_RAIL_MAX` (4) launches inside `DESKTOP_WINDOW_MS` (5000), in memory. A fifth is 429 `too many
-  launches in flight`. It is a separate count from `MAX_LAUNCHING` because there is no child to count: the app opens a window per link, so an unbounded
-  burst would flood the screen, and a failed `open` gives its place back (`releaseDesktopLaunch`).
+- **The rail** (`server/lib/desktop.ts`): at most `DESKTOP_RAIL_MAX` (4) `claude://` links inside `DESKTOP_WINDOW_MS` (5000), in memory, counting both
+  hand-overs from the drawer and the watch's own. A fifth drawer hand-over is 429 `too many launches in flight`; a fifth watch waits a poll. It is a
+  separate count from `MAX_LAUNCHING` because a link has no child to count: the app opens a window per link, so an unbounded burst would flood the screen,
+  and a failed `open` gives its place back (`releaseDesktopLaunch`).
 - **The hand-over mark.** Each hand-over also marks its session id for the same window (`handOverInFlight`), checked *before* the rail, so a second tap
   or a second device in the seconds before the app writes its registry record is 409 `already resuming` rather than a second `open`. Headless resume
   answers the same text from the launch store (`listLaunching`); a hand-over leaves nothing there, hence the mark. A failed `open` releases the mark too,
@@ -601,8 +616,8 @@ through its `claude://` links instead, and `SpawnResponse` is the union `{surfac
   mirrors it: `resumeEligible` is false for `Session.desktopOwned`, and the drawer's hand-over button reads `Already open in the desktop app`.
 - **500 `open failed`** when `open` rejects or times out; the client shows the fixed line `Couldn't open the desktop app.` (`handOverErrorText`).
   Any other throw before it (project resolution, transcript read) is 500 `spawn failed`, as headless.
-- **No launch-store entry, no phantom row.** The row appears on a later scan once the app writes its transcript, so the client says so in the `.spawn-done`
-  line instead. Real `open claude://…` from the UI is unverified end to end (the code is tested against a stub runner).
+- **The row is the headless one until the hand-over.** A fresh desktop launch is a launch-store entry and a `dashboard` row like any other; once the app
+  imports it, the scan marks it `desktopOwned`. The `.spawn-done` line says where it is going.
 
 ## Routine runs: the other detached launch
 
@@ -626,8 +641,9 @@ one seam for it, and nothing about `launch`'s own contract changes. Three differ
 |---|---|
 | `server/lib/spawn.ts` | pure `buildSpawnArgs`/`clampPermission`/`parseSpawnRequest`, plus the impure `probeSpawn`/`launch`/`listLaunching`/`adoptLaunched`/`stopSession`/`forceStopSession`/`escalateStop`/`stopStates`/`hasLiveChild` and the RAM-only store |
 | `spawnProcess` (`server/lib/spawn.ts`) | the `Spawner` seam as a function, exported for `routine-run.ts`'s wrapper launch; see [Routine runs](#routine-runs-the-other-detached-launch) |
-| `POST /api/spawn` | `serveSpawn` — validates, then on `surface` absent or `dashboard` resolves the project, launches and returns `{surface:'dashboard', sessionId}` immediately; on `desktop` hands off to `spawnDesktop` ([§Launching in the desktop app](#launching-in-the-desktop-app)) and returns `{surface:'desktop'}` |
-| `server/lib/desktop.ts` | the desktop half's one module: `newSessionUrl`/`resumeUrl`, the memoised `desktopAvailable` probe, `openDesktopUrl` (`open <url>` via `execFile`, no shell), the in-memory rail and per-id hand-over mark (`reserveDesktopLaunch`/`releaseDesktopLaunch`/`handOverInFlight`), and the `overrideDesktop` test seam |
+| `POST /api/spawn` | `serveSpawn` — validates, then on `surface` absent or `dashboard` resolves the project, launches and returns `{surface:'dashboard', sessionId}` immediately; on `desktop` hands off to `spawnDesktop` ([§Launching in the desktop app](#launching-in-the-desktop-app)), which returns `{surface:'desktop', sessionId}` for a fresh launch (`launchForDesktop`) and `{surface:'desktop'}` for a hand-over |
+| `server/lib/handover.ts` | the fresh desktop launch's watch: `watchHandOver` (an unref'd 3 s timer per id), `stepHandOver` (one poll: settle, rail slot and mark, `open claude://resume…`, or give up), `resetHandOvers` / `watchedHandOvers` test seams |
+| `server/lib/desktop.ts` | the desktop half's link module: `resumeUrl`, the memoised `desktopAvailable` probe, `openDesktopUrl` (`open <url>` via `execFile`, no shell), the in-memory rail and per-id hand-over mark (`reserveDesktopLaunch`/`releaseDesktopLaunch`/`handOverInFlight`), and the `overrideDesktop` test seam |
 | `POST /api/spawn/:id/stop` | `serveSpawnStop` — SIGTERM + delete for a `launching` entry; delegates to `stopSession` |
 | `POST /api/sessions/:id/stop` | `serveSessionStop` — the row button's route; graceful by default, `{force:true}` for SIGKILL |
 | `client/src/lib/stopControl.ts` | the pure decision function behind the Stop control: render or not, the label, and which POST it sends |
@@ -635,11 +651,11 @@ one seam for it, and nothing about `launch`'s own contract changes. Three differ
 | `client/src/hooks/useStopSession.ts` | POSTs the stop, same bearer-token pattern as `useSpawn`, read-only 403 included (`READ_ONLY_TEXT`, no token prompt) |
 | `serveSessions` wiring | calls `adoptLaunched(ids)` then `listLaunching()` before every `/api/sessions` response, so `launching` rides the poll the client already makes |
 | `serveHealth` wiring | publishes `spawnAvailable` (`probeSpawn`), `desktopAvailable` (`desktopAvailable()`), `launchSurfaceDefault` (the [Shared setting](settings.md)) and `spawnMaxPermission` (`config.spawnMaxPermission`) |
-| `client/src/components/SpawnPanel.tsx` | the launch form, as a **modal** (below) — project picker, prompt textarea with the reply composer's own `MicButton` in the foot, name on its own line, then model/effort/permission as a triplet (model and effort start at the per-device Settings defaults, `spawnDefaultModel`/`spawnDefaultEffort` in `client/src/lib/settings.ts`, where `''` still means "send no flag and let the CLI decide"), and remote control and Close when done as the board's pill switch; a **Dashboard | Desktop** pick at the top when the host offers both (`offeredSurfaces`/`initialSurface`, `client/src/lib/launchSurface.ts`), which greys the fields a desktop launch ignores under the note `The desktop app's own defaults apply to these.`; own lazy chunk, cyan chrome (a compose surface opened on purpose, not a hold waiting on you) |
+| `client/src/components/SpawnPanel.tsx` | the launch form, as a **modal** (below) — project picker, prompt textarea with the reply composer's own `MicButton` in the foot, name on its own line, then model/effort/permission as a triplet (model and effort start at the per-device Settings defaults, `spawnDefaultModel`/`spawnDefaultEffort` in `client/src/lib/settings.ts`, where `''` still means "send no flag and let the CLI decide"), and remote control and Close when done as the board's pill switch; a **Dashboard | Desktop** pick at the top when the host offers both (`offeredSurfaces`/`initialSurface`, `client/src/lib/launchSurface.ts`), which fixes the two toggles a desktop launch forces (remote control Off, Close when done On) under the note `The first turn runs here, then the session moves to the desktop app.`; own lazy chunk, cyan chrome (a compose surface opened on purpose, not a hold waiting on you) |
 | Management › Git's Sync button | a second launcher (`client/src/hooks/useGitSync.ts`): `useSpawn().launch` with no sheet, the body built by `syncRequest` (`client/src/lib/gitSync.ts`) from the Settings › Git Sync model and effort, the host's `SYNC_PERMISSION_MODE` (`HealthResponse.syncPermissionMode`, clamped to the ceiling) and Remote answers' state, always `oneShot`; `docs/subsystems/git-stats.md` §Client |
-| `client/src/lib/spawnResponse.ts` | `parseSpawnResponse` — reads a 200 body into the `SpawnResponse` union, or `null`. A `{surface:'desktop'}` body has no id and is still a success; a bare `{sessionId}` (an older server) reads as `dashboard` |
-| `client/src/lib/launchSurface.ts` | `offeredSurfaces` (a surface is offered only on a literal `true` from `/api/health`), `initialSurface`, `canOpenLaunchForm` (the two `New session` entry points hide when nothing is offered), and the fixed copy for the desktop success/failure/hand-over lines and the Settings hint |
-| `.spawn-done` line (`client/src/components/SessionsView.tsx`) | the line over the session list after a launch-form desktop launch, `Opened in the desktop app — the row appears in a few seconds.`; there is no phantom row to show, since a desktop launch writes nothing to the launch store |
+| `client/src/lib/spawnResponse.ts` | `parseSpawnResponse` — reads a 200 body into the `SpawnResponse` union, or `null`. A `{surface:'desktop'}` body keeps its id when it has one (a fresh launch) and is a success without one (a hand-over, or an older server); a bare `{sessionId}` (an older server) reads as `dashboard` |
+| `client/src/lib/launchSurface.ts` | `offeredSurfaces` (a surface is offered only on a literal `true` from `/api/health`; desktop needs `spawnAvailable` too, since its first turn runs headless), `initialSurface`, `canOpenLaunchForm` (the two `New session` entry points hide when nothing is offered), and the fixed copy for the desktop success/failure/hand-over lines and the Settings hint |
+| `.spawn-done` line (`client/src/components/SessionsView.tsx`) | the line over the session list after a launch-form desktop launch, `Running here first — it moves to the desktop app when its first turn ends.`, shown beside the chat drawer the launch opens |
 | `client/src/hooks/useSpawn.ts` | POSTs the request through `postWrite` (`client/src/lib/postWrite.ts`), the same bearer-token pattern as `useRemoteAnswer`'s toggle; a 403 `read-only from this network` (`refusalKind`, `client/src/lib/writeRefusal.ts`) sets `readOnly` and `READ_ONLY_TEXT` as the error instead of `needsToken` |
 | `client/src/lib/spawnOptions.ts` | the client's copy of `MODELS`/`EFFORTS`/`PERMISSION_MODES` (duplicated, not imported — the FE/BE boundary is `shared/types.ts` alone — kept honest by `test/spawn-options.test.ts` asserting byte-for-byte equality against the server's arrays) and `allowedPermissionModes` |
 | The Board card's `+ New session` | rendered only when `spawnAvailable` is true on the one `/api/health` poll `SessionsView` already owns |
@@ -653,7 +669,7 @@ one seam for it, and nothing about `launch`'s own contract changes. Three differ
 
 | Method | Path | Codes |
 |---|---|---|
-| `POST` | `/api/spawn` | Body is `SpawnRequest` (`project`, `prompt`, optional `name`/`model`/`effort`/`permissionMode`/`remoteControl`/`oneShot`/`resume`/`surface`). 200 `{surface:'dashboard', sessionId}` or `{surface:'desktop'}` (`SpawnResponse`); 400 malformed body / `bad surface` / unknown project / empty or oversized prompt / bad or unknown `resume` id / non-dashboard resume target / resume target with no recorded cwd (headless resume only); 403 refused by the write gate (`bad token`, or `read-only from this network`); 404 remote answers off *or* (headless) feature off; 409 resume of a still-running, already-resuming or desktop-held session (`session is still running`, `already resuming`, `session is open in the desktop app`); 429 `MAX_LAUNCHING` launches already in flight (headless) or the desktop rail full; 500 spawn threw, or (desktop) `open failed`; 501 `desktop app unavailable` |
+| `POST` | `/api/spawn` | Body is `SpawnRequest` (`project`, `prompt`, optional `name`/`model`/`effort`/`permissionMode`/`remoteControl`/`oneShot`/`resume`/`surface`). 200 `{surface:'dashboard', sessionId}`, `{surface:'desktop', sessionId}` (fresh) or `{surface:'desktop'}` (hand-over) (`SpawnResponse`); 400 malformed body / `bad surface` / unknown project / empty or oversized prompt / bad or unknown `resume` id / non-dashboard resume target / resume target with no recorded cwd (headless resume only); 403 refused by the write gate (`bad token`, or `read-only from this network`); 404 remote answers off *or* (headless, or a fresh desktop launch) feature off; 409 resume of a still-running, already-resuming or desktop-held session (`session is still running`, `already resuming`, `session is open in the desktop app`); 429 `MAX_LAUNCHING` launches already in flight (headless, or a fresh desktop launch) or the desktop rail full (hand-over); 500 spawn threw, or (desktop) `open failed`; 501 `desktop app unavailable` |
 | `POST` | `/api/spawn/:id/stop` | 200 `{stopped: true}` for a still-`launching` entry, or `{stopping: true}` if that id has since become a running session (it delegates to `stopSession`); 400 bad id shape; 403 refused by the write gate (`bad token`, or `read-only from this network`); 404 remote answers off *or* no live launch for that id |
 | `POST` | `/api/sessions/:id/stop` | 200 `{stopping: true}` (graceful) or `{stopped: true}` (`{"force": true}`); 400 bad id shape, bad path encoding, *or* a present-but-unparseable body — an absent/empty body is normal; 403 refused by the write gate (`bad token`, or `read-only from this network`); 404 remote answers off *or* no live session for that id; 405 + `Allow: POST` for any other method |
 
@@ -689,8 +705,8 @@ pure — it decides fresh-vs-resume *and* headless-vs-desktop) → then, per sur
 - **Headless:** is the feature configured (`probeSpawn`, 404 `spawn unavailable`) → is anything already in flight (`MAX_LAUNCHING`, 429) → the filesystem
   step for the chosen shape: `resolveSpawnProject` (`resolveProject`) for a fresh launch, `resumeTarget` (the transcript hunt plus liveness checks) for a
   resume.
-- **Desktop:** `spawnDesktop` — `desktopAvailable` (501) → `resolveSpawnProject` or `resumeTarget` → the rail slot (`reserveDesktopLaunch`: 409 / 429) →
-  `open`.
+- **Desktop:** `spawnDesktop` — `desktopAvailable` (501) → for a fresh launch, the headless order above (`launchForDesktop`) and `watchHandOver`; for a
+  hand-over, `resumeTarget` → the rail slot (`reserveDesktopLaunch`: 409 / 429) → `open`.
 
 The write gate used to come *after* the probe, the opposite of `serveTranscribe`'s order; it now comes first, because which probe applies (and which rail)
 is in the body. That moves precedence for a headless request, not its codes: a malformed body is 400 where 404 or 429 used to win, and an unauthenticated

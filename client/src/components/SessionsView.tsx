@@ -87,7 +87,7 @@ export function SessionsView({ onLink }: {
   const [chatId, setChatId] = useState<string | null>(() => deepLinkSession());
   // Not persisted either: a one-shot form, not a view setting.
   const [spawnOpen, setSpawnOpen] = useState(false);
-  // What a desktop launch leaves behind: it opens no chat drawer (the app minted the session, there is no id), so this line is the answer.
+  // What a desktop launch leaves behind besides the chat drawer: the session is about to move, so this line says where it is going.
   const [desktopLaunched, setDesktopLaunched] = useState(false);
   useEffect(() => {
     if (!desktopLaunched) return;
@@ -181,8 +181,8 @@ export function SessionsView({ onLink }: {
             <SpawnPanel
               onClose={() => setSpawnOpen(false)}
               onLaunched={r => {
-                if (r.surface === 'dashboard') setChatId(r.sessionId);
-                else setDesktopLaunched(true);
+                if (r.sessionId) setChatId(r.sessionId);
+                if (r.surface === 'desktop') setDesktopLaunched(true);
                 setSpawnOpen(false);
               }}
               spawnMaxPermission={remoteAnswer.state?.spawnMaxPermission}

@@ -1,7 +1,7 @@
 /** Proves `stage` reaches the state every shot depends on, and that the harness fails a case on a mock-api refusal. */
 import { SECTIONS } from '../../client/src/lib/sections.js';
 
-import { DESKTOP_DEFAULTS_NOTE } from '../../client/src/lib/launchSurface.js';
+import { DESKTOP_HANDOVER_NOTE } from '../../client/src/lib/launchSurface.js';
 
 import { EPOCH } from './fixtures/epoch.js';
 import { FIXTURE_FIRST_MESSAGE, FIXTURE_SESSION_ID } from './fixtures/index.js';
@@ -157,7 +157,7 @@ test('the hand-over note on a working session stays inside the head at 375', asy
 
 // The launch form's target picker. 1280 opens it from the board's `+ New session`, 375 from the strip's `+`.
 for (const { width, open } of [{ width: 1280, open: '.newbtn' }, { width: 375, open: '.s-plus' }]) {
-  test(`the launch form offers Dashboard | Desktop and greys out the ignored fields at ${width}`, async ({ page }) => {
+  test(`the launch form offers Dashboard | Desktop and fixes the two toggles under Desktop at ${width}`, async ({ page }) => {
     await stage(page, { ...BASE, width });
     await page.locator(open).click();
     const form = page.locator('.spawn');
@@ -170,10 +170,16 @@ for (const { width, open } of [{ width: 1280, open: '.newbtn' }, { width: 375, o
 
     await form.locator('.sp-surface button', { hasText: 'Desktop' }).click();
     await expect(form.locator('.sp-surface button.on')).toHaveText('Desktop');
-    await expect(name).toBeDisabled();
-    expect(await name.evaluate(el => getComputedStyle(el).opacity)).toBe('0.55');
-    await expect(form.locator('.sp-note', { hasText: DESKTOP_DEFAULTS_NOTE })).toBeVisible();
-    await expect(form.getByText('SPAWN_MAX_PERMISSION')).toHaveCount(0);
+    // The first turn runs headless, so name, model, effort and permission still apply; only the two toggles are fixed.
+    await expect(name).toBeEnabled();
+    const remote = form.locator('.set-seg[aria-label="Remote control"] button');
+    const close = form.locator('.set-seg[aria-label="Close when done"] button');
+    await expect(remote.first()).toBeDisabled();
+    await expect(form.locator('.set-seg[aria-label="Remote control"] button.on')).toHaveText('Off');
+    await expect(form.locator('.set-seg[aria-label="Close when done"] button.on')).toHaveText('On');
+    await expect(close.first()).toBeDisabled();
+    await expect(form.locator('.sp-note', { hasText: DESKTOP_HANDOVER_NOTE })).toBeVisible();
+    await expect(form.getByText('SPAWN_MAX_PERMISSION')).toHaveCount(1);
 
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
     expect(await form.evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);

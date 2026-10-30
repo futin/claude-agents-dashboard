@@ -965,6 +965,11 @@ export function hasLiveChild(id: string): boolean {
   return !!entry && entry.state === 'running' && signalablePid(entry.child) !== null;
 }
 
+/** The store's state for `id`, `null` once the entry has left it (adopted and exited, stopped, or expired). Read by the desktop hand-over watch. */
+export function launchEntryState(id: string): Entry['state'] | null {
+  return entries.get(id)?.state ?? null;
+}
+
 /** Test seam: drop every entry, disarming any escalation timers they had armed. */
 export function resetLaunches(): void {
   for (const entry of entries.values()) {

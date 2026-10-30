@@ -5,10 +5,10 @@ const ORDER: LaunchSurface[] = ['dashboard', 'desktop'];
 
 /**
  * The surfaces the launch form offers. Each flag is `HealthResponse`'s, absent until the poll answers or on an older server, so only a literal `true` counts: a
- * surface that might not work is not offered.
+ * surface that might not work is not offered. Desktop needs both: its first turn runs headless before the session moves to the app.
  */
 export function offeredSurfaces(spawnAvailable: boolean | undefined, desktopAvailable: boolean | undefined): LaunchSurface[] {
-  const on: Record<LaunchSurface, boolean> = { dashboard: spawnAvailable === true, desktop: desktopAvailable === true };
+  const on: Record<LaunchSurface, boolean> = { dashboard: spawnAvailable === true, desktop: spawnAvailable === true && desktopAvailable === true };
   return ORDER.filter(s => on[s]);
 }
 
@@ -24,7 +24,7 @@ export const canOpenLaunchForm = (spawnAvailable: boolean | undefined, desktopAv
 
 // Spec decision 12: fixed copy, since the dashboard has no toast and each line shows where the action was taken.
 /** The line over the session list after a launch-form desktop launch. */
-export const DESKTOP_LAUNCHED_TEXT = 'Opened in the desktop app — the row appears in a few seconds.';
+export const DESKTOP_LAUNCHED_TEXT = 'Running here first — it moves to the desktop app when its first turn ends.';
 /** Beside a hand-over action once the app was opened. */
 export const DESKTOP_OPENED_TEXT = 'Opened in the desktop app.';
 /** Where the success line would show, on a 500 `open failed`. */
@@ -33,8 +33,8 @@ export const DESKTOP_FAILED_TEXT = "Couldn't open the desktop app.";
 export const DESKTOP_STOP_FIRST_TEXT = 'Stop it first';
 /** Beside the disabled hand-over button once the app already holds the session. */
 export const DESKTOP_OWNED_TEXT = 'Already open in the desktop app';
-/** Under the launch-form controls a desktop launch ignores. */
-export const DESKTOP_DEFAULTS_NOTE = "The desktop app's own defaults apply to these.";
+/** Under the launch-form toggles a desktop launch fixes: remote control off, close when done on. */
+export const DESKTOP_HANDOVER_NOTE = 'The first turn runs here, then the session moves to the desktop app.';
 
 /** Settings row hint, first sentence — the default is the server's, so every device's launch form starts on it. */
 export const LAUNCH_DEFAULT_HINT = 'Preselects the launch form on every device.';

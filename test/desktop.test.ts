@@ -9,7 +9,7 @@ import os from 'node:os';
 import path from 'node:path';
 
 import {
-  DESKTOP_RAIL_MAX, DESKTOP_WINDOW_MS, desktopAvailable, handOverInFlight, newSessionUrl, openDesktopUrl, overrideDesktop, releaseDesktopLaunch,
+  DESKTOP_RAIL_MAX, DESKTOP_WINDOW_MS, desktopAvailable, handOverInFlight, openDesktopUrl, overrideDesktop, releaseDesktopLaunch,
   reserveDesktopLaunch, resetDesktopProbe, resetDesktopRail, resumeUrl
 } from '../server/lib/desktop.js';
 
@@ -25,17 +25,6 @@ export async function run(): Promise<number> {
   let ok = 0, total = 0;
   const check = (r: boolean): void => { total++; if (r) ok++; };
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'desktop-test-'));
-
-  check(await test('newSessionUrl encodes folder and prompt as query params', () => {
-    const u = newSessionUrl('/Users/a b/proj', 'fix & ship\nnow');
-    const parsed = new URL(u);
-    assert.equal(parsed.protocol, 'claude:');
-    assert.equal(parsed.searchParams.get('folder'), '/Users/a b/proj');
-    assert.equal(parsed.searchParams.get('q'), 'fix & ship\nnow');
-    assert.ok(u.startsWith('claude://code/new?folder='), u);
-    assert.ok(!u.includes(' '), 'no literal space');
-    assert.ok(!u.includes('&ship'), 'the & in the prompt is escaped');
-  }));
 
   check(await test('resumeUrl carries the session id', () => {
     assert.equal(resumeUrl('48716273-aaaa'), 'claude://resume?session=48716273-aaaa');

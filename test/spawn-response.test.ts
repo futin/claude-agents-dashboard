@@ -11,8 +11,10 @@ export function run(): number {
   console.log('\n=== client/lib/spawnResponse.ts ===\n');
   let p = 0, f = 0;
 
-  if (test('a desktop 200 is a success with no session id — never "Launch failed"', () => {
+  if (test('a desktop 200 is a success with or without a session id — never "Launch failed"', () => {
     assert.deepStrictEqual(parseSpawnResponse({ surface: 'desktop' }), { surface: 'desktop' });
+    assert.deepStrictEqual(parseSpawnResponse({ surface: 'desktop', sessionId: '' }), { surface: 'desktop' }, 'an empty id is no id');
+    assert.deepStrictEqual(parseSpawnResponse({ surface: 'desktop', sessionId: 's3' }), { surface: 'desktop', sessionId: 's3' }, 'a fresh launch keeps its id');
   })) p++; else f++;
 
   if (test('a dashboard 200 carries its session id', () => {
