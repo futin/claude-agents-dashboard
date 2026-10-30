@@ -51,6 +51,7 @@ import { maybeSend, sendTest } from './lib/notify.js';
 import { getState, setEnabled } from './lib/remoteState.js';
 import { getPinnedProjects, getSettings, setPinOrder, setPinned, setSettings } from './lib/settings.js';
 import { fetchAll, markGitWatched } from './lib/git-fetch.js';
+import { desktopAvailable } from './lib/desktop.js';
 import { openFolder, openFolderPlatform, revealFile } from './lib/open-folder.js';
 import { runQuickOp } from './lib/git-quick.js';
 import { readSessionPr } from './lib/pr-detect.js';
@@ -523,6 +524,7 @@ export function serveHealth(config: Config, res: ServerResponse, req: IncomingMe
     tokenRequired: access === 'token',
     transcribe: probeTranscribe(config),
     spawnAvailable: probeSpawn(config),
+    desktopAvailable: desktopAvailable(),
     spawnMaxPermission: config.spawnMaxPermission,
     syncPermissionMode: clampPermission(config.syncPermissionMode, config.spawnMaxPermission)
   } satisfies HealthResponse);
