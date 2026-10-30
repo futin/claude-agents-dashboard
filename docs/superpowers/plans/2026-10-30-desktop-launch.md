@@ -24,7 +24,8 @@ in the chat drawer, and a Shared setting for the default.
 ## Global Constraints
 
 - `server/` takes no new dependency and no new outbound kind; the only new program launch is `open <claude:// url>` via `execFile` with an args array, no shell.
-- macOS only: `desktopAvailable` is `process.platform === 'darwin'` **and** a `stat` of `/Applications/Claude.app` succeeding, memoised. Never `open -R` / `open -Ra`.
+- macOS only: `desktopAvailable` is `process.platform === 'darwin'` **and** a `stat` of `/Applications/Claude.app` succeeding, memoised.
+  Never `open -R` / `open -Ra`.
 - Absent `surface` always means `dashboard`; the server never applies the default setting to a request (decision 1).
 - `shared/types.ts` first, then server, then client.
 - Desktop prompt limit is `PROMPT_CAP` (4000), the same as headless; the app's own cut (14336, app 4.4212.0) is recorded only as a comment in `desktop.ts`.
@@ -108,7 +109,8 @@ in the chat drawer, and a Shared setting for the default.
   - probe: `overrideDesktop({platform:'linux', appPath:<existing tmp dir>})` → false; `{platform:'darwin', appPath:<missing path>}` → false;
     `{platform:'darwin', appPath:<existing tmp dir>}` → true.
   - `openDesktopUrl(u)` with a fake runner records exactly `['open', [u]]`; a rejecting runner → the promise rejects.
-  - rail with fixed `now`: four `reserveDesktopLaunch(null, 1000)` → `'ok'`; fifth → `'rail-full'`; `reserveDesktopLaunch(null, 1000 + 5001)` → `'ok'` (window expired).
+  - rail with fixed `now`: four `reserveDesktopLaunch(null, 1000)` → `'ok'`; fifth → `'rail-full'`;
+    `reserveDesktopLaunch(null, 1000 + 5001)` → `'ok'` (window expired).
   - marks: `reserveDesktopLaunch('s1', 0)` → `'ok'`; again at 10 → `'in-flight'`; `handOverInFlight('s1', 10)` true; at 5001 → false;
     `releaseDesktopLaunch('s1', 0)` right after reserving → `handOverInFlight('s1', 1)` false and a new reserve → `'ok'`.
   - `in-flight` beats `rail-full`: fill 3 `null` + 1 `'s1'` at 0, then `reserveDesktopLaunch('s1', 1)` → `'in-flight'`.
@@ -122,8 +124,8 @@ in the chat drawer, and a Shared setting for the default.
 **Files:**
 - Modify: `server/lib/archived.ts` (new sibling reader; `classify` untouched)
 - Modify: `server/lib/scan.ts` (`ScanOptions`/`RowOptions` gain `desktopOwnedIds`; row sets `desktopOwned`)
-- Modify: `server/api.ts` (every `scanSessions` / row call site that injects `archivedIds` also injects `desktopOwnedIds: desktopLiveSessionIds()` —
-  at minimum the sessions list and the row-by-id route)
+- Modify: `server/api.ts` (the sessions list's `scanSessions` options, which inject `archivedIds`, and the row-by-id route's `sessionFromRef` options both
+  gain `desktopOwnedIds: desktopLiveSessionIds()`)
 - Test: `test/archived.test.ts`, `test/scan.test.ts`
 
 **Interfaces:**
@@ -186,8 +188,9 @@ in the chat drawer, and a Shared setting for the default.
   `{prompt:'x', surface:'desktop'}` → ok, `surface:'desktop'`; `{prompt:'x'}` → `surface:'dashboard'`; `{prompt:'x', surface:'Desktop'}` → `bad surface`;
   `{prompt:'x'.repeat(4001), surface:'desktop'}` → the existing `prompt must be at most 4000 characters`.
 - [ ] **Step 2: Write failing endpoint tests** in `test/spawn-endpoint.test.ts` (fake runner via `overrideDesktop({run, platform:'darwin', appPath:<tmp dir>})`,
-  `resetDesktopRail()` + `resetDesktopProbe()` between cases; resume cases need a tmpdir transcript with a `dashboard` entrypoint reachable through the
-  `projectsRoot` the handler reads — follow how the file or `api-harness.ts` points it at a fixture; if neither can, add the smallest seam that can and say so):
+  `resetDesktopRail()` + `resetDesktopProbe()` between cases; resume cases need a tmpdir transcript with a `dashboard` entrypoint: the file already
+  points `os.homedir()` at a fixture HOME for `projectsRoot()` (its comment near line 289), and `appSessionsRoot()` reads the same HOME, so registry
+  records go under `<HOME>/Library/Application Support/Claude/claude-code-sessions/<install>/<account>/`):
   - desktop fresh on a pinned/recent fixture project → 200 `{surface:'desktop'}`; runner saw one `open` whose URL parses to that project's path and the prompt.
   - desktop with `platform:'linux'` → 501 `desktop app unavailable`; runner never called.
   - desktop while `probeSpawn` would be false (no `claudeBin`) → still 200 (the headless probe does not gate desktop).
@@ -196,8 +199,8 @@ in the chat drawer, and a Shared setting for the default.
   - hand-over twice back to back for one id → 200 then 409 `already resuming`; runner called once with `claude://resume?session=<id>`.
   - hand-over, then headless resume of the same id with a prompt → 409 `already resuming`.
   - hand-over with a rejecting runner → 500 `open failed`; immediately again with a resolving runner → 200 (slot and mark released).
-  - hand-over of an id whose live registry record exists (store fixture via the `ArchivedOptions` root the handler uses — same seam question as above)
-    → 409 `session is open in the desktop app`; same for a headless resume of it.
+  - hand-over of an id whose live registry record exists (under the fixture HOME, `resetArchivedCache()` before) → 409 `session is open in the desktop
+    app`; same for a headless resume of it.
   - desktop body carrying `name`, `model:'opus'`, `oneShot:true`, `remoteControl:true` → 200.
   - `surface:'nope'` → 400 `bad surface`.
   - Existing cases that relied on the old order (429 or 404 returned **before** the body is read, posted with a malformed body) are updated to post a
@@ -299,10 +302,10 @@ in the chat drawer, and a Shared setting for the default.
   (the dashboard now fires both links; `desktopOwned`), `docs/overview.md` (§Map line for `server/lib/desktop.ts` and `client/src/lib/launchSurface.ts`),
   `.claude/CLAUDE.md` (Code rules launched-program list: `lib/desktop.ts` launches `open` with a `claude://` URL), the spec's Status line
   (`implemented on feat/desktop-launch`).
-- Test: none of its own; any doc-reading suite `scripts/ci-scope.ts` maps these files to (check it) must pass.
+- Test: none of its own; the suites that read these docs must pass — find them with `grep -l` over `test/*.ts` for each changed doc path.
 
 - [ ] **Step 1: Edit the docs**, 160-column wrap, no reflow of untouched prose. If a doc carries a provenance stamp, leave the stamp alone (docs-sync owns it).
-- [ ] **Step 2: Run the doc-reading suites `ci-scope` names for these paths, expect PASS.**
+- [ ] **Step 2: Run those doc-reading suites, expect PASS.**
 - [ ] **Step 3: Commit** `docs: document desktop launches and hand-overs`.
 
 ### Final verification (controller, after Task 8)
