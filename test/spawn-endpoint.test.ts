@@ -33,6 +33,7 @@ import {
 import { setPsRunner } from '../server/lib/scan.js';
 import { resetArchivedCache } from '../server/lib/archived.js';
 import { overrideDesktop, resetDesktopProbe, resetDesktopRail } from '../server/lib/desktop.js';
+import { resetHandOvers, watchedHandOvers } from '../server/lib/handover.js';
 import { withServer } from './api-harness.js';
 import type { Spawner } from '../server/lib/spawn.js';
 import type { ChildProcess } from 'node:child_process';
@@ -564,11 +565,13 @@ export async function run(): Promise<number> {
       resetDesktopRail();
       resetDesktopProbe();
       resetArchivedCache();
+      resetHandOvers();
       try { await fn(cfg, d); } finally {
         overrideDesktop({ run: null, platform: null, appPath: null });
         resetDesktopRail();
         resetDesktopProbe();
         resetArchivedCache();
+        resetHandOvers();
       }
     });
   }
@@ -584,22 +587,30 @@ export async function run(): Promise<number> {
     post((req, res) => void serveSpawn(cfg, req, res), JSON.stringify(body));
   const HAND_OVER = { resume: RES_ID, surface: 'desktop' };
 
-  check(await testAsync('desktop fresh launch: 200 {surface:"desktop"}, one `open` of a link carrying the project path and the prompt', async () => {
+  check(await testAsync('desktop fresh launch runs headless first: 200 {surface, sessionId}, a one-shot child, a hand-over watch, nothing opened yet', async () => {
     await withDesktop('CLAUDE_BIN=/bin/echo\n', 'darwin', async (cfg, d) => {
-      const children: FakeChild[] = [];
-      setSpawner(fakeSpawner(children));
-      const reply = await spawnReq(cfg, { project: '-fake-proj', prompt: 'build the thing', surface: 'desktop' });
+      const calls: Array<{ args: string[]; env: NodeJS.ProcessEnv | undefined; cwd: unknown }> = [];
+      setSpawner(((_command: string, args: string[], options: { env?: NodeJS.ProcessEnv; cwd?: unknown }) => {
+        calls.push({ args: args.slice(), env: options.env, cwd: options.cwd });
+        return new FakeChild() as unknown as ChildProcess;
+      }) as Spawner);
+      // remoteControl on and oneShot off are what the form would send for a headless launch; the desktop path overrides both.
+      const reply = await spawnReq(cfg, {
+        project: '-fake-proj', prompt: 'build the thing', surface: 'desktop', name: 'my-run', model: 'opus', effort: 'high', remoteControl: true, oneShot: false
+      });
       assert.equal(reply.status, 200);
-      assert.deepEqual(reply.json, { surface: 'desktop' });
-      assert.equal(d.calls.length, 1);
-      assert.equal(d.calls[0].cmd, 'open');
-      assert.equal(d.calls[0].args.length, 1, 'the link is one argv entry');
-      const url = new URL(d.calls[0].args[0]);
-      assert.equal(url.protocol, 'claude:');
-      assert.equal(url.searchParams.get('folder'), process.cwd());
-      assert.equal(url.searchParams.get('q'), 'build the thing');
-      assert.equal(children.length, 0, 'no headless child');
-      assert.equal(listLaunching().length, 0, 'a desktop launch never enters the launch store');
+      const json = reply.json as { surface?: string; sessionId?: string } | null;
+      assert.equal(json?.surface, 'desktop');
+      assert.equal(typeof json?.sessionId, 'string');
+      assert.equal(calls.length, 1, 'one headless child');
+      assert.equal(calls[0].cwd, process.cwd(), 'in the picked project');
+      assert.equal(calls[0].env?.CLAUDE_DASHBOARD_ONESHOT, '1', 'one-shot forced on, so the first turn ends');
+      assert.ok(!calls[0].args.includes('--remote-control'), 'remote control forced off');
+      assert.equal(calls[0].args[calls[0].args.indexOf('--model') + 1], 'opus', 'the model applies');
+      assert.equal(calls[0].args[calls[0].args.indexOf('--effort') + 1], 'high', 'the effort applies');
+      assert.equal(d.calls.length, 0, 'the resume link waits for the first turn to end');
+      assert.deepEqual(watchedHandOvers(), [json?.sessionId]);
+      assert.equal(listLaunching().length, 1, 'the launch store holds it like any headless launch');
     });
   }));
 
@@ -612,15 +623,16 @@ export async function run(): Promise<number> {
     });
   }));
 
-  check(await testAsync('the headless probe does not gate desktop: no claude CLI, desktop still 200, headless 404', async () => {
+  check(await testAsync('with no claude CLI a fresh desktop launch is 404 "spawn unavailable", while a hand-over still opens', async () => {
     await withDesktop('', 'darwin', async (cfg, d) => {
       assert.equal(probeSpawn(cfg), false, 'the fixture must have no spawnable CLI');
       const desk = await spawnReq(cfg, { project: '-fake-proj', prompt: 'x', surface: 'desktop' });
-      assert.equal(desk.status, 200);
+      assert.equal(desk.status, 404);
+      assert.equal(desk.json?.error, 'spawn unavailable');
+      assert.equal(d.calls.length, 0);
+      const over = await spawnReq(cfg, HAND_OVER);
+      assert.equal(over.status, 200, 'the hand-over is the link alone');
       assert.equal(d.calls.length, 1);
-      const head = await spawnReq(cfg, { project: '-fake-proj', prompt: 'x' });
-      assert.equal(head.status, 404);
-      assert.equal(head.json?.error, 'spawn unavailable');
     });
   }));
 
@@ -636,8 +648,9 @@ export async function run(): Promise<number> {
     });
   }));
 
-  check(await testAsync('the desktop rail: four fresh launches back to back are 200, the fifth 429 "too many launches in flight"', async () => {
+  check(await testAsync('fresh desktop launches share the headless cap: four back to back are 200, the fifth 429 "too many launches in flight"', async () => {
     await withDesktop('CLAUDE_BIN=/bin/echo\n', 'darwin', async (cfg, d) => {
+      setSpawner(fakeSpawner());
       const statuses: number[] = [];
       let last: Reply | null = null;
       for (let i = 0; i < 5; i++) {
@@ -646,7 +659,8 @@ export async function run(): Promise<number> {
       }
       assert.deepEqual(statuses, [200, 200, 200, 200, 429]);
       assert.equal(last?.json?.error, 'too many launches in flight');
-      assert.equal(d.calls.length, 4, 'the refused launch opens nothing');
+      assert.equal(d.calls.length, 0, 'nothing is opened before a first turn ends');
+      assert.equal(watchedHandOvers().length, 4, 'the refused launch is not watched');
     });
   }));
 
@@ -717,16 +731,6 @@ export async function run(): Promise<number> {
       assert.equal(unknown.status, 400);
       assert.equal(unknown.json?.error, 'unknown session');
       assert.equal(d.calls.length, 0);
-    });
-  }));
-
-  check(await testAsync('fields a desktop launch ignores are accepted, not refused', async () => {
-    await withDesktop('CLAUDE_BIN=/bin/echo\n', 'darwin', async (cfg, d) => {
-      const reply = await spawnReq(cfg, {
-        project: '-fake-proj', prompt: 'x', surface: 'desktop', name: 'my run', model: 'opus', oneShot: true, remoteControl: true
-      });
-      assert.equal(reply.status, 200);
-      assert.equal(d.calls.length, 1);
     });
   }));
 

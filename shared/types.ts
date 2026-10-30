@@ -2125,10 +2125,11 @@ export interface SpawnRequest {
  * the instant this response lands — the transcript it names does not exist yet, which is why the client can set its chat-drawer deep link from it but
  * the drawer itself still waits for the id to appear in a poll.
  *
- * `desktop`: no id at all. The app mints its own for a fresh launch, and the row appears on a later scan; a hand-over keeps the id the caller sent.
- * An older server answers a bare `{sessionId}`, which a client reads as `dashboard` (`client/src/lib/spawnResponse.ts`).
+ * `desktop`: a fresh launch carries the id the same way, since its first turn runs headless here before the session moves to the app
+ * (`server/lib/handover.ts`); a hand-over carries none, as it keeps the id the caller sent. A server older than that answers a fresh desktop launch with
+ * no id. An older server still answers a bare `{sessionId}`, which a client reads as `dashboard` (`client/src/lib/spawnResponse.ts`).
  */
-export type SpawnResponse = { surface: 'dashboard'; sessionId: string } | { surface: 'desktop' };
+export type SpawnResponse = { surface: 'dashboard'; sessionId: string } | { surface: 'desktop'; sessionId?: string };
 
 /** Full payload of `GET /api/sessions`. */
 export interface SessionsResponse {

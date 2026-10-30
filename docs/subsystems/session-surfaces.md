@@ -161,9 +161,15 @@ undocumented, so an app update can change or drop them; re-probe before building
 Fired through `open` on the server, either link acts on this Mac whichever device asked; an `<a href="claude://…">` in the page would instead hand the link to
 the *viewing* device's own Claude app. `lib/open-folder.ts` already launches `open`, so neither needs a new outbound kind.
 
-**The dashboard now fires both**, from `server/lib/desktop.ts` (`newSessionUrl`, `resumeUrl`) behind `POST /api/spawn` with `surface: 'desktop'`: a fresh
-launch for `claude://code/new`, the hand-over of a `dashboard` session for `claude://resume` ([spawn](spawn.md#launching-in-the-desktop-app)). That module is
-the one place to fix a change in either link.
+**`code/new` does not send unattended — corrected 2026-10-30.** The send above was a folder the app already trusted. Re-fired from the dashboard on
+2026-10-30 (app 4.4212.0), the link put the prompt in the composer as an **unsent draft**, behind the app's own "Trust this workspace?" prompt, for a folder
+the CLI trusts (`hasTrustDialogAccepted` in `~/.claude.json`): the app keeps a per-folder trust of its own (`LocalSessions.checkTrust` / `saveTrust` in
+`~/Library/Logs/Claude/main.log`), and even after the trust was saved no session started. The handler blanks `q` out of the URL it hands its web view, and
+none of the params it reads forces a send. `claude://resume` showed no prompt: its import saves trust on its own.
+
+**So the dashboard fires only `claude://resume`**, from `server/lib/desktop.ts` (`resumeUrl`) behind `POST /api/spawn` with `surface: 'desktop'`: for the
+hand-over of a `dashboard` session, and for a fresh desktop launch once its first turn, run headless here, has ended (`server/lib/handover.ts`,
+[spawn](spawn.md#launching-in-the-desktop-app)). That module is the one place to fix a change in the link.
 
 **`Session.desktopOwned`** marks a session the app now holds, so the dashboard offers neither a headless resume nor a second hand-over for it. It is set
 from `desktopLiveSessionIds()` (`server/lib/archived.ts`): the `cliSessionId` of every registry record that is not archived, read from the same files and

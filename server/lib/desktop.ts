@@ -29,16 +29,10 @@ let appPath: string = DEFAULT_APP_PATH;
 let probed: boolean | null = null;
 
 /**
- * `claude://code/new?folder=…&q=…` opens a fresh desktop session in `folder` with `prompt` prefilled.
- *
- * The app cuts `q` at 14336 characters (app 4.4212.0, `app.asar`, read 2026-10-29); `PROMPT_CAP` (4000) must stay below it. These links are undocumented
- * (`docs/subsystems/session-surfaces.md`), so this module is the one place to fix a change in them.
+ * `claude://resume?session=<id>` reopens an existing session in the desktop app. A fresh desktop launch ends here too, after its headless first turn
+ * (`handover.ts`): `claude://code/new` only prefills a draft. These links are undocumented (`docs/subsystems/session-surfaces.md`), so this module is the
+ * one place to fix a change in them.
  */
-export function newSessionUrl(folder: string, prompt: string): string {
-  return 'claude://code/new?' + new URLSearchParams([['folder', folder], ['q', prompt]]).toString();
-}
-
-/** `claude://resume?session=<id>` reopens an existing session in the desktop app. */
 export function resumeUrl(sessionId: string): string {
   return 'claude://resume?' + new URLSearchParams([['session', sessionId]]).toString();
 }

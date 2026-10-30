@@ -3,7 +3,7 @@
 import assert from 'node:assert';
 
 import {
-  DESKTOP_DEFAULTS_NOTE, DESKTOP_FAILED_TEXT, DESKTOP_LAUNCHED_TEXT, DESKTOP_OPENED_TEXT, canOpenLaunchForm, initialSurface, offeredSurfaces
+  DESKTOP_FAILED_TEXT, DESKTOP_HANDOVER_NOTE, DESKTOP_LAUNCHED_TEXT, DESKTOP_OPENED_TEXT, canOpenLaunchForm, initialSurface, offeredSurfaces
 } from '../client/src/lib/launchSurface.js';
 
 function test(name: string, fn: () => void): boolean {
@@ -21,8 +21,11 @@ export function run(): number {
   }));
   check(test('offeredSurfaces drops the surface the host cannot serve', () => {
     assert.deepEqual(offeredSurfaces(true, undefined), ['dashboard']);
-    assert.deepEqual(offeredSurfaces(false, true), ['desktop']);
     assert.deepEqual(offeredSurfaces(undefined, undefined), []);
+  }));
+  check(test('offeredSurfaces offers desktop only with the headless launch too: its first turn runs here', () => {
+    assert.deepEqual(offeredSurfaces(false, true), []);
+    assert.deepEqual(offeredSurfaces(undefined, true), []);
   }));
   check(test('offeredSurfaces needs a strict true: a truthy non-boolean offers nothing', () => {
     assert.deepEqual(offeredSurfaces(1 as unknown as boolean, 'yes' as unknown as boolean), []);
@@ -41,18 +44,19 @@ export function run(): number {
     assert.equal(initialSurface([], 'dashboard'), null);
   }));
 
-  check(test('canOpenLaunchForm is true when either surface is available', () => {
-    assert.equal(canOpenLaunchForm(false, true), true);
+  check(test('canOpenLaunchForm follows the headless launch: the desktop app alone opens nothing', () => {
+    assert.equal(canOpenLaunchForm(false, true), false);
     assert.equal(canOpenLaunchForm(true, false), true);
+    assert.equal(canOpenLaunchForm(true, true), true);
     assert.equal(canOpenLaunchForm(false, false), false);
     assert.equal(canOpenLaunchForm(undefined, undefined), false);
   }));
 
   check(test('the desktop copy is the spec string, byte for byte', () => {
-    assert.equal(DESKTOP_LAUNCHED_TEXT, 'Opened in the desktop app — the row appears in a few seconds.');
+    assert.equal(DESKTOP_LAUNCHED_TEXT, 'Running here first — it moves to the desktop app when its first turn ends.');
     assert.equal(DESKTOP_OPENED_TEXT, 'Opened in the desktop app.');
     assert.equal(DESKTOP_FAILED_TEXT, "Couldn't open the desktop app.");
-    assert.equal(DESKTOP_DEFAULTS_NOTE, "The desktop app's own defaults apply to these.");
+    assert.equal(DESKTOP_HANDOVER_NOTE, 'The first turn runs here, then the session moves to the desktop app.');
   }));
 
   console.log(`\nlaunch surface: ${ok}/${total} passed`);

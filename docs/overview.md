@@ -294,11 +294,12 @@ server/
                   one — the fourth session write path, and the first the dashboard initiates;
                   also owns stopping one (graceful SIGTERM, grace window, escalation)
                   (see docs/subsystems/spawn.md)
-  lib/desktop.ts  launches work in the Claude desktop app: `open claude://code/new?…` for a
-                  fresh session, `open claude://resume?session=…` for the hand-over of a
-                  dashboard one (execFile, no shell); the memoised macOS-and-app probe,
-                  the 4-per-5s launch rail and the per-session hand-over mark
+  lib/desktop.ts  moves work to the Claude desktop app: `open claude://resume?session=…`
+                  (execFile, no shell); the memoised macOS-and-app probe, the 4-per-5s
+                  link rail and the per-session hand-over mark
                   (see docs/subsystems/spawn.md §Launching in the desktop app)
+  lib/handover.ts  a fresh desktop launch's watch: its first turn runs headless, then
+                  the resume link fires once the transcript has settled on an `end_turn`
 client/src/
   App.tsx         shell: side rail (Sessions | Routines | Management | Usage | Claude Configs |
                   Analytics | Settings) + lazy views
