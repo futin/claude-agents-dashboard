@@ -1,6 +1,6 @@
 # Launch in the desktop app — design
 
-Date: 2026-10-29. Status: draft, review round 2 applied, awaiting approval. Repos: `claude-agents-dashboard` (this one) and the sibling `backlog-manager`.
+Date: 2026-10-29. Status: implemented on feat/desktop-launch. Repos: `claude-agents-dashboard` (this one) and the sibling `backlog-manager`.
 
 ## Intent
 

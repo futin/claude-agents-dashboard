@@ -16,7 +16,7 @@ phone-only pill switch of its own; it is gone, so `settingsTab` has exactly one 
 at any width, as Usage's Forecast / Token value / History does. Each page is a band
 (title, a scope pill, one line) over sub-category cards: Local has Display, Live data,
 New sessions, Git Sync, Notify this browser, Connection and Reset; Shared has Push notifications,
-Remote answers, Write access, Usage forecast and Git fetch.
+Remote answers, Write access, Usage forecast, Git fetch and New sessions.
 
 The Management › Projects page (`management/ProjectsView.tsx`) is no Settings card at all: it draws on the app ground under its own band, "Management ·
 Projects", which carries the "every device" scope pill (the pins are server-stored) and says a pin keeps a project in the launch sheet however long ago its
@@ -83,6 +83,17 @@ it takes effect without a restart.
 `git fetch origin` over the pinned repos ([git-stats](git-stats.md#the-fetch)), so only the Shared file can hold it. Unlike `recordUsageHistory` it idles
 while nobody has Management › Git open — the timer fires only while the view was polled recently. A hand-edited value outside the six reads back as `0`, and a
 `POST /api/settings` patch carrying one is refused whole, like a bad `idleSecs`. It is the **Git fetch** card on the Shared page, after Usage forecast.
+
+`launchSurfaceDefault` (default **`dashboard`**; `dashboard` or `desktop`) is the Shared setting behind the launch form's preselection
+([spawn](spawn.md#launching-in-the-desktop-app)). It is Shared so every device's form starts on the same surface, and it is only a preselection: the form
+always sends its own `surface`, and the server never applies it to a request that names none, so an API caller never inherits it. `/api/health` mirrors it
+(`launchSurfaceDefault`), so the form preselects without a second fetch. A hand-edited value outside the two reads back as `dashboard`, and a
+`POST /api/settings` patch carrying one is refused whole, like a bad `gitFetchSecs`. It is the **New sessions** card on the Shared page, after Git fetch,
+with one row, **New sessions open in** (Dashboard | Desktop). It shares its title with Local's New sessions card (the per-device model and effort defaults); the
+scope pill tells them apart. The hint is `launchSurface.ts`'s: `Preselects the launch form on every device.`, then
+`The desktop app is only on this Mac.` when the health poll reports the app, or `The desktop app was not found on the Mac running this dashboard.` when it
+does not. The row stays either way, because the setting is shared and may be changed from a device other than the Mac. When the host lacks a surface the
+form starts on the first one offered instead (`initialSurface`).
 
 `trustTailnet` (default **true**) decides whether a tailnet peer writes without `ANSWER_TOKEN` ([remote-access](remote-access.md#who-may-write)). It has to be
 Shared: the write gate on the server reads it on every request, through the same in-process cache `setSettings` updates, so flipping it takes effect without a
@@ -343,7 +354,7 @@ Worth knowing from this page's side:
 | Route | Purpose |
 |---|---|
 | `GET /api/settings` | the non-per-device settings + any detected override, plus `notifyAvailable`, `usageAvailable` and `staleEnvKeys` (names only — never the topic or token itself) |
-| `POST /api/settings` | change them (`{idleSecs?, answerSecs?, notify?, recordUsageHistory?, gitFetchSecs?, trustTailnet?}` — any subset); a gate-only write, like the other settings writes; replies with the same body as GET (`settingsBody`), `staleEnvKeys` included, since the client replaces its whole state with it |
+| `POST /api/settings` | change them (`{idleSecs?, answerSecs?, notify?, recordUsageHistory?, gitFetchSecs?, trustTailnet?, launchSurfaceDefault?}` — any subset); a gate-only write, like the other settings writes; replies with the same body as GET (`settingsBody`), `staleEnvKeys` included, since the client replaces its whole state with it |
 | `GET /api/pins` | `{pinned: PinRow[], recent: ProjectRef[], older: ProjectRef[], home}` — the stored pins (a dead one `listed: false`) and the projects on offer to pin: `recent` is the listed ones not yet pinned, `older` the 30-day tail past the lookback, both minus Claude's own dirs (scratchpads, scratch workspaces, `~/.claude`) |
 | `POST /api/pins` | `{dirName, pinned}` — gate-only write; a pin must name a recent or older project (404 otherwise), 409 past 50; an unpin takes any stored dir; answers with the fresh `GET` payload |
 | `POST /api/pins/order` | `{order: string[]}` — gate-only write; the whole pin list in its new order, 409 unless it is an exact permutation of the stored pins (no membership check: a permutation cannot add a dir); answers with the fresh `GET /api/pins` payload |

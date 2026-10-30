@@ -161,6 +161,17 @@ undocumented, so an app update can change or drop them; re-probe before building
 Fired through `open` on the server, either link acts on this Mac whichever device asked; an `<a href="claude://…">` in the page would instead hand the link to
 the *viewing* device's own Claude app. `lib/open-folder.ts` already launches `open`, so neither needs a new outbound kind.
 
+**The dashboard now fires both**, from `server/lib/desktop.ts` (`newSessionUrl`, `resumeUrl`) behind `POST /api/spawn` with `surface: 'desktop'`: a fresh
+launch for `claude://code/new`, the hand-over of a `dashboard` session for `claude://resume` ([spawn](spawn.md#launching-in-the-desktop-app)). That module is
+the one place to fix a change in either link.
+
+**`Session.desktopOwned`** marks a session the app now holds, so the dashboard offers neither a headless resume nor a second hand-over for it. It is set
+from `desktopLiveSessionIds()` (`server/lib/archived.ts`): the `cliSessionId` of every registry record that is not archived, read from the same files and
+with the same stat-and-re-read-on-mtime cost as `archivedSessionIds`. Its failure direction is the **inverse** of `classify`'s: a wrong "archived" hides a
+row, so `classify` fails open to "not archived"; a wrong "not owned" admits a second writer on one transcript, so this reader treats a record as live
+unless `isArchived` is exactly `true` and only ever adds an id. What it cannot read (no root, an unreadable or malformed record, no string `cliSessionId`)
+it cannot attribute, and contributes nothing. The flag is `true` or absent, never `false`, like `processLive`.
+
 ## The two boundaries that will not move from this repo
 
 - **No *documented* route adds a row to the desktop app's local sidebar.** Its registry

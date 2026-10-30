@@ -82,7 +82,7 @@ config; a public tunnel's hostname needs `ALLOWED_HOSTS` (the DNS-rebinding guar
   `GH_PROMPT_DISABLED=1` set; `lib/git-quick.ts` launches `git fetch`,
   `git merge --ff-only` and `git push` for the Sync menu; `lib/codegraph.ts` launches `codegraph` with `CODEGRAPH_NO_UPDATE_CHECK=1` and
   `CODEGRAPH_NO_DOWNLOAD=1` set, which switch off its update check and bundle download; `lib/routine-reconcile.ts` launches `launchctl`, `crontab` and
-  `pgrep`; `lib/routine-store.ts` launches `ps` and `sysctl`; `lib/open-folder.ts` launches `open` and `open -R`; `lib/routine-run.ts` spawns the
+  `pgrep`; `lib/routine-store.ts` launches `ps` and `sysctl`; `lib/open-folder.ts` launches `open` and `open -R`; `lib/desktop.ts` launches `open` with a `claude://` URL; `lib/routine-run.ts` spawns the
   plugin's `run-routine.mjs` through `spawn.ts`'s `spawnProcess`. `test/outbound.test.ts` pins the list.
   Two npm packages are allowed, by name, each with zero runtime deps of its own and pinned to a git tag: `lookout-widgets`, the Lookout contract producer
   behind `/api/hub/widgets`, and `release-kit`, whose reader is the one reader of the tag-message contract its release workflow writes (spec

@@ -76,6 +76,16 @@ for it (`Session.processLive`; a restart, an orchestrator run, a pending backgro
 the composer is replaced by a `still running` note on the same `qpanel` classes — see
 [spawn](spawn.md#processlive-the-live-process-this-server-cannot-signal).
 
+**"Open in desktop app" is a head button, not a panel.** On a headless `dashboard` session the drawer head carries `.chat-desktop` (inside
+`.chat-desktop-wrap`, before the close button) when the health poll reports `desktopAvailable`; it POSTs `{resume: <id>, surface: 'desktop', prompt: ''}` to
+`/api/spawn`, the [hand-over](spawn.md#launching-in-the-desktop-app) to the app. `handOverState` (`client/src/lib/resume.ts`) decides what the button says:
+`hidden` (host cannot open the app, or the session is not `dashboard`), `offer` (turn over, nothing held, not `desktopOwned`), `stop-first` (a held
+question/plan/reply, `stopState`, `processLive`, or any status but `idle`/`incomplete`) and `owned` (`Session.desktopOwned`). Only `offer` enables it. A
+`role="status"` line (`.chat-desktop-note`) sits beside it: `Stop it first` or `Already open in the desktop app` for the two disabled states,
+`Opened in the desktop app.` after a 200, `Couldn't open the desktop app.` for the 500 `open failed` (`handOverErrorText`), and any other refusal as the
+server worded it (the 409s). It is UX, not the boundary: the server re-checks and 409s. The button is separate from the resume composer on purpose; the
+two are never both live, since `resumeEligible` is false for a `desktopOwned` session.
+
 **A pinned panel floats over the transcript; it does not push it.** The transcript body and a
 single `.chat-pinned` layer are siblings in `.chat-stack`, a relative box that fills the
 column, and the layer is absolutely positioned against its bottom edge. Consequences, all of

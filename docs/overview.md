@@ -93,7 +93,7 @@ remote-answer switch on, a **gate-only write** needs the gate alone ([who may wr
 | `POST /api/sessions/:id/message-answer` | send free text into a finished turn, or let it stop (session write path — message) |
 | `POST /api/messages/wait` | the Stop hook's held-open wait, away only — except headless sessions, which hold at the desk too (session write path — message) |
 | `POST /api/transcribe` | a recorded clip in, transcribed text out — feeds the reply composer's mic (session write path — dictation, rides the switch, not counted) |
-| `POST /api/spawn` | start a new headless `claude -p` session in a recent or pinned project, or `resume` an ended `dashboard` one by id (session write path — spawn, the one the dashboard initiates rather than answers) |
+| `POST /api/spawn` | start a new headless `claude -p` session in a recent or pinned project, or `resume` an ended `dashboard` one by id; with `surface: 'desktop'` open the new session, or the hand-over of that one, in the Claude desktop app instead (session write path — spawn, the one the dashboard initiates rather than answers) |
 | `POST /api/spawn/:id/stop` | SIGTERM a still-launching session's child (session write path — spawn) |
 | `POST /api/sessions/:id/stop` | stop a dashboard-spawned session at any point in its life — graceful by default, `{"force":true}` to skip the grace window; the row's button only ever calls this one (session write path — spawn) |
 | `POST /api/permissions/notify` | "a permission dialog is open" flag (display-only) (gate-only write) |
@@ -102,7 +102,7 @@ remote-answer switch on, a **gate-only write** needs the gate alone ([who may wr
 | `POST /api/remote-answer` | flip the remote-answer toggle (gate-only write) |
 | `GET /api/dismiss` | where a tapped desk push lands — a page that closes the tab it opened in; carries no deep link |
 | `GET /api/health` | liveness + remote-answer state + connection origin and this caller's `writeAccess` + the two hook numbers (idle threshold, answer window) |
-| `GET /api/settings`, `POST /api/settings` | the non-per-device settings — idle threshold, answer window, push policy, usage-history recording, Git fetch interval (`gitFetchSecs`), tailnet write trust, plus `notifyAvailable` and `usageAvailable` (never the ntfy topic itself); the POST is a gate-only write |
+| `GET /api/settings`, `POST /api/settings` | the non-per-device settings — idle threshold, answer window, push policy, usage-history recording, Git fetch interval (`gitFetchSecs`), tailnet write trust, the launch form's default surface (`launchSurfaceDefault`), plus `notifyAvailable` and `usageAvailable` (never the ntfy topic itself); the POST is a gate-only write |
 | `GET /api/pins`, `POST /api/pins` | pinned projects — listed past `LOOKBACK_HOURS` — plus the recent and older ones on offer to pin; the POST is a gate-only write (see [configs](subsystems/configs.md)) |
 | `POST /api/pins/order` | the whole pin list in a new order, accepted only as an exact permutation of the stored pins (409 otherwise); gate-only write, answers the `GET /api/pins` payload (see [configs](subsystems/configs.md)) |
 | `POST /api/open-folder` | open a pinned project's folder with macOS `open` (gate-only write); path must be a listed pin's, 501 off macOS (see [git-stats](subsystems/git-stats.md)) |
@@ -203,7 +203,9 @@ server/
                   Support) for the `isArchived` flag, joined to transcripts by
                   `cliSessionId` — the only place that touches that store; the id
                   set is passed *into* `scanSessions`/`listRecentProjects` so they
-                  stay pure. Fails open (no store → nothing hidden)
+                  stay pure. Fails open (no store → nothing hidden). Its second reader,
+                  `desktopLiveSessionIds`, names the sessions the app holds open
+                  (`Session.desktopOwned`) and fails the other way
   lib/agents.ts   whole-file subagent parser → AgentJob[]
   lib/agents-cache.ts  incremental byte-offset cache over agents.ts
   lib/tasks.ts    whole-file fold of the plan signals and TaskCreate/TaskUpdate → Session.tasks / taskPlan (plan wins), incremental by byte offset (the creates sit below the 256 KB tail)
@@ -292,6 +294,11 @@ server/
                   one — the fourth session write path, and the first the dashboard initiates;
                   also owns stopping one (graceful SIGTERM, grace window, escalation)
                   (see docs/subsystems/spawn.md)
+  lib/desktop.ts  launches work in the Claude desktop app: `open claude://code/new?…` for a
+                  fresh session, `open claude://resume?session=…` for the hand-over of a
+                  dashboard one (execFile, no shell); the memoised macOS-and-app probe,
+                  the 4-per-5s launch rail and the per-session hand-over mark
+                  (see docs/subsystems/spawn.md §Launching in the desktop app)
 client/src/
   App.tsx         shell: side rail (Sessions | Routines | Management | Usage | Claude Configs |
                   Analytics | Settings) + lazy views
@@ -353,7 +360,7 @@ client/src/
                   tail poll at a time, an epoch per re-tail), pollSeq (`createPollSeq`, the skip-while-in-flight rule useSessions and the Routines polls share),
                   heldBody (which timeline body a pinned panel folds), markdown, configsEntries,
                   format, settings, persistedReset (Settings › Reset's reach into mounted usePersistedState holders),
-                  sections, deepLink, dictation, openFolder (the Open folder key's status → note), spawnOptions, pins, resume, pace, usageProfile,
+                  sections, deepLink, dictation, openFolder (the Open folder key's status → note), spawnOptions, spawnResponse (`parseSpawnResponse`, the `POST /api/spawn` 200 body → its `SpawnResponse` branch), launchSurface (which launch surfaces the form offers, its initial pick, and the desktop copy), pins, resume, pace, usageProfile,
                   usageRatesFormat, usageHistory (the History tab's step path, ticks and figures), panelCollapse, surface, walkChart (the headroom
                   chart's geometry), walkRows (the same walk as day rows), holds,
                   composer (that keyboard's pure rules and the session's latest `wrap_up` suggestion), modelLabel (`claude-opus-5-5` → `Opus 5.5`),
