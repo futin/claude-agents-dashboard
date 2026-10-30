@@ -7,7 +7,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-import { archivedSessionIds, appSessionsRoot } from '../server/lib/archived.js';
+import { archivedSessionIds, appSessionsRoot, desktopLiveSessionIds, resetArchivedCache } from '../server/lib/archived.js';
 import * as scan from '../server/lib/scan.js';
 import * as mgmt from '../server/lib/management.js';
 import { listReports } from '../server/lib/analytics.js';
@@ -259,6 +259,82 @@ export function run(): number {
     assert.equal(reports.length, 1);
     assert.equal(reports[0].sessionId, id);
     assert.ok(reports[0].analysis, 'analysis still computed for an archived session');
+  });
+
+  /* ---------------------------------------------------- desktopLiveSessionIds */
+
+  /** The decision-11 fixture: live, archived, flag absent, no id, malformed. */
+  const liveFixture = (): string => makeStore([
+    { local: 'u1', cliSessionId: 'a', isArchived: false },
+    { local: 'u2', cliSessionId: 'b', isArchived: true },
+    { local: 'u3', raw: JSON.stringify({ sessionId: 'local_u3', cliSessionId: 'c', name: 'no flag' }) },
+    { local: 'u4', raw: JSON.stringify({ sessionId: 'local_u4', isArchived: false }) },
+    { local: 'u5', raw: '{not json' }
+  ]);
+
+  t('desktopLiveSessionIds: live and flag-absent records count, archived / id-less / malformed do not', () => {
+    resetArchivedCache();
+    assert.deepEqual([...desktopLiveSessionIds({ root: liveFixture() })].sort(), ['a', 'c']);
+  });
+
+  t('desktopLiveSessionIds: a non-boolean isArchived is live (only true archives)', () => {
+    resetArchivedCache();
+    const root = makeStore([
+      { local: 'u1', raw: JSON.stringify({ cliSessionId: 'str', isArchived: 'true' }) },
+      { local: 'u2', raw: JSON.stringify({ cliSessionId: 'nul', isArchived: null }) },
+      { local: 'u3', raw: JSON.stringify({ cliSessionId: 'empty', isArchived: false }).replace('"cliSessionId":"empty"', '"cliSessionId":""') }
+    ]);
+    assert.deepEqual([...desktopLiveSessionIds({ root })].sort(), ['nul', 'str']);
+  });
+
+  t('desktopLiveSessionIds: a prefix that shows isArchived:false next to a later true is still read in full', () => {
+    resetArchivedCache();
+    // The prefix fast path may only trust a live verdict it can see end to end; a record whose prefix carries both flags must be parsed.
+    const root = makeStore([{ local: 'u1', raw: '{"cliSessionId":"x","isArchived":false,"nested":{"isArchived":true}}' }]);
+    assert.deepEqual([...desktopLiveSessionIds({ root })], ['x']);
+  });
+
+  t('desktopLiveSessionIds: store root absent → empty set, no throw', () => {
+    resetArchivedCache();
+    const root = path.join(os.tmpdir(), 'cad-store-does-not-exist-' + Date.now());
+    assert.deepEqual([...desktopLiveSessionIds({ root })], []);
+  });
+
+  t('desktopLiveSessionIds: rewriting a record as archived with a newer mtime drops its id', () => {
+    resetArchivedCache();
+    const root = makeStore([{ local: 'u1', cliSessionId: 'a', isArchived: false, mtimeMs: NOW - 60_000 }]);
+    assert.deepEqual([...desktopLiveSessionIds({ root })], ['a']);
+    writeRecord(root, { local: 'u1', cliSessionId: 'a', isArchived: true, mtimeMs: NOW });
+    assert.deepEqual([...desktopLiveSessionIds({ root })], []);
+    // mirror: back to live, newer again → the id returns
+    writeRecord(root, { local: 'u1', cliSessionId: 'a', isArchived: false, mtimeMs: NOW + 60_000 });
+    assert.deepEqual([...desktopLiveSessionIds({ root })], ['a']);
+  });
+
+  t('desktopLiveSessionIds: the sibling leaves archivedSessionIds alone, and the two caches do not share verdicts', () => {
+    resetArchivedCache();
+    const root = liveFixture();
+    assert.deepEqual([...desktopLiveSessionIds({ root })].sort(), ['a', 'c']);
+    assert.deepEqual([...archivedSessionIds({ root })], ['b']);
+    assert.deepEqual([...desktopLiveSessionIds({ root })].sort(), ['a', 'c']);
+  });
+
+  t('desktopLiveSessionIds: a store root other than the one asked for does not leak in', () => {
+    resetArchivedCache();
+    const one = makeStore([{ local: 'u1', cliSessionId: 'one', isArchived: false }]);
+    const two = makeStore([{ local: 'u1', cliSessionId: 'two', isArchived: false }]);
+    assert.deepEqual([...desktopLiveSessionIds({ root: one })], ['one']);
+    assert.deepEqual([...desktopLiveSessionIds({ root: two })], ['two']);
+  });
+
+  t('desktopLiveSessionIds: no options resolves HOME at call time', () => {
+    resetArchivedCache();
+    const home = fs.mkdtempSync(path.join(os.tmpdir(), 'cad-home-'));
+    const store = appSessionsRoot(home);
+    writeRecord(store, { local: 'u1', cliSessionId: 'homed', isArchived: false });
+    const prev = process.env.HOME;
+    process.env.HOME = home;
+    try { assert.deepEqual([...desktopLiveSessionIds()], ['homed']); } finally { process.env.HOME = prev; }
   });
 
   console.log(`  ${ok}/${n} passed`);

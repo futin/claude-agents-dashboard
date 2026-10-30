@@ -14,7 +14,7 @@ import type { HubHandler } from 'lookout-widgets';
 import { listTranscripts, findTranscript, liveSessionIds, projectsRoot, sessionFromRef, sessionSurface } from './lib/scan.js';
 import { scanSnapshot } from './lib/scan-snapshot.js';
 import { readSessionAnalyticsLog } from './lib/sessionAnalyticsLog.js';
-import { archivedSessionIds } from './lib/archived.js';
+import { archivedSessionIds, desktopLiveSessionIds } from './lib/archived.js';
 import { lastSessionEffort, readTranscript } from './lib/transcript.js';
 import { readAgentsCached } from './lib/agents-cache.js';
 import { getCachedUsageState } from './lib/usage.js';
@@ -1907,7 +1907,7 @@ export function serveSessionRow(config: Config, id: string, res: ServerResponse)
     if (!ref) return sendJson(res, 404, { error: 'no such session' });
     const row = sessionFromRef(ref, {
       now: Date.now(), activeWindowMin: config.activeWindowMin, liveCwds: null,
-      lessons: config.showAnalytics === false ? null : readSessionAnalyticsLog()
+      lessons: config.showAnalytics === false ? null : readSessionAnalyticsLog(), desktopOwnedIds: desktopLiveSessionIds()
     });
     if (!row) return sendJson(res, 500, { error: 'transcript unreadable' });
     sendJson(res, 200, row satisfies Session);
