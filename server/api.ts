@@ -1445,7 +1445,7 @@ export async function serveConfigsProject(config: Config, dirName: string, res: 
 
 /**
  * `GET /api/configs/file?path=<abs>` — one enumerated file's content.
- * 400 malformed path, 403 not in the servable set, 404 vanished on disk.
+ * 400 malformed path, 403 not in the servable set, 404 vanished on disk or a settings file that no longer parses.
  */
 export async function serveConfigsFile(config: Config, rawPath: string, res: ServerResponse): Promise<void> {
   const p = rawPath;

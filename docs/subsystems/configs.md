@@ -152,6 +152,13 @@ control (the type is a column now, not a collapsible header) and the
   and is **never servable** — nor is any `.mcp.json`, project or plugin: each can hold `env` values, and `normalizeMcpServers`
   reduces `env`/`headers` to key names so no value reaches the payload. (A plugin manifest with inline `mcpServers` stays
   servable as the Plugins row's file — it is the plugin's published file, not local config.)
+- **⚠️ Settings files are served redacted, to every peer (#355).** `settings.json` and `settings.local.json` directly under a `.claude` dir stay viewable, but
+  `readServableFile` parses them whole and re-serializes through `redactSettings`: every `env` and `headers` value, at any depth, becomes `[redacted]`, and an object
+  under those keys keeps its key names. **It fails closed:** JSON that does not parse answers null (HTTP 404), never the raw text, and it never edits the raw text by
+  pattern, because a duplicate or escaped `env` key would slip past that. The cap applies to the redacted text, so `truncated` describes that text while `size` stays
+  the byte size on disk. The answer does not vary by peer: `resolvePeer` reads a tunnel without `X-Forwarded-For` as `local`, so a per-peer answer would rest the
+  secret on that header. The cost is that the owner too sees `[redacted]` here and opens the file in an editor to read a value. Other secret-shaped text in these files
+  (`permissions` entries, `pluginConfigs` values, hook `command` strings) is not redacted.
 - **⚠️ The skill-dir walk feeds that set, so it enumerates only what it can see itself:**
   **symlinks and dotfiles/dot-dirs are skipped**. A symlink inside a skill dir pointing at
   `~/.claude/.credentials.json` or a project `.env` would otherwise turn into a servable

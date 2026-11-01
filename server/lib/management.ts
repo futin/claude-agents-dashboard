@@ -32,6 +32,13 @@ import type {
 /** Max bytes served per file by GET /api/configs/file. */
 export const FILE_CONTENT_CAP = 256 * 1024;
 
+/** A scope's settings files, both directly under its `.claude` dir. */
+const SETTINGS_FILES = ['settings.json', 'settings.local.json'];
+
+/** Keys of a settings file whose values never leave the server, at any depth. */
+const REDACTED_KEYS = new Set(['env', 'headers']);
+const REDACTED = '[redacted]';
+
 /** Max files listed per skill dir (after sorting, so SKILL.md always survives). */
 export const SKILL_FILES_CAP = 200;
 
@@ -308,8 +315,9 @@ function stringList(v: unknown): string[] {
 }
 
 /**
- * One `mcpServers` object → rows sorted by name. The only place redaction happens: `env` and
- * `headers` are reduced to their key names, so no value of either can reach the payload.
+ * One `mcpServers` object → rows sorted by name. The scope payload's only redaction: `env` and
+ * `headers` are reduced to their key names, so no value of either can reach the payload. A served
+ * settings file has its own, {@link redactSettings}.
  */
 export function normalizeMcpServers(raw: unknown, source: string, declaredIn: string, disabledNames: ReadonlySet<string>): McpServerInfo[] {
   if (!isObject(raw)) return [];
@@ -423,7 +431,7 @@ async function readPlugins(home: string, enabledMap: Record<string, unknown>): P
 /* ----------------------------------------------------------------- scopes */
 
 function settingsInfo(dir: string, existing: Set<string>): SettingsFileInfo[] {
-  return ['settings.json', 'settings.local.json'].map(label => {
+  return SETTINGS_FILES.map(label => {
     const p = path.join(dir, label);
     return { label, path: p, exists: existing.has(p) };
   });
@@ -442,7 +450,7 @@ async function memoryItems(paths: string[], source: string): Promise<ConfigItem[
 }
 
 async function settingsHooks(dir: string, source: string, scriptRoots: string[]): Promise<{ hooks: HookInfo[]; existing: Set<string> }> {
-  const files = ['settings.json', 'settings.local.json'].map(l => path.join(dir, l));
+  const files = SETTINGS_FILES.map(l => path.join(dir, l));
   const parsed = await Promise.all(files.map(readJsonIfFile));
   const existing = new Set<string>();
   const hooks: HookInfo[] = [];
@@ -768,7 +776,8 @@ export function resolveProject(config: Partial<Config>, dirName: string, options
  * path this scanner itself enumerated across the global scope and all recent
  * project scopes. Exact membership only — secrets under the same roots
  * (~/.claude/.credentials.json, history.jsonl, project .env) are never
- * members because no scanner emits them.
+ * members because no scanner emits them. Settings files are members, and
+ * {@link readServableFile} redacts them on the way out.
  */
 export async function collectServablePaths(config: Partial<Config>, options: ProjectsOptions = {}): Promise<Set<string>> {
   const projects = listRecentProjects(config, options);
@@ -802,10 +811,28 @@ export async function collectServablePaths(config: Partial<Config>, options: Pro
   return allowed;
 }
 
+/** True for a settings file of either scope: a skill's own `settings.json` is not one. */
+function isSettingsPath(p: string): boolean {
+  return SETTINGS_FILES.includes(path.basename(p)) && path.basename(path.dirname(p)) === '.claude';
+}
+
+/**
+ * Copy of parsed settings JSON with every `env` and `headers` value replaced, at any depth. An
+ * object keeps its key names so the file still reads as itself; anything else is replaced whole.
+ */
+export function redactSettings(v: unknown): unknown {
+  if (Array.isArray(v)) return v.map(redactSettings);
+  if (!isObject(v)) return v;
+  return Object.fromEntries(Object.entries(v).map(([k, val]) => {
+    if (!REDACTED_KEYS.has(k)) return [k, redactSettings(val)];
+    return [k, isObject(val) ? Object.fromEntries(Object.keys(val).map(name => [name, REDACTED])) : REDACTED];
+  }));
+}
+
 /**
  * Serve one enumerated file. Null on any rejection (relative path, `..`
- * survivor, non-member, unreadable) — the API layer distinguishes 403 vs 404
- * by re-checking membership itself.
+ * survivor, non-member, unreadable, a settings file that does not parse) — the
+ * API layer distinguishes 403 vs 404 by re-checking membership itself.
  */
 export async function readServableFile(p: string, allowed: Set<string>, cap = FILE_CONTENT_CAP): Promise<FileContent | null> {
   if (!path.isAbsolute(p) || path.normalize(p) !== p) return null;
@@ -813,6 +840,11 @@ export async function readServableFile(p: string, allowed: Set<string>, cap = FI
   try {
     const stat = await fsp.stat(p);
     if (!stat.isFile()) return null;
+    if (isSettingsPath(p)) {
+      // Parsed whole and never edited as text: a duplicate or escaped `env` key would slip past a text edit, and a cap applied first would cut the JSON.
+      const text = Buffer.from(JSON.stringify(redactSettings(JSON.parse(await fsp.readFile(p, 'utf8'))), null, 2));
+      return { path: p, content: text.subarray(0, cap).toString('utf8'), size: stat.size, truncated: text.length > cap };
+    }
     if (stat.size <= cap) {
       return { path: p, content: await fsp.readFile(p, 'utf8'), size: stat.size, truncated: false };
     }
