@@ -10,7 +10,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import {
-  classify, makePlan, mentions, nodeSuitePaths, pathTokens, prFiles, readSuites, scopeOf, selectSuites, tsxSuitePaths,
+  classify, handFiles, makePlan, mentions, nodeSuitePaths, pathTokens, prFiles, readSuites, scopeOf, selectSuites, tsxSuitePaths,
 } from '../scripts/ci-scope.js';
 
 function test(name: string, fn: () => void): boolean {
@@ -130,6 +130,24 @@ export function run(): number {
     assert.match(out.stdout, /^ci-scope: docs-only — files given by hand; running run-some/);
     assert.match(out.stdout, /would run: pnpm exec tsx test\/run-some\.ts .*test\/docs-links\.test\.ts/);
     assert.doesNotMatch(out.stdout, /typecheck\n|ALL PASS/);
+  }));
+
+  r(test('handFiles: the --files list ends at the next flag, and a list left empty falls back to full', () => {
+    assert.strictEqual(handFiles(['--dry-run']), null);
+    assert.deepStrictEqual(handFiles(['--files', 'a.md', 'b.md']), ['a.md', 'b.md']);
+    assert.deepStrictEqual(handFiles(['--dry-run', '--files', 'a.md']), ['a.md']);
+    assert.deepStrictEqual(handFiles(['--files', 'a.md', 'b.md', '--dry-run']), ['a.md', 'b.md']);
+    assert.deepStrictEqual(handFiles(['--files', '--dry-run']), []);
+    assert.strictEqual(scopeOf(handFiles(['--files', '--dry-run'])), 'full');
+  }));
+
+  r(test('the CLI reads a flag after the --files list as a flag, not as a changed file', () => {
+    const env = { ...process.env };
+    delete env.GITHUB_ACTIONS;
+    const out = spawnSync(process.execPath, ['--import', 'tsx', 'scripts/ci-scope.ts', '--files', 'docs/overview.md', '--dry-run'], { cwd: ROOT, env, encoding: 'utf8' });
+    assert.strictEqual(out.status, 0, out.stderr);
+    assert.match(out.stdout, /^ci-scope: docs-only — files given by hand; running run-some/);
+    assert.doesNotMatch(out.stdout, /--dry-run/);
   }));
 
   console.log(`\n  ${p} passed, ${f} failed`);
