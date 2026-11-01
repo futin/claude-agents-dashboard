@@ -791,6 +791,144 @@ export async function run(): Promise<number> {
     assert.strictEqual((await mgmt.readServableFile(link, allowed))!.content, '# global');
   }));
 
+  /* ------------------------------------------------- settings file redaction */
+
+  const SECRET = 'FAKE-SECRET-VALUE';
+
+  /** Serve a settings file planted at `.claude/<label>` under `root`. */
+  async function serveSettings(root: string, text: string, label = 'settings.json', cap?: number) {
+    const p = put(root, path.join('.claude', label), text);
+    const file = await mgmt.readServableFile(p, new Set([p]), cap);
+    assert.ok(file, 'the settings file is served');
+    return { p, file: file! };
+  }
+
+  tally(await test('global settings.json served through the scanner: env value redacted, key kept', async () => {
+    const home = makeHome();
+    const p = put(home, '.claude/settings.json', JSON.stringify({ env: { GITHUB_TOKEN: SECRET } }));
+    const allowed = await servableFor(makeProject(), home);
+    assert.ok(allowed.has(p));
+    const file = await mgmt.readServableFile(p, allowed);
+    assert.ok(!file!.content.includes(SECRET));
+    assert.strictEqual(JSON.parse(file!.content).env.GITHUB_TOKEN, '[redacted]');
+  }));
+
+  tally(await test('project settings.json and settings.local.json served through the scanner: env value redacted', async () => {
+    const proj = makeProject();
+    const files = ['settings.json', 'settings.local.json'].map(l => put(proj, path.join('.claude', l), JSON.stringify({ env: { K: SECRET } })));
+    const allowed = await servableFor(proj);
+    for (const p of files) {
+      assert.ok(allowed.has(p), p);
+      const file = await mgmt.readServableFile(p, allowed);
+      assert.ok(!file!.content.includes(SECRET), p);
+      assert.strictEqual(JSON.parse(file!.content).env.K, '[redacted]', p);
+    }
+  }));
+
+  tally(await test('global settings.json symlinked to a dotfiles repo is still redacted (mirror of the #289 dotfiles case)', async () => {
+    const real = put(makeProject(), 'settings.json', JSON.stringify({ env: { K: SECRET } }));
+    const home = makeHome();
+    fs.mkdirSync(path.join(home, '.claude'));
+    const link = path.join(home, '.claude/settings.json');
+    fs.symlinkSync(real, link);
+    const allowed = await servableFor(makeProject(), home);
+    assert.ok(allowed.has(link));
+    const file = await mgmt.readServableFile(link, allowed);
+    assert.ok(!file!.content.includes(SECRET));
+  }));
+
+  tally(await test('settings: env and headers redacted at any depth, through objects and arrays, keys kept', async () => {
+    const { file } = await serveSettings(makeHome(), JSON.stringify({
+      hooks: { Stop: [{ hooks: [{ type: 'http', url: 'https://x', headers: { Authorization: SECRET } }] }] },
+      mcpServers: { s: { command: 'c', env: { A: SECRET }, headers: { H: SECRET } } }
+    }));
+    assert.ok(!file.content.includes(SECRET));
+    const json = JSON.parse(file.content);
+    assert.deepStrictEqual(json.hooks.Stop[0].hooks[0], { type: 'http', url: 'https://x', headers: { Authorization: '[redacted]' } });
+    assert.deepStrictEqual(json.mcpServers.s, { command: 'c', env: { A: '[redacted]' }, headers: { H: '[redacted]' } });
+  }));
+
+  tally(await test('settings: env or headers holding a non-object is replaced whole', async () => {
+    for (const value of [SECRET, [SECRET], [{ K: SECRET }], 42, null]) {
+      const { file } = await serveSettings(makeHome(), JSON.stringify({ env: value, nested: { headers: value } }));
+      assert.ok(!file.content.includes(SECRET));
+      assert.deepStrictEqual(JSON.parse(file.content), { env: '[redacted]', nested: { headers: '[redacted]' } });
+    }
+  }));
+
+  tally(await test('settings: an object nested inside env is replaced, not walked', async () => {
+    const { file } = await serveSettings(makeHome(), JSON.stringify({ env: { outer: { inner: SECRET } } }));
+    assert.ok(!file.content.includes(SECRET));
+    assert.deepStrictEqual(JSON.parse(file.content), { env: { outer: '[redacted]' } });
+  }));
+
+  tally(await test('settings: a duplicate env key leaks neither value', async () => {
+    const { file } = await serveSettings(makeHome(), '{"env":{"A":"FAKE-ONE"},"env":{"A":"FAKE-TWO"}}');
+    assert.ok(!file.content.includes('FAKE-ONE'));
+    assert.ok(!file.content.includes('FAKE-TWO'));
+    assert.deepStrictEqual(JSON.parse(file.content), { env: { A: '[redacted]' } });
+  }));
+
+  tally(await test('settings: an escaped env key is redacted', async () => {
+    const { file } = await serveSettings(makeHome(), `{"\\u0065nv":{"A":"${SECRET}"}}`);
+    assert.ok(!file.content.includes(SECRET));
+    assert.deepStrictEqual(JSON.parse(file.content), { env: { A: '[redacted]' } });
+  }));
+
+  tally(await test('settings: non-secret keys survive, and a file with no env parses to a deep-equal object', async () => {
+    const body = { model: 'opus', permissions: { allow: ['Bash(ls)'] }, hooks: { Stop: [{ hooks: [{ type: 'command', command: 'echo hi' }] }] } };
+    const { file } = await serveSettings(makeHome(), JSON.stringify(body));
+    assert.deepStrictEqual(JSON.parse(file.content), body);
+    const mixed = await serveSettings(makeHome(), JSON.stringify({ ...body, env: { K: SECRET } }));
+    assert.deepStrictEqual(JSON.parse(mixed.file.content), { ...body, env: { K: '[redacted]' } });
+  }));
+
+  tally(await test('settings: size is the on-disk byte size, not the length of the redacted text', async () => {
+    const raw = `{"env":{"K":"${'é'.repeat(50)}"}}`;
+    const { file } = await serveSettings(makeHome(), raw);
+    assert.strictEqual(file.size, Buffer.byteLength(raw));
+    assert.notStrictEqual(file.size, Buffer.byteLength(file.content));
+    assert.strictEqual(file.truncated, false);
+  }));
+
+  tally(await test('settings: over the cap the secret stays absent whether it sits before or after the cut', async () => {
+    const padding = 'x'.repeat(1000);
+    const cases = [
+      JSON.stringify({ env: { K: SECRET }, model: padding }),
+      JSON.stringify({ model: padding, env: { K: SECRET } })
+    ];
+    for (const raw of cases) {
+      const { file } = await serveSettings(makeHome(), raw, 'settings.json', 100);
+      assert.ok(!file.content.includes(SECRET));
+      assert.strictEqual(file.truncated, true);
+      assert.strictEqual(Buffer.byteLength(file.content), 100);
+      assert.strictEqual(file.size, Buffer.byteLength(raw));
+    }
+  }));
+
+  tally(await test('settings: a raw file over the cap whose redacted text fits is served whole', async () => {
+    const raw = JSON.stringify({ env: { K: 'x'.repeat(1000) } });
+    const { file } = await serveSettings(makeHome(), raw, 'settings.json', 100);
+    assert.strictEqual(file.truncated, false);
+    assert.deepStrictEqual(JSON.parse(file.content), { env: { K: '[redacted]' } });
+    assert.strictEqual(file.size, Buffer.byteLength(raw));
+  }));
+
+  tally(await test('settings: bytes that are not JSON answer null, never the raw text', async () => {
+    const p = put(makeHome(), '.claude/settings.json', `{"env":{"K":"${SECRET}"`);
+    assert.strictEqual(await mgmt.readServableFile(p, new Set([p])), null);
+  }));
+
+  tally(await test('settings mirror: other servable files are served byte for byte', async () => {
+    const home = makeHome();
+    const raw = `{ "env":   {"K": "visible"} }\n`;
+    const skillFile = put(home, '.claude/skills/s/settings.json', raw);
+    const memory = put(home, '.claude/CLAUDE.md', 'the "env" key\n');
+    const allowed = new Set([skillFile, memory]);
+    assert.strictEqual((await mgmt.readServableFile(skillFile, allowed))!.content, raw);
+    assert.strictEqual((await mgmt.readServableFile(memory, allowed))!.content, 'the "env" key\n');
+  }));
+
 
   /* ------------------------------------------------------------ MCP servers */
 

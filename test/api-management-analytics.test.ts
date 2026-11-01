@@ -151,6 +151,19 @@ export async function run(): Promise<number> {
     });
   }));
 
+  check(await testAsync('GET /api/configs/file redacts a settings file env value and keeps its key name', async () => {
+    await withServer(ENV, async h => {
+      h.plant(ID);
+      const settings = path.join(h.home, '.claude', 'settings.json');
+      fs.writeFileSync(settings, JSON.stringify({ env: { GITHUB_TOKEN: 'SEKRIT' } }));
+      const reply = await h.req(`/api/configs/file?path=${encodeURIComponent(settings)}`);
+      assert.equal(reply.status, 200);
+      assert.equal(reply.json?.error, undefined);
+      assert.ok(!reply.raw.includes('SEKRIT'), 'the value never reaches the wire');
+      assert.ok(reply.raw.includes('GITHUB_TOKEN'), 'the key name stays readable');
+    });
+  }));
+
   check(await testAsync('GET /api/configs/file is 400 for a relative or dot-dot path', async () => {
     await withServer(ENV, async h => {
       for (const p of ['', 'relative/path', '/etc/../etc/passwd']) {

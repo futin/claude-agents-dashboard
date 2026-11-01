@@ -2034,10 +2034,11 @@ export interface ManagementIndex {
 /** Payload of `GET /api/configs/file`. */
 export interface FileContent {
   path: string;
+  /** The file's text. A settings file is re-serialized with its `env` and `headers` values redacted; every other file is served as it is on disk. */
   content: string;
   /** Real byte size on disk. */
   size: number;
-  /** True when size exceeded the cap and content was cut. */
+  /** True when the served text exceeded the cap and content was cut. */
   truncated: boolean;
   error?: boolean;
 }

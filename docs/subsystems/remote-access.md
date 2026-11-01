@@ -103,7 +103,7 @@ to someone who isn't on your tailnet.
 > ⚠️ **If you pick a public tunnel instead** (ngrok, Cloudflare, …), understand what it
 > exposes: *every* read endpoint is open — full transcripts, chat history,
 > `/api/git-stats` (pinned repos' paths and branch names), and `/api/configs/file`
-> (config file bodies) — to anyone with the link. And if you have
+> (config file bodies, with a settings file's `env` / `headers` values redacted and the rest of it readable) — to anyone with the link. And if you have
 > set `CLAUDE_BIN`, so is [spawn](spawn.md) for anyone holding the token. A tunnel client
 > terminates on loopback, so the write gate trusts it only through `X-Forwarded-For`: the
 > tunnel must set that header (ngrok and cloudflared do), or every client of it reads
@@ -232,7 +232,7 @@ outside a secure context, so a plain-http tailnet URL or LAN IP can never record
 went from "nicer bookmark" to "the only way a phone dictates" without any change of its own.
 
 **Never Funnel.** Every read endpoint here is open — full transcripts, chat history,
-`/api/git-stats` repo paths and branch names, `/api/configs/file` config bodies — and
+`/api/git-stats` repo paths and branch names, `/api/configs/file` config bodies (settings `env` / `headers` values redacted, the rest readable) — and
 with `CLAUDE_BIN` set, [spawn](spawn.md) starts
 a real Claude Code session on this machine. The tailnet *is* the perimeter;
 `tailscale funnel` is the one command that removes it. `test/tailnet.test.ts` asserts the
