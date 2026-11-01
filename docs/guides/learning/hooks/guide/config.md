@@ -68,7 +68,7 @@ degrades to the terminal dialog. Even a misconfigured ladder fails safe.
 The UI enforces it from the other end, twice. First the field simply won't go higher:
 
 ```tsx
-// client/src/components/settings/SettingsView.tsx:358-364
+// client/src/components/settings/SettingsView.tsx:360-366
 <NumberField
   value={server.state.answerSecs}
   min={5}
@@ -81,7 +81,7 @@ The UI enforces it from the other end, twice. First the field simply won't go hi
 And if a value above 600 arrives some other way, it names the exact number you would need:
 
 ```tsx
-// client/src/components/settings/SettingsView.tsx:289-297  (compacted here)
+// client/src/components/settings/SettingsView.tsx:381-390  (compacted here)
 {server.state.answerSecs > 600 && (
   <div className="set-warn">
     Above 600s the CLI kills the hook before the window closes, unless you also raise
@@ -151,7 +151,7 @@ Docker, CI, a second dashboard on another port. But a silently-losing UI control
 experience, so the server *detects* the override and the UI says so:
 
 ```ts
-// server/lib/settings.ts:230
+// server/lib/settings.ts:241
 export function detectEnvOverride(name: string, homeDir?: string): EnvOverride | null {
 ```
 
@@ -213,7 +213,7 @@ works this run, and says so) means a read-only container doesn't lose the featur
 
 **Stack 2 — should *this* one wait?** The idle check, in the hook, per invocation. The server never makes this call, because the server can't
 see your keyboard from inside a container. It does read the same idle value for a different job: once a hold is open,
-[`idle.ts`](../../../../../server/lib/idle.ts)'s `backAtDesk()` (`idle.ts:45-53`) asks whether you came back, so each store's 5s reaper can release the hold
+[`idle.ts`](../../../../../server/lib/idle.ts)'s `backAtDesk()` (`idle.ts:45-53`) asks whether you came back, so the stores' shared 5s reaper can release the hold
 early. An unreadable reading there means "stay held", never "release" — see [Fail-open §6](./fail-open.md).
 
 **Stack 3 — should it push?** ([`notify.ts`](../../../../../server/lib/notify.ts)) Orthogonal to the
@@ -241,7 +241,7 @@ So flipping the toggle off stops *new* waits from registering but does not stran
 held. And the toggle handler releases the held ones deliberately:
 
 ```ts
-// server/lib/pending.ts:265-275
+// server/lib/pending.ts:251-261
 /**
  * Hand every waiting question back to its terminal dialog. Used when the toggle
  * is switched off: "stop accepting remote answers" should release the waits it
@@ -249,8 +249,8 @@ held. And the toggle handler releases the held ones deliberately:
  * Returns how many were released.
  */
 export function dismissAll(): number {
-  const waiting = [...entries.values()];
-  for (const entry of waiting) settle(entry, { status: 'dismissed' });
+  const waiting = store.values();
+  for (const entry of waiting) store.settle(entry, { status: 'dismissed' });
   return waiting.length;
 }
 ```
@@ -271,7 +271,7 @@ should mean. Turning the switch off releases what it owns; it does not orphan it
 | `DEFAULT_TIMEOUT_MS` | 600_000 | [`pending.ts:46`](../../../../../server/lib/pending.ts) |
 | `MIN_TIMEOUT_MS` / `MAX_TIMEOUT_MS` | 5_000 / 1_800_000 | `pending.ts:47-48` |
 | `PERMISSION_TTL_MS` | 30 min | [`permissions.ts:26`](../../../../../server/lib/permissions.ts) |
-| idle reaper interval | 5s | [`messages.ts:207`](../../../../../server/lib/messages.ts) |
+| idle reaper interval | 5s | [`wait-store.ts:81`](../../../../../server/lib/wait-store.ts) |
 | `TEXT_CAP` (follow-up) | 4000 | `messages.ts:27` |
 | `QUESTION_CAP` / `LABEL_CAP` / `DESCRIPTION_CAP` | 2000 / 200 / 500 | `pending.ts:39-41` |
 | CLI Stop-block cap | 8 | `CLAUDE_CODE_STOP_HOOK_BLOCK_CAP` |

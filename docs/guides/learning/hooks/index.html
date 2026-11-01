@@ -92,7 +92,7 @@ hr { border: 0; border-top: 1px solid var(--line); margin: 2rem 0; }
 <section><h2 id="README">Overview</h2>
 <p>This guide teaches the five Claude Code remote-answer hooks this repo ships: what each one is, where it is wired, what order they fire in, and — the part reference docs skip — <strong>why each piece is shaped the way it is</strong>, by contrasting it with the naive approach and laying out what that trade cost.</p>
 <blockquote><p><strong>Mental model up front:</strong> A Claude Code hook is the CLI shelling out to <em>your</em> script at one of five named moments in a turn, handing it JSON on stdin and reading a decision off stdout. This repo uses that mechanism for exactly one purpose: <strong>making a terminal-bound session answerable from your phone.</strong> Four of the five hooks are variations on a single trick, and once you see the trick, the whole subsystem collapses into something simple.</p></blockquote>
-<blockquote><p>Baseline: written against <code>scripts/</code> + the hook-facing <code>server/lib/</code> stores at commit <code>092484b</code> (2026-08-17). Citations and the passages that had drifted refreshed against <code>8d0f7f2</code> on 2026-10-26.</p></blockquote>
+<blockquote><p>Baseline: written against <code>scripts/</code> + the hook-facing <code>server/lib/</code> stores at commit <code>092484b</code> (2026-08-17). Citations and the passages that had drifted refreshed against <code>c6662c0</code> on 2026-11-01.</p></blockquote>
 <hr>
 <h3 id="README--the-shape-of-the-whole-thing">The shape of the whole thing</h3>
 <div class="diagram"><svg viewBox="0 0 660 326" role="img" xmlns="http://www.w3.org/2000/svg">
@@ -166,7 +166,7 @@ ls -l ~/.claude/hooks/</code></pre>
 <p><strong>Five scripts, one trick (<code>deny</code> + reason), three gates, fourteen fail-open guards, and a state machine that knows nothing about HTTP.</strong></p>
 <hr>
 <p><strong>Relevant files</strong></p>
-<ul><li><a href="../../../../scripts/ask-remote-hook.sh"><code>scripts/ask-remote-hook.sh</code></a> — the reference implementation of the blocking pattern; read this one first</li><li><a href="../../../../scripts/plan-remote-hook.sh"><code>scripts/plan-remote-hook.sh</code></a> — same pattern, different output shape, reject-only</li><li><a href="../../../../scripts/stop-notify-hook.sh"><code>scripts/stop-notify-hook.sh</code></a> — same pattern plus a loop and a fallback path</li><li><a href="../../../../scripts/permission-notify-hook.sh"><code>scripts/permission-notify-hook.sh</code></a> — the display-only outlier; deliberately incapable of deciding</li><li><a href="../../../../scripts/remote-decision-hook.sh"><code>scripts/remote-decision-hook.sh</code></a> — pure context injection, no HTTP wait</li><li><a href="../../../../server/lib/pending.ts"><code>server/lib/pending.ts</code></a> — the state machine the other two wait-stores copy</li><li><a href="../../../../server/lib/plans.ts"><code>server/lib/plans.ts</code></a> — same machine, reject-only verdicts</li><li><a href="../../../../server/lib/messages.ts"><code>server/lib/messages.ts</code></a> — same machine plus the 5s idle reaper</li><li><a href="../../../../server/lib/permissions.ts"><code>server/lib/permissions.ts</code></a> — flag store, no socket, no verdict</li><li><a href="../../../../server/lib/remoteState.ts"><code>server/lib/remoteState.ts</code></a> — the env gate × UI toggle product the hooks act on</li><li><a href="../../../../server/lib/settings.ts"><code>server/lib/settings.ts</code></a> — the idle/answer values the hooks read off <code>/api/health</code></li><li><a href="../../../../server/lib/notify.ts"><code>server/lib/notify.ts</code></a> — the push policy, and the clearest example of a deliberately inverted fail direction</li><li><a href="../../../../server/api.ts"><code>server/api.ts</code></a> — the handlers that hold the sockets</li><li><code>docs/subsystems/remote-answer.md</code> — the reference doc this guide is the <em>why</em> layer for</li></ul>
+<ul><li><a href="../../../../scripts/ask-remote-hook.sh"><code>scripts/ask-remote-hook.sh</code></a> — the reference implementation of the blocking pattern; read this one first</li><li><a href="../../../../scripts/plan-remote-hook.sh"><code>scripts/plan-remote-hook.sh</code></a> — same pattern, different output shape, reject-only</li><li><a href="../../../../scripts/stop-notify-hook.sh"><code>scripts/stop-notify-hook.sh</code></a> — same pattern plus a loop and a fallback path</li><li><a href="../../../../scripts/permission-notify-hook.sh"><code>scripts/permission-notify-hook.sh</code></a> — the display-only outlier; deliberately incapable of deciding</li><li><a href="../../../../scripts/remote-decision-hook.sh"><code>scripts/remote-decision-hook.sh</code></a> — pure context injection, no HTTP wait</li><li><a href="../../../../server/lib/wait-store.ts"><code>server/lib/wait-store.ts</code></a> — the state machine and the one idle reaper all three wait stores share</li><li><a href="../../../../server/lib/pending.ts"><code>server/lib/pending.ts</code></a> — the question store: its payload and validation over that machine</li><li><a href="../../../../server/lib/plans.ts"><code>server/lib/plans.ts</code></a> — same machine, reject-only verdicts</li><li><a href="../../../../server/lib/messages.ts"><code>server/lib/messages.ts</code></a> — same machine, headless holds exempt from the idle reaper</li><li><a href="../../../../server/lib/permissions.ts"><code>server/lib/permissions.ts</code></a> — flag store, no socket, no verdict</li><li><a href="../../../../server/lib/remoteState.ts"><code>server/lib/remoteState.ts</code></a> — the env gate × UI toggle product the hooks act on</li><li><a href="../../../../server/lib/settings.ts"><code>server/lib/settings.ts</code></a> — the idle/answer values the hooks read off <code>/api/health</code></li><li><a href="../../../../server/lib/notify.ts"><code>server/lib/notify.ts</code></a> — the push policy, and the clearest example of a deliberately inverted fail direction</li><li><a href="../../../../server/api.ts"><code>server/api.ts</code></a> — the handlers that hold the sockets</li><li><code>docs/subsystems/remote-answer.md</code> — the reference doc this guide is the <em>why</em> layer for</li></ul>
 <p class="backtop"><a href="#top">↑ back to contents</a></p></section>
 <section><h2 id="lifecycle">The lifecycle and execution order</h2>
 <p>The five events, what fires when inside one real turn, and the ordering facts that catch people out.</p>
@@ -215,16 +215,21 @@ ls -l ~/.claude/hooks/</code></pre>
     stroke-width="1.5" marker-end="url(#ar-turn)"/><text x="304" y="535" fill="var(--muted)" font-size="11" text-anchor="middle">block+reason, or exit 0</text></svg></div><p class="caption">The two held POSTs are the blocking hooks. Everything else returns in about a second.</p>
 <h3 id="lifecycle--3-userpromptsubmit-stdout-becomes-turn-context">3. <code>UserPromptSubmit</code> stdout becomes turn context</h3>
 <p>The first hook runs before the model sees anything, and its stdout is prepended to the turn:</p>
-<pre><code># scripts/remote-decision-hook.sh:60-68  (abridged here — heredoc truncated at rule 1)
+<pre><code># scripts/remote-decision-hook.sh:113-126  (abridged here — heredoc truncated at rule 1)
 cat &lt;&lt;'EOF'
 REMOTE DECISION MODE — the dashboard is accepting remote answers and this session
 runs without permission prompts. The user may be away from the terminal: they can
 answer the AskUserQuestion tool from their phone, but they cannot read a
 plain-text question or approve a plan card. Therefore, for this session:
-1. Put EVERY decision through the AskUserQuestion tool — approach choices,
-   "should I proceed?", scope calls, and questions a skill tells you to ask
-   (e.g. the brainstorming skill's session-mode pick). Never end a turn on a
-   prose question.
+1. Put each decision that is the user's to make through the AskUserQuestion
+   tool — approach choices, "should I proceed?", scope calls, and questions a
+   skill tells you to ask (e.g. the brainstorming skill's session-mode pick).
+   A skill or task that says to proceed on stated assumptions still does: this
+   rule changes how you ask, not whether. While that tool is available, never
+   end a turn on a prose question.
+   If AskUserQuestion is not available in this session, this rule does not
+   apply: follow whatever the running skill says to do without a channel,
+   and if it says nothing, ask in prose rather than deciding silently.
 EOF</code></pre>
 <p><strong>Why a hook rather than a line in <code>CLAUDE.md</code>.</strong> The instruction is only correct under two live conditions — the dashboard is accepting remote answers, <em>and</em> this session runs in an auto-ish permission mode. Both are re-checked on every prompt, so flipping the dashboard toggle takes effect on your next message.</p>
 <p><strong>The bad alternative</strong> is putting it in <code>CLAUDE.md</code> (or a rules file):</p>
@@ -245,7 +250,7 @@ TOOL=$(printf '%s' "$INPUT" | jq -r '.tool_name // empty' 2&gt;/dev/null)
 <h3 id="lifecycle--5-a-continued-turn-skips-the-front-of-the-lifecycle">5. A continued turn skips the front of the lifecycle</h3>
 <p>This is the ordering fact worth memorizing. A <code>Stop</code> hook that blocks does not end the turn — the model reads the reason and keeps working. But that continuation had <strong>no user prompt</strong>, so <code>UserPromptSubmit</code> never fires, so <code>remote-decision.sh</code> never runs, so its instruction is never injected.</p>
 <p>The consequence: the away-mode instructions have to ride inside the <code>Stop</code> block's own reason text, which is why <a href="../../../../server/lib/messages.ts"><code>messages.ts</code></a> composes prose that carries both your follow-up <em>and</em> a re-statement of the rules:</p>
-<pre><code>// server/lib/messages.ts:51-55
+<pre><code>// server/lib/messages.ts:52-56
 /**
  * The prose the hook prints as the Stop block's `reason`. Two jobs: carry the
  * text, and carry the away-mode instructions — `UserPromptSubmit` hooks (the
@@ -281,7 +286,7 @@ jq -cn --arg r "$REASON" '{
   }
 }'</code></pre>
 <p>The reason is written to be read as an answer, not as a refusal:</p>
-<pre><code>// server/lib/pending.ts:150-151
+<pre><code>// server/lib/pending.ts:157-158
 return `The user answered via the dashboard (not the terminal dialog) — ${lines[0]}. `
   + 'Treat this as the user\'s selection and continue; do not ask again.';</code></pre>
 <p><strong>What it does:</strong> the tool call fails, and the failure message tells the model what you picked. The model reads denial reasons and adapts — that behaviour already existed — so a denial whose reason names your choice is functionally an answer.</p>
@@ -300,7 +305,7 @@ return `The user answered via the dashboard (not the terminal dialog) — ${line
     hookEventName: "PermissionRequest",
     decision: { behavior: "deny", message: $r }
   }</code></pre>
-<pre><code># scripts/stop-notify-hook.sh:217  (Stop — top level, no hookSpecificOutput at all)
+<pre><code># scripts/stop-notify-hook.sh:218  (Stop — top level, no hookSpecificOutput at all)
 jq -cn --arg r "$REASON" '{decision: "block", reason: $r}'</code></pre>
 <p><code>PreToolUse</code> takes a flat <code>permissionDecision</code> string plus a sibling reason field. <code>PermissionRequest</code> takes a nested <code>decision</code> object with <code>behavior</code> and <code>message</code>. <code>Stop</code> takes neither wrapper — <code>decision</code> and <code>reason</code> at the top level.</p>
 <p><strong>Why the scripts hard-code these rather than sharing a helper:</strong> they were each verified against a specific CLI build, and the comments say so — <a href="../../../../scripts/stop-notify-hook.sh"><code>stop-notify-hook.sh:13-14</code></a> records <em>"the ONLY output shape the CLI accepts for a Stop block (verified against 2.1.233)"</em>. A shared emitter would hide which shape was confirmed where, and the shapes have no common structure to factor out anyway. Three call sites, three literals, three provenance notes.</p>
@@ -311,7 +316,7 @@ jq -cn --arg r "$REASON" '{decision: "block", reason: $r}'</code></pre>
 #    swap it if a native "answer the tool call" path ever lands. The reason is
 #    composed server-side (pending.ts composeReason), never here.</code></pre>
 <p><strong>Why prose lives in TypeScript and not in the shell:</strong> it is testable there. <code>composeReason</code> is a pure function over questions and answers, and it has real logic — a single question gets one sentence, several get a bulleted list:</p>
-<pre><code>// server/lib/pending.ts:143-156
+<pre><code>// server/lib/pending.ts:150-163
 export function composeReason(questions: PendingQuestionItem[], answers: QuestionAnswer[]): string {
   const byIndex = new Map(answers.map(a =&gt; [a.index, a.selected]));
   const lines = questions.map((q, i) =&gt; {
@@ -331,7 +336,7 @@ export function composeReason(questions: PendingQuestionItem[], answers: Questio
 <p>The script keeps exactly one job: translate an HTTP result into the event's JSON shape. The comment marks that block as the single mechanism-specific part of the whole feature — the thing to replace if a native path ever lands.</p>
 <h3 id="answer-channel--4-why-plans-can-only-be-rejected">4. Why plans can only be <em>rejected</em></h3>
 <p>Not a design choice. A wall:</p>
-<pre><code># scripts/plan-remote-hook.sh:11-14
+<pre><code># scripts/plan-remote-hook.sh:10-13  (abridged here — line 13 truncated)
 # ⚠️ REJECT ONLY, and not by choice: the CLI discards a hook `allow` for any tool
 # whose requiresUserInteraction() is true ("the tool's approval card IS the
 # user-interaction surface"), and ExitPlanMode is one. So a plan can be sent back
@@ -385,7 +390,7 @@ export function composeReason(questions: PendingQuestionItem[], answers: Questio
         stroke="var(--line)" stroke-width="1.5" marker-end="url(#ar-held)"/><text x="484" y="378" fill="var(--muted)" font-size="11" text-anchor="start">settle → clear, delete, resolve</text><line x1="440" y1="409" x2="88" y2="409" stroke="var(--accent)"
     stroke-width="1.5" marker-end="url(#ar-held)"/><text x="264" y="403" fill="var(--muted)" font-size="11" text-anchor="middle">resolve fires → curl returns</text></svg></div><p class="caption">The handler’s job is to NOT answer. The socket stays open until the store settles the entry.</p>
 <p>The whole mechanism is six lines:</p>
-<pre><code>// server/api.ts:1139-1145
+<pre><code>// server/api.ts:785-791
 let questionId = '';
 res.on('close', () =&gt; { if (questionId) cancelPending(sessionId, questionId); });
 questionId = register(sessionId, questions, clampTimeout(body.timeoutMs), (result: WaitResult) =&gt; {
@@ -394,7 +399,7 @@ questionId = register(sessionId, questions, clampTimeout(body.timeoutMs), (resul
 });
 if (res.destroyed) cancelPending(sessionId, questionId);</code></pre>
 <p><strong>Why the push comes last:</strong></p>
-<pre><code>// server/api.ts:1147-1148
+<pre><code>// server/api.ts:793-794
 // Last, so a refused registration never pushes. Returns immediately — the
 // response above stays held either way.</code></pre>
 <p>Every gate that can reject the registration runs before <code>maybeSend</code>, so you never get a "question waiting" buzz for a question that was rejected as malformed.</p>
@@ -404,19 +409,22 @@ if (res.destroyed) cancelPending(sessionId, questionId);</code></pre>
  *  - No HTTP types. The handler injects `resolve`, which is what makes the whole
  *    state machine unit-testable (see test/pending.test.ts).</code></pre>
 <p><strong>What it does:</strong> the store is a pure state machine over a <code>Map&lt;string, Entry&gt;</code>. Registering takes a callback; settling calls it.</p>
-<p><strong>Why:</strong> testability, and reuse. The same shape appears verbatim in <a href="../../../../server/lib/plans.ts"><code>plans.ts</code></a> and <a href="../../../../server/lib/messages.ts"><code>messages.ts</code></a>.</p>
+<p><strong>Why:</strong> testability, and reuse. <a href="../../../../server/lib/plans.ts"><code>plans.ts</code></a> and <a href="../../../../server/lib/messages.ts"><code>messages.ts</code></a> take the same callback, and all three hand it to the one state machine in <a href="../../../../server/lib/wait-store.ts"><code>wait-store.ts</code></a>.</p>
 <p><strong>The bad alternative</strong> — store the <code>ServerResponse</code> in the entry and call <code>res.end()</code> inside the store:</p>
-<div class="tablewrap"><table><thead><tr><th></th><th>injected <code>resolve</code> (chosen)</th><th>store the <code>res</code></th></tr></thead><tbody><tr><td>Unit-testable</td><td><code>test/pending.test.ts</code> passes a plain function and asserts on what it gets</td><td>Needs a fake socket, or a real server per test</td></tr><tr><td>Coupling</td><td>Store knows nothing about HTTP</td><td>Store owns transport <em>and</em> lifecycle</td></tr><tr><td>Reuse</td><td>Same shape reused verbatim 3×</td><td>Re-derived 3×</td></tr><tr><td>Cost</td><td>An indirection, and the handler must guard <code>writableEnded</code> itself</td><td>Slightly less ceremony</td></tr></tbody></table></div>
+<div class="tablewrap"><table><thead><tr><th></th><th>injected <code>resolve</code> (chosen)</th><th>store the <code>res</code></th></tr></thead><tbody><tr><td>Unit-testable</td><td><code>test/pending.test.ts</code> passes a plain function and asserts on what it gets</td><td>Needs a fake socket, or a real server per test</td></tr><tr><td>Coupling</td><td>Store knows nothing about HTTP</td><td>Store owns transport <em>and</em> lifecycle</td></tr><tr><td>Reuse</td><td>One <code>createWaitStore</code> behind 3 stores</td><td>Re-derived 3×</td></tr><tr><td>Cost</td><td>An indirection, and the handler must guard <code>writableEnded</code> itself</td><td>Slightly less ceremony</td></tr></tbody></table></div>
 <p>That <code>writableEnded</code> guard is the price paid. The store promises to fire <code>resolve</code> at most once, but the <em>response</em> can die independently of the store, so the handler double-checks before writing to it.</p>
 <h3 id="held-socket--3-settle-is-the-entire-state-machine">3. <code>settle</code> is the entire state machine</h3>
-<pre><code>// server/lib/pending.ts:159-163
-function settle(entry: Entry, result: WaitResult): void {
-  clearTimeout(entry.timer);
-  if (entries.get(entry.sessionId) === entry) entries.delete(entry.sessionId);
-  entry.resolve(result);
-}</code></pre>
-<p>Every exit routes through it — <code>answered</code>, <code>timeout</code>, <code>dismissed</code>, <code>superseded</code>, and <code>released</code> (the idle reaper every wait store runs). Three lines, three invariants:</p>
-<ul><li><strong><code>clearTimeout</code></strong> — the deadline can never fire after another exit won.</li><li><strong>The identity check</strong> — <code>entries.get(…) === entry</code> means a <em>superseded</em> entry does not delete the replacement that just evicted it. Without it, <code>register</code>'s supersede path would remove the new entry from the map while leaving it live in a closure.</li><li><strong><code>resolve</code> last</strong> — the map is already consistent before anyone is notified.</li></ul>
+<pre><code>// server/lib/wait-store.ts:90-97
+  const settle = (entry: E, result: R): void =&gt; {
+    if (settled.has(entry)) return;
+    settled.add(entry);
+    clearTimeout(entry.timer);
+    if (entries.get(entry.sessionId) === entry) entries.delete(entry.sessionId);
+    opts.onSettle?.(entry, result);
+    entry.resolve(result);
+  };</code></pre>
+<p>Every exit routes through it — <code>answered</code>, <code>timeout</code>, <code>dismissed</code>, <code>superseded</code>, and <code>released</code> (the idle reaper the three stores share). Four invariants:</p>
+<ul><li><strong>The <code>settled</code> guard</strong> — a second settle of the same entry is a no-op, so <code>resolve</code> fires at most once.</li><li><strong><code>clearTimeout</code></strong> — the deadline can never fire after another exit won.</li><li><strong>The identity check</strong> — <code>entries.get(…) === entry</code> means a settle only ever deletes the entry it was given, never a replacement. It is the backstop rather than the working part: <code>add</code> settles the old entry before it inserts the new one, and the <code>settled</code> guard stops any later settle before it reaches this line.</li><li><strong><code>resolve</code> last</strong> — the map is already consistent before anyone is notified.</li></ul>
 <h3 id="held-socket--4-the-three-way-race">4. The three-way race</h3>
 <p>Three things can end a wait, and they genuinely race:</p>
 <div class="diagram"><svg viewBox="0 0 620 420" role="img" xmlns="http://www.w3.org/2000/svg">
@@ -438,23 +446,29 @@ function settle(entry: Entry, result: WaitResult): void {
        font-family="ui-monospace, SFMono-Regular, Menlo, monospace"><text x="310" y="306">Cancelled</text></g><text x="414" y="306" fill="var(--muted)" font-size="11" text-anchor="start">no resolve — nobody left</text><line x1="358" y1="54" x2="300" y2="280" stroke="var(--line)"
     stroke-width="1.5" marker-end="url(#ar-race)"/><text x="208" y="306" fill="var(--muted)" font-size="11" text-anchor="end">socket closes</text></svg></div><p class="caption">Only Cancelled skips resolve — a closed socket means there is nobody left to answer to.</p>
 <p><code>Cancelled</code> is the one that needed care. The hook dying — Ctrl-C, CLI hook timeout, session interrupted — shows up only as a closed socket:</p>
-<pre><code>// server/api.ts:1135-1138
+<pre><code>// server/api.ts:781-784
 // The hook's socket closing IS the signal that nobody is waiting any more
 // (session interrupted, hook killed, CLI hook timeout). Listen before
 // registering, and re-check after, so a socket that dies during the body read
 // can't leave an entry parked until its deadline.</code></pre>
 <p><strong>Why both a listener and a re-check:</strong> <code>readJsonBody</code> is <code>await</code>ed, so the socket can die <em>during</em> the body read — before the listener is attached, after which <code>close</code> never fires again. The <code>res.destroyed</code> re-check catches exactly that window.</p>
 <p><strong>Why <code>cancel</code> takes a <code>questionId</code>:</strong></p>
-<pre><code>// server/lib/pending.ts:258-263
+<pre><code>// server/lib/pending.ts:247-249
 export function cancel(sessionId: string, questionId: string): void {
-  const entry = entries.get(sessionId);
-  if (!entry || entry.questionId !== questionId) return;
-  clearTimeout(entry.timer);
-  entries.delete(sessionId);
+  store.cancel(sessionId, entry =&gt; entry.questionId === questionId);
 }</code></pre>
+<p>The shared store runs that predicate, and drops the entry only when it passes:</p>
+<pre><code>// server/lib/wait-store.ts:109-115
+    cancel(sessionId, isCurrent) {
+      const entry = entries.get(sessionId);
+      if (!entry || !isCurrent(entry)) return;
+      settled.add(entry);
+      clearTimeout(entry.timer);
+      entries.delete(sessionId);
+    },</code></pre>
 <p>The map is keyed by session, so a re-registration replaces the entry. Without the id check, a <em>late</em> socket-close from the dead first wait would delete the <em>live</em> second one. The id makes every terminal operation idempotent per entry. The browser echoes it back when answering too, which is what makes a stale phone tab 404 instead of answering the wrong question.</p>
 <h3 id="held-socket--5-no-locking-and-the-invariant-that-makes-that-safe">5. No locking, and the invariant that makes that safe</h3>
-<pre><code>// server/lib/pending.ts:227-231
+<pre><code>// server/lib/pending.ts:216-220
 /**
  * Answer (or dismiss) a session's pending question. Synchronous by design:
  * Node is single-threaded, so two tabs submitting at once means the first wins
@@ -464,14 +478,13 @@ export function cancel(sessionId: string, questionId: string): void {
 <p><strong>The bad alternative</strong> is a mutex or a compare-and-swap flag: real added complexity to buy a guarantee the runtime already provides. The trade-off they accepted is that the invariant is implicit — nothing mechanically stops someone adding an <code>await</code> to <code>answer()</code> and quietly introducing a race. The doc comment is the only guard.</p>
 <h3 id="held-socket--6-four-stores-three-shapes">6. Four stores, three shapes</h3>
 <div class="tablewrap"><table><thead><tr><th>Store</th><th>Held socket?</th><th>Verdicts</th><th>Distinctive</th></tr></thead><tbody><tr><td><a href="../../../../server/lib/pending.ts"><code>pending.ts</code></a></td><td>yes</td><td>answered / timeout / dismissed / superseded / released</td><td><code>sanitizeQuestions</code> + <code>validateAnswer</code></td></tr><tr><td><a href="../../../../server/lib/plans.ts"><code>plans.ts</code></a></td><td>yes</td><td>rejected only (+ the same non-answer exits)</td><td>accept refused upstream</td></tr><tr><td><a href="../../../../server/lib/messages.ts"><code>messages.ts</code></a></td><td>yes</td><td>answered + the same non-answer exits</td><td>headless holds exempt from the idle reaper</td></tr><tr><td><a href="../../../../server/lib/permissions.ts"><code>permissions.ts</code></a></td><td><strong>no</strong></td><td>none</td><td>display-only, 30min TTL</td></tr></tbody></table></div>
-<p><strong>Why three modules rather than one generic store:</strong></p>
-<pre><code>// server/lib/messages.ts:13-15
- * Third parallel store, same state machine as `pending.ts`/`plans.ts` (same
- * injected `resolve`, same one-entry-per-session rule), separate module for the
- * same reason `plans.ts` is: the payloads and verdicts share nothing.</code></pre>
-<p>The <em>state machine</em> is identical; the <em>types</em> share nothing. <code>pending.ts</code> validates a structured answer against the questions it claims to answer; <code>messages.ts</code> takes a string; <code>plans.ts</code> has one verdict. A generic store would be parameterized over payload, verdict union, and validation — three type parameters to save maybe forty lines, and every call site would read worse. The duplication is deliberate and the comments say so at each site.</p>
+<p><strong>Why three modules on top of one generic store:</strong></p>
+<pre><code>// server/lib/wait-store.ts:5-6
+ * The payloads, the validation and the prose stay in each store — they share nothing. What lives here is only what they used to hold three copies of:
+ * the map, `settle`, supersede-on-register, the stale-id-safe `cancel`, the test reset, and the 5 s `backAtDesk()` sweep.</code></pre>
+<p>The <em>state machine</em> is one; the <em>types</em> share nothing. <code>pending.ts</code> validates a structured answer against the questions it claims to answer; <code>messages.ts</code> takes a string; <code>plans.ts</code> has one verdict. These used to be three copies. <code>createWaitStore&lt;E, R&gt;</code> is parameterized over the entry type, which carries the payload, and the result type, which is the verdict union. Validation never enters it: each store checks a submission before it settles the entry. Each store keeps its own module for what differs, and its call site passes only what the shared code cannot know.</p>
 <p><code>pending.ts</code> also carries validation the others don't need, and it is worth noting what it <em>declines</em> to check:</p>
-<pre><code>// server/lib/pending.ts:115-116
+<pre><code>// server/lib/pending.ts:122-123
  * Values are deliberately NOT checked against the option labels: the terminal
  * dialog always offers a free-text "Other", and the panel mirrors that.</code></pre>
 <p>Rejecting unknown values would be the obvious "safer" choice and would break the free-text path that the terminal dialog has always had. The caps (<code>SELECTED_CAP = 500</code>) do the memory-safety job instead.</p>
@@ -482,7 +495,7 @@ export function cancel(sessionId: string, questionId: string): void {
  * CLI offers no way for anything outside the TUI to answer a permission dialog,
  * so this store records a fact and nothing more. Answering stays in the terminal.</code></pre>
 <p>And the hook is kept deliberately incapable:</p>
-<pre><code># scripts/permission-notify-hook.sh:23-26
+<pre><code># scripts/permission-notify-hook.sh:25-28
 # DISPLAY-ONLY, unlike ask-remote-hook.sh. This hook never prints anything on
 # stdout, which for PermissionRequest means "no decision" — the prompt renders
 # exactly as it would have. Do not make it emit a decision: an `allow` reaching
@@ -540,20 +553,21 @@ export function cancel(sessionId: string, questionId: string): void {
 # server skips the push you would not want mid-chat.</code></pre>
 <p>Bailing on that flag would cap the conversation at exactly <strong>one</strong> reply, because the second turn-end is by definition a mid-hook-conversation stop.</p>
 <p>So the flag changed jobs. It is no longer control flow; it is data:</p>
-<pre><code># scripts/stop-notify-hook.sh:196-201
+<pre><code># scripts/stop-notify-hook.sh:196-202
 BODY=$(jq -cn \
   --arg sid "$SESSION_ID" \
   --arg pm "$PERM_MODE" \
   --argjson sha "$SHA" \
+  --argjson hl "$HEADLESS" \
   --argjson t "$((TIMEOUT_S * 1000))" \
-  '{sessionId: $sid, timeoutMs: $t, permissionMode: $pm, stopHookActive: $sha}') || notify_fallback</code></pre>
+  '{sessionId: $sid, timeoutMs: $t, permissionMode: $pm, stopHookActive: $sha, headless: $hl}') || notify_fallback</code></pre>
 <p><strong>Why this is safe:</strong> the loop bound moved from the script to the platform. The CLI's own 8-block cap is the guard now, and it cannot be misconfigured away by editing this script — because the script no longer holds that responsibility.</p>
 <p><strong>The bad alternative</strong> is keeping the guard and finding some other way to allow more than one reply, e.g. a counter in the script or a server-side reply budget:</p>
 <div class="tablewrap"><table><thead><tr><th></th><th>rely on the CLI cap (chosen)</th><th>keep the guard + own counter</th></tr></thead><tbody><tr><td>Loop safety</td><td>Enforced by the CLI, unconditionally</td><td>Enforced by your own bookkeeping</td></tr><tr><td>State needed</td><td>None — the script is stateless</td><td>A counter that must survive across subprocess invocations</td></tr><tr><td>Conversation length</td><td>Up to 8 replies</td><td>Whatever you implement</td></tr><tr><td>Risk</td><td>You inherit a cap you don't control (8, via env var)</td><td>A bug in your counter is an infinite loop</td></tr></tbody></table></div>
 <p>The script is invoked fresh per stop, with no memory. Any counter would have to live on disk or on the server, and a bug in it means a session that never stops. Delegating to the platform is strictly better here.</p>
 <h3 id="stop-loop--3-two-exits-and-the-old-behaviour-preserved-byte-for-byte">3. Two exits, and the old behaviour preserved byte-for-byte</h3>
 <p><code>notify_fallback</code> is a shell function used as a jump target:</p>
-<pre><code># scripts/stop-notify-hook.sh:122-129
+<pre><code># scripts/stop-notify-hook.sh:123-130
 notify_fallback() {
   [ "$SHA" = "true" ] &amp;&amp; exit 0
   BODY=$(jq -cn --arg sid "$SESSION_ID" --arg pm "$PERM_MODE" \
@@ -563,8 +577,8 @@ notify_fallback() {
   exit 0
 }</code></pre>
 <p>Every non-hold path calls it. The header states the contract plainly:</p>
-<pre><code># scripts/stop-notify-hook.sh:6-9  (abridged here — line 9 truncated)
-# Two paths out of every run:
+<pre><code># scripts/stop-notify-hook.sh:6-12  (abridged here — lines 9-11 elided, line 12 truncated)
+# Two paths out of every run (the token-renewal turn, CLAUDE_DASHBOARD_REFRESH, takes neither — see below):
 #   at the desk / feature off → POST /api/notify/event (the old fire-and-forget
 #     push trigger) and exit 0 — byte-for-byte the pre-feature behaviour;
 #   away + remote answers on  → POST /api/messages/wait, held.</code></pre>
@@ -613,30 +627,33 @@ export function backAtDesk(): boolean {
   return atDesk((idleReader ?? readIdleSecs)(), thresholdSecs);
 }</code></pre>
 <p><strong>Why:</strong> when you walk back to your desk, the right behaviour is for the session to go back to the terminal immediately — not to make you find a phone panel and dismiss it. Each store settles such a hold as <code>released</code>.</p>
-<p>This policy first lived only in <code>messages.ts</code>, which is why held questions and plans used to sit parked until their deadlines. <code>idle.ts</code> now owns it; each store keeps its own <code>sweepIdle()</code> only for what differs per store. <code>messages.ts</code> is the one that differs, because it skips headless holds:</p>
-<pre><code>// server/lib/messages.ts:188-195
-export function sweepIdle(): number {
-  if (entries.size === 0) return 0;
-  const releasable = [...entries.values()].filter(e =&gt; !e.headless);
-  if (releasable.length === 0) return 0; // nothing to release — don't spawn ioreg
-  if (!backAtDesk()) return 0;
-  for (const entry of releasable) settle(entry, { status: 'released' });
-  return releasable.length;
-}</code></pre>
+<p>This policy first lived only in <code>messages.ts</code>, which is why held questions and plans used to sit parked until their deadlines. <code>idle.ts</code> now owns it, and <a href="../../../../server/lib/wait-store.ts"><code>wait-store.ts</code></a> runs it: each store's <code>sweepIdle()</code> is a one-line call into the shared sweep.</p>
+<pre><code>// server/lib/wait-store.ts:120-126
+    sweepIdle() {
+      const release = releasableEntries();
+      if (release.length === 0) return 0; // nothing to release — don't spawn ioreg
+      if (!backAtDesk()) return 0;
+      for (const entry of release) settle(entry, opts.released);
+      return release.length;
+    },</code></pre>
+<p>What differs per store is an option. <code>messages.ts</code> is the one that passes it, because it skips headless holds:</p>
+<pre><code>// server/lib/messages.ts:48-49
+  // The headless exemption — see {@link sweepIdle}: a `claude -p` session has no terminal to come back to, so the dashboard window stays its only channel.
+  releasable: entry =&gt; !entry.headless</code></pre>
 <p>A dashboard-spawned <code>claude -p</code> session has no terminal, so coming back to the desk gives you no other way to reply. Its hold stays open until you answer, dismiss it or it times out.</p>
-<p>And each reaper self-terminates. The three <code>ensureReaper()</code> functions are identical:</p>
-<pre><code>// server/lib/messages.ts:202-209
+<p>And the reaper self-terminates. There is one, shared by all three stores. Each tick asks <code>backAtDesk()</code> once, not once per store, and only with something to release:</p>
+<pre><code>// server/lib/wait-store.ts:76-83
 function ensureReaper(): void {
   if (reaper) return;
   reaper = setInterval(() =&gt; {
-    sweepIdle();
-    if (entries.size === 0 &amp;&amp; reaper) { clearInterval(reaper); reaper = null; }
+    reapIdle();
+    stopReaperIfEmpty();
   }, 5_000);
   reaper.unref();
 }</code></pre>
 <p><strong>The bad alternative</strong> is a permanent 5-second interval started at boot:</p>
-<div class="tablewrap"><table><thead><tr><th></th><th>on-demand reaper (chosen)</th><th>always-on interval</th></tr></thead><tbody><tr><td><code>ioreg</code> spawns when idle</td><td>Zero — <em>"an idle server never spawns <code>ioreg</code>"</em></td><td>17,280/day per store to serve an empty store</td></tr><tr><td>Holds the process open</td><td>No — <code>unref()</code></td><td>Needs <code>unref()</code> anyway</td></tr><tr><td>Complexity</td><td><code>ensureReaper</code> + the self-clear check</td><td>One line at boot</td></tr></tbody></table></div>
-<p>The stores are empty the overwhelming majority of the time, and each sweep shells out to <code>ioreg</code>. Six extra lines per store to spawn no subprocesses when there is nothing to reap.</p>
+<div class="tablewrap"><table><thead><tr><th></th><th>on-demand reaper (chosen)</th><th>always-on interval</th></tr></thead><tbody><tr><td>Work when idle</td><td>None — no timer runs</td><td>17,280 ticks/day to find every store empty</td></tr><tr><td>Holds the process open</td><td>No — <code>unref()</code></td><td>Needs <code>unref()</code> anyway</td></tr><tr><td>Complexity</td><td><code>ensureReaper</code> + <code>stopReaperIfEmpty</code></td><td>One line at boot</td></tr></tbody></table></div>
+<p>The stores are empty the overwhelming majority of the time, so an always-on timer would have nothing to do for most of its life. The <code>ioreg</code> cost is a separate guard: <code>reapIdle</code> calls <code>backAtDesk()</code> only with something to release, so an idle server and a headless-only hold never spawn it.</p>
 <p>Note the fail direction. It is the <em>same</em> as the hook's, never act on a guess. Here that keeps the hold open, where the hook's guess keeps the dialog in the terminal:</p>
 <pre><code>// server/lib/idle.ts:35-40
  * Fail directions, both deliberately "stay held":
@@ -693,7 +710,7 @@ function ensureReaper(): void {
     stroke-width="1.5" marker-end="url(#ar-gates)"/><text x="503" y="138" fill="var(--muted)" font-size="11" text-anchor="middle">12 of 13 paths</text></svg></div><p class="caption">Every edge out of the stack except one lands on exit 0. Fail-open toward the terminal is the invariant.</p>
 <p>Every edge except one lands on <code>exit 0</code>.</p>
 <h3 id="fail-open--2-why-the-arbitration-is-necessary-at-all">2. Why the arbitration is necessary at all</h3>
-<pre><code># scripts/ask-remote-hook.sh:7-13
+<pre><code># scripts/ask-remote-hook.sh:9-15
 # A question can't be live in the terminal AND answerable from the phone (the
 # dialog only renders once this hook exits), so three gates decide who gets it:
 #   1. REMOTE_ANSWER on the server — is the feature available at all?
@@ -707,7 +724,7 @@ function ensureReaper(): void {
 <p>That table spans the set — the <code>tool_name</code> row is <code>plan-remote-hook.sh</code>'s alone, and the non-numeric <code>idleSecs</code> row is a default rather than a bail-out. <a href="../../../../scripts/ask-remote-hook.sh"><code>ask-remote-hook.sh</code></a> itself contains <strong>fifteen</strong> <code>exit 0</code> statements: fourteen bail-outs and one success exit after the decision is printed. <code>grep -c 'exit 0' scripts/*-hook.sh</code> gives ask-remote 15, plan-remote 16, stop-notify 16, remote-decision 10 and permission-notify 9 across the five (<code>kill-guard-hook.sh</code>, the sixth script and outside this guide, adds 7). One path through to a decision, more than a dozen out. The asymmetry <em>is</em> the design.</p>
 <h3 id="fail-open--4-inputcat-comes-first-always">4. <code>INPUT=$(cat)</code> comes first, always</h3>
 <p>All five scripts open the same way:</p>
-<pre><code># scripts/ask-remote-hook.sh:28-36  (abridged here — comment lines elided)
+<pre><code># scripts/ask-remote-hook.sh:28-39  (abridged here — lines 29-30, 32-35, 37-38 elided)
 INPUT=$(cat)
 [ "$CLAUDECODE" = "1" ] || exit 0
 DASH="${CLAUDE_DASHBOARD_URL:-http://127.0.0.1:4173}"
@@ -745,7 +762,7 @@ case "$IDLE_MIN_S" in ''|*[!0-9]*) IDLE_MIN_S=60 ;; esac</code></pre>
     if (idle !== null &amp;&amp; idle &lt; ctx.thresholdSecs) return false;
   }</code></pre>
 <p>Cost of guessing wrong: <strong>one unnecessary buzz.</strong> The comment names the other call site explicitly and explains the inversion — this is the clearest example in the repo of a fail direction being derived rather than inherited from a house rule.</p>
-<p><strong>c) <code>idle.ts</code> <code>backAtDesk</code> (every store's <code>sweepIdle</code>) — unknown idle → do NOT release.</strong></p>
+<p><strong>c) <code>idle.ts</code> <code>backAtDesk</code> (the shared reaper, and every store's <code>sweepIdle</code>) — unknown idle → do NOT release.</strong></p>
 <p>Cost of guessing wrong: <strong>a turn ends that you were about to reply to.</strong> So the deadline timer stays the reaper of last resort.</p>
 <div class="diagram"><svg viewBox="0 0 620 300" role="img" xmlns="http://www.w3.org/2000/svg">
       <title>One unreadable signal, three call sites, three opposite defaults — each derived from its own cost of being wrong</title><defs><marker id="ar-dirs" viewBox="0 0 10 10" refX="9" refY="5"
@@ -829,7 +846,7 @@ case "$IDLE_MIN_S" in ''|*[!0-9]*) IDLE_MIN_S=60 ;; esac</code></pre>
 # raising it past ~615s means raising this number too.</code></pre>
 <p>If the CLI's <code>timeout</code> is smaller than the window, <strong>the CLI kills the hook mid-wait</strong> — which degrades to the terminal dialog. Even a misconfigured ladder fails safe.</p>
 <p>The UI enforces it from the other end, twice. First the field simply won't go higher:</p>
-<pre><code>// client/src/components/settings/SettingsView.tsx:358-364
+<pre><code>// client/src/components/settings/SettingsView.tsx:360-366
 &lt;NumberField
   value={server.state.answerSecs}
   min={5}
@@ -838,7 +855,7 @@ case "$IDLE_MIN_S" in ''|*[!0-9]*) IDLE_MIN_S=60 ;; esac</code></pre>
   onCommit={answerSecs =&gt; void server.save({ answerSecs })}
 /&gt;</code></pre>
 <p>And if a value above 600 arrives some other way, it names the exact number you would need:</p>
-<pre><code>// client/src/components/settings/SettingsView.tsx:289-297  (compacted here)
+<pre><code>// client/src/components/settings/SettingsView.tsx:381-390  (compacted here)
 {server.state.answerSecs &gt; 600 &amp;&amp; (
   &lt;div className="set-warn"&gt;
     Above 600s the CLI kills the hook before the window closes, unless you also raise
@@ -870,7 +887,7 @@ IDLE_MIN_S="${CLAUDE_DASHBOARD_IDLE_SECS:-$(printf '%s' "$HEALTH" | jq -r '.idle
 <p>The probe is already happening — it is gate 1 — so piggybacking two integers on it costs nothing.</p>
 <p><strong>The bad alternative</strong> is a <code>GET /api/settings</code> call. That doubles the latency added to <em>every</em> permission prompt and tool call in every session, to fetch two numbers that were already in flight.</p>
 <p><strong>Why the env var wins over the UI:</strong> it is the escape hatch for a setup the UI cannot model — Docker, CI, a second dashboard on another port. But a silently-losing UI control is a bad experience, so the server <em>detects</em> the override and the UI says so:</p>
-<pre><code>// server/lib/settings.ts:230
+<pre><code>// server/lib/settings.ts:241
 export function detectEnvOverride(name: string, homeDir?: string): EnvOverride | null {</code></pre>
 <p>It checks both the shell environment and the <code>env</code> block of <code>~/.claude/settings.json</code>, and the Settings page renders which one, with an honest disclaimer: <em>"Remove it for the value above to take effect. The dashboard won't edit that file for you."</em></p>
 <p><strong>Why not just edit that file:</strong> it is the user's global Claude Code config, shared by every project and every session. A dashboard that rewrote it to make its own slider work would be reaching far outside its remit. Reporting the conflict is the correct scope.</p>
@@ -924,7 +941,7 @@ export function getState(config: Config): RemoteAnswerState {
  * open: an unwritable path keeps the in-memory value and reports `persisted: false`
  * so the UI can say so.</code></pre>
 <p>An earlier version of this comment also called the toggle "the only thing this app writes to disk". That was never true — the server writes settings, routines and other state files too — and the comment no longer claims it. A dev-loop detail drove a persistence decision, and the fail-open path (unwritable disk still works this run, and says so) means a read-only container doesn't lose the feature.</p>
-<p><strong>Stack 2 — should <em>this</em> one wait?</strong> The idle check, in the hook, per invocation. The server never makes this call, because the server can't see your keyboard from inside a container. It does read the same idle value for a different job: once a hold is open, <a href="../../../../server/lib/idle.ts"><code>idle.ts</code></a>'s <code>backAtDesk()</code> (<code>idle.ts:45-53</code>) asks whether you came back, so each store's 5s reaper can release the hold early. An unreadable reading there means "stay held", never "release" — see <a href="#fail-open">Fail-open §6</a>.</p>
+<p><strong>Stack 2 — should <em>this</em> one wait?</strong> The idle check, in the hook, per invocation. The server never makes this call, because the server can't see your keyboard from inside a container. It does read the same idle value for a different job: once a hold is open, <a href="../../../../server/lib/idle.ts"><code>idle.ts</code></a>'s <code>backAtDesk()</code> (<code>idle.ts:45-53</code>) asks whether you came back, so the stores' shared 5s reaper can release the hold early. An unreadable reading there means "stay held", never "release" — see <a href="#fail-open">Fail-open §6</a>.</p>
 <p><strong>Stack 3 — should it push?</strong> (<a href="../../../../server/lib/notify.ts"><code>notify.ts</code></a>) Orthogonal to the other two — it governs <em>notifications</em>, not waits:</p>
 <pre><code>// server/lib/notify.ts:73-77
 export function shouldNotify(event: NotifyEvent, policy: NotifyPolicy, ctx: PredicateContext): boolean {
@@ -935,7 +952,7 @@ export function shouldNotify(event: NotifyEvent, policy: NotifyPolicy, ctx: Pred
 <p><code>requireAutoMode</code> is the reason <code>permissionMode</code> is threaded through every hook POST — you will see <code>--arg pm "$PERM_MODE"</code> in all four POSTing scripts, with the note <em>"Absent on older CLIs, which simply never satisfy that layer."</em> A missing field disables one policy layer rather than erroring.</p>
 <p><strong>Stack 4 — the wait endpoint vs the answer endpoint.</strong> One asymmetry that reads as a slip until you follow it through. <code>serveQuestionWait</code> gates on <code>getState(config).remoteAnswer</code> (env <strong>and</strong> toggle); <code>serveSessionAnswer</code> gates on <code>config.remoteAnswer</code> (env only).</p>
 <p>So flipping the toggle off stops <em>new</em> waits from registering but does not strand one already held. And the toggle handler releases the held ones deliberately:</p>
-<pre><code>// server/lib/pending.ts:265-275
+<pre><code>// server/lib/pending.ts:251-261
 /**
  * Hand every waiting question back to its terminal dialog. Used when the toggle
  * is switched off: "stop accepting remote answers" should release the waits it
@@ -943,13 +960,13 @@ export function shouldNotify(event: NotifyEvent, policy: NotifyPolicy, ctx: Pred
  * Returns how many were released.
  */
 export function dismissAll(): number {
-  const waiting = [...entries.values()];
-  for (const entry of waiting) settle(entry, { status: 'dismissed' });
+  const waiting = store.values();
+  for (const entry of waiting) store.settle(entry, { status: 'dismissed' });
   return waiting.length;
 }</code></pre>
 <p><strong>Why not gate the answer endpoint on the toggle too:</strong> a wait that is <em>already held</em> has a hook blocked on it. Refusing the answer would leave that hook waiting out its full deadline with no way to resolve early — the exact opposite of what "stop accepting remote answers" should mean. Turning the switch off releases what it owns; it does not orphan it.</p>
 <h3 id="config--5-the-values-in-one-table">5. The values, in one table</h3>
-<div class="tablewrap"><table><thead><tr><th>Constant</th><th>Value</th><th>Where</th></tr></thead><tbody><tr><td><code>DEFAULT_IDLE_SECS</code></td><td>60</td><td><a href="../../../../server/lib/settings.ts"><code>settings.ts:42</code></a></td></tr><tr><td><code>MAX_IDLE_SECS</code></td><td>3600</td><td><code>settings.ts:44</code></td></tr><tr><td><code>DEFAULT_ANSWER_SECS</code></td><td>600</td><td><code>settings.ts:47</code></td></tr><tr><td><code>MIN_ANSWER_SECS</code> / <code>MAX_ANSWER_SECS</code></td><td>5 / 1800</td><td><code>settings.ts:49-50</code></td></tr><tr><td><code>DEFAULT_TIMEOUT_MS</code></td><td>600_000</td><td><a href="../../../../server/lib/pending.ts"><code>pending.ts:46</code></a></td></tr><tr><td><code>MIN_TIMEOUT_MS</code> / <code>MAX_TIMEOUT_MS</code></td><td>5_000 / 1_800_000</td><td><code>pending.ts:47-48</code></td></tr><tr><td><code>PERMISSION_TTL_MS</code></td><td>30 min</td><td><a href="../../../../server/lib/permissions.ts"><code>permissions.ts:26</code></a></td></tr><tr><td>idle reaper interval</td><td>5s</td><td><a href="../../../../server/lib/messages.ts"><code>messages.ts:207</code></a></td></tr><tr><td><code>TEXT_CAP</code> (follow-up)</td><td>4000</td><td><code>messages.ts:27</code></td></tr><tr><td><code>QUESTION_CAP</code> / <code>LABEL_CAP</code> / <code>DESCRIPTION_CAP</code></td><td>2000 / 200 / 500</td><td><code>pending.ts:39-41</code></td></tr><tr><td>CLI Stop-block cap</td><td>8</td><td><code>CLAUDE_CODE_STOP_HOOK_BLOCK_CAP</code></td></tr><tr><td>hook <code>timeout</code> (blocking)</td><td>630</td><td><code>~/.claude/settings.json</code></td></tr><tr><td>hook <code>timeout</code> (display-only)</td><td>5</td><td><code>~/.claude/settings.json</code></td></tr></tbody></table></div>
+<div class="tablewrap"><table><thead><tr><th>Constant</th><th>Value</th><th>Where</th></tr></thead><tbody><tr><td><code>DEFAULT_IDLE_SECS</code></td><td>60</td><td><a href="../../../../server/lib/settings.ts"><code>settings.ts:42</code></a></td></tr><tr><td><code>MAX_IDLE_SECS</code></td><td>3600</td><td><code>settings.ts:44</code></td></tr><tr><td><code>DEFAULT_ANSWER_SECS</code></td><td>600</td><td><code>settings.ts:47</code></td></tr><tr><td><code>MIN_ANSWER_SECS</code> / <code>MAX_ANSWER_SECS</code></td><td>5 / 1800</td><td><code>settings.ts:49-50</code></td></tr><tr><td><code>DEFAULT_TIMEOUT_MS</code></td><td>600_000</td><td><a href="../../../../server/lib/pending.ts"><code>pending.ts:46</code></a></td></tr><tr><td><code>MIN_TIMEOUT_MS</code> / <code>MAX_TIMEOUT_MS</code></td><td>5_000 / 1_800_000</td><td><code>pending.ts:47-48</code></td></tr><tr><td><code>PERMISSION_TTL_MS</code></td><td>30 min</td><td><a href="../../../../server/lib/permissions.ts"><code>permissions.ts:26</code></a></td></tr><tr><td>idle reaper interval</td><td>5s</td><td><a href="../../../../server/lib/wait-store.ts"><code>wait-store.ts:81</code></a></td></tr><tr><td><code>TEXT_CAP</code> (follow-up)</td><td>4000</td><td><code>messages.ts:27</code></td></tr><tr><td><code>QUESTION_CAP</code> / <code>LABEL_CAP</code> / <code>DESCRIPTION_CAP</code></td><td>2000 / 200 / 500</td><td><code>pending.ts:39-41</code></td></tr><tr><td>CLI Stop-block cap</td><td>8</td><td><code>CLAUDE_CODE_STOP_HOOK_BLOCK_CAP</code></td></tr><tr><td>hook <code>timeout</code> (blocking)</td><td>630</td><td><code>~/.claude/settings.json</code></td></tr><tr><td>hook <code>timeout</code> (display-only)</td><td>5</td><td><code>~/.claude/settings.json</code></td></tr></tbody></table></div>
 <p>The caps in the last rows are not ceremony. <code>pending.ts</code> states the reason: <em>"Length caps — a hostile/runaway tool input must not pin memory."</em> The store holds entries in RAM with no size bound other than one-per-session, so the per-field caps are the memory bound.</p>
 <hr>
 <p><a href="#README">↑ back to contents</a></p>

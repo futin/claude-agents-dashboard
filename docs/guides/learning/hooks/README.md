@@ -1,4 +1,4 @@
-<!-- study-provenance: sources=scripts,server/lib/pending.ts,server/lib/plans.ts,server/lib/messages.ts,server/lib/permissions.ts,server/lib/remoteState.ts,server/lib/settings.ts,server/lib/notify.ts commit=092484b date=2026-08-17 -->
+<!-- study-provenance: sources=scripts,server/lib/pending.ts,server/lib/plans.ts,server/lib/messages.ts,server/lib/wait-store.ts,server/lib/permissions.ts,server/lib/remoteState.ts,server/lib/settings.ts,server/lib/notify.ts commit=092484b date=2026-08-17 -->
 
 # Claude Code hooks in this project — a learning walkthrough
 
@@ -19,7 +19,7 @@ what that trade cost.
 > and re-run `node docs/guides/learning/hooks/tools/build.mjs`; never edit `index.html` by hand.
 
 > Baseline: written against `scripts/` + the hook-facing `server/lib/` stores at commit
-> `092484b` (2026-08-17). Citations and the passages that had drifted refreshed against `8d0f7f2` on 2026-10-26.
+> `092484b` (2026-08-17). Citations and the passages that had drifted refreshed against `c6662c0` on 2026-11-01.
 
 ---
 
@@ -203,11 +203,12 @@ state machine that knows nothing about HTTP.**
   display-only outlier; deliberately incapable of deciding
 - [`scripts/remote-decision-hook.sh`](../../../../scripts/remote-decision-hook.sh) — pure context
   injection, no HTTP wait
-- [`server/lib/pending.ts`](../../../../server/lib/pending.ts) — the state machine the other two
-  wait-stores copy
+- [`server/lib/wait-store.ts`](../../../../server/lib/wait-store.ts) — the state machine and the one idle reaper all three
+  wait stores share
+- [`server/lib/pending.ts`](../../../../server/lib/pending.ts) — the question store: its payload and validation over that machine
 - [`server/lib/plans.ts`](../../../../server/lib/plans.ts) — same machine, reject-only verdicts
-- [`server/lib/messages.ts`](../../../../server/lib/messages.ts) — same machine plus the 5s idle
-  reaper
+- [`server/lib/messages.ts`](../../../../server/lib/messages.ts) — same machine, headless holds exempt
+  from the idle reaper
 - [`server/lib/permissions.ts`](../../../../server/lib/permissions.ts) — flag store, no socket, no
   verdict
 - [`server/lib/remoteState.ts`](../../../../server/lib/remoteState.ts) — the env gate × UI toggle

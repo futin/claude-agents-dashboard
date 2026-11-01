@@ -22,7 +22,7 @@ jq -cn --arg r "$REASON" '{
 The reason is written to be read as an answer, not as a refusal:
 
 ```ts
-// server/lib/pending.ts:150-151
+// server/lib/pending.ts:157-158
 return `The user answered via the dashboard (not the terminal dialog) — ${lines[0]}. `
   + 'Treat this as the user\'s selection and continue; do not ask again.';
 ```
@@ -69,7 +69,7 @@ Nothing unifies the output formats. Each event wants its own:
 ```
 
 ```bash
-# scripts/stop-notify-hook.sh:217  (Stop — top level, no hookSpecificOutput at all)
+# scripts/stop-notify-hook.sh:218  (Stop — top level, no hookSpecificOutput at all)
 jq -cn --arg r "$REASON" '{decision: "block", reason: $r}'
 ```
 
@@ -101,7 +101,7 @@ is a pure function over questions and answers, and it has real logic — a singl
 one sentence, several get a bulleted list:
 
 ```ts
-// server/lib/pending.ts:143-156
+// server/lib/pending.ts:150-163
 export function composeReason(questions: PendingQuestionItem[], answers: QuestionAnswer[]): string {
   const byIndex = new Map(answers.map(a => [a.index, a.selected]));
   const lines = questions.map((q, i) => {
@@ -136,7 +136,7 @@ thing to replace if a native path ever lands.
 Not a design choice. A wall:
 
 ```bash
-# scripts/plan-remote-hook.sh:11-14
+# scripts/plan-remote-hook.sh:10-13  (abridged here — line 13 truncated)
 # ⚠️ REJECT ONLY, and not by choice: the CLI discards a hook `allow` for any tool
 # whose requiresUserInteraction() is true ("the tool's approval card IS the
 # user-interaction surface"), and ExitPlanMode is one. So a plan can be sent back

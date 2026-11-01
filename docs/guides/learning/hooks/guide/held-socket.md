@@ -35,7 +35,7 @@ sequenceDiagram
 The whole mechanism is six lines:
 
 ```ts
-// server/api.ts:1139-1145
+// server/api.ts:785-791
 let questionId = '';
 res.on('close', () => { if (questionId) cancelPending(sessionId, questionId); });
 questionId = register(sessionId, questions, clampTimeout(body.timeoutMs), (result: WaitResult) => {
@@ -48,7 +48,7 @@ if (res.destroyed) cancelPending(sessionId, questionId);
 **Why the push comes last:**
 
 ```ts
-// server/api.ts:1147-1148
+// server/api.ts:793-794
 // Last, so a refused registration never pushes. Returns immediately — the
 // response above stays held either way.
 ```
@@ -70,8 +70,8 @@ imports **no HTTP types at all** — it takes a `(r: WaitResult) => void`:
 **What it does:** the store is a pure state machine over a `Map<string, Entry>`. Registering
 takes a callback; settling calls it.
 
-**Why:** testability, and reuse. The same shape appears verbatim in
-[`plans.ts`](../../../../../server/lib/plans.ts) and [`messages.ts`](../../../../../server/lib/messages.ts).
+**Why:** testability, and reuse. [`plans.ts`](../../../../../server/lib/plans.ts) and [`messages.ts`](../../../../../server/lib/messages.ts) take the same
+callback, and all three hand it to the one state machine in [`wait-store.ts`](../../../../../server/lib/wait-store.ts).
 
 **The bad alternative** — store the `ServerResponse` in the entry and call `res.end()` inside
 the store:
@@ -80,7 +80,7 @@ the store:
 |---|---|---|
 | Unit-testable | `test/pending.test.ts` passes a plain function and asserts on what it gets | Needs a fake socket, or a real server per test |
 | Coupling | Store knows nothing about HTTP | Store owns transport *and* lifecycle |
-| Reuse | Same shape reused verbatim 3× | Re-derived 3× |
+| Reuse | One `createWaitStore` behind 3 stores | Re-derived 3× |
 | Cost | An indirection, and the handler must guard `writableEnded` itself | Slightly less ceremony |
 
 That `writableEnded` guard is the price paid. The store promises to fire `resolve` at most
@@ -90,21 +90,24 @@ before writing to it.
 ## 3. `settle` is the entire state machine
 
 ```ts
-// server/lib/pending.ts:159-163
-function settle(entry: Entry, result: WaitResult): void {
-  clearTimeout(entry.timer);
-  if (entries.get(entry.sessionId) === entry) entries.delete(entry.sessionId);
-  entry.resolve(result);
-}
+// server/lib/wait-store.ts:90-97
+  const settle = (entry: E, result: R): void => {
+    if (settled.has(entry)) return;
+    settled.add(entry);
+    clearTimeout(entry.timer);
+    if (entries.get(entry.sessionId) === entry) entries.delete(entry.sessionId);
+    opts.onSettle?.(entry, result);
+    entry.resolve(result);
+  };
 ```
 
 Every exit routes through it — `answered`, `timeout`, `dismissed`, `superseded`, and `released`
-(the idle reaper every wait store runs). Three lines, three invariants:
+(the idle reaper the three stores share). Four invariants:
 
+- **The `settled` guard** — a second settle of the same entry is a no-op, so `resolve` fires at most once.
 - **`clearTimeout`** — the deadline can never fire after another exit won.
-- **The identity check** — `entries.get(…) === entry` means a *superseded* entry does not
-  delete the replacement that just evicted it. Without it, `register`'s supersede path would
-  remove the new entry from the map while leaving it live in a closure.
+- **The identity check** — `entries.get(…) === entry` means a settle only ever deletes the entry it was given, never a replacement. It is the backstop rather
+  than the working part: `add` settles the old entry before it inserts the new one, and the `settled` guard stops any later settle before it reaches this line.
 - **`resolve` last** — the map is already consistent before anyone is notified.
 
 ## 4. The three-way race
@@ -128,7 +131,7 @@ stateDiagram-v2
 interrupted — shows up only as a closed socket:
 
 ```ts
-// server/api.ts:1135-1138
+// server/api.ts:781-784
 // The hook's socket closing IS the signal that nobody is waiting any more
 // (session interrupted, hook killed, CLI hook timeout). Listen before
 // registering, and re-check after, so a socket that dies during the body read
@@ -142,13 +145,23 @@ again. The `res.destroyed` re-check catches exactly that window.
 **Why `cancel` takes a `questionId`:**
 
 ```ts
-// server/lib/pending.ts:258-263
+// server/lib/pending.ts:247-249
 export function cancel(sessionId: string, questionId: string): void {
-  const entry = entries.get(sessionId);
-  if (!entry || entry.questionId !== questionId) return;
-  clearTimeout(entry.timer);
-  entries.delete(sessionId);
+  store.cancel(sessionId, entry => entry.questionId === questionId);
 }
+```
+
+The shared store runs that predicate, and drops the entry only when it passes:
+
+```ts
+// server/lib/wait-store.ts:109-115
+    cancel(sessionId, isCurrent) {
+      const entry = entries.get(sessionId);
+      if (!entry || !isCurrent(entry)) return;
+      settled.add(entry);
+      clearTimeout(entry.timer);
+      entries.delete(sessionId);
+    },
 ```
 
 The map is keyed by session, so a re-registration replaces the entry. Without the id check, a
@@ -159,7 +172,7 @@ which is what makes a stale phone tab 404 instead of answering the wrong questio
 ## 5. No locking, and the invariant that makes that safe
 
 ```ts
-// server/lib/pending.ts:227-231
+// server/lib/pending.ts:216-220
 /**
  * Answer (or dismiss) a session's pending question. Synchronous by design:
  * Node is single-threaded, so two tabs submitting at once means the first wins
@@ -185,26 +198,25 @@ introducing a race. The doc comment is the only guard.
 | [`messages.ts`](../../../../../server/lib/messages.ts) | yes | answered + the same non-answer exits | headless holds exempt from the idle reaper |
 | [`permissions.ts`](../../../../../server/lib/permissions.ts) | **no** | none | display-only, 30min TTL |
 
-**Why three modules rather than one generic store:**
+**Why three modules on top of one generic store:**
 
 ```ts
-// server/lib/messages.ts:13-15
- * Third parallel store, same state machine as `pending.ts`/`plans.ts` (same
- * injected `resolve`, same one-entry-per-session rule), separate module for the
- * same reason `plans.ts` is: the payloads and verdicts share nothing.
+// server/lib/wait-store.ts:5-6
+ * The payloads, the validation and the prose stay in each store — they share nothing. What lives here is only what they used to hold three copies of:
+ * the map, `settle`, supersede-on-register, the stale-id-safe `cancel`, the test reset, and the 5 s `backAtDesk()` sweep.
 ```
 
-The *state machine* is identical; the *types* share nothing. `pending.ts` validates a
+The *state machine* is one; the *types* share nothing. `pending.ts` validates a
 structured answer against the questions it claims to answer; `messages.ts` takes a string;
-`plans.ts` has one verdict. A generic store would be parameterized over payload, verdict
-union, and validation — three type parameters to save maybe forty lines, and every call site
-would read worse. The duplication is deliberate and the comments say so at each site.
+`plans.ts` has one verdict. These used to be three copies. `createWaitStore<E, R>` is parameterized over the entry type, which carries the payload, and the
+result type, which is the verdict union. Validation never enters it: each store checks a submission before it settles the entry. Each store keeps its own
+module for what differs, and its call site passes only what the shared code cannot know.
 
 `pending.ts` also carries validation the others don't need, and it is worth noting what it
 *declines* to check:
 
 ```ts
-// server/lib/pending.ts:115-116
+// server/lib/pending.ts:122-123
  * Values are deliberately NOT checked against the option labels: the terminal
  * dialog always offers a free-text "Other", and the panel mirrors that.
 ```
@@ -227,7 +239,7 @@ No socket, no resolve, no verdict:
 And the hook is kept deliberately incapable:
 
 ```bash
-# scripts/permission-notify-hook.sh:23-26
+# scripts/permission-notify-hook.sh:25-28
 # DISPLAY-ONLY, unlike ask-remote-hook.sh. This hook never prints anything on
 # stdout, which for PermissionRequest means "no decision" — the prompt renders
 # exactly as it would have. Do not make it emit a decision: an `allow` reaching
