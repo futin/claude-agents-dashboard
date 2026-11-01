@@ -12,7 +12,7 @@
  *
  * Every doubt resolves to the full run: a push to main (the post-merge backstop), a missing or odd merge commit, a failed fetch, an empty diff, and any path
  * that is not a doc. Drift in this file therefore costs CI time, never a false green. Local `pnpm test` is untouched. `--dry-run` prints the plan without
- * running it and `--files` replaces the PR diff: `pnpm exec tsx scripts/ci-scope.ts --dry-run --files docs/overview.md`.
+ * running it and `--files` replaces the PR diff, its list ending at the next flag: `pnpm exec tsx scripts/ci-scope.ts --dry-run --files docs/overview.md`.
  */
 import { execFileSync, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
@@ -140,10 +140,19 @@ export function prFiles(git: Git = realGit, event = process.env.GITHUB_EVENT_NAM
   }
 }
 
+/** The paths after `--files`, or null without it. The list ends at the next flag, so a flag after it stays a flag instead of classifying as a changed file. */
+export function handFiles(argv: string[]): string[] | null {
+  const at = argv.indexOf('--files');
+  if (at < 0) return null;
+  const rest = argv.slice(at + 1);
+  const end = rest.findIndex(arg => arg.startsWith('--'));
+  return end < 0 ? rest : rest.slice(0, end);
+}
+
 function main(argv: string[]): number {
   const dryRun = argv.includes('--dry-run');
-  const at = argv.indexOf('--files');
-  const { files, why } = at >= 0 ? { files: argv.slice(at + 1), why: 'files given by hand' } : prFiles();
+  const given = handFiles(argv);
+  const { files, why } = given ? { files: given, why: 'files given by hand' } : prFiles();
   const { scope, steps } = makePlan(files, readSuites());
 
   const summary = scope === 'full'
