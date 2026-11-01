@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import type { RoutineRunsResponse } from '../../../shared/types';
+import { pollFetch } from '../lib/pollSeq';
 import { createPollSeq, runsQueryString, type RoutineRunsQuery } from '../lib/routines';
 import { useSettings } from './useSettings';
 
@@ -32,7 +33,7 @@ export function useRoutineRuns(q: RoutineRunsQuery, enabled = true): RoutineRuns
     const poll = (force: boolean) => {
       const mine = seq.next(force);
       if (mine === null) return;
-      fetch(`/api/routines/runs${query}`)
+      pollFetch(`/api/routines/runs${query}`)
         .then(res => {
           if (!res.ok) throw new Error(`HTTP ${res.status}`);
           return res.json() as Promise<RoutineRunsResponse>;

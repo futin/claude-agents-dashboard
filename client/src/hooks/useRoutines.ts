@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import type { RoutinesResponse } from '../../../shared/types';
+import { pollFetch } from '../lib/pollSeq';
 import { createPollSeq } from '../lib/routines';
 import { useSettings } from './useSettings';
 
@@ -31,7 +32,7 @@ export function useRoutines(): RoutinesState {
     const poll = (force: boolean) => {
       const mine = seq.next(force);
       if (mine === null) return;
-      fetch('/api/routines')
+      pollFetch('/api/routines')
         .then(res => {
           if (!res.ok) throw new Error(`HTTP ${res.status}`);
           return res.json() as Promise<RoutinesResponse>;

@@ -227,10 +227,13 @@ request for it and `/api/sessions/:id/chat` knows nothing of it. Three behaviour
 - **Client:** `ChatDrawer` is a `React.lazy` default export (own chunk; the sessions
   bundle is unchanged), keyed by session id in `SessionsView` so switching sessions
   remounts the tail. `useSessionChat` keeps `cursor`/`headOffset` in `createChatPaging` (`client/src/lib/chatPaging.ts`, node-tested in
-  `test/chat-paging.test.ts`) — outside React state, so the poll always sees the latest without re-arming — and it holds three rules: no poll before the
+  `test/chat-paging.test.ts`) — outside React state, so the poll always sees the latest without re-arming — and it holds four rules: no poll before the
   first page lands (`?after=0` would ship the whole file); one poll out at a time, because `?after=` is stateless and two polls with the same cursor would
-  append the same page twice when a poll outlasts the refresh interval; and an epoch per (re)tail, so a poll or "load older" page fetched before a reset
-  is dropped instead of merged into the new transcript. Scroll: an append
+  append the same page twice when a poll outlasts the refresh interval; an epoch per (re)tail, so a poll or "load older" page fetched before a reset
+  is dropped instead of merged into the new transcript; and a failed tail retries. `endTail` answers `land`, `stale` or `failed`, and `failed` — no page, or
+  `error: true`, whose cursor 0 must never become `?after=0` — keeps the polls held and arms `retryDue`, so the next tick re-tails where it would have polled.
+  The retry leaves `loading` alone, so the error text stays up until one lands. Every request goes through `pollFetch` (`client/src/lib/pollSeq.ts`), so a hung one
+  fails at 30s instead of holding its slot. Scroll: an append
   auto-scrolls only when the reader was already within 40px of the bottom; a prepend
   restores position by the height the new page added (`scrollHeight` captured at click
   time, prepend detected by a changed first-message uuid). ⚠️ That restore needs

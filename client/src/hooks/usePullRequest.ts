@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 
+import { pollFetch } from '../lib/pollSeq';
 import { acceptPrAnswer } from '../lib/pr';
 import { useSettings } from './useSettings';
 import type { SessionPr, SessionPrResponse } from '../../../shared/types';
@@ -27,7 +28,7 @@ export function usePullRequest(id: string): SessionPr {
       if (busy) return;
       busy = true;
       try {
-        const res = await fetch(`/api/sessions/${encodeURIComponent(id)}/pr`);
+        const res = await pollFetch(`/api/sessions/${encodeURIComponent(id)}/pr`);
         const body = (await res.json()) as SessionPrResponse;
         if (live) setPr(prev => acceptPrAnswer(idRef.current, body, prev));
       } catch {

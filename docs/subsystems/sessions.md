@@ -4,7 +4,9 @@ The default section: every Claude Code session, refreshed on the interval the Se
 page sets (3s by default), sorted most-recent-first. Everything is derived from the
 transcript files on disk. `useSessions` also carries the per-device scan knobs as query
 params, so a changed row count or window takes effect on the next tick. A tick that finds the previous scan still out is
-skipped (`createPollSeq`, `client/src/lib/pollSeq.ts`), so a slow scan can never land after a newer one and step the board backwards.
+skipped (`createPollSeq`, `client/src/lib/pollSeq.ts`), so a slow scan can never land after a newer one and step the board backwards. Only a request settling frees
+that skip, so each one carries a 30s bound (`pollFetch`, the same file): a hung scan fails there, the rail's foot turns to `disconnected — server stopped?`, and the next
+tick's success turns it back. The Routines polls, the PR card and the chat drawer use it as well.
 
 ## The page
 
