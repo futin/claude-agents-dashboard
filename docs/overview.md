@@ -358,7 +358,8 @@ client/src/
                   useStuckStrip (when the phone's aside strip pins)
   lib/            routines (the Routines page's pure helpers: pills, run folding, the Repos helper, write-failure text), routineForm (the job drawer's
                   Form view: one read/write/summary per row over the file text), filterSort, analyticsFilterSort, chatFilter, chatPaging (the chat drawer's byte offsets: one
-                  tail poll at a time, an epoch per re-tail), pollSeq (`createPollSeq`, the skip-while-in-flight rule useSessions and the Routines polls share),
+                  tail poll at a time, an epoch per re-tail, a retry after a failed tail), pollSeq (`createPollSeq`, the skip-while-in-flight rule useSessions and the Routines
+                  polls share, and `pollFetch`, the 30s bound every guarded poll's request carries),
                   heldBody (which timeline body a pinned panel folds), markdown, configsEntries,
                   format, settings, persistedReset (Settings › Reset's reach into mounted usePersistedState holders),
                   sections, deepLink, dictation, openFolder (the Open folder key's status → note), spawnOptions, spawnResponse (`parseSpawnResponse`, the `POST /api/spawn` 200 body → its `SpawnResponse` branch), launchSurface (which launch surfaces the form offers, its initial pick, and the desktop copy), pins, resume, pace, usageProfile,

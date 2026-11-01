@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 
 import { useSettings } from './useSettings';
 import { createChatPaging } from '../lib/chatPaging';
+import { pollFetch } from '../lib/pollSeq';
 import { chatQuery } from '../lib/settings';
 import type { ChatMessage, SessionChat } from '../../../shared/types';
 
@@ -39,10 +40,10 @@ export function useSessionChat(id: string): ChatState {
   const get = useCallback(async (cursor: string): Promise<SessionChat | null> => {
     try {
       const query = chatQuery({ chatFullText }, cursor);
-      const res = await fetch(`/api/sessions/${encodeURIComponent(id)}/chat${query}`);
+      const res = await pollFetch(`/api/sessions/${encodeURIComponent(id)}/chat${query}`);
       return (await res.json()) as SessionChat;
     } catch {
-      return null; // keep the last snapshot; the next poll retries
+      return null; // keep the last snapshot; the next tick retries
     }
   }, [id, chatFullText]);
 
@@ -59,16 +60,16 @@ export function useSessionChat(id: string): ChatState {
       setLoadingOlder(false);
       const page = await get('');
       if (!live) return;
-      if (!page) {
-        setLoading(false);
+      const end = paging.endTail(epoch, page);
+      if (end === 'stale') return;
+      setLoading(false);
+      if (end === 'failed') {
         setError(true);
         return;
       }
-      if (!paging.tailLanded(epoch, page)) return;
-      setMessages(page.messages);
-      setHasMore(page.hasMore);
-      setError(!!page.error);
-      setLoading(false);
+      setMessages(page!.messages);
+      setHasMore(page!.hasMore);
+      setError(false);
     }
 
     async function poll(): Promise<void> {
@@ -83,7 +84,8 @@ export function useSessionChat(id: string): ChatState {
     }
 
     void tail();
-    const timer = setInterval(() => void poll(), refreshMs);
+    // A retry leaves `loading` alone, so the error text stays up until one lands, with no flash of "Loading chat…".
+    const timer = setInterval(() => void (paging.retryDue() ? tail() : poll()), refreshMs);
     return () => {
       live = false;
       clearInterval(timer);
