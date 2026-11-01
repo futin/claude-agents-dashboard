@@ -42,13 +42,14 @@ turn-end is by definition a mid-hook-conversation stop.
 So the flag changed jobs. It is no longer control flow; it is data:
 
 ```bash
-# scripts/stop-notify-hook.sh:196-201
+# scripts/stop-notify-hook.sh:196-202
 BODY=$(jq -cn \
   --arg sid "$SESSION_ID" \
   --arg pm "$PERM_MODE" \
   --argjson sha "$SHA" \
+  --argjson hl "$HEADLESS" \
   --argjson t "$((TIMEOUT_S * 1000))" \
-  '{sessionId: $sid, timeoutMs: $t, permissionMode: $pm, stopHookActive: $sha}') || notify_fallback
+  '{sessionId: $sid, timeoutMs: $t, permissionMode: $pm, stopHookActive: $sha, headless: $hl}') || notify_fallback
 ```
 
 **Why this is safe:** the loop bound moved from the script to the platform. The CLI's own
@@ -74,7 +75,7 @@ platform is strictly better here.
 `notify_fallback` is a shell function used as a jump target:
 
 ```bash
-# scripts/stop-notify-hook.sh:122-129
+# scripts/stop-notify-hook.sh:123-130
 notify_fallback() {
   [ "$SHA" = "true" ] && exit 0
   BODY=$(jq -cn --arg sid "$SESSION_ID" --arg pm "$PERM_MODE" \
@@ -203,32 +204,40 @@ export function backAtDesk(): boolean {
 immediately — not to make you find a phone panel and dismiss it. Each store settles such a hold as `released`.
 
 This policy first lived only in `messages.ts`, which is why held questions and plans used to sit parked until their deadlines. `idle.ts` now owns
-it; each store keeps its own `sweepIdle()` only for what differs per store. `messages.ts` is the one that differs, because it skips headless holds:
+it, and [`wait-store.ts`](../../../../../server/lib/wait-store.ts) runs it: each store's `sweepIdle()` is a one-line call into the shared sweep.
 
 ```ts
-// server/lib/messages.ts:188-195
-export function sweepIdle(): number {
-  if (entries.size === 0) return 0;
-  const releasable = [...entries.values()].filter(e => !e.headless);
-  if (releasable.length === 0) return 0; // nothing to release — don't spawn ioreg
-  if (!backAtDesk()) return 0;
-  for (const entry of releasable) settle(entry, { status: 'released' });
-  return releasable.length;
-}
+// server/lib/wait-store.ts:120-126
+    sweepIdle() {
+      const release = releasableEntries();
+      if (release.length === 0) return 0; // nothing to release — don't spawn ioreg
+      if (!backAtDesk()) return 0;
+      for (const entry of release) settle(entry, opts.released);
+      return release.length;
+    },
+```
+
+What differs per store is an option. `messages.ts` is the one that passes it, because it skips headless holds:
+
+```ts
+// server/lib/messages.ts:48-49
+  // The headless exemption — see {@link sweepIdle}: a `claude -p` session has no terminal to come back to, so the dashboard window stays its only channel.
+  releasable: entry => !entry.headless
 ```
 
 A dashboard-spawned `claude -p` session has no terminal, so coming back to the desk gives you no other way to reply. Its hold stays open until you
 answer, dismiss it or it times out.
 
-And each reaper self-terminates. The three `ensureReaper()` functions are identical:
+And the reaper self-terminates. There is one, shared by all three stores. Each tick asks `backAtDesk()` once, not once per store, and only with something to
+release:
 
 ```ts
-// server/lib/messages.ts:202-209
+// server/lib/wait-store.ts:76-83
 function ensureReaper(): void {
   if (reaper) return;
   reaper = setInterval(() => {
-    sweepIdle();
-    if (entries.size === 0 && reaper) { clearInterval(reaper); reaper = null; }
+    reapIdle();
+    stopReaperIfEmpty();
   }, 5_000);
   reaper.unref();
 }
@@ -238,12 +247,12 @@ function ensureReaper(): void {
 
 | | on-demand reaper (chosen) | always-on interval |
 |---|---|---|
-| `ioreg` spawns when idle | Zero — *"an idle server never spawns `ioreg`"* | 17,280/day per store to serve an empty store |
+| Work when idle | None — no timer runs | 17,280 ticks/day to find every store empty |
 | Holds the process open | No — `unref()` | Needs `unref()` anyway |
-| Complexity | `ensureReaper` + the self-clear check | One line at boot |
+| Complexity | `ensureReaper` + `stopReaperIfEmpty` | One line at boot |
 
-The stores are empty the overwhelming majority of the time, and each sweep shells out to
-`ioreg`. Six extra lines per store to spawn no subprocesses when there is nothing to reap.
+The stores are empty the overwhelming majority of the time, so an always-on timer would have nothing to do for most of its life. The `ioreg` cost is a
+separate guard: `reapIdle` calls `backAtDesk()` only with something to release, so an idle server and a headless-only hold never spawn it.
 
 Note the fail direction. It is the *same* as the hook's, never act on a guess. Here that keeps the hold open, where the hook's guess keeps the dialog in
 the terminal:

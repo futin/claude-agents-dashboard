@@ -140,7 +140,7 @@ reason text, which is why [`messages.ts`](../../../../../server/lib/messages.ts)
 that carries both your follow-up *and* a re-statement of the rules:
 
 ```ts
-// server/lib/messages.ts:51-55
+// server/lib/messages.ts:52-56
 /**
  * The prose the hook prints as the Stop block's `reason`. Two jobs: carry the
  * text, and carry the away-mode instructions — `UserPromptSubmit` hooks (the

@@ -31,7 +31,7 @@ Every edge except one lands on `exit 0`.
 ## 2. Why the arbitration is necessary at all
 
 ```bash
-# scripts/ask-remote-hook.sh:7-13
+# scripts/ask-remote-hook.sh:9-15
 # A question can't be live in the terminal AND answerable from the phone (the
 # dialog only renders once this hook exits), so three gates decide who gets it:
 #   1. REMOTE_ANSWER on the server — is the feature available at all?
@@ -155,7 +155,7 @@ Cost of guessing wrong: **one unnecessary buzz.** The comment names the other ca
 explicitly and explains the inversion — this is the clearest example in the repo of a fail
 direction being derived rather than inherited from a house rule.
 
-**c) `idle.ts` `backAtDesk` (every store's `sweepIdle`) — unknown idle → do NOT release.**
+**c) `idle.ts` `backAtDesk` (the shared reaper, and every store's `sweepIdle`) — unknown idle → do NOT release.**
 
 Cost of guessing wrong: **a turn ends that you were about to reply to.** So the deadline timer
 stays the reaper of last resort.
