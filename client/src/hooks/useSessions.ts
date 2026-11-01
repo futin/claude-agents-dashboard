@@ -1,13 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
 
 import { useSettings } from './useSettings';
-import { createPollSeq } from '../lib/pollSeq';
+import { createPollSeq, pollFetch } from '../lib/pollSeq';
 import { scanQuery } from '../lib/settings';
 import type { SessionsResponse } from '../../../shared/types';
 
 export interface SessionsState {
   data: SessionsResponse | null;
-  /** false once a poll has failed (server stopped?). */
+  /** false once a poll has failed or outlasted `POLL_TIMEOUT_MS` (server stopped?). */
   connected: boolean;
 }
 
@@ -41,7 +41,7 @@ export function useSessions(opts: { enabled?: boolean; limit?: number; projects?
       const n = seq.next(false);
       if (n === null) return;
       try {
-        const res = await fetch(`/api/sessions${query}`);
+        const res = await pollFetch(`/api/sessions${query}`);
         const data: SessionsResponse = await res.json();
         if (seq.settle(n) && alive) setState({ data, connected: true });
       } catch {
