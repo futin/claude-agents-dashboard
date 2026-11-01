@@ -215,16 +215,21 @@ ls -l ~/.claude/hooks/</code></pre>
     stroke-width="1.5" marker-end="url(#ar-turn)"/><text x="304" y="535" fill="var(--muted)" font-size="11" text-anchor="middle">block+reason, or exit 0</text></svg></div><p class="caption">The two held POSTs are the blocking hooks. Everything else returns in about a second.</p>
 <h3 id="lifecycle--3-userpromptsubmit-stdout-becomes-turn-context">3. <code>UserPromptSubmit</code> stdout becomes turn context</h3>
 <p>The first hook runs before the model sees anything, and its stdout is prepended to the turn:</p>
-<pre><code># scripts/remote-decision-hook.sh:60-68  (abridged here — heredoc truncated at rule 1)
+<pre><code># scripts/remote-decision-hook.sh:113-126  (abridged here — heredoc truncated at rule 1)
 cat &lt;&lt;'EOF'
 REMOTE DECISION MODE — the dashboard is accepting remote answers and this session
 runs without permission prompts. The user may be away from the terminal: they can
 answer the AskUserQuestion tool from their phone, but they cannot read a
 plain-text question or approve a plan card. Therefore, for this session:
-1. Put EVERY decision through the AskUserQuestion tool — approach choices,
-   "should I proceed?", scope calls, and questions a skill tells you to ask
-   (e.g. the brainstorming skill's session-mode pick). Never end a turn on a
-   prose question.
+1. Put each decision that is the user's to make through the AskUserQuestion
+   tool — approach choices, "should I proceed?", scope calls, and questions a
+   skill tells you to ask (e.g. the brainstorming skill's session-mode pick).
+   A skill or task that says to proceed on stated assumptions still does: this
+   rule changes how you ask, not whether. While that tool is available, never
+   end a turn on a prose question.
+   If AskUserQuestion is not available in this session, this rule does not
+   apply: follow whatever the running skill says to do without a channel,
+   and if it says nothing, ask in prose rather than deciding silently.
 EOF</code></pre>
 <p><strong>Why a hook rather than a line in <code>CLAUDE.md</code>.</strong> The instruction is only correct under two live conditions — the dashboard is accepting remote answers, <em>and</em> this session runs in an auto-ish permission mode. Both are re-checked on every prompt, so flipping the dashboard toggle takes effect on your next message.</p>
 <p><strong>The bad alternative</strong> is putting it in <code>CLAUDE.md</code> (or a rules file):</p>
@@ -419,7 +424,7 @@ if (res.destroyed) cancelPending(sessionId, questionId);</code></pre>
     entry.resolve(result);
   };</code></pre>
 <p>Every exit routes through it — <code>answered</code>, <code>timeout</code>, <code>dismissed</code>, <code>superseded</code>, and <code>released</code> (the idle reaper the three stores share). Four invariants:</p>
-<ul><li><strong>The <code>settled</code> guard</strong> — a second settle of the same entry is a no-op, so <code>resolve</code> fires at most once.</li><li><strong><code>clearTimeout</code></strong> — the deadline can never fire after another exit won.</li><li><strong>The identity check</strong> — <code>entries.get(…) === entry</code> means a <em>superseded</em> entry does not delete the replacement that just evicted it. Without it, <code>add</code>'s supersede path would remove the new entry from the map while leaving it live in a closure.</li><li><strong><code>resolve</code> last</strong> — the map is already consistent before anyone is notified.</li></ul>
+<ul><li><strong>The <code>settled</code> guard</strong> — a second settle of the same entry is a no-op, so <code>resolve</code> fires at most once.</li><li><strong><code>clearTimeout</code></strong> — the deadline can never fire after another exit won.</li><li><strong>The identity check</strong> — <code>entries.get(…) === entry</code> means a settle only ever deletes the entry it was given, never a replacement. It is the backstop rather than the working part: <code>add</code> settles the old entry before it inserts the new one, and the <code>settled</code> guard stops any later settle before it reaches this line.</li><li><strong><code>resolve</code> last</strong> — the map is already consistent before anyone is notified.</li></ul>
 <h3 id="held-socket--4-the-three-way-race">4. The three-way race</h3>
 <p>Three things can end a wait, and they genuinely race:</p>
 <div class="diagram"><svg viewBox="0 0 620 420" role="img" xmlns="http://www.w3.org/2000/svg">
@@ -477,7 +482,7 @@ export function cancel(sessionId: string, questionId: string): void {
 <pre><code>// server/lib/wait-store.ts:5-6
  * The payloads, the validation and the prose stay in each store — they share nothing. What lives here is only what they used to hold three copies of:
  * the map, `settle`, supersede-on-register, the stale-id-safe `cancel`, the test reset, and the 5 s `backAtDesk()` sweep.</code></pre>
-<p>The <em>state machine</em> is one; the <em>types</em> share nothing. <code>pending.ts</code> validates a structured answer against the questions it claims to answer; <code>messages.ts</code> takes a string; <code>plans.ts</code> has one verdict. These used to be three copies, on the argument that a generic store would have to be parameterized over payload, verdict union and validation. <code>createWaitStore&lt;E, R&gt;</code> avoids that trade: it takes only the entry and the result type, and validation never enters it. Each store keeps its own module for what differs, and its call site passes only what the shared code cannot know.</p>
+<p>The <em>state machine</em> is one; the <em>types</em> share nothing. <code>pending.ts</code> validates a structured answer against the questions it claims to answer; <code>messages.ts</code> takes a string; <code>plans.ts</code> has one verdict. These used to be three copies. <code>createWaitStore&lt;E, R&gt;</code> is parameterized over the entry type, which carries the payload, and the result type, which is the verdict union. Validation never enters it: each store checks a submission before it settles the entry. Each store keeps its own module for what differs, and its call site passes only what the shared code cannot know.</p>
 <p><code>pending.ts</code> also carries validation the others don't need, and it is worth noting what it <em>declines</em> to check:</p>
 <pre><code>// server/lib/pending.ts:122-123
  * Values are deliberately NOT checked against the option labels: the terminal
@@ -572,8 +577,8 @@ notify_fallback() {
   exit 0
 }</code></pre>
 <p>Every non-hold path calls it. The header states the contract plainly:</p>
-<pre><code># scripts/stop-notify-hook.sh:6-9  (abridged here — line 9 truncated)
-# Two paths out of every run:
+<pre><code># scripts/stop-notify-hook.sh:6-12  (abridged here — lines 9-11 elided, line 12 truncated)
+# Two paths out of every run (the token-renewal turn, CLAUDE_DASHBOARD_REFRESH, takes neither — see below):
 #   at the desk / feature off → POST /api/notify/event (the old fire-and-forget
 #     push trigger) and exit 0 — byte-for-byte the pre-feature behaviour;
 #   away + remote answers on  → POST /api/messages/wait, held.</code></pre>
@@ -719,7 +724,7 @@ function ensureReaper(): void {
 <p>That table spans the set — the <code>tool_name</code> row is <code>plan-remote-hook.sh</code>'s alone, and the non-numeric <code>idleSecs</code> row is a default rather than a bail-out. <a href="../../../../scripts/ask-remote-hook.sh"><code>ask-remote-hook.sh</code></a> itself contains <strong>fifteen</strong> <code>exit 0</code> statements: fourteen bail-outs and one success exit after the decision is printed. <code>grep -c 'exit 0' scripts/*-hook.sh</code> gives ask-remote 15, plan-remote 16, stop-notify 16, remote-decision 10 and permission-notify 9 across the five (<code>kill-guard-hook.sh</code>, the sixth script and outside this guide, adds 7). One path through to a decision, more than a dozen out. The asymmetry <em>is</em> the design.</p>
 <h3 id="fail-open--4-inputcat-comes-first-always">4. <code>INPUT=$(cat)</code> comes first, always</h3>
 <p>All five scripts open the same way:</p>
-<pre><code># scripts/ask-remote-hook.sh:28-36  (abridged here — comment lines elided)
+<pre><code># scripts/ask-remote-hook.sh:28-39  (abridged here — lines 29-30, 32-35, 37-38 elided)
 INPUT=$(cat)
 [ "$CLAUDECODE" = "1" ] || exit 0
 DASH="${CLAUDE_DASHBOARD_URL:-http://127.0.0.1:4173}"

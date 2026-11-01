@@ -106,9 +106,8 @@ Every exit routes through it — `answered`, `timeout`, `dismissed`, `superseded
 
 - **The `settled` guard** — a second settle of the same entry is a no-op, so `resolve` fires at most once.
 - **`clearTimeout`** — the deadline can never fire after another exit won.
-- **The identity check** — `entries.get(…) === entry` means a *superseded* entry does not
-  delete the replacement that just evicted it. Without it, `add`'s supersede path would
-  remove the new entry from the map while leaving it live in a closure.
+- **The identity check** — `entries.get(…) === entry` means a settle only ever deletes the entry it was given, never a replacement. It is the backstop rather
+  than the working part: `add` settles the old entry before it inserts the new one, and the `settled` guard stops any later settle before it reaches this line.
 - **`resolve` last** — the map is already consistent before anyone is notified.
 
 ## 4. The three-way race
@@ -209,9 +208,9 @@ introducing a race. The doc comment is the only guard.
 
 The *state machine* is one; the *types* share nothing. `pending.ts` validates a
 structured answer against the questions it claims to answer; `messages.ts` takes a string;
-`plans.ts` has one verdict. These used to be three copies, on the argument that a generic store would have to be parameterized over payload, verdict union
-and validation. `createWaitStore<E, R>` avoids that trade: it takes only the entry and the result type, and validation never enters it. Each store keeps its
-own module for what differs, and its call site passes only what the shared code cannot know.
+`plans.ts` has one verdict. These used to be three copies. `createWaitStore<E, R>` is parameterized over the entry type, which carries the payload, and the
+result type, which is the verdict union. Validation never enters it: each store checks a submission before it settles the entry. Each store keeps its own
+module for what differs, and its call site passes only what the shared code cannot know.
 
 `pending.ts` also carries validation the others don't need, and it is worth noting what it
 *declines* to check:

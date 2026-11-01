@@ -89,8 +89,8 @@ notify_fallback() {
 Every non-hold path calls it. The header states the contract plainly:
 
 ```bash
-# scripts/stop-notify-hook.sh:6-9  (abridged here — line 9 truncated)
-# Two paths out of every run:
+# scripts/stop-notify-hook.sh:6-12  (abridged here — lines 9-11 elided, line 12 truncated)
+# Two paths out of every run (the token-renewal turn, CLAUDE_DASHBOARD_REFRESH, takes neither — see below):
 #   at the desk / feature off → POST /api/notify/event (the old fire-and-forget
 #     push trigger) and exit 0 — byte-for-byte the pre-feature behaviour;
 #   away + remote answers on  → POST /api/messages/wait, held.

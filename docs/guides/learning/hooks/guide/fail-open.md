@@ -78,7 +78,7 @@ non-numeric `idleSecs` row is a default rather than a bail-out.
 All five scripts open the same way:
 
 ```bash
-# scripts/ask-remote-hook.sh:28-36  (abridged here — comment lines elided)
+# scripts/ask-remote-hook.sh:28-39  (abridged here — lines 29-30, 32-35, 37-38 elided)
 INPUT=$(cat)
 [ "$CLAUDECODE" = "1" ] || exit 0
 DASH="${CLAUDE_DASHBOARD_URL:-http://127.0.0.1:4173}"
