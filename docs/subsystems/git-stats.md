@@ -283,7 +283,8 @@ reply, so its row ends and the button returns to Sync; a follow-up goes through 
 `useGitSync` (`client/src/hooks/useGitSync.ts`) remembers each launch per device in `localStorage['management.syncRuns']`, keyed by the repo's toplevel, so
 two pins on one repo share a run. `syncPhase` reads a run against the sessions payload: a `launching` entry, or a row not seen yet, is "Syncing…" and
 disabled; a `working` or `question` row is "Syncing" (no "open" suffix: the cyan tint and the turning glyph say it is live), which opens that session's
-`ChatDrawer` over Management; an ended row or a failed launch is
+`ChatDrawer` over Management. So is an `incomplete` row with `apiError` and a live process: a server error's retry can land seconds later
+([sessions](sessions.md)), and forgetting the run would re-arm Sync beside a child still at work. An ended row or a failed launch is
 forgotten (`reconcileRuns` in `client/src/lib/gitSyncRuns.ts`), and each payload that forgets any run re-polls git stats once. A row missing from the
 payload is not an end, since the scan caps rows by recency and a sync parked on its question writes nothing, so absence ends a run only 24h after launch
 once its row has shown, or 10 min after launch if it never has: a launch that failed while no tab watched leaves no trace once the server drops it.

@@ -80,13 +80,18 @@ export function syncRequest(repo: OkRepo, s: SyncSettings, host: SyncHost): Spaw
 /**
  * What `run` is doing in `data`. A row that is not in the payload is not proof of an end: the scan caps its rows by recency, and a sync parked on its
  * question writes nothing, so absence only ends a run after `SYNC_UNSEEN_TTL_MS` — or `SYNC_NEVER_SEEN_TTL_MS` for a run whose row never showed.
+ * An API-error row whose process is still alive is not an end either: a server error's retry can land seconds later, and forgetting the run then would
+ * re-arm Sync beside a child still at work. The `incomplete` status bounds it, since the row goes `idle` when it turns stale.
  */
 export function syncPhase(run: SyncRun, data: SessionsResponse | null, nowMs: number): SyncPhase {
   if (!data) return { kind: 'unseen' };
   const launch = data.launching?.find(l => l.sessionId === run.sessionId);
   if (launch) return launch.state === 'failed' ? { kind: 'failed', error: launch.error ?? null } : { kind: 'launching' };
   const row = data.sessions.find(s => s.id === run.sessionId);
-  if (row) return row.status === 'working' || row.status === 'question' ? { kind: 'running', session: row } : { kind: 'ended' };
+  if (row) {
+    const mayRetry = row.status === 'incomplete' && !!row.apiError && (!!row.stopState || !!row.processLive);
+    return row.status === 'working' || row.status === 'question' || mayRetry ? { kind: 'running', session: row } : { kind: 'ended' };
+  }
   return nowMs - run.launchedAtMs < (run.seen ? SYNC_UNSEEN_TTL_MS : SYNC_NEVER_SEEN_TTL_MS) ? { kind: 'unseen' } : { kind: 'ended' };
 }
 

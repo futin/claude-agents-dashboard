@@ -368,8 +368,9 @@ becomes `Session.apiError` (`kind`, `text`, and `resetsAtMs` from `quotaLimits.r
 reads `idle` with the badge still on it.
 
 A `server_error` is sometimes retried within the same turn, 3–15 s later. The row then reads `pending` with the badge for a poll or two, and `working` once
-the retry's record lands. That flicker is accepted: the alternative, waiting out a timeout, is the false `working` this replaced. The desktop hand-over is the
-one reader that cannot accept it ([spawn](spawn.md#launching-in-the-desktop-app)), so it does not treat an API-error record as settled.
+the retry's record lands. That flicker is accepted: the alternative, waiting out a timeout, is the false `working` this replaced. Two readers cannot accept it, because each acts once on
+what it reads: the desktop hand-over ([spawn](spawn.md#launching-in-the-desktop-app)) does not treat an API-error record as settled, and Git Sync
+([git-stats](git-stats.md)) keeps a run going while the row has `apiError` and a live process.
 
 **Process-liveness gate (overrides the 2×2):** a cleaned/interrupted session's last
 record often has no `end_turn`, so on disk it looks recent + pending = `working` forever

@@ -1552,6 +1552,7 @@ export function run(): number {
     assert.strictEqual(fresh.status, 'incomplete');
     assert.deepStrictEqual(fresh.apiError, { kind: 'rate_limit', text: 'You\'ve hit your session limit', resetsAtMs: 1789749000000 });
     assert.strictEqual(row('limstale').status, 'idle');
+    assert.strictEqual(row('limstale').apiError?.kind, 'rate_limit');
     assert.strictEqual('apiError' in row('limnone'), false);
   })) p++; else f++;
 
