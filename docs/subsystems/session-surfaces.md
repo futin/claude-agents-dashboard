@@ -39,7 +39,7 @@ than an `isLocalOnly` boolean because `cloud` is already a known third answer:
 | value | means | pill |
 |---|---|---|
 | `local` | an ordinary terminal (B) or desktop-app (A) session — the surface that started it lists it too | none, on purpose |
-| `dashboard` | a headless `-p` run (C/D): **no other list has it** | cyan `dashboard`; none once `desktopOwned` (below) |
+| `dashboard` | a headless `-p` run (C/D): **no other list has it** | cyan `dashboard`; `hand-over failed` on a `handOverFailed` row, none once `desktopOwned` (both below) |
 | `cloud` | reserved for E. Nothing produces it: a cloud session writes no transcript here, so the scanner cannot see one | grey `cloud` |
 
 It is read off the transcript's own `entrypoint` field — `cli`, `claude-desktop`,
@@ -181,6 +181,10 @@ it cannot attribute, and contributes nothing. The flag is `true` or absent, neve
 **A `desktopOwned` row shows no `dashboard` pill.** Until the app writes a turn the transcript still reads `claude-agents-dashboard`, so the row keeps
 `surface: 'dashboard'`, which the drawer's hand-over reads to say `owned` ([chat](chat.md)). The pill's claim, that no other list has the session, stopped
 being true at the import, so `surfacePill` (`client/src/lib/surface.ts`) takes the whole session and stays silent for the flag.
+
+**`Session.handOverFailed` relabels that pill `hand-over failed`.** A fresh desktop launch whose watch gave up on a failure stays here, against what the launch
+form said ([spawn](spawn.md#launching-in-the-desktop-app)). The classes stay `ag-pill surface dashboard`, and the title names the drawer's `Open in desktop app`
+as the retry. `desktopOwned` wins: the scan never sets both, and the pill's check for it comes first.
 
 ## The two boundaries that will not move from this repo
 

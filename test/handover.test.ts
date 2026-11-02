@@ -10,7 +10,7 @@ import os from 'node:os';
 import path from 'node:path';
 
 import { handOverInFlight, overrideDesktop, reserveDesktopLaunch, resetDesktopRail, DESKTOP_RAIL_MAX } from '../server/lib/desktop.js';
-import { HANDOVER_MAX_MS, resetHandOvers, stepHandOver, type HandOverWatch } from '../server/lib/handover.js';
+import { HANDOVER_MAX_MS, handOverFailedIds, markHandOverFailed, resetHandOvers, stepHandOver, type HandOverWatch } from '../server/lib/handover.js';
 import { launch, resetLaunches, setSpawner } from '../server/lib/spawn.js';
 import type { Config } from '../server/lib/config.js';
 import type { ChildProcess } from 'node:child_process';
@@ -93,6 +93,7 @@ export async function run(): Promise<number> {
     assert.equal(await stepHandOver(w), 'handed-over');
     assert.deepEqual(f.opened, [[`claude://resume?session=${w.id}`]]);
     assert.equal(handOverInFlight(w.id), true, 'a drawer tap now reads as already resuming');
+    assert.equal(handOverFailedIds().has(w.id), false);
   }));
 
   check(await test('a transcript that moves between the two polls settles again: a blocked Stop starting another turn is not handed over', async f => {
@@ -113,6 +114,7 @@ export async function run(): Promise<number> {
     write(f, w.id, [user, endTurn]);
     assert.equal(await stepHandOver(w), 'gave-up');
     assert.deepEqual(f.opened, []);
+    assert.equal(handOverFailedIds().has(w.id), false, 'the failed launching row already says so');
   }));
 
   check(await test('a child gone from the store without a finished turn (stopped, crashed) is given up', async f => {
@@ -120,6 +122,7 @@ export async function run(): Promise<number> {
     write(f, w.id, [user, toolUse]);
     assert.equal(await stepHandOver(w), 'gave-up');
     assert.deepEqual(f.opened, []);
+    assert.equal(handOverFailedIds().has(w.id), false, 'no turn ended, so the promise never came due');
   }));
 
   check(await test('a child gone after finishing its turn is still handed over: the transcript, not the process, decides', async f => {
@@ -132,7 +135,12 @@ export async function run(): Promise<number> {
   check(await test('past HANDOVER_MAX_MS the watch gives up', async f => {
     const w = launched(f);
     write(f, w.id, [user, toolUse]);
-    assert.equal(await stepHandOver(w, w.startedAtMs + HANDOVER_MAX_MS + 1), 'gave-up');
+    const prevError = console.error;
+    const logged: unknown[][] = [];
+    console.error = (...a: unknown[]) => { logged.push(a); };
+    try { assert.equal(await stepHandOver(w, w.startedAtMs + HANDOVER_MAX_MS + 1), 'gave-up'); } finally { console.error = prevError; }
+    assert.equal(handOverFailedIds().has(w.id), true, 'a first turn outliving the watch is a failure to report');
+    assert.equal(logged.length, 1, 'and the path logs, which it did not before');
   }));
 
   check(await test('a full rail waits for a slot rather than giving up', async f => {
@@ -154,6 +162,7 @@ export async function run(): Promise<number> {
     assert.equal(reserveDesktopLaunch(w.id).status, 'ok');
     assert.equal(await stepHandOver(w), 'gave-up');
     assert.deepEqual(f.opened, []);
+    assert.equal(handOverFailedIds().has(w.id), false, 'the drawer got there first: nothing failed');
   }));
 
   check(await test('a failed `open` gives the mark back and ends the watch: the drawer can still hand it over', async f => {
@@ -166,6 +175,14 @@ export async function run(): Promise<number> {
     try { assert.equal(await stepHandOver(w), 'gave-up'); } finally { console.error = prevError; }
     assert.equal(f.opened.length, 1);
     assert.equal(handOverInFlight(w.id), false);
+    assert.equal(handOverFailedIds().has(w.id), true);
+  }));
+
+  check(await test('resetHandOvers empties the failed set', async () => {
+    markHandOverFailed('33333333-3333-4333-8333-333333333333');
+    assert.equal(handOverFailedIds().size, 1);
+    resetHandOvers();
+    assert.equal(handOverFailedIds().size, 0);
   }));
 
   console.log(`\nhandover: ${ok}/${total} passed`);

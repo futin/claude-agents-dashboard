@@ -6,6 +6,7 @@
 
 import { archivedSessionIds, desktopLiveSessionIds } from './archived.js';
 import type { Config } from './config.js';
+import { handOverFailedIds } from './handover.js';
 import { messageSessionIds } from './messages.js';
 import { pendingSessionIds, sweepDecided as sweepDecidedPending } from './pending.js';
 import { permissionWaits } from './permissions.js';
@@ -66,6 +67,7 @@ export function scanSnapshot(config: Config, projects?: ReadonlySet<string> | nu
     permissionWaits: permissionWaits(),
     archivedIds: archivedSessionIds(),
     desktopOwnedIds: desktopLiveSessionIds(),
+    handOverFailedIds: handOverFailedIds(),
     // stopStates is the same injection again, and the only one that is not a
     // hint about a wait: it says which rows this server can actually signal,
     // so the Stop control is offered only where it would work.

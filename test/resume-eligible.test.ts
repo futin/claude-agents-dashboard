@@ -1,7 +1,7 @@
 import assert from 'node:assert';
 
-import { handOverErrorText, handOverState, resumeEligible, resumeErrorText, stillRunningNote, STILL_RUNNING_DETAIL } from '../client/src/lib/resume.js';
-import { DESKTOP_FAILED_TEXT } from '../client/src/lib/launchSurface.js';
+import { handOverErrorText, handOverFailedText, handOverState, resumeEligible, resumeErrorText, stillRunningNote, STILL_RUNNING_DETAIL } from '../client/src/lib/resume.js';
+import { DESKTOP_FAILED_TEXT, DESKTOP_HANDOVER_FAILED_TEXT } from '../client/src/lib/launchSurface.js';
 
 function test(name: string, fn: () => void): boolean {
   try { fn(); console.log('  ✓ ' + name); return true; }
@@ -123,6 +123,11 @@ export function run(): number {
     assert.strictEqual(handOverErrorText('open failed'), DESKTOP_FAILED_TEXT);
     assert.strictEqual(handOverErrorText('already resuming'), 'already resuming');
     assert.strictEqual(handOverErrorText('session is open in the desktop app'), 'session is open in the desktop app');
+  })) p++; else f++;
+
+  if (test('handOverFailedText: a row still running also says to stop it; an offered one says only what failed', () => {
+    assert.strictEqual(handOverFailedText('stop-first'), `${DESKTOP_HANDOVER_FAILED_TEXT} Stop it first`);
+    assert.strictEqual(handOverFailedText('offer'), DESKTOP_HANDOVER_FAILED_TEXT);
   })) p++; else f++;
 
   console.log(`\n  ${p} passed, ${f} failed`);

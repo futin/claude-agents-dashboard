@@ -1132,6 +1132,44 @@ export function run(): number {
     })) p++; else f++;
   }
 
+  /* --------------------------------------------------------- handOverFailed */
+
+  {
+    const HF_NOW = 1_700_000_000_000;
+    const hfScan = (extra: Record<string, unknown>) => scan.scanSessions({ maxSessions: 5, activeWindowMin: 5, lookbackHours: 24 }, {
+      root: makeRoot([
+        { dirName: '-a-s1', id: 's1', mtimeMs: HF_NOW - 60 * 1000, records: [metaRec('/a/s1', 'main'), entryRec('claude-agents-dashboard')] },
+        { dirName: '-a-app', id: 'app', mtimeMs: HF_NOW - 90 * 1000, records: [metaRec('/a/app', 'main'), entryRec('claude-desktop')] }
+      ]),
+      now: HF_NOW, liveCwds: null, ...extra
+    } as any);
+    const hfRow = (out: ReturnType<typeof hfScan>, id: string) => out.sessions.find(s => s.id === id)!;
+
+    if (test('handOverFailed: a dashboard row whose id is in handOverFailedIds carries true', () => {
+      const row = hfRow(hfScan({ handOverFailedIds: new Set(['s1']) }), 's1');
+      assert.strictEqual(row.surface, 'dashboard');
+      assert.strictEqual(row.handOverFailed, true);
+    })) p++; else f++;
+
+    if (test('handOverFailed: absent for an id not in the set, and for no set at all', () => {
+      for (const extra of [{ handOverFailedIds: new Set(['other']) }, {}]) {
+        assert.strictEqual('handOverFailed' in hfRow(hfScan(extra), 's1'), false);
+      }
+    })) p++; else f++;
+
+    if (test('handOverFailed: a claude-desktop row gets no flag even when its id is in the set', () => {
+      const row = hfRow(hfScan({ handOverFailedIds: new Set(['app']) }), 'app');
+      assert.strictEqual(row.surface, 'local');
+      assert.strictEqual('handOverFailed' in row, false);
+    })) p++; else f++;
+
+    if (test('handOverFailed: a row the desktop app holds gets no flag: the app has it, whatever the watch recorded', () => {
+      const row = hfRow(hfScan({ handOverFailedIds: new Set(['s1']), desktopOwnedIds: new Set(['s1']) }), 's1');
+      assert.strictEqual(row.desktopOwned, true);
+      assert.strictEqual('handOverFailed' in row, false);
+    })) p++; else f++;
+  }
+
   /* --------------------------------------------------------- lastMessageMs */
 
   if (test('lastMessageMs reports the newest conversational timestamp in ms', () => {

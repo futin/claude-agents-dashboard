@@ -8,7 +8,7 @@ import { usePins } from '../hooks/usePins';
 import { useSettings } from '../hooks/useSettings';
 import { useSpawn } from '../hooks/useSpawn';
 import { appendTranscript } from '../lib/dictation';
-import { DESKTOP_FAILED_TEXT, DESKTOP_HANDOVER_NOTE, initialSurface, offeredSurfaces } from '../lib/launchSurface';
+import { DESKTOP_HANDOVER_NOTE, initialSurface, offeredSurfaces } from '../lib/launchSurface';
 import {
   EFFORTS, MODELS, NAME_CAP, PERMISSION_MODE_LABEL, PERMISSION_MODES, PROMPT_CAP,
   allowedPermissionModes
@@ -381,8 +381,7 @@ export default function SpawnPanel({ onClose, onLaunched, spawnMaxPermission, sp
             </div>
           )}
 
-          {/* The server's `open failed` is a fixed body with nothing to act on; the line names what happened (spec decision 12). */}
-          {error && <span className="qp-note sp-error">{desktop && error === 'open failed' ? DESKTOP_FAILED_TEXT : error}</span>}
+          {error && <span className="qp-note sp-error">{error}</span>}
         </div>
 
         <div className="spawn-foot">

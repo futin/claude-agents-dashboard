@@ -153,6 +153,12 @@ export interface Session {
    * 'dashboard'` until the app writes a turn, but renders no surface pill: the app's sidebar lists it.
    */
   desktopOwned?: true;
+  /**
+   * `true` when a fresh desktop launch's hand-over gave up on a failure (`open` rejected, `HANDOVER_MAX_MS` passed, the watch threw), so the session stayed
+   * here though the launch form said it would move. **Absent, never `false`**, the encoding `desktopOwned` uses. Cleared by a hand-over that reaches the app
+   * or a headless resume. Held in memory like the watch itself, so a server restart drops it. Never set on a `desktopOwned` row.
+   */
+  handOverFailed?: true;
   activity: Activity | null;
   lastTimestamp: string | null;
   updatedMs: number;

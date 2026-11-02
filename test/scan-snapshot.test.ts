@@ -7,6 +7,7 @@ import assert from 'node:assert';
 
 import { testAsync, userRecord, withServer } from './api-harness.js';
 import { scanSnapshot } from '../server/lib/scan-snapshot.js';
+import { markHandOverFailed, resetHandOvers } from '../server/lib/handover.js';
 import { pendingSessionIds, register as registerQuestion } from '../server/lib/pending.js';
 import { planSessionIds, register as registerPlan } from '../server/lib/plans.js';
 import type { SessionsResponse } from '../shared/types.js';
@@ -37,6 +38,19 @@ export async function run(): Promise<number> {
       const ids = scanSnapshot(h.cfg).sessions.map(s => s.id);
       assert.equal(ids.length, 2);
       assert.deepStrictEqual(ids, served.sessions.map(s => s.id));
+    });
+  }));
+
+  check(await testAsync('scanSnapshot passes the failed hand-overs through, so a dashboard row carries handOverFailed', async () => {
+    await withServer(ENV, async h => {
+      h.plant('hf-1', [{ ...(userRecord('hf-u1', 'hello', '/x/alpha') as object), entrypoint: 'sdk-cli' }]);
+      h.plant('hf-2', [{ ...(userRecord('hf-u2', 'hello', '/x/beta') as object), entrypoint: 'sdk-cli' }]);
+      markHandOverFailed('hf-1');
+      try {
+        const rows = scanSnapshot(h.cfg).sessions;
+        assert.equal(rows.find(s => s.id === 'hf-1')?.handOverFailed, true);
+        assert.equal('handOverFailed' in rows.find(s => s.id === 'hf-2')!, false);
+      } finally { resetHandOvers(); }
     });
   }));
 

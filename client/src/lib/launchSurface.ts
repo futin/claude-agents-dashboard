@@ -29,6 +29,8 @@ export const DESKTOP_LAUNCHED_TEXT = 'Running here first — it moves to the des
 export const DESKTOP_OPENED_TEXT = 'Opened in the desktop app.';
 /** Where the success line would show, on a 500 `open failed`. */
 export const DESKTOP_FAILED_TEXT = "Couldn't open the desktop app.";
+/** On the row's pill and in the drawer, once a fresh desktop launch's hand-over gave up (`Session.handOverFailed`). */
+export const DESKTOP_HANDOVER_FAILED_TEXT = "Couldn't move this session to the desktop app, so it stayed here.";
 /** Beside the disabled hand-over button while the session is alive. */
 export const DESKTOP_STOP_FIRST_TEXT = 'Stop it first';
 /** Beside the disabled hand-over button once the app already holds the session. */
