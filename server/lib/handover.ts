@@ -6,7 +6,8 @@
  * one-shot `claude -p` and this module watches its transcript. Once the first turn has ended cleanly it fires `claude://resume?session=<id>`, which the
  * app imports with no trust prompt. The child is left to its post-turn linger, where a second writer is benign (`docs/subsystems/spawn.md` §Two writers).
  *
- * The watch lives in memory: a server restart drops it, and the session then stays a dashboard one, which the chat drawer can still hand over by hand.
+ * The watch lives in memory, and so does the failed mark the row shows (`Session.handOverFailed`): a server restart drops both, and the session then stays
+ * a dashboard one, which the chat drawer can still hand over by hand.
  */
 
 import { openDesktopUrl, releaseDesktopLaunch, reserveDesktopLaunch, resumeUrl } from './desktop.js';
@@ -33,7 +34,11 @@ export type HandOverStep = 'wait' | 'handed-over' | 'gave-up';
  * after the `end_turn` record, and firing the link then would put the app's writer on a transcript mid-turn, which forks it.
  */
 export async function stepHandOver(w: HandOverWatch, now: number = Date.now()): Promise<HandOverStep> {
-  if (now - w.startedAtMs > HANDOVER_MAX_MS) return 'gave-up';
+  if (now - w.startedAtMs > HANDOVER_MAX_MS) {
+    markHandOverFailed(w.id);
+    console.error(`[dashboard] desktop hand-over gave up: first turn still running after ${HANDOVER_MAX_MS / 60_000} min`);
+    return 'gave-up';
+  }
   // Read the store before the transcript: a child gone by now wrote its last record before it went, so the read below cannot miss it.
   const state = launchEntryState(w.id);
   if (state === 'failed') return 'gave-up';
@@ -55,10 +60,28 @@ export async function stepHandOver(w: HandOverWatch, now: number = Date.now()): 
     await openDesktopUrl(resumeUrl(w.id));
   } catch (e) {
     releaseDesktopLaunch(w.id, slot.at);
+    markHandOverFailed(w.id);
     console.error('[dashboard] desktop hand-over failed:', (e as Error).message);
     return 'gave-up';
   }
   return 'handed-over';
+}
+
+const failed = new Set<string>();
+
+/** Record that this session's watch gave up on a hand-over the launch form promised, so the row can say so (`Session.handOverFailed`). */
+export function markHandOverFailed(id: string): void {
+  failed.add(id);
+}
+
+/** The user has acted on the session: a hand-over reached the app, or they resumed it here. */
+export function clearHandOverFailed(id: string): void {
+  failed.delete(id);
+}
+
+/** Ids whose watch gave up on a failure, injected into the row producers like `desktopLiveSessionIds()`. */
+export function handOverFailedIds(): ReadonlySet<string> {
+  return failed;
 }
 
 const timers = new Map<string, ReturnType<typeof setTimeout>>();
@@ -71,7 +94,7 @@ export function watchHandOver(id: string, now: number = Date.now()): void {
     const timer = setTimeout(() => {
       stepHandOver(w).then(
         step => { if (step === 'wait' && timers.has(id)) schedule(); else timers.delete(id); },
-        e => { timers.delete(id); console.error('[dashboard] desktop hand-over watch failed:', (e as Error).message); }
+        e => { timers.delete(id); markHandOverFailed(id); console.error('[dashboard] desktop hand-over watch failed:', (e as Error).message); }
       );
     }, HANDOVER_POLL_MS);
     timer.unref();
@@ -89,4 +112,5 @@ export function watchedHandOvers(): string[] {
 export function resetHandOvers(): void {
   for (const t of timers.values()) clearTimeout(t);
   timers.clear();
+  failed.clear();
 }

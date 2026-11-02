@@ -22,7 +22,7 @@ import { useSettings } from '../hooks/useSettings';
 import { CHAT_FILTERS, filterMessages, isChatFilter, type ChatFilter } from '../lib/chatFilter';
 import { fmtTok } from '../lib/format';
 import { DESKTOP_OPENED_TEXT, DESKTOP_OWNED_TEXT, DESKTOP_STOP_FIRST_TEXT } from '../lib/launchSurface';
-import { handOverErrorText, handOverState, resumeEligible, stillRunningNote, STILL_RUNNING_DETAIL, STILL_RUNNING_HINT } from '../lib/resume';
+import { handOverErrorText, handOverFailedText, handOverState, resumeEligible, stillRunningNote, STILL_RUNNING_DETAIL, STILL_RUNNING_HINT } from '../lib/resume';
 import { heldBodyUuid } from '../lib/heldBody';
 import { latestSuggestion } from '../lib/composer';
 import { formatInterval } from '../lib/settings';
@@ -156,11 +156,12 @@ export default function ChatDrawer({ session, onClose, spawnAvailable, desktopAv
     if (result?.surface === 'desktop') setHandedOver(true);
   }
   const handOverNote =
-    handOver === 'stop-first' ? DESKTOP_STOP_FIRST_TEXT
+    handOver === 'stop-first' ? (session.handOverFailed ? handOverFailedText(handOver) : DESKTOP_STOP_FIRST_TEXT)
     : handOver === 'owned' ? DESKTOP_OWNED_TEXT
     : handOverSpawn.needsToken ? 'This dashboard needs its answer token.'
     : handOverSpawn.error ? handOverErrorText(handOverSpawn.error)
     : handedOver ? DESKTOP_OPENED_TEXT
+    : handOver === 'offer' && session.handOverFailed ? handOverFailedText(handOver)
     : null;
   const [filter, setFilter] = usePersistedState<ChatFilter>('dashboard.chatFilter', 'all');
   const { settings: { refreshMs } } = useSettings();

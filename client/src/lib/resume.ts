@@ -1,4 +1,4 @@
-import { DESKTOP_FAILED_TEXT } from './launchSurface';
+import { DESKTOP_FAILED_TEXT, DESKTOP_HANDOVER_FAILED_TEXT, DESKTOP_STOP_FIRST_TEXT } from './launchSurface';
 import type { Session } from '../../../shared/types';
 
 /**
@@ -66,6 +66,11 @@ export function handOverState(
 /** A hand-over's failure as the line beside the button: the 500 `open failed` becomes the fixed copy, every other server text (409s) passes through. */
 export function handOverErrorText(error: string): string {
   return error === 'open failed' ? DESKTOP_FAILED_TEXT : error;
+}
+
+/** The drawer's note for a `handOverFailed` row. A first turn that timed out is usually still running, so `stop-first` also says what a retry needs first. */
+export function handOverFailedText(state: ReturnType<typeof handOverState>): string {
+  return state === 'stop-first' ? `${DESKTOP_HANDOVER_FAILED_TEXT} ${DESKTOP_STOP_FIRST_TEXT}` : DESKTOP_HANDOVER_FAILED_TEXT;
 }
 
 /**

@@ -54,7 +54,7 @@ import { fetchAll, markGitWatched } from './lib/git-fetch.js';
 import {
   desktopAvailable, handOverInFlight, openDesktopUrl, releaseDesktopLaunch, reserveDesktopLaunch, resumeUrl
 } from './lib/desktop.js';
-import { watchHandOver } from './lib/handover.js';
+import { clearHandOverFailed, handOverFailedIds, watchHandOver } from './lib/handover.js';
 import { openFolder, openFolderPlatform, revealFile } from './lib/open-folder.js';
 import { runQuickOp } from './lib/git-quick.js';
 import { ANY_PR_RE, readSessionPr } from './lib/pr-detect.js';
@@ -1171,6 +1171,7 @@ export async function serveSpawn(config: Config, req: IncomingMessage, res: Serv
       const recorded = parsed.input.effort ? null : lastSessionEffort(t.file);
       const effort = recorded && (EFFORTS as readonly string[]).includes(recorded) ? recorded : parsed.input.effort;
       sessionId = launch(config, ref, { ...parsed.input, effort }, rid);
+      clearHandOverFailed(rid);
     } else {
       const ref = resolveSpawnProject(config, body);
       if ('refuse' in ref) return sendJson(res, 400, { error: ref.refuse });
@@ -1222,6 +1223,7 @@ async function spawnDesktop(
     console.error('[dashboard] desktop open failed:', (e as Error).message);
     return sendJson(res, 500, { error: 'open failed' });
   }
+  clearHandOverFailed(rid);
   sendJson(res, 200, { surface: 'desktop' } satisfies SpawnResponse);
 }
 
@@ -2011,7 +2013,8 @@ export function serveSessionRow(config: Config, id: string, res: ServerResponse)
     if (!ref) return sendJson(res, 404, { error: 'no such session' });
     const row = sessionFromRef(ref, {
       now: Date.now(), activeWindowMin: config.activeWindowMin, liveCwds: null,
-      lessons: config.showAnalytics === false ? null : readSessionAnalyticsLog(), desktopOwnedIds: desktopLiveSessionIds()
+      lessons: config.showAnalytics === false ? null : readSessionAnalyticsLog(), desktopOwnedIds: desktopLiveSessionIds(),
+      handOverFailedIds: handOverFailedIds()
     });
     if (!row) return sendJson(res, 500, { error: 'transcript unreadable' });
     sendJson(res, 200, row satisfies Session);

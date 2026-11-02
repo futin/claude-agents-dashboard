@@ -262,6 +262,7 @@ said that this session appears in **no other list**, not the desktop app's sideb
 not), not `claude.ai`. So `Session.surface`
 (`local | dashboard | cloud`) carries that, and a `sdk-cli` transcript — what `-p` writes
 — renders a cyan `dashboard` pill on the row and in the chat modal's sidecar facts, until the desktop app imports the session (`desktopOwned`).
+A failed hand-over relabels it `hand-over failed` (`handOverFailed`).
 
 It is derived from the transcript's `entrypoint` field, not from this module's store: the
 store drops an entry at adoption by charter, and a mark that vanished three seconds after
@@ -591,7 +592,10 @@ app, through its `claude://resume` link, and `SpawnResponse` is the union `{surf
   - **It gives up**, leaving an ordinary dashboard session the drawer can hand over by hand, when: the launch entry is `failed`; the entry has left the
     store with no finished turn (stopped from the dashboard, or crashed — the store is read *before* the transcript, so a child that finished and exited
     still hands over); the mark is already held (the drawer's hand-over got there first); `open` fails (the mark is released); or `HANDOVER_MAX_MS` (2 h)
-    passes. A full rail waits for the next poll instead.
+    passes. A full rail waits for the next poll instead. Three of those are failures the launch form's promise makes worth reporting, and mark the row
+    `Session.handOverFailed` (an in-memory set, `handOverFailedIds()`): `open` failing, `HANDOVER_MAX_MS` passing, and the watch itself throwing. The other
+    three mark nothing: a failed launch already shows on its row, no turn ended for a stopped or crashed session (the two cannot be told apart here), and a
+    held mark means the drawer got there first. The mark goes on a 200 from the hand-over or on a headless resume, and a failed retry keeps it.
   - **In memory only.** A server restart drops every watch; the session then stays a dashboard one.
 - **The link goes through `open` as one argv entry** (`execFile('open', [url])`, 5s timeout, no shell): these routes are reachable from LAN and the
   tailnet. This is a launched local program, not a new outbound kind (`.claude/CLAUDE.md` Code rules).
@@ -617,7 +621,8 @@ app, through its `claude://resume` link, and `SpawnResponse` is the union `{surf
 - **500 `open failed`** when `open` rejects or times out; the client shows the fixed line `Couldn't open the desktop app.` (`handOverErrorText`).
   Any other throw before it (project resolution, transcript read) is 500 `spawn failed`, as headless.
 - **The row is the headless one until the hand-over.** A fresh desktop launch is a launch-store entry and a `dashboard` row like any other; once the app
-  imports it, the scan marks it `desktopOwned`. The `.spawn-done` line says where it is going.
+  imports it, the scan marks it `desktopOwned`. The `.spawn-done` line says where it is going. If the hand-over gives up on a failure, the row's pill reads
+  `hand-over failed` and the drawer says so ([chat](chat.md)): the form has closed by then, so the row is the only place left to report it.
 
 ## Routine runs: the other detached launch
 
@@ -642,7 +647,7 @@ one seam for it, and nothing about `launch`'s own contract changes. Three differ
 | `server/lib/spawn.ts` | pure `buildSpawnArgs`/`clampPermission`/`parseSpawnRequest`, plus the impure `probeSpawn`/`launch`/`listLaunching`/`adoptLaunched`/`stopSession`/`forceStopSession`/`escalateStop`/`stopStates`/`hasLiveChild` and the RAM-only store |
 | `spawnProcess` (`server/lib/spawn.ts`) | the `Spawner` seam as a function, exported for `routine-run.ts`'s wrapper launch; see [Routine runs](#routine-runs-the-other-detached-launch) |
 | `POST /api/spawn` | `serveSpawn` — validates, then on `surface` absent or `dashboard` resolves the project, launches and returns `{surface:'dashboard', sessionId}` immediately; on `desktop` hands off to `spawnDesktop` ([§Launching in the desktop app](#launching-in-the-desktop-app)), which returns `{surface:'desktop', sessionId}` for a fresh launch (`launchForDesktop`) and `{surface:'desktop'}` for a hand-over |
-| `server/lib/handover.ts` | the fresh desktop launch's watch: `watchHandOver` (an unref'd 3 s timer per id), `stepHandOver` (one poll: settle, rail slot and mark, `open claude://resume…`, or give up), `resetHandOvers` / `watchedHandOvers` test seams |
+| `server/lib/handover.ts` | the fresh desktop launch's watch: `watchHandOver` (an unref'd 3 s timer per id), `stepHandOver` (one poll: settle, rail slot and mark, `open claude://resume…`, or give up), the failed set behind `Session.handOverFailed` (`markHandOverFailed`, `clearHandOverFailed`, `handOverFailedIds`), `resetHandOvers` / `watchedHandOvers` test seams |
 | `server/lib/desktop.ts` | the desktop half's link module: `resumeUrl`, the memoised `desktopAvailable` probe, `openDesktopUrl` (`open <url>` via `execFile`, no shell), the in-memory rail and per-id hand-over mark (`reserveDesktopLaunch`/`releaseDesktopLaunch`/`handOverInFlight`), and the `overrideDesktop` test seam |
 | `POST /api/spawn/:id/stop` | `serveSpawnStop` — SIGTERM + delete for a `launching` entry; delegates to `stopSession` |
 | `POST /api/sessions/:id/stop` | `serveSessionStop` — the row button's route; graceful by default, `{force:true}` for SIGKILL |
@@ -662,7 +667,7 @@ one seam for it, and nothing about `launch`'s own contract changes. Three differ
 | each view's phantom row | renders each `launching` entry at the head of its list — project, truncated prompt, `starting…` or (for `failed`) the error — and disappears on its own once the real row adopts the id; never interactive |
 | `sessionSurface` (`server/lib/scan.ts`) | maps the transcript's `entrypoint` → `Session.surface`; `sdk-cli` or `claude-agents-dashboard` ⇒ `dashboard`, everything else ⇒ `local` |
 | `client/src/components/ResumePanel.tsx` | the resume composer pinned in an ended dashboard session's chat drawer — textarea + mic + *resume session*, POSTing `useSpawn().launch({prompt, resume: id})`; Enter sends and Tab takes the last turn's suggested reply (`ComposerSuggestion.tsx`, see [chat](chat.md)) |
-| `client/src/lib/resume.ts` | `resumeEligible` — the pure gate deciding when the drawer offers that composer (dashboard surface, not `desktopOwned`, nothing pending, turn over, spawn available, no `stopState` or `processLive`); `handOverState` and `handOverErrorText` for the drawer's [hand-over button](chat.md); `stillRunningNote` and `resumeErrorText` for the [still-running note](#processlive-the-live-process-this-server-cannot-signal); unit-tested like every other client lib |
+| `client/src/lib/resume.ts` | `resumeEligible` — the pure gate deciding when the drawer offers that composer (dashboard surface, not `desktopOwned`, nothing pending, turn over, spawn available, no `stopState` or `processLive`); `handOverState`, `handOverErrorText` and `handOverFailedText` for the drawer's [hand-over button](chat.md); `stillRunningNote` and `resumeErrorText` for the [still-running note](#processlive-the-live-process-this-server-cannot-signal); unit-tested like every other client lib |
 | `client/src/lib/surface.ts` | the pill's label + tooltip, one copy shared by the session views (`sessions/atoms.tsx`) and the `ChatDrawer` header |
 
 ## Endpoints

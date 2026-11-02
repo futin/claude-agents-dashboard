@@ -1,5 +1,6 @@
 import assert from 'node:assert';
 
+import { DESKTOP_HANDOVER_FAILED_TEXT } from '../client/src/lib/launchSurface.js';
 import { surfacePill } from '../client/src/lib/surface.js';
 import { sessionSurface } from '../server/lib/scan.js';
 
@@ -35,6 +36,15 @@ export function run(): number {
     // Imported into the desktop app, not yet continued there: the transcript still reads `dashboard`, so the row keeps that surface (the drawer's
     // hand-over reads `owned` off it), but the pill's claim — no other list has this session — is false once the app's sidebar lists it.
     assert.strictEqual(surfacePill({ surface: 'dashboard', desktopOwned: true }), null);
+    assert.strictEqual(surfacePill({ surface: 'dashboard' })!.label, 'dashboard');
+  })) p++; else f++;
+
+  if (test('surfacePill: a failed hand-over relabels the dashboard pill and names the retry; desktopOwned still wins', () => {
+    const pill = surfacePill({ surface: 'dashboard', handOverFailed: true })!;
+    assert.strictEqual(pill.label, 'hand-over failed');
+    assert.ok(pill.title.startsWith(DESKTOP_HANDOVER_FAILED_TEXT));
+    assert.ok(pill.title.includes('Open in desktop app'));
+    assert.strictEqual(surfacePill({ surface: 'dashboard', handOverFailed: true, desktopOwned: true }), null);
     assert.strictEqual(surfacePill({ surface: 'dashboard' })!.label, 'dashboard');
   })) p++; else f++;
 

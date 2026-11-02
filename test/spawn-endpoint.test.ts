@@ -22,7 +22,7 @@ import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 
-import { serveSessionStop, serveSpawn, serveSpawnStop } from '../server/api.js';
+import { serveSessionRow, serveSessionStop, serveSpawn, serveSpawnStop } from '../server/api.js';
 import { loadConfig } from '../server/lib/config.js';
 import { register as registerMessage, resetStore as resetMessages } from '../server/lib/messages.js';
 import { resetState } from '../server/lib/remoteState.js';
@@ -33,7 +33,7 @@ import {
 import { setPsRunner } from '../server/lib/scan.js';
 import { resetArchivedCache } from '../server/lib/archived.js';
 import { overrideDesktop, resetDesktopProbe, resetDesktopRail } from '../server/lib/desktop.js';
-import { resetHandOvers, watchedHandOvers } from '../server/lib/handover.js';
+import { handOverFailedIds, markHandOverFailed, resetHandOvers, watchedHandOvers } from '../server/lib/handover.js';
 import { withServer } from './api-harness.js';
 import type { Spawner } from '../server/lib/spawn.js';
 import type { ChildProcess } from 'node:child_process';
@@ -702,6 +702,55 @@ export async function run(): Promise<number> {
       const retry = await spawnReq(cfg, HAND_OVER);
       assert.equal(retry.status, 200, 'the failed attempt must not hold the mark');
       assert.equal(d.calls.length, 2);
+    });
+  }));
+
+  check(await testAsync('a successful hand-over clears the failed mark', async () => {
+    await withDesktop('CLAUDE_BIN=/bin/echo\n', 'darwin', async cfg => {
+      markHandOverFailed(RES_ID);
+      assert.equal((await spawnReq(cfg, HAND_OVER)).status, 200);
+      assert.equal(handOverFailedIds().has(RES_ID), false);
+    });
+  }));
+
+  check(await testAsync('a hand-over answering 500 "open failed" keeps the failed mark: the retry failed too', async () => {
+    await withDesktop('CLAUDE_BIN=/bin/echo\n', 'darwin', async (cfg, d) => {
+      markHandOverFailed(RES_ID);
+      d.reject = true;
+      const prevError = console.error;
+      console.error = () => undefined;
+      const failed = await spawnReq(cfg, HAND_OVER).finally(() => { console.error = prevError; });
+      assert.equal(failed.status, 500);
+      assert.equal(handOverFailedIds().has(RES_ID), true);
+    });
+  }));
+
+  check(await testAsync('a headless resume clears the failed mark: the user chose to carry on here', async () => {
+    await withDesktop('CLAUDE_BIN=/bin/echo\n', 'darwin', async cfg => {
+      setSpawner(fakeSpawner([]));
+      markHandOverFailed(RES_ID);
+      assert.equal((await spawnReq(cfg, { prompt: 'continue', resume: RES_ID })).status, 200);
+      assert.equal(handOverFailedIds().has(RES_ID), false);
+    });
+  }));
+
+  check(await testAsync('a refused headless resume keeps the failed mark: the user got nothing', async () => {
+    await withDesktop('CLAUDE_BIN=/bin/echo\n', 'darwin', async cfg => {
+      plantRegistry(RES_ID);
+      resetArchivedCache();
+      markHandOverFailed(RES_ID);
+      assert.equal((await spawnReq(cfg, { prompt: 'continue', resume: RES_ID })).status, 409);
+      assert.equal(handOverFailedIds().has(RES_ID), true);
+    });
+  }));
+
+  check(await testAsync('GET of one session row carries handOverFailed: the row-by-id producer passes the set too', async () => {
+    await withDesktop('CLAUDE_BIN=/bin/echo\n', 'darwin', async cfg => {
+      const rowOf = async (): Promise<Record<string, unknown>> =>
+        (await post((_req, res) => serveSessionRow(cfg, RES_ID, res), '')).json as unknown as Record<string, unknown>;
+      assert.equal('handOverFailed' in await rowOf(), false);
+      markHandOverFailed(RES_ID);
+      assert.equal((await rowOf()).handOverFailed, true);
     });
   }));
 

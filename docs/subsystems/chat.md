@@ -84,7 +84,9 @@ the composer is replaced by a `still running` note on the same `qpanel` classes 
 question/plan/reply, `stopState`, `processLive`, or any status but `idle`/`incomplete`) and `owned` (`Session.desktopOwned`). Only `offer` enables it. A
 `role="status"` line (`.chat-desktop-note`) sits beside it: `Stop it first` or `Already open in the desktop app` for the two disabled states,
 `Opened in the desktop app.` after a 200, `Couldn't open the desktop app.` for the 500 `open failed` (`handOverErrorText`), and any other refusal as the
-server worded it (the 409s). It is UX, not the boundary: the server re-checks and 409s. The button is separate from the resume composer on purpose. For an
+server worded it (the 409s). On a `Session.handOverFailed` row it also carries `Couldn't move this session to the desktop app, so it stayed here.`
+(`handOverFailedText`): on an `offer` row after those results, so a retry's own outcome is never hidden, and on a `stop-first` row ahead of `Stop it first`.
+It is UX, not the boundary: the server re-checks and 409s. The button is separate from the resume composer on purpose. For an
 idle, unowned `dashboard` row both show, so the user picks the surface; once the session is `desktopOwned` neither is offered (`resumeEligible` is false, and
 `handOverState` says `owned`). The composer is also withdrawn the moment a hand-over succeeds, before the row turns `desktopOwned` (the app writes its
 registry record seconds later), so a second writer is never one tap away. The Sessions, Git and Routines drawers all pass `desktopAvailable` from the health
