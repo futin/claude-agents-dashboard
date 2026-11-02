@@ -584,7 +584,7 @@ app, through its `claude://resume` link, and `SpawnResponse` is the union `{surf
   — `probeSpawn` 404, `MAX_LAUNCHING` 429, `resolveSpawnProject` 400, `launch()` — with `oneShot` forced on and `remoteControl` forced off, while `name`,
   `model`, `effort` and `permissionMode` (under the ceiling) apply as they do headless. The 200 carries the `sessionId`, so the client opens the chat drawer
   on the first turn. `watchHandOver(id)` then polls every `HANDOVER_POLL_MS` (3000): once the transcript's newest message is an `end_turn`
-  (`readTranscript().turnComplete`, `hasMessages`) and the file is unchanged on the next poll, it takes a rail slot and the hand-over mark
+  (`readTranscript().turnComplete`, `hasMessages`, no `apiError`: a server error's retry can land after the settle poll) and the file is unchanged on the next poll, it takes a rail slot and the hand-over mark
   (`reserveDesktopLaunch(id)`) and fires `claude://resume?session=<id>`, which the app imports with no trust prompt.
   - **The settle poll** is there for a Stop hook that blocks the stop: that starts another turn right after the `end_turn` record, and the link fired then
     would put the app's writer on a transcript mid-turn, which forks it ([§Two writers](#two-writers-on-one-transcript-2259)). After the settle, the child

@@ -1523,6 +1523,38 @@ export function run(): number {
     assert.strictEqual(subScan(root, { skipProcScan: false, liveCwds: new Set(['/a/other']) }), 'idle');
   })) p++; else f++;
 
+  // #368: the usage-limit record Claude Code appends to the session and to each of its subagents.
+  const limitRec = { type: 'assistant', isApiErrorMessage: true, error: 'rate_limit', quotaLimits: { resetsAt: 1789749000, rateLimitType: 'five_hour' },
+    message: { role: 'assistant', model: '<synthetic>', stop_reason: 'stop_sequence', usage: { input_tokens: 0 }, content: [{ type: 'text', text: 'You\'ve hit your session limit' }] } };
+  const subLimited = [{ type: 'user', message: { role: 'user', content: 'go' } }, limitRec];
+
+  if (test('subagentRunning: a subagent ended by a usage limit is not running, though the parent\'s job says it is', () => {
+    const limited = subRoot('sublim', '/a/sublim', bgParent(), subLimited, 60 * 1000);
+    assert.strictEqual(scan.subagentRunning(limited.parentFile, 'sublim', subNow), false);
+    // Same fixture but for the subagent's newest record, so the error record is what the guard turned on.
+    const busy = subRoot('subbsy', '/a/subbsy', bgParent(), subBusy, 60 * 1000);
+    assert.strictEqual(scan.subagentRunning(busy.parentFile, 'subbsy', subNow), true);
+  })) p++; else f++;
+
+  if (test('status: a parent parked on usage-limited subagents settles instead of reading working', () => {
+    assert.strictEqual(subScan(subRoot('parlim', '/a/parlim', syncParent(), subLimited, 60 * 1000).root), 'incomplete');
+  })) p++; else f++;
+
+  if (test('sessionFromRef: a usage-limited session is pending while recent, idle once stale, and only then carries apiError', () => {
+    const subT1 = new Date(subNow - 60 * 1000).toISOString();
+    const root = makeRoot([
+      { dirName: '-a-limfresh', id: 'limfresh', mtimeMs: subNow - 60 * 1000, records: [metaRec('/a/limfresh', 'main'), at(assistantPending(), subT1), at(limitRec, subT1)] },
+      { dirName: '-a-limstale', id: 'limstale', mtimeMs: subNow - 6 * 60 * 1000, records: [metaRec('/a/limstale', 'main'), at(assistantPending(), subT6), at(limitRec, subT6)] },
+      { dirName: '-a-limnone', id: 'limnone', mtimeMs: subNow - 60 * 1000, records: [metaRec('/a/limnone', 'main'), at(assistantDone(), subT1)] }
+    ]);
+    const row = (id: string) => scan.sessionFromRef(scan.findTranscript(root, id)!, { now: subNow, activeWindowMin: 5, liveCwds: null, lessons: null })!;
+    const fresh = row('limfresh');
+    assert.strictEqual(fresh.status, 'incomplete');
+    assert.deepStrictEqual(fresh.apiError, { kind: 'rate_limit', text: 'You\'ve hit your session limit', resetsAtMs: 1789749000000 });
+    assert.strictEqual(row('limstale').status, 'idle');
+    assert.strictEqual('apiError' in row('limnone'), false);
+  })) p++; else f++;
+
   if (test('parsePsSessionIds: both flag spellings, claude lines only, charset-delimited', () => {
     const psOut = [
       '  111 /usr/local/bin/claude -p --session-id 11111111-1111-4111-8111-111111111111 --print',

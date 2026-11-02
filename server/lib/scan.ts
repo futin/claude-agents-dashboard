@@ -333,7 +333,7 @@ export const SUBAGENT_STALL_MS = 15 * 60 * 1000;
  * True only when all three hold, cheapest first:
  *  1. an `agent-*.jsonl` under `<dir>/<sessionId>/subagents/` was written within
  *     {@link SUBAGENT_STALL_MS} — no directory is the common case, one `readdir`;
- *  2. that file's newest message is mid-turn (a finished subagent ends `end_turn`);
+ *  2. that file's newest message is mid-turn (a finished subagent ends `end_turn` or on an API-error record);
  *  3. the parent still has a launch `running` per `readAgentsCached` — the veto
  *     for an interrupted run, where Esc gives the parent a `tool_result` but
  *     leaves the subagent file fresh and mid-turn.
@@ -687,6 +687,7 @@ export function sessionFromRef(ref: TranscriptRef, opts: RowOptions): Session | 
     ...(processLive ? { processLive: true as const } : {}),
     ...(desktopOwned ? { desktopOwned: true as const } : {}),
     ...(handOverFailed ? { handOverFailed: true as const } : {}),
+    ...(parsed.apiError ? { apiError: parsed.apiError } : {}),
     activity: parsed.activity,
     lastTimestamp: parsed.lastTimestamp,
     updatedMs: ref.mtimeMs,

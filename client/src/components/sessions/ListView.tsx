@@ -3,7 +3,7 @@ import { Fragment } from 'react';
 import type { LaunchingSession, Session } from '../../../../shared/types';
 import { formatAgo } from '../../lib/format';
 import { modelLabel } from '../../lib/modelLabel';
-import { Bar, ChatButton, Dot, LaunchPill, Pct, StatusPill, TaskPill, Tok, ToolChip, keyActivate, launchState } from './atoms';
+import { ApiErrBadge, Bar, ChatButton, Dot, LaunchPill, Pct, StatusPill, TaskPill, Tok, ToolChip, keyActivate, launchState } from './atoms';
 import { stopControl } from '../../lib/stopControl';
 import { surfacePill } from '../../lib/surface';
 import { Expanded } from './Expanded';
@@ -76,6 +76,7 @@ function Row({ s, open, onToggle, onOpenChat }: { s: Session; open: boolean; onT
         <div className="act-line">
           <ToolChip s={s} />
           {ctl.render && ctl.badge && <span className="stop-badge">{ctl.badge}</span>}
+          <ApiErrBadge s={s} />
         </div>
       </td>
       <td className="when">{formatAgo(s.updatedMs)} ago</td>

@@ -159,6 +159,11 @@ export interface Session {
    * or a headless resume. Held in memory like the watch itself, so a server restart drops it. Never set on a `desktopOwned` row.
    */
   handOverFailed?: true;
+  /**
+   * Why the session stopped, when its newest message record is an API-error turn end (usage limit, signed out, server error) — see {@link ApiErrorState}.
+   * **Absent, never `null`**, the encoding `stopState` uses, on every other row, a retry's next real record included.
+   */
+  apiError?: ApiErrorState;
   activity: Activity | null;
   lastTimestamp: string | null;
   updatedMs: number;
@@ -182,6 +187,16 @@ export interface Session {
  * {@link Session.stopState}).
  */
 export type StopState = 'ready' | 'stopping';
+
+/** The synthetic record Claude Code ends a turn with when a request fails for good. */
+export interface ApiErrorState {
+  /** The record's `error`, verbatim: `rate_limit`, `server_error`, `authentication_failed`, or a kind this code has never seen. */
+  kind: string;
+  /** The record's text block, trimmed. Localized and worded by the CLI, so read it, never parse it. */
+  text: string;
+  /** When a usage limit lifts: the record's `quotaLimits.resetsAt` in ms. Null when the record carries none. */
+  resetsAtMs: number | null;
+}
 
 export interface Totals {
   shown: number;

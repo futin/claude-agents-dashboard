@@ -44,7 +44,8 @@ export async function stepHandOver(w: HandOverWatch, now: number = Date.now()): 
   if (state === 'failed') return 'gave-up';
   const t = findTranscript(projectsRoot(), w.id);
   const tr = t ? readTranscript(t.file) : null;
-  if (!t || !tr?.hasMessages || !tr.turnComplete) {
+  // An API-error record is not settled: a server error can be retried within the same turn seconds later, which outlasts the settle poll below.
+  if (!t || !tr?.hasMessages || !tr.turnComplete || tr.apiError) {
     w.settledMtimeMs = null;
     // Gone without a finished turn: stopped from the dashboard, or crashed. It stays a dashboard session.
     return state === null ? 'gave-up' : 'wait';
