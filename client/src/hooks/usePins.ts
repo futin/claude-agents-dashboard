@@ -1,9 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { useAnswerToken } from './useAnswerToken';
-import { postWrite, replyError } from '../lib/postWrite';
-import type { WriteResult } from '../lib/postWrite';
-import { READ_ONLY_TEXT } from '../lib/writeRefusal';
+import { postWrite } from '../lib/postWrite';
+import { NETWORK_TEXT, pinWriteOutcome } from '../lib/pinWrite';
 import { applyPinOrder } from '../lib/pins';
 import type { PinsResponse } from '../../../shared/types';
 
@@ -15,34 +14,14 @@ export interface PinsControl {
   /**
    * Pin or unpin one project. Resolves null on success, else the reason to show
    * inline — the server's own message, or a fixed one for a network failure.
-   * Never throws.
+   * Never throws. The text can also mean the write stood but the list could not be re-read, so the rows lag until a reload.
    */
   setPin: (dirName: string, pinned: boolean) => Promise<string | null>;
   /**
-   * Save the whole pin list in a new order. The rows take that order at once, before the request, and roll back if it is refused. Same resolution as
-   * `setPin`: null on success, else the text to show. Never throws.
+   * Save the whole pin list in a new order. The rows take that order at once, before the request, and roll back if it is refused; a write that saved but
+   * could not re-read the list keeps them. Same resolution as `setPin`: null on success, else the text to show. Never throws.
    */
   reorder: (order: string[]) => Promise<string | null>;
-}
-
-const TOKEN_TEXT = 'The server refused the request — set the Answer token under Settings › Local › Connection.';
-const NETWORK_TEXT = 'Could not reach the server.';
-
-/** A 403's note: the token prompt, or `READ_ONLY_TEXT` when no token could help. */
-function refusalText(result: WriteResult): string {
-  return result.refusal === 'read-only' ? READ_ONLY_TEXT : TOKEN_TEXT;
-}
-
-/** A refused write's note: the 403 text, else the server's own message. */
-function failureText(result: WriteResult): string {
-  if (result.refusal) return refusalText(result);
-  return replyError(result.body) ?? `Failed (${result.status}).`;
-}
-
-/** The fresh payload a successful pin write answers with, or null when the reply is not one. */
-function pinsOf(result: WriteResult): PinsResponse | null {
-  const body = result.body as PinsResponse | undefined;
-  return Array.isArray(body?.pinned) ? body : null;
 }
 
 /**
@@ -70,13 +49,12 @@ export function usePins(): PinsControl {
   const setPin = useCallback(async (dirName: string, pinned: boolean): Promise<string | null> => {
     setBusy(dirName);
     try {
-      const result = await postWrite('/api/pins', { token, body: { dirName, pinned } });
-      const fresh = result.ok ? pinsOf(result) : null;
-      if (fresh) {
-        setPins(fresh);
+      const outcome = pinWriteOutcome(await postWrite('/api/pins', { token, body: { dirName, pinned } }));
+      if (outcome.kind === 'fresh') {
+        setPins(outcome.pins);
         return null;
       }
-      return result.status === 0 || result.ok ? NETWORK_TEXT : failureText(result);
+      return outcome.text;
     } finally {
       setBusy(null);
     }
@@ -91,13 +69,14 @@ export function usePins(): PinsControl {
     setBusy('order');
     if (before) setPins({ ...before, pinned: applyPinOrder(before.pinned, order) });
     try {
-      const result = await postWrite('/api/pins/order', { token, body: { order } });
-      const saved = result.ok ? pinsOf(result) : null;
-      if (saved) {
-        setPins(saved);
+      const outcome = pinWriteOutcome(await postWrite('/api/pins/order', { token, body: { order } }));
+      if (outcome.kind === 'fresh') {
+        setPins(outcome.pins);
         return null;
       }
-      if (result.status === 409) {
+      // The optimistic rows already hold the order that was stored.
+      if (outcome.kind === 'saved') return outcome.text;
+      if (outcome.kind === 'conflict') {
         // The stored set changed under this tab, so the pre-drag rows are stale too: show the server's list instead.
         try {
           const fresh = await fetch('/api/pins');
@@ -111,7 +90,7 @@ export function usePins(): PinsControl {
         return NETWORK_TEXT;
       }
       setPins(before);
-      return result.status === 0 || result.ok ? NETWORK_TEXT : failureText(result);
+      return outcome.text;
     } finally {
       setBusy(null);
     }

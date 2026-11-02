@@ -103,8 +103,8 @@ remote-answer switch on, a **gate-only write** needs the gate alone ([who may wr
 | `GET /api/dismiss` | where a tapped desk push lands — a page that closes the tab it opened in; carries no deep link |
 | `GET /api/health` | liveness + remote-answer state + connection origin and this caller's `writeAccess` + the two hook numbers (idle threshold, answer window) |
 | `GET /api/settings`, `POST /api/settings` | the non-per-device settings — idle threshold, answer window, push policy, usage-history recording, Git fetch interval (`gitFetchSecs`), tailnet write trust, the launch form's default surface (`launchSurfaceDefault`), plus `notifyAvailable` and `usageAvailable` (never the ntfy topic itself); the POST is a gate-only write |
-| `GET /api/pins`, `POST /api/pins` | pinned projects — listed past `LOOKBACK_HOURS` — plus the recent and older ones on offer to pin; the POST is a gate-only write (see [configs](subsystems/configs.md)) |
-| `POST /api/pins/order` | the whole pin list in a new order, accepted only as an exact permutation of the stored pins (409 otherwise); gate-only write, answers the `GET /api/pins` payload (see [configs](subsystems/configs.md)) |
+| `GET /api/pins`, `POST /api/pins` | pinned projects — listed past `LOOKBACK_HOURS` — plus the recent and older ones on offer to pin; the POST is a gate-only write, answering a 500 with `saved: true` when it stood but the list could not be rebuilt (see [configs](subsystems/configs.md)) |
+| `POST /api/pins/order` | the whole pin list in a new order, accepted only as an exact permutation of the stored pins (409 otherwise); gate-only write, answers the `GET /api/pins` payload, or the same `saved: true` 500 (see [configs](subsystems/configs.md)) |
 | `POST /api/open-folder` | open a pinned project's folder with macOS `open` (gate-only write); path must be a listed pin's, 501 off macOS (see [git-stats](subsystems/git-stats.md)) |
 | `GET /api/git-stats` | local git state of every pinned project, in pin order, plus the fetch clock and each repo's last-fetch verdict; a repo that fails is its own `error` row (see [git-stats](subsystems/git-stats.md)) |
 | `GET /api/codegraph` | the `codegraph` CLI's state of every pinned project, in pin order: index health, watcher, run in flight, last run; `cli: 'missing'` once for the payload; `?fresh=1` (Re-read status) skips the status cache (see [codegraph](subsystems/codegraph.md)) |
@@ -366,7 +366,7 @@ client/src/
                   usageRatesFormat, usageHistory (the History tab's step path, ticks and figures), panelCollapse, surface, walkChart (the headroom
                   chart's geometry), walkRows (the same walk as day rows), holds,
                   composer (that keyboard's pure rules and the session's latest `wrap_up` suggestion), modelLabel (`claude-opus-5-5` → `Opus 5.5`),
-                  notifyRows (Settings' push-event rows), writeRefusal (a 403's token vs read-only-network kind), postWrite (every write hook's POST and its one read of the reply),
+                  notifyRows (Settings' push-event rows), writeRefusal (a 403's token vs read-only-network kind), postWrite (every write hook's POST and its one read of the reply), pinWrite (what a pin write's reply means to `usePins`),
                   pendingReply (the reply panels' phase machine), writeStatus (Settings › Local ›
                   Connection's write-access line),
                   webNotify, backClose, clipboard (copyText with the execCommand fallback), stopControl, triage (the board/triage piles), answerToken (the token store + authHeaders),
