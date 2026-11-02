@@ -2,8 +2,8 @@
  * `GET/POST /api/pins` (#161), driven through the real route table: the token
  * gate, the body shape, the membership rule a pin must pass (a pinned dir
  * becomes spawnable and its config servable, so this is the gate), the dead-pin
- * row, the knock-on effect on `GET /api/configs`, and `POST /api/pins/order`'s
- * permutation rule.
+ * row, the knock-on effect on `GET /api/configs`, `POST /api/pins/order`'s
+ * permutation rule, and what each route answers when a listing throws (#361).
  *
  * The harness `$HOME` is a tmpdir, and the older-projects list never offers a
  * cwd under one, so every case here lifts that filter with `overrideClaudeRoots`.
@@ -15,6 +15,7 @@ import path from 'node:path';
 
 import { testAsync, userRecord, withServer } from './api-harness.js';
 import type { Harness } from './api-harness.js';
+import { overridePinsPayload } from '../server/api.js';
 import { encodeProjectDir } from '../server/lib/management.js';
 import { overrideClaudeRoots } from '../server/lib/paths.js';
 import { getPinnedProjects, resetSettings } from '../server/lib/settings.js';
@@ -22,6 +23,7 @@ import type { PinsResponse, ProjectRef } from '../shared/types.js';
 
 const ENV = 'SHOW_USAGE=false\nSKIP_PROC_SCAN=true\n';
 const DAY = 24 * 3600_000;
+const ANSWER_MS = 2000;
 
 /** A project cwd (default `$HOME/projs/<name>`), with one transcript `ageDays` old. Returns its dirName. */
 function plantProject(h: Harness, name: string, ageDays: number, cwd = path.join(h.home, 'projs', name)): { dirName: string; cwd: string } {
@@ -42,6 +44,15 @@ function postOrder(h: Harness, body: unknown, headers: Record<string, string> = 
 
 function post(h: Harness, body: unknown, headers: Record<string, string> = {}) {
   return h.req('/api/pins', { method: 'POST', body: typeof body === 'string' ? body : JSON.stringify(body), headers });
+}
+
+/** The harness request has no timeout, so a handler that never answers would hang the whole suite: this turns that into one failed case. */
+function answered<T>(reply: Promise<T>): Promise<T> {
+  let timer: NodeJS.Timeout;
+  const hung = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`no response within ${ANSWER_MS}ms`)), ANSWER_MS);
+  });
+  return Promise.race([reply, hung]).finally(() => clearTimeout(timer));
 }
 
 /** Each case starts with no pins and the Claude-root filter off, and leaves both that way. */
@@ -242,6 +253,83 @@ export async function run(): Promise<number> {
   check(await testAsync('GET /api/pins/order is 405', async () => {
     await withPins(ENV, async h => {
       assert.equal((await h.req('/api/pins/order')).status, 405);
+    });
+  }));
+
+  /* A throw while listing. Nothing drives these from disk: `listTranscripts` swallows readdir errors, so the payload's seam stands in for the listing. */
+  const payloadThrows = async (fn: () => Promise<void>): Promise<void> => {
+    overridePinsPayload(() => { throw new Error('listing blew up'); });
+    try { await fn(); } finally { overridePinsPayload(null); }
+  };
+
+  check(await testAsync('pinning when the reply cannot be built is 500 saved: true, and the pin stood', async () => {
+    await withPins(ENV, async h => {
+      const { dirName } = plantProject(h, 'old', 5);
+      await payloadThrows(async () => {
+        const reply = await answered(post(h, { dirName, pinned: true }));
+        assert.equal(reply.status, 500);
+        assert.strictEqual(reply.json?.saved, true);
+        assert.equal(reply.json?.error, 'Saved, but the pin list could not be re-read — reopen to refresh.');
+        assert.deepStrictEqual(getPinnedProjects(), [dirName]);
+      });
+    });
+  }));
+
+  check(await testAsync('unpinning when the reply cannot be built is 500 saved: true, and the pin is gone', async () => {
+    await withPins(ENV, async h => {
+      const [p, q] = await pinAll(h, ['p', 'q']);
+      await payloadThrows(async () => {
+        const reply = await answered(post(h, { dirName: p, pinned: false }));
+        assert.equal(reply.status, 500);
+        assert.strictEqual(reply.json?.saved, true);
+        assert.deepStrictEqual(getPinnedProjects(), [q]);
+      });
+    });
+  }));
+
+  check(await testAsync('reordering when the reply cannot be built is 500 saved: true, and the new order stood', async () => {
+    await withPins(ENV, async h => {
+      const [p, q, r] = await pinAll(h, ['p', 'q', 'r']);
+      await payloadThrows(async () => {
+        const reply = await answered(postOrder(h, { order: [r, p, q] }));
+        assert.equal(reply.status, 500);
+        assert.strictEqual(reply.json?.saved, true);
+        assert.deepStrictEqual(getPinnedProjects(), [r, p, q]);
+      });
+    });
+  }));
+
+  check(await testAsync('GET /api/pins when the payload throws is 500 pins read failed, with no saved flag', async () => {
+    await withPins(ENV, async h => {
+      await payloadThrows(async () => {
+        const reply = await answered(h.req('/api/pins'));
+        assert.equal(reply.status, 500);
+        assert.equal(reply.json?.error, 'pins read failed');
+        assert.strictEqual(reply.json?.saved, undefined);
+      });
+    });
+  }));
+
+  check(await testAsync('a throw in the membership check is 500 without saved, and stores nothing', async () => {
+    await withPins(ENV, async h => {
+      const { dirName } = plantProject(h, 'old', 5);
+      // A root that is not a string makes `isClaudeOwned` throw inside `listOlderProjects`, which the check calls before anything is saved.
+      overrideClaudeRoots([null as unknown as string]);
+      const reply = await answered(post(h, { dirName, pinned: true }));
+      assert.equal(reply.status, 500);
+      assert.equal(reply.json?.error, 'pins write failed');
+      assert.strictEqual(reply.json?.saved, undefined);
+      assert.deepStrictEqual(getPinnedProjects(), []);
+    });
+  }));
+
+  check(await testAsync('with the seam back to null a pin answers the 200 payload again', async () => {
+    await withPins(ENV, async h => {
+      const { dirName } = plantProject(h, 'old', 5);
+      await payloadThrows(async () => { await answered(h.req('/api/pins')); });
+      const reply = await answered(post(h, { dirName, pinned: true }));
+      assert.equal(reply.status, 200);
+      assert.deepStrictEqual((reply.json as unknown as PinsResponse).pinned.map(row => row.dirName), [dirName]);
     });
   }));
 

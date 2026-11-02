@@ -1802,7 +1802,10 @@ export interface OpenFolderResponse {
   ok: true;
 }
 
-/** Payload of `GET /api/pins`, and of a successful `POST /api/pins` (#161) or `POST /api/pins/order`. */
+/**
+ * Payload of `GET /api/pins`, and of a successful `POST /api/pins` (#161) or `POST /api/pins/order`. A write route whose change saved but whose payload could
+ * not be rebuilt answers {@link PinsSavedError} instead.
+ */
 export interface PinsResponse {
   /** Every stored pin, in pin order. */
   pinned: PinRow[];
@@ -1816,6 +1819,12 @@ export interface PinsResponse {
   older: ProjectRef[];
   /** The server's home dir, so the UI can show paths as `~/…`. */
   home: string;
+}
+
+/** The 500 body of a pin write that stood: `saved` tells it apart from a refused write, whose 500 carries `error` alone (#361). */
+export interface PinsSavedError {
+  error: string;
+  saved: true;
 }
 
 /** One unmerged local branch of a pinned repo (Git Stats, `docs/superpowers/specs/2026-10-01-git-stats-design.md` §2). */
