@@ -45,7 +45,7 @@ export function ListView({ sessions, launching, expanded, onToggle, onOpenChat }
 }
 
 function Row({ s, open, onToggle, onOpenChat }: { s: Session; open: boolean; onToggle: () => void; onOpenChat: () => void }) {
-  const surface = surfacePill(s.surface);
+  const surface = surfacePill(s);
   const ctl = stopControl(s.stopState, false);
   const repo = s.repo ?? s.project;
   // Shown only while the table is too narrow for the Project column. An unnamed main-checkout row is already titled with its repo.

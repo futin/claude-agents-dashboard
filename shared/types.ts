@@ -34,6 +34,7 @@ export interface Activity {
  *   remote-control sessions nowhere; the phone app sees only the RC ones, and
  *   only while alive. So this dashboard and `claude --resume <id>` are the ways
  *   back in — which is exactly the confusion this field exists to remove.
+ *   One exception: a {@link Session.desktopOwned} row keeps this value until the desktop app writes a turn, though the app's sidebar lists it.
  * - `cloud` — reserved for a session running in Anthropic's sandbox (created
  *   from the phone app / claude.ai). Nothing produces this value yet: those
  *   sessions write no transcript to this machine, so the scanner cannot see
@@ -148,7 +149,8 @@ export interface Session {
   processLive?: true;
   /**
    * `true` when the desktop app owns this session's live process: it was launched there, or resumed there, and the server holds no handle for it. **Absent,
-   * never `false`**, the encoding `processLive` uses. The drawer shows it in place of a resume the server would refuse.
+   * never `false`**, the encoding `processLive` uses. The drawer shows it in place of a resume the server would refuse. The row keeps `surface:
+   * 'dashboard'` until the app writes a turn, but renders no surface pill: the app's sidebar lists it.
    */
   desktopOwned?: true;
   activity: Activity | null;
