@@ -369,7 +369,7 @@ client/src/
                   notifyRows (Settings' push-event rows), writeRefusal (a 403's token vs read-only-network kind), postWrite (every write hook's POST and its one read of the reply), pinWrite (what a pin write's reply means to `usePins`),
                   pendingReply (the reply panels' phase machine), writeStatus (Settings › Local ›
                   Connection's write-access line),
-                  webNotify, backClose, clipboard (copyText with the execCommand fallback), stopControl, triage (the board/triage piles), answerToken (the token store + authHeaders),
+                  webNotify, backClose, clipboard (copyText with the execCommand fallback), stopControl, apiError (the row's badge text for an API-error turn end), triage (the board/triage piles), answerToken (the token store + authHeaders),
                   stickyStrip, agentLabel (a subagent's type only when informative),
                   tasks (taskProgress — the one count the row pill and the Tasks card share),
                   gitLayouts / gitLevels / gitLinks / gitStatsText (the Git sub-view's switcher rules,

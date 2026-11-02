@@ -873,6 +873,9 @@ code,kbd,samp,pre{font-family:inherit}
 /* Real text, not a `title` — a tooltip never appears on touch, and the phone is
    the surface the stop control exists for. */
 .stop-badge{flex-shrink:0;font-size:12px;color:var(--amber-text)}
+/* Wraps rather than truncates: the reset time is the end of the text, and the ledger's activity cell and the split rail are too narrow to fit it on one line. */
+.act-line:has(.api-err-badge){flex-wrap:wrap}
+.api-err-badge{flex-shrink:0;max-width:100%;font-size:11px;font-weight:500;padding:2px 8px;border-radius:12px;background:var(--mustard-tint);color:var(--mustard-ink)}
 /* the chat button — the way into a session's drawer, and where it names a
    hold. Tinted amber when you can act from here, mustard when only that
    terminal can, so the two kinds of "needs you" stay apart down a whole column. */

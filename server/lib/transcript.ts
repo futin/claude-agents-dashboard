@@ -10,7 +10,7 @@ import { frozenCompactWindow } from './compact-window.js';
 import { findModelIdentity, resolveModelIdentity } from './model-identity.js';
 import { findTitle, resolveSessionTitle } from './title-cache.js';
 
-import type { Activity } from '../../shared/types.js';
+import type { Activity, ApiErrorState } from '../../shared/types.js';
 
 export const STANDARD_WINDOW = 200000;
 export const LARGE_WINDOW = 1000000;
@@ -137,10 +137,12 @@ export interface ParsedTranscript {
    * stay visible.
    */
   commandOnly: boolean;
-  /** Newest assistant turn ended cleanly (stop_reason "end_turn"). */
+  /** Newest assistant turn ended: cleanly (stop_reason "end_turn") or on an API-error record, whose own stop_reason says nothing. */
   turnComplete: boolean;
   /** Newest assistant action is an unanswered {@link WAIT_TOOLS} call. */
   waitingOnQuestion: boolean;
+  /** The newest message record's API error, when it is an API-error turn end. */
+  apiError: ApiErrorState | null;
 }
 
 interface TailResult {
@@ -392,6 +394,15 @@ function findSessionName(lines: string[], first: number): string | null {
   return findTitle(lines, first);
 }
 
+function apiErrorOf(rec: any): ApiErrorState {
+  const resetsAt = rec.quotaLimits?.resetsAt;
+  return {
+    kind: typeof rec.error === 'string' ? rec.error : 'unknown',
+    text: contentText(rec.message.content).trim(),
+    resetsAtMs: typeof resetsAt === 'number' && Number.isFinite(resetsAt) ? resetsAt * 1000 : null
+  };
+}
+
 /** Read a transcript and return usage, metadata, and current activity. */
 export function readTranscript(
   filePath: string,
@@ -429,6 +440,7 @@ export function readTranscript(
   let waitingOnQuestion = false;
   let lastMessageTs: string | null = null;
   let newestIsPlumbing = false;
+  let apiError: ApiErrorState | null = null;
 
   // Single newest-first scan gathers everything we need.
   for (let i = lines.length - 1; i >= first; i--) {
@@ -474,7 +486,8 @@ export function readTranscript(
       newestMessageSeen = true;
       const m = rec.message;
       if (typeof rec.timestamp === 'string') lastMessageTs = rec.timestamp;
-      turnComplete = role === 'assistant' && m.stop_reason === 'end_turn';
+      if (role === 'assistant' && rec.isApiErrorMessage === true) apiError = apiErrorOf(rec);
+      turnComplete = apiError !== null || (role === 'assistant' && m.stop_reason === 'end_turn');
       newestIsPlumbing = role === 'user' && LOCAL_PLUMBING.test(contentText(m.content).trimStart());
       if (role === 'assistant' && Array.isArray(m.content)) {
         waitingOnQuestion = m.content.some(
@@ -518,7 +531,8 @@ export function readTranscript(
     hasMessages: newestMessageSeen,
     commandOnly: newestIsPlumbing && tokens === 0,
     turnComplete,
-    waitingOnQuestion
+    waitingOnQuestion,
+    apiError
   };
 }
 

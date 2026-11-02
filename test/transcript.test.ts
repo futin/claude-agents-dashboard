@@ -213,6 +213,55 @@ export function run(): number {
     assert.strictEqual(s.activity!.tool, 'Edit');
   })) p++; else f++;
 
+  // #368: when a request fails for good, Claude Code ends the turn with this synthetic record, whose `stop_reason` is `stop_sequence`.
+  const apiErrorRec = (error: string, text: string, extra: object = {}) => ({
+    type: 'assistant', isApiErrorMessage: true, error, ...extra,
+    message: { role: 'assistant', model: '<synthetic>', stop_reason: 'stop_sequence', usage: { input_tokens: 0, output_tokens: 0 }, content: [{ type: 'text', text }] }
+  });
+  const LIMIT_TEXT = "You've hit your session limit · resets 6:30pm (Europe/Berlin)";
+  const realTurn = { type: 'assistant', message: { role: 'assistant', model: 'claude-opus-5-5', stop_reason: 'tool_use', content: [{ type: 'tool_use', name: 'Bash', input: { command: 'ls' } }], usage: { input_tokens: 4200 } } };
+
+  if (test('API-error record ends the turn, reports the error, and leaves tokens, model and activity on the last real turn', () => {
+    const s = tr.readTranscript(fixture([realTurn, apiErrorRec('rate_limit', `  ${LIMIT_TEXT}\n`, { quotaLimits: { resetsAt: 1789749000, rateLimitType: 'five_hour' } })]))!;
+    assert.strictEqual(s.turnComplete, true);
+    assert.strictEqual(s.waitingOnQuestion, false);
+    assert.deepStrictEqual(s.apiError, { kind: 'rate_limit', text: LIMIT_TEXT, resetsAtMs: 1789749000000 });
+    assert.strictEqual(s.tokens, 4200);
+    assert.strictEqual(s.model, 'claude-opus-5-5');
+    assert.deepStrictEqual(s.activity, { tool: 'Bash', detail: 'ls' });
+  })) p++; else f++;
+
+  if (test('API-error record: no usable reset time reads null, and the kind passes through verbatim', () => {
+    const noQuota = tr.readTranscript(fixture([apiErrorRec('rate_limit', LIMIT_TEXT)]))!;
+    assert.strictEqual(noQuota.turnComplete, true);
+    assert.strictEqual(noQuota.apiError!.resetsAtMs, null);
+    assert.strictEqual(tr.readTranscript(fixture([apiErrorRec('rate_limit', LIMIT_TEXT, { quotaLimits: { resetsAt: 'soon' } })]))!.apiError!.resetsAtMs, null);
+    for (const kind of ['server_error', 'authentication_failed', 'some_future_kind']) {
+      const s = tr.readTranscript(fixture([apiErrorRec(kind, 'nope')]))!;
+      assert.strictEqual(s.turnComplete, true);
+      assert.strictEqual(s.apiError!.kind, kind);
+    }
+  })) p++; else f++;
+
+  if (test('stop_sequence without the API-error flag is still mid-turn: the fix keys on the flag', () => {
+    const s = tr.readTranscript(fixture([
+      { type: 'assistant', message: { role: 'assistant', stop_reason: 'stop_sequence', content: [{ type: 'text', text: 'partial' }] } }
+    ]))!;
+    assert.strictEqual(s.turnComplete, false);
+    assert.strictEqual(s.apiError, null);
+  })) p++; else f++;
+
+  if (test('API-error record followed by a retry\'s real record: mid-turn again, no error', () => {
+    const s = tr.readTranscript(fixture([apiErrorRec('server_error', 'API Error: 529 Overloaded'), realTurn]))!;
+    assert.strictEqual(s.turnComplete, false);
+    assert.strictEqual(s.apiError, null);
+  })) p++; else f++;
+
+  if (test('an ordinary finished transcript has no API error', () => {
+    const s = tr.readTranscript(fixture([{ message: { role: 'assistant', stop_reason: 'end_turn', content: [{ type: 'text', text: 'done' }] } }]))!;
+    assert.strictEqual(s.apiError, null);
+  })) p++; else f++;
+
   if (test('turnComplete/waitingOnQuestion (question + plan) from newest message record', () => {
     const done = tr.readTranscript(fixture([
       { message: { role: 'assistant', stop_reason: 'end_turn', content: [{ type: 'text', text: 'done' }] } }

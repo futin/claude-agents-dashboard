@@ -298,7 +298,7 @@ message timestamp exists (and still the coarse `lookbackHours` enumeration filte
 |                          | recent (< `activeWindowMin`) | stale               |
 |--------------------------|------------------------------|---------------------|
 | **pending** (no end_turn)| 🟢 `working`                 | 🟡 `incomplete`     |
-| **finished** (end_turn)  | 🟡 `incomplete`              | ⚪ `idle`           |
+| **finished** (end_turn or API error) | 🟡 `incomplete` | ⚪ `idle`           |
 
 - **question** (blue) — newest assistant action is an unanswered call to one of
   `transcript.ts`'s `WAIT_TOOLS`: `AskUserQuestion` **or** `ExitPlanMode`. Beats all. Both
@@ -337,8 +337,8 @@ message timestamp exists (and still the coarse `lookbackHours` enumeration filte
   which puts the row's tab in `allow?` — display-only, see
   [permission-notify](permission-notify.md).
 - **working** (green, pulsing) — recent AND the turn is unfinished = machine actively
-  churning. **Only this state** counts toward `totals.active`. A finished turn (end_turn)
-  is NOT working even if recent — the ball is in the human's court.
+  churning. **Only this state** counts toward `totals.active`. A finished turn (end_turn,
+  or an API-error record: see below) is NOT working even if recent — the ball is in the human's court.
 - **working** also comes from a **running subagent** (bug-25) — the one cell-override below
   the question rungs and the liveness gate. A parent parked on a dispatched agent writes
   nothing while it waits: a background launch acks and ends its turn (`end_turn`, so the 2×2
@@ -348,7 +348,7 @@ message timestamp exists (and still the coarse `lookbackHours` enumeration filte
   reads it, only for a row the 2×2 would otherwise leave idle or incomplete. All three must
   hold: an `agent-*.jsonl` written within `SUBAGENT_STALL_MS` (**15 minutes** — longer than the
   Bash tool's 10-minute maximum timeout, so a subagent inside its longest single tool call
-  still counts); its newest message mid-turn (a finished subagent ends `end_turn`); and the
+  still counts); its newest message mid-turn (a finished subagent ends `end_turn` or on an API-error record); and the
   parent still showing a launch `running` in `readAgentsCached` (a `SendMessage` resume counts — see
   [Expandable subagent detail](#expandable-subagent-detail)) — the veto for Esc, which
   records the launch's `tool_result` but leaves the subagent file fresh and mid-turn. A dead
@@ -357,7 +357,20 @@ message timestamp exists (and still the coarse `lookbackHours` enumeration filte
   has no subagent file and no reliable liveness signal.
 - **incomplete** (yellow, "pending") — either recent + finished (your turn to reply) or
   stale + unfinished (stalled mid-task).
-- **idle** (gray) — stale AND the last turn finished cleanly.
+- **idle** (gray) — stale AND the last turn finished, cleanly or on an API error.
+
+**API-error turn ends.** When a request fails for good (usage limit, signed out, server error), Claude Code ends the turn with a synthetic assistant record:
+`isApiErrorMessage: true`, an `error` kind, `model: "<synthetic>"`, zero usage, one text block, and a `stop_reason` that is not `end_turn`. `transcript.ts`
+reads the flag, so the turn counts as finished for the session and, through the same `turnComplete`, for each subagent the limit stopped. There is no fifth
+status, because the state behaves like `incomplete`: nothing is running and the next move is a prompt. What the row lacks is the reason, so the record also
+becomes `Session.apiError` (`kind`, `text`, and `resetsAtMs` from `quotaLimits.resetsAt`, never parsed out of the localized text), absent on every other row.
+`.api-err-badge` shows it as visible text in the activity line (`lib/apiError.ts` picks the words). The status alone does not carry the reason: a stale row
+reads `idle` with the badge still on it.
+
+A `server_error` is sometimes retried within the same turn, 3–15 s later. The row then reads `pending` with the badge for a poll or two, and `working` once
+the retry's record lands. That flicker is accepted: the alternative, waiting out a timeout, is the false `working` this replaced. Two readers cannot accept it, because each acts once on
+what it reads: the desktop hand-over ([spawn](spawn.md#launching-in-the-desktop-app)) does not treat an API-error record as settled, and Git Sync
+([git-stats](git-stats.md)) keeps a run going while the row has `apiError` and a live process.
 
 **Process-liveness gate (overrides the 2×2):** a cleaned/interrupted session's last
 record often has no `end_turn`, so on disk it looks recent + pending = `working` forever
@@ -507,7 +520,7 @@ read — a plain `find` would serve the abandoned half to the detail or [chat](c
 
 **Signals** come from the **newest message record** (newest tail record with
 `message.role` of `user`/`assistant`): `transcript.ts` exposes `turnComplete` (default
-true; false unless that record is an assistant with `end_turn`), `waitingOnQuestion`, and
+true; false unless that record is an assistant with `end_turn` or an API-error record), `apiError`, `waitingOnQuestion`, and
 `lastMessageTs` (that record's timestamp — the recency signal). Records without a role
 (usage-only, meta, last-prompt, queue-operation) are ignored for state, and so are `api-request-blob` records, which carry a role but only replay
 turns already recorded (`isConversationRecord` in `transcript.ts`).

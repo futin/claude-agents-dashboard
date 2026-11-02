@@ -96,6 +96,16 @@ export async function run(): Promise<number> {
     assert.equal(handOverFailedIds().has(w.id), false);
   }));
 
+  // #368: an API-error record reads as a finished turn on the board, but a `server_error` can be retried within the same turn 3-15 s later, past the settle poll.
+  check(await test('an API-error record is never handed over: the retry it may precede would fork the transcript', async f => {
+    const w = launched(f);
+    write(f, w.id, [user, toolUse, { type: 'assistant', isApiErrorMessage: true, error: 'server_error',
+      message: { role: 'assistant', model: '<synthetic>', stop_reason: 'stop_sequence', content: [{ type: 'text', text: 'API Error: 529 Overloaded' }] } }]);
+    assert.equal(await stepHandOver(w), 'wait');
+    assert.equal(await stepHandOver(w), 'wait');
+    assert.deepEqual(f.opened, []);
+  }));
+
   check(await test('a transcript that moves between the two polls settles again: a blocked Stop starting another turn is not handed over', async f => {
     const w = launched(f);
     write(f, w.id, [user, endTurn]);

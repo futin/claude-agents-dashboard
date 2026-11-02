@@ -158,6 +158,34 @@ export function run(): number {
     assert.deepStrictEqual(syncPhase(RUN, payload([session('s1', 'incomplete')]), RUN.launchedAtMs), { kind: 'ended' });
   })) p++; else f++;
 
+  const serverError = { kind: 'server_error', text: 'API Error: 529', resetsAtMs: null };
+
+  if (test('an API-error row with a live process is still running: a retry may follow, and it must not re-arm Sync', () => {
+    const held = { ...session('s1', 'incomplete'), apiError: serverError, stopState: 'ready' } as Session;
+    assert.deepStrictEqual(syncPhase(RUN, payload([held]), RUN.launchedAtMs), { kind: 'running', session: held });
+    const foreign = { ...session('s1', 'incomplete'), apiError: serverError, processLive: true } as Session;
+    assert.deepStrictEqual(syncPhase(RUN, payload([foreign]), RUN.launchedAtMs), { kind: 'running', session: foreign });
+  })) p++; else f++;
+
+  if (test('an API-error row ends the run once no process is left, or once the row has gone stale', () => {
+    const gone = { ...session('s1', 'incomplete'), apiError: serverError } as Session;
+    assert.deepStrictEqual(syncPhase(RUN, payload([gone]), RUN.launchedAtMs), { kind: 'ended' });
+    const stale = { ...session('s1', 'idle'), apiError: serverError, stopState: 'ready' } as Session;
+    assert.deepStrictEqual(syncPhase(RUN, payload([stale]), RUN.launchedAtMs), { kind: 'ended' });
+  })) p++; else f++;
+
+  if (test('a live process alone does not hold a run: a finished turn lingers without being a retry', () => {
+    const lingering = { ...session('s1', 'incomplete'), stopState: 'ready' } as Session;
+    assert.deepStrictEqual(syncPhase(RUN, payload([lingering]), RUN.launchedAtMs), { kind: 'ended' });
+  })) p++; else f++;
+
+  if (test('reconcileRuns keeps a run across the poll that shows a retryable API error', () => {
+    const runs = { '/p/a': RUN };
+    const r = reconcileRuns(runs, payload([{ ...session('s1', 'incomplete'), apiError: serverError, stopState: 'ready' } as Session]), RUN.launchedAtMs);
+    assert.strictEqual(r.runs, runs);
+    assert.deepStrictEqual(r.ended, []);
+  })) p++; else f++;
+
   if (test("another session's row does not decide this run", () => {
     assert.deepStrictEqual(syncPhase(RUN, payload([session('s2', 'idle')]), RUN.launchedAtMs + HOUR), { kind: 'unseen' });
   })) p++; else f++;

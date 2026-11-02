@@ -1,4 +1,5 @@
 import type { LaunchingSession, Session } from '../../../../shared/types';
+import { apiErrorLabel } from '../../lib/apiError';
 import { fmtTok, formatAgo } from '../../lib/format';
 import { STATUS_LABEL } from '../../lib/filterSort';
 import { modelLabel } from '../../lib/modelLabel';
@@ -132,10 +133,16 @@ export function ActFull({ s }: { s: Session }) {
   );
 }
 
+/** Why the session stopped, as visible text for the same reason as the `stopping…` badge. */
+export function ApiErrBadge({ s }: { s: Session }) {
+  if (!s.apiError) return null;
+  return <span className="api-err-badge">{apiErrorLabel(s.apiError, Date.now())}</span>;
+}
+
 /**
- * Status pill, tool name, (stopping…), ago. The `stopping…` badge is visible
- * text, never a `title` — a tooltip is dead on touch, and the phone is the
- * surface the stop control exists for.
+ * Status pill, tool name, (stopping…), API error, ago. The `stopping…` badge is
+ * visible text, never a `title` — a tooltip is dead on touch, and the phone is
+ * the surface the stop control exists for.
  */
 export function ActLine({ s, ago = true }: { s: Session; ago?: boolean }) {
   const ctl = stopControl(s.stopState, false);
@@ -144,6 +151,7 @@ export function ActLine({ s, ago = true }: { s: Session; ago?: boolean }) {
       <StatusPill s={s} />
       <ToolChip s={s} />
       {ctl.render && ctl.badge && <span className="stop-badge">{ctl.badge}</span>}
+      <ApiErrBadge s={s} />
       {ago && <span className="ago">{formatAgo(s.updatedMs)} ago</span>}
     </div>
   );
