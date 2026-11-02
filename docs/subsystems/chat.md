@@ -45,7 +45,8 @@ collapsed the gauge track to 0px. Rows are the plan's tasks with the status the 
 [sessions](sessions.md#the-task-list-and-why-it-folds-the-whole-file) has the signals and the cases that show no card.
 
 **A PR card sits under the Tasks card** once the session has created a pull request — the newest one only. `GET /api/sessions/:id/pr` finds it in the
-transcript (`server/lib/pr-detect.ts`): a `gitOperation.pr` record marked `created` decides alone, else the last github PR URL in a `gh pr create` result;
+transcript (`server/lib/pr-detect.ts`): a `gitOperation.pr` record marked `created` decides alone, and contributes nothing unless its URL has the `https://<host>/<owner>/<repo>/pull/<n>` shape,
+else the last github PR URL in a `gh pr create` result;
 a `pr-link` record never counts, because it also names PRs the session only looked at. `server/lib/pr-status.ts` then reads the live state with
 `gh pr view --json …` (10s timeout, `GH_NO_UPDATE_NOTIFIER=1`, `GH_PROMPT_DISABLED=1`) and caches it per URL: 20s while a check runs, mergeability is
 still being computed or `gh` failed, 60s once settled, for good once merged or closed, with one shared launch per URL in flight. `usePullRequest` polls at

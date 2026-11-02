@@ -18,13 +18,13 @@ const ENV = 'SHOW_USAGE=false\nSKIP_PROC_SCAN=true\n';
 const URL7 = 'https://github.com/o/r/pull/7';
 
 /** An assistant `gh pr create` call carrying `--title "Arg title"`, and its result with Claude Code's gitOperation create record. */
-function createRecords(cwd: string): unknown[] {
+function createRecords(cwd: string, url = URL7): unknown[] {
   return [
     { type: 'assistant', cwd, message: { role: 'assistant', content: [
       { type: 'tool_use', id: 'toolu_pr_1', name: 'Bash', input: { command: 'gh pr create --title "Arg title" --body x' } },
     ] } },
-    { type: 'user', cwd, message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'toolu_pr_1', content: URL7, is_error: false }] },
-      toolUseResult: { stdout: URL7, stderr: '', gitOperation: { pr: { number: 7, url: URL7, action: 'created' } } } },
+    { type: 'user', cwd, message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'toolu_pr_1', content: url, is_error: false }] },
+      toolUseResult: { stdout: url, stderr: '', gitOperation: { pr: { number: 7, url, action: 'created' } } } },
   ];
 }
 
@@ -123,6 +123,36 @@ export async function run(): Promise<number> {
       } finally {
         fs.chmodSync(file, 0o644);
       }
+    });
+  }));
+
+  check(await testAsync('A7. a PR on another host gets its repo from the URL, the command title and no gh launch', async () => {
+    let launched = 0;
+    fresh(async () => { launched++; throw new Error('gh must not run for a non-github.com PR'); });
+    const url = 'https://ghe.example.com/o/r/pull/7';
+    await withServer(ENV, async h => {
+      h.plant(ID, createRecords(h.home, url));
+      const reply = await h.req(`/api/sessions/${ID}/pr`);
+      assert.equal(reply.status, 200);
+      const pr = reply.json?.pr as SessionPrInfo | null | undefined;
+      assert.equal(pr?.url, url);
+      assert.equal(pr?.repo, 'o/r');
+      assert.equal(pr?.number, 7);
+      assert.equal(pr?.title, 'Arg title');
+      assert.strictEqual(pr?.live, null);
+      assert.equal(pr?.unavailable, 'not a GitHub PR');
+      assert.equal(launched, 0);
+    });
+  }));
+
+  check(await testAsync('A8. a create at a javascript: URL is 200 with no PR and no error', async () => {
+    fresh(null);
+    await withServer(ENV, async h => {
+      h.plant(ID, createRecords(h.home, 'javascript:alert(1)'));
+      const reply = await h.req(`/api/sessions/${ID}/pr`);
+      assert.equal(reply.status, 200);
+      assert.strictEqual(reply.json?.pr, null);
+      assert.equal(reply.json?.error, undefined);
     });
   }));
 

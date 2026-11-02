@@ -57,8 +57,8 @@ import {
 import { watchHandOver } from './lib/handover.js';
 import { openFolder, openFolderPlatform, revealFile } from './lib/open-folder.js';
 import { runQuickOp } from './lib/git-quick.js';
-import { readSessionPr } from './lib/pr-detect.js';
-import { GH_PR_RE, readPrStatus } from './lib/pr-status.js';
+import { ANY_PR_RE, readSessionPr } from './lib/pr-detect.js';
+import { readPrStatus } from './lib/pr-status.js';
 import { readGitStats } from './lib/git-stats.js';
 import { readCodegraph, startCodegraphRun } from './lib/codegraph-store.js';
 import { classifyOrigin, resolvePeer } from './lib/origin.js';
@@ -874,9 +874,6 @@ export function serveSessionPlan(id: string, res: ServerResponse): void {
   sendJson(res, 200, { id, pending: getPendingPlan(id) } satisfies SessionPlan);
 }
 
-/** `owner/repo` of a PR URL on any host; null when the URL has no `/<owner>/<repo>/pull/<n>` shape. */
-const ANY_PR_RE = /^https:\/\/[^/]+\/([^/]+\/[^/]+)\/pull\/\d+/;
-
 /** `GET /api/sessions/:id/pr` — the newest PR this session created, with its live `gh` state or the reason there is none. */
 export async function serveSessionPr(id: string, res: ServerResponse): Promise<void> {
   const fail = (code: number): void => sendJson(res, code, { id, pr: null, error: true } satisfies SessionPrResponse);
@@ -888,7 +885,7 @@ export async function serveSessionPr(id: string, res: ServerResponse): Promise<v
     if (!detected) return sendJson(res, 200, { id, pr: null } satisfies SessionPrResponse);
 
     const { live, unavailable } = await readPrStatus(detected.url, detected.cwd);
-    const repo = GH_PR_RE.exec(detected.url)?.[1] ?? ANY_PR_RE.exec(detected.url)?.[1] ?? null;
+    const repo = ANY_PR_RE.exec(detected.url)?.[1] ?? null;
     const pr: SessionPrInfo = { url: detected.url, number: detected.number, repo, title: live?.title ?? detected.title, live, unavailable };
     sendJson(res, 200, { id, pr } satisfies SessionPrResponse);
   } catch (e) {
