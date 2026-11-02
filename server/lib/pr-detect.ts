@@ -3,7 +3,7 @@
  *
  * Two signals, newest in transcript order wins:
  *   1. Claude Code's own `toolUseResult.gitOperation.pr` on a Bash result, `action: "created"`. Undocumented, so it can change between versions; when a
- *      result carries one, it alone decides that call.
+ *      result carries one, it alone decides that call. A URL that fails `ANY_PR_RE` contributes nothing, because the card renders it as a link.
  *   2. Fallback: a Bash call whose command contains `gh pr create`, did not fail, and whose result text holds a github.com PR URL (the last one).
  * Never the top-level `pr-link` record: Claude Code writes it for any PR URL seen in output, and on this machine (2026-10-24) it marked 11 PRs that
  * sessions did not create. Subagent files are not read — only the parent transcript the caller hands in.
@@ -25,6 +25,12 @@ const MARKERS = [Buffer.from(CREATE_CMD), Buffer.from(GIT_OP)];
 
 /** A github.com PR URL; the lookahead keeps `…/pull/new/<branch>` (git push's hint) and `…/pull/12abc` out. */
 const PR_URL_RE = /https:\/\/github\.com\/[\w.-]+\/[\w.-]+\/pull\/(\d+)(?![\w/])/g;
+
+/**
+ * A whole PR URL on any host; group 1 is `owner/repo`. No userinfo, query or fragment: `https://github.com@evil.example/…` reads as GitHub and goes elsewhere.
+ * No `g` flag, unlike `PR_URL_RE`: `.test()` on a `g` regex keeps `lastIndex` between calls.
+ */
+export const ANY_PR_RE = /^https:\/\/[\w.-]+(?::\d+)?\/([\w.-]+\/[\w.-]+)\/pull\/\d+$/;
 
 /** `--title` / `-t`, then `=` or spaces, then a double-quoted, single-quoted or bare value. */
 const TITLE_RE = /(?:^|\s)(?:--title|-t)(?:=|\s+)(?:"((?:[^"\\]|\\.)*)"|'([^']*)'|([^\s"']\S*))/;
@@ -78,7 +84,7 @@ function settle(entry: Entry, block: Record<string, any>, rec: Record<string, an
 
   const op = isObject(rec.toolUseResult) && isObject(rec.toolUseResult.gitOperation) ? rec.toolUseResult.gitOperation.pr : undefined;
   if (isObject(op)) {
-    if (op.action === 'created' && typeof op.number === 'number' && typeof op.url === 'string') {
+    if (op.action === 'created' && typeof op.number === 'number' && typeof op.url === 'string' && ANY_PR_RE.test(op.url)) {
       entry.newest = { url: op.url, number: op.number, title, cwd };
     }
     return;
