@@ -79,7 +79,7 @@ import { applyReconcile, lastReconcile, planReconcile, scheduled } from './lib/r
 import { runJob, stopJob } from './lib/routine-run.js';
 import { RoutineStoreError, deleteJob, isOwner, readJobs, writeJob, writePinsSnapshot } from './lib/routine-store.js';
 import type {
-  AnalyticsResponse, GitQuickRequest, ManagementIndex, MessageWaitResult, OpenFolderResponse, PinsResponse, PlanWaitResult, ScopeConfig,
+  AnalyticsResponse, GitQuickRequest, ManagementIndex, MessageWaitResult, OpenFolderResponse, PinsResponse, PinsSavedError, PlanWaitResult, ScopeConfig,
   SessionMessage, SessionPlan, SessionPrInfo, SessionPrResponse, SessionQuestion, SessionsResponse, SessionChat, SessionDetail, SpawnRequest,
   ProjectRef, ServerSettings, SpawnResponse,
   UsageHistoryResponse, UsageProfileResponse, WaitResult, ConnectionOrigin, WriteAccess,
@@ -1470,6 +1470,13 @@ function pinOptions(): { pinnedDirs: ReadonlySet<string> } {
   return { pinnedDirs: new Set(getPinnedProjects()) };
 }
 
+let pinsPayloadOverride: ((config: Config) => PinsResponse) | null = null;
+
+/** Test seam: replace {@link pinsPayload} process-wide, null to restore. No disk fault reaches it, since `listTranscripts` swallows its readdir errors. */
+export function overridePinsPayload(fn: ((config: Config) => PinsResponse) | null): void {
+  pinsPayloadOverride = fn;
+}
+
 /**
  * A recent project Claude made for itself (a scratch workspace, a dir under
  * `~/.claude`) stays on the rail but is not offered here, the same rule
@@ -1477,6 +1484,7 @@ function pinOptions(): { pinnedDirs: ReadonlySet<string> } {
  * `pinned` — that is where it can be removed.
  */
 function pinsPayload(config: Config): PinsResponse {
+  if (pinsPayloadOverride) return pinsPayloadOverride(config);
   // One listing for all three lists, which used to enumerate the tree five times between them.
   const options = { archivedIds: archivedSessionIds(), ...pinOptions(), transcripts: listTranscripts(projectsRoot()) };
   const claudeRoots = defaultClaudeRoots();
@@ -1606,6 +1614,21 @@ function snapshotPins(config: Config): void {
 }
 
 /**
+ * The reply to a pin write already on disk. The routes are dispatched unawaited, so a throw here would leave the request open forever. A 200 without the payload
+ * is what the client reads as no reply, hence the 500 whose `saved` says the change stood.
+ */
+function sendPinsSaved(config: Config, res: ServerResponse): void {
+  let payload: PinsResponse;
+  try {
+    payload = pinsPayload(config);
+  } catch (e) {
+    console.error('[dashboard] pins reload after write failed:', (e as Error).message);
+    return sendJson(res, 500, { error: 'Saved, but the pin list could not be re-read — reopen to refresh.', saved: true } satisfies PinsSavedError);
+  }
+  sendJson(res, 200, payload);
+}
+
+/**
  * `POST /api/pins` `{dirName, pinned}` — pin or unpin one project (#161).
  * A gate-only write, like `POST /api/settings`. A pin must name a dir the server
  * itself enumerated (older ∪ recent), compared as a string and never joined into
@@ -1621,14 +1644,20 @@ export async function servePinsWrite(config: Config, req: IncomingMessage, res: 
   }
   const { dirName, pinned } = body;
   if (pinned) {
-    const options = { archivedIds: archivedSessionIds(), ...pinOptions() };
-    const known = [...listRecentProjects(config, options), ...listOlderProjects(config, options)]
-      .some(r => r.dirName === dirName);
+    let known: boolean;
+    try {
+      const options = { archivedIds: archivedSessionIds(), ...pinOptions() };
+      known = [...listRecentProjects(config, options), ...listOlderProjects(config, options)]
+        .some(r => r.dirName === dirName);
+    } catch (e) {
+      console.error('[dashboard] pins write failed:', (e as Error).message);
+      return sendJson(res, 500, { error: 'pins write failed' });
+    }
     if (!known) return sendJson(res, 404, { error: 'no such project' });
   }
   if (setPinned(dirName, pinned) === null) return sendJson(res, 409, { error: 'pin limit reached' });
   snapshotPins(config);
-  sendJson(res, 200, pinsPayload(config));
+  sendPinsSaved(config, res);
 }
 
 /**
@@ -1644,7 +1673,7 @@ export async function servePinsOrder(config: Config, req: IncomingMessage, res: 
   }
   if (setPinOrder(body.order) === null) return sendJson(res, 409, { error: 'pins changed — reload' });
   snapshotPins(config);
-  sendJson(res, 200, pinsPayload(config));
+  sendPinsSaved(config, res);
 }
 
 /**
