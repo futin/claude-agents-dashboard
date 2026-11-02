@@ -18,7 +18,9 @@ const KNOWN = new Set([
 ]);
 const LIST_KEYS = new Set(['machines', 'allowed-tools']);
 const PERMISSION_MODES = ['plan', 'acceptEdits', 'auto'];
-const DEFAULT_TIMEOUT_MS = 3_600_000;
+/** A job's timeout when its file names none, and the grammar of the `timeout` key. */
+export const DEFAULT_TIMEOUT_MS = 3_600_000;
+export const TIMEOUT_RE = /^(\d+)([smh])$/;
 const UNIT_MS = { s: 1000, m: 60_000, h: 3_600_000 };
 function unquote(v) {
     if (v.length >= 2 && ((v[0] === '"' && v[v.length - 1] === '"') || (v[0] === "'" && v[v.length - 1] === "'")))
@@ -233,7 +235,7 @@ export function parseJob(name, text) {
     let timeoutMs = DEFAULT_TIMEOUT_MS;
     const toE = requireValue('timeout');
     if (toE) {
-        const tm = toE.value.match(/^(\d+)([smh])$/);
+        const tm = toE.value.match(TIMEOUT_RE);
         if (tm && Number(tm[1]) > 0)
             timeoutMs = Number(tm[1]) * UNIT_MS[tm[2]];
         else

@@ -6,7 +6,7 @@
 import assert from 'node:assert';
 
 import {
-  FIELDS, UNREADABLE, cronFor, fmValue, formKind, frontmatterReadable, routeErrors, scheduleEdit, schedulePick, setKey, switchPreset, timeoutUnitView, timeoutWithUnit, visibleFields
+  FIELDS, UNREADABLE, cronFor, fmValue, formKind, frontmatterReadable, routeErrors, scheduleEdit, schedulePick, setKey, switchPreset, timeoutUnitView, timeoutWithUnit, validMinute, validTime, visibleFields
 } from '../client/src/lib/routineForm.js';
 import { jobTemplate, setRepos } from '../client/src/lib/routines.js';
 import type { Schedule } from '../client/src/lib/routineForm.js';
@@ -489,6 +489,17 @@ export function run(): number {
     assert.deepStrictEqual(weekdays, { view: null, write: { preset: 'weekdays', hour: 9, minute: 25 } });
     assert.deepStrictEqual(schedulePick(text, { preset: 'custom', text: '0 14 * * *' }, 'daily'), { view: null, write: daily(14, 0) });
     assert.strictEqual(fmValue(FIELDS.schedule.write(text, weekdays!.write!), 'cron')?.value, '25 9 * * 1-5');
+  });
+
+  t('validTime: only a whole HH:MM is accepted', () => {
+    assert.strictEqual(validTime('09:30'), true);
+    assert.strictEqual(validTime('9:30'), false);
+    assert.strictEqual(validTime(''), false);
+  });
+
+  t('validMinute: one or two digits up to 59, surrounding spaces allowed', () => {
+    for (const s of ['0', '59', ' 7 ']) assert.strictEqual(validMinute(s), true, s);
+    for (const s of ['60', '-1', '1.5', '', '123']) assert.strictEqual(validMinute(s), false, s);
   });
 
   console.log(`\n  ${p} passed, ${f} failed`);

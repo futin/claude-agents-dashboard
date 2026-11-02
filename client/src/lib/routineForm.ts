@@ -5,7 +5,7 @@
  */
 import { describeCron, isManualCron, parseCron } from '../../../shared/cron';
 import { scalarEnd, writeFrontmatterLine } from '../../../shared/frontmatter';
-import type { JobError } from '../../../shared/routine-file';
+import { DEFAULT_TIMEOUT_MS, TIMEOUT_RE, type JobError } from '../../../shared/routine-file';
 import { readForeach, setRepos, type ForeachMode } from './routines';
 
 export type FormKind = 'shell' | 'claude' | null;
@@ -365,21 +365,20 @@ const limits: FieldDef<Limits> = {
     const parts: string[] = [];
     // max-turns only means something to claude; a shell or kind-less job shows the timeout alone.
     if (ctx.kind === 'claude') parts.push(v.maxTurns ? `${v.maxTurns} turns` : 'No turn limit');
-    parts.push(v.timeout ? `${v.timeout} timeout` : '1h timeout (default)');
+    parts.push(v.timeout ? `${v.timeout} timeout` : `${DEFAULT_TIMEOUT_MS / 3_600_000}h timeout (default)`);
     const set = (ctx.kind === 'claude' && v.maxTurns) || v.timeout;
     return { text: parts.join(' · '), tone: set ? 'set' : 'dim' };
   },
 };
 
 export type TimeoutUnit = 's' | 'm' | 'h';
-const TIMEOUT = /^(\d+)([smh])$/;
 
 /**
  * What the Limits row shows for a timeout: the amount, the pressed unit and the unit a typed amount commits with. The file's unit wins; with no timeout
  * the local pick (else `m`) is pressed, so a unit can be chosen before the number; a written timeout the row cannot parse presses nothing until one is picked.
  */
 export function timeoutUnitView(timeout: string | null, pick: TimeoutUnit | null): { amount: string; shown: TimeoutUnit | null; commit: TimeoutUnit } {
-  const parsed = TIMEOUT.exec(timeout ?? '');
+  const parsed = TIMEOUT_RE.exec(timeout ?? '');
   if (parsed) return { amount: parsed[1], shown: parsed[2] as TimeoutUnit, commit: parsed[2] as TimeoutUnit };
   if (timeout === null) return { amount: '', shown: pick ?? 'm', commit: pick ?? 'm' };
   return { amount: timeout, shown: pick, commit: pick ?? 'm' };
@@ -387,7 +386,7 @@ export function timeoutUnitView(timeout: string | null, pick: TimeoutUnit | null
 
 /** The timeout a unit click writes, or null to write nothing: a bare positive whole number is repaired to carry the unit, anything else unparsed is left. */
 export function timeoutWithUnit(timeout: string | null, u: TimeoutUnit): string | null {
-  const parsed = TIMEOUT.exec(timeout ?? '');
+  const parsed = TIMEOUT_RE.exec(timeout ?? '');
   if (parsed) return `${parsed[1]}${u}`;
   const bare = timeout?.trim() ?? '';
   return /^[1-9]\d*$/.test(bare) ? `${bare}${u}` : null;
@@ -571,4 +570,14 @@ export function routeErrors(text: string, errors: JobError[], kind: FormKind): {
     else rest.push(err);
   }
   return { byField, rest };
+}
+
+/** A time input reports '' until every segment is filled, so only a whole HH:MM counts. */
+export function validTime(s: string): boolean {
+  return /^\d{2}:\d{2}/.test(s);
+}
+
+/** A minute a half-typed field may commit: one or two digits, 59 at most. */
+export function validMinute(s: string): boolean {
+  return /^\d{1,2}$/.test(s.trim()) && Number(s) <= 59;
 }

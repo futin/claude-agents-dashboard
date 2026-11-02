@@ -1,6 +1,6 @@
 import { describeCron, nextAfter, parseCron } from '../../../../shared/cron';
 import { useDraft } from '../../hooks/useDraft';
-import { cronFor, pad2, type Preset, type Schedule } from '../../lib/routineForm';
+import { cronFor, pad2, validMinute, validTime, type Preset, type Schedule } from '../../lib/routineForm';
 import { nextText } from '../../lib/routines';
 
 const PRESETS: Array<[Preset, string]> = [
@@ -17,8 +17,7 @@ function nextFire(cron: string, now: Date): string {
 }
 
 function TimeField({ hour, minute, disabled, set }: { hour: number; minute: number; disabled: boolean; set(hour: number, minute: number): void }) {
-  // A time input reports '' until every segment is filled, so only a whole HH:MM is written.
-  const d = useDraft<HTMLInputElement>(`${pad2(hour)}:${pad2(minute)}`, s => set(Number(s.slice(0, 2)), Number(s.slice(3, 5))), s => /^\d{2}:\d{2}/.test(s));
+  const d = useDraft<HTMLInputElement>(`${pad2(hour)}:${pad2(minute)}`, s => set(Number(s.slice(0, 2)), Number(s.slice(3, 5))), validTime);
   return (
     <div className="rtn-f-row">
       <span className="rtn-f-at">At</span>
@@ -28,8 +27,7 @@ function TimeField({ hour, minute, disabled, set }: { hour: number; minute: numb
 }
 
 function HourlyFields({ value, disabled, onChange }: { value: Extract<Schedule, { preset: 'hourly' }>; disabled: boolean; onChange(s: Schedule): void }) {
-  const d = useDraft<HTMLInputElement>(String(value.minute), s => onChange({ ...value, minute: Number(s.trim()) }),
-    s => /^\d{1,2}$/.test(s.trim()) && Number(s) <= 59);
+  const d = useDraft<HTMLInputElement>(String(value.minute), s => onChange({ ...value, minute: Number(s.trim()) }), validMinute);
   return (
     <div className="rtn-f-row">
       <span className="rtn-f-at">At minute</span>

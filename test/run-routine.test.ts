@@ -85,9 +85,9 @@ function repo(fx: Fx, name: string): string {
   return p;
 }
 
-function wrap(fx: Fx, args: string[], extra: Record<string, string | undefined> = {}): { code: number | null; stderr: string } {
+function wrap(fx: Fx, args: string[], extra: Record<string, string | undefined> = {}): { code: number | null; stderr: string; pid: number } {
   const r = spawnSync(process.execPath, [WRAPPER, ...args], { env: envFor(fx, extra), encoding: 'utf8', timeout: 20_000 });
-  return { code: r.status, stderr: r.stderr };
+  return { code: r.status, stderr: r.stderr, pid: r.pid };
 }
 
 function log(fx: Fx, machine = 'mac'): any[] {
@@ -369,6 +369,7 @@ export async function run(): Promise<number> {
     const recs = log(fx);
     assert.deepStrictEqual(kinds(recs), ['refused']);
     assert.deepStrictEqual([recs[0].why, recs[0].heldBy, recs[0].job, recs[0].trigger], ['running', kid.pid, 'held', 'schedule']);
+    assert.strictEqual(recs[0].pid, r.pid, 'the refusing wrapper names itself, so Run now can tell its own child\'s refusal from another\'s');
     assert.strictEqual(JSON.parse(fs.readFileSync(path.join(fx.state, 'locks', 'held.lock'), 'utf8')).pid, kid.pid, 'lock left alone');
     kid.kill('SIGKILL');
   }));

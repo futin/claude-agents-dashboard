@@ -77,8 +77,11 @@ function fakeSpawner(onSpawn?: () => void, throws = false): Call[] {
   return calls;
 }
 
-const startRec = (run: string, job: string, trigger: string, at: Date): string =>
-  JSON.stringify({ kind: 'start', run, job, machine: 'mac', trigger, at: at.toISOString(), steps: 1, pid: 99 }) + '\n';
+const startRec = (run: string, job: string, trigger: string, at: Date, pid: number | null = 99): string =>
+  JSON.stringify({ kind: 'start', run, job, machine: 'mac', trigger, at: at.toISOString(), steps: 1, ...(pid === null ? {} : { pid }) }) + '\n';
+
+const refusedRec = (job: string, at: Date, why: string, pid: number | null): string =>
+  JSON.stringify({ kind: 'refused', job, at: at.toISOString(), trigger: 'manual', why, heldBy: HELD, ...(pid === null ? {} : { pid }) }) + '\n';
 
 function fakeProbe(table: Record<number, string | null>): Probe {
   return { alive: pid => pid in table, command: pid => table[pid] ?? null };
@@ -179,6 +182,63 @@ export async function run(): Promise<number> {
     } finally { fx.done(); }
   }));
 
+  check(await test('another wrapper\'s start for this job is not this request\'s run: a different pid is skipped, the spawned child\'s is returned', async () => {
+    const fx = fixture();
+    try {
+      fs.writeFileSync(path.join(fx.routines, 'git-sync.md'), JOB());
+      const log = path.join(fx.runs, 'mac.jsonl');
+      fakeSpawner(() => later(10, () => {
+        fs.appendFileSync(log, startRec('theirs', 'git-sync', 'manual', new Date(), 1234));
+        fs.appendFileSync(log, startRec('mine', 'git-sync', 'manual', new Date()));
+      }));
+      assert.deepStrictEqual(await runJob(fx.config, 'git-sync', undefined, NO_PROBE), { status: 202, run: 'mine' });
+
+      fakeSpawner(() => later(10, () => fs.appendFileSync(log, startRec('theirs-only', 'git-sync', 'manual', new Date(), 1234))));
+      const t0 = Date.now();
+      assert.deepStrictEqual(await runJob(fx.config, 'git-sync', undefined, NO_PROBE), { status: 202, run: null });
+      assert.ok(Date.now() - t0 >= 1900, 'waited out READBACK_MS');
+    } finally { fx.done(); }
+  }));
+
+  check(await test('a child with no pid matches nothing, not even a start record with no pid of its own', async () => {
+    const fx = fixture();
+    try {
+      fs.writeFileSync(path.join(fx.routines, 'git-sync.md'), JOB());
+      const log = path.join(fx.runs, 'mac.jsonl');
+      setSpawner(() => {
+        later(10, () => fs.appendFileSync(log, startRec('no-pid', 'git-sync', 'manual', new Date(), null)));
+        return Object.assign(new EventEmitter(), { unref: () => undefined }) as unknown as ChildProcess;
+      });
+      assert.deepStrictEqual(await runJob(fx.config, 'git-sync', undefined, NO_PROBE), { status: 202, run: null });
+    } finally { fx.done(); }
+  }));
+
+  check(await test('this child\'s own refusal for `running` is 409 already-running, well before the read-back times out', async () => {
+    const fx = fixture();
+    try {
+      fs.writeFileSync(path.join(fx.routines, 'git-sync.md'), JOB());
+      const log = path.join(fx.runs, 'mac.jsonl');
+      fakeSpawner(() => later(10, () => fs.appendFileSync(log, refusedRec('git-sync', new Date(), 'running', 99))));
+      const t0 = Date.now();
+      assert.deepStrictEqual(await runJob(fx.config, 'git-sync', undefined, NO_PROBE), { status: 409, error: 'already-running' });
+      assert.ok(Date.now() - t0 < 1000, `answered after ${Date.now() - t0} ms`);
+    } finally { fx.done(); }
+  }));
+
+  check(await test('a refusal that is not this child\'s `running` is ignored: another pid, no pid (an older wrapper), another why, another job', async () => {
+    const fx = fixture();
+    try {
+      fs.writeFileSync(path.join(fx.routines, 'git-sync.md'), JOB());
+      const log = path.join(fx.runs, 'mac.jsonl');
+      fakeSpawner(() => later(10, () => {
+        const now = new Date();
+        fs.appendFileSync(log, refusedRec('git-sync', now, 'running', 1234) + refusedRec('git-sync', now, 'running', null)
+          + refusedRec('git-sync', now, 'disabled', 99) + refusedRec('other-job', now, 'running', 99));
+      }));
+      assert.deepStrictEqual(await runJob(fx.config, 'git-sync', undefined, NO_PROBE), { status: 202, run: null });
+    } finally { fx.done(); }
+  }));
+
   check(await test('a lock held by a live wrapper for the job is 409 already-running and nothing spawns', async () => {
     const fx = fixture();
     try {
@@ -275,7 +335,7 @@ export async function run(): Promise<number> {
       assert.deepStrictEqual(await runJob(fx.config, 'git-sync', undefined, NO_PROBE), { status: 500, error: 'spawn-failed' });
 
       setSpawner(() => {
-        const child = Object.assign(new EventEmitter(), { pid: 1, unref: () => undefined });
+        const child = Object.assign(new EventEmitter(), { pid: 99, unref: () => undefined });
         setImmediate(() => child.emit('error', new Error('boom')));
         return child as unknown as ChildProcess;
       });

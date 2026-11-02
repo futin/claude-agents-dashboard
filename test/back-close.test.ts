@@ -226,6 +226,22 @@ export function run(): number {
     assert.strictEqual(b.count('pushState'), 1);
   })) p++; else f++;
 
+  if (test('a refused Back re-arms: the spent arm\'s teardown never calls back(), and the new arm pushes an entry that closes again', () => {
+    const h = fakeHost();
+    let pops = 0;
+    const first = armBackClose(h.host, () => { pops++; });
+    h.runDeferred();
+    h.firePopstate();
+    assert.strictEqual(pops, 1);
+    first();
+    assert.strictEqual(h.count('back'), 0);
+    armBackClose(h.host, () => { pops++; });
+    h.runDeferred();
+    assert.strictEqual(h.count('pushState'), 2);
+    h.firePopstate();
+    assert.strictEqual(pops, 2);
+  })) p++; else f++;
+
   if (test('browserHost is one host, so every overlay sees the same in-flight back()', () => {
     assert.strictEqual(browserHost(), browserHost());
   })) p++; else f++;

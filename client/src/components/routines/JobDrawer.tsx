@@ -50,9 +50,12 @@ export default function JobDrawer({ mode, row, confirmDelete, existing, ctl, sen
   const readOnly = !ctl.owner;
   const fileName = mode === 'edit' && row ? row.name : name;
 
-  useBackClose(onClose);
+  // Every dismissal without an explicit button reads this, set below once `dirty` is known: unsaved edits survive a stray key, tap or Back.
+  const keepOpen = useRef(false);
+  const [backGen, setBackGen] = useState(0);
+  useBackClose(() => { if (keepOpen.current) setBackGen(g => g + 1); else onClose(); }, backGen);
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape' && !keepOpen.current) onClose(); };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
   }, [onClose]);
@@ -96,6 +99,7 @@ export default function JobDrawer({ mode, row, confirmDelete, existing, ctl, sen
   const errors = serverErrors ?? check?.errors ?? [];
   const diskChanged = mode === 'edit' && row !== null && loaded !== null && row.mtimeMs !== loaded.mtimeMs;
   const dirty = mode === 'new' || (loaded !== null && text !== loaded.text);
+  keepOpen.current = dirty && !readOnly;
   const canSave = !readOnly && !ctl.locked && !saving && !diskChanged && nameErr === null && errors.length === 0 && (mode === 'new' || (loaded !== null && dirty));
 
   const save = async (enabled: boolean | null) => {
@@ -122,7 +126,7 @@ export default function JobDrawer({ mode, row, confirmDelete, existing, ctl, sen
 
   const title = mode === 'new' ? 'New job' : readOnly ? 'View job' : 'Edit job';
   return (
-    <div className="rtn-back" onClick={() => { if (!dirty || readOnly) onClose(); }}>
+    <div className="rtn-back" onClick={() => { if (!keepOpen.current) onClose(); }}>
       <aside className="rtn-drawer" role="dialog" aria-label={title} onClick={e => e.stopPropagation()}>
         <div className="rtn-f-head">
           <h3 className="rtn-dtitle">

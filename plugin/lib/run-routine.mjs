@@ -140,7 +140,7 @@ class Wrapper {
   }
 
   refuse(why, extra = {}) {
-    this.append({ kind: 'refused', job: this.job, at: new Date().toISOString(), trigger: this.trigger, why, ...extra });
+    this.append({ kind: 'refused', job: this.job, at: new Date().toISOString(), trigger: this.trigger, why, pid: process.pid, ...extra });
   }
 
   /** The job, or a refusal reason when the OS job outlived its file (see spec step 1). */
