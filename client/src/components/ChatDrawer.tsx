@@ -170,7 +170,7 @@ export default function ChatDrawer({ session, onClose, spawnAvailable, desktopAv
   const heldPlan = useMemo(() => heldBodyUuid(messages, 'ExitPlanMode', !!plan.pending), [messages, plan.pending]);
   // Off the unfiltered page: the text filter must not hide the turn the suggestion belongs to.
   const suggestion = useMemo(() => latestSuggestion(messages), [messages]);
-  const surfaceInfo = surfacePill(session.surface);
+  const surfaceInfo = surfacePill(session);
   // same 70% threshold the row uses — one context reading, two places.
   const ctxPct = session.contextPct || 0;
   const ctxWarn = ctxPct >= 70;

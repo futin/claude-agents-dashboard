@@ -169,6 +169,41 @@ export function run(): number {
     assert.strictEqual(readSessionPr(file)?.number, 63);
   })) p++; else f++;
 
+  for (const bad of [
+    'javascript:alert(1)',
+    'JAVASCRIPT:alert(1)',
+    ' javascript:alert(1)',
+    'data:text/html,x',
+    'http://github.com/o/r/pull/1',
+    'https://github.com/o/r',
+    'https://github.com/o/r/pull/new/x',
+    'https://github.com/o/r/pull/1?x=1',
+    'https://github.com@evil.example/o/r/pull/1',
+    'https://github.com/o/r/pull/1"><b>',
+  ]) {
+    if (test(`D17. a gitOperation create at ${JSON.stringify(bad)} is no PR`, () => {
+      const file = transcript(bash('gh pr create --fill', 'x', { gitOperation: created(1, bad) }));
+      assert.strictEqual(readSessionPr(file), null);
+    })) p++; else f++;
+  }
+
+  if (test('D18. a rejected create leaves an earlier valid PR the newest', () => {
+    const url = 'https://github.com/o/r/pull/3';
+    const file = transcript(bash('gh pr create --fill', url, { gitOperation: created(3, url) }) + bash('gh pr create --fill', 'x', { gitOperation: created(4, 'javascript:alert(1)') }));
+    assert.strictEqual(readSessionPr(file)?.url, url);
+  })) p++; else f++;
+
+  if (test('D19. a rejected create still decides its call alone: no parse of its text', () => {
+    const file = transcript(bash('gh pr create --fill', 'https://github.com/o/r/pull/5', { gitOperation: created(5, 'javascript:alert(1)') }));
+    assert.strictEqual(readSessionPr(file), null);
+  })) p++; else f++;
+
+  if (test('D20. a gitOperation create on another host with a port is kept with that exact URL', () => {
+    const url = 'https://ghe.example.com:8443/o/r/pull/4';
+    const file = transcript(bash('gh pr create --fill', url, { gitOperation: created(4, url) }));
+    assert.strictEqual(readSessionPr(file)?.url, url);
+  })) p++; else f++;
+
   console.log('\nPassed: ' + p + '  Failed: ' + f + '\n');
   return f;
 }

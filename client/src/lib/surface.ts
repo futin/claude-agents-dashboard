@@ -8,7 +8,7 @@
  * sentence that long drift.
  */
 
-import type { SessionSurface } from '../../../shared/types';
+import type { Session } from '../../../shared/types';
 
 export interface SurfacePill {
   /** Pill text. Lower case; `.ag-pill` upper-cases it in CSS. */
@@ -24,9 +24,15 @@ export interface SurfacePill {
  * is the overwhelming majority of rows, and a pill on every one of them would
  * compete with the fields already printed in `.r1` while telling you nothing
  * you didn't assume. Only a surface that breaks the assumption gets to speak.
+ *
+ * A `desktopOwned` row is silent too. It was imported into the desktop app but not yet continued there, so its transcript still reads `dashboard`
+ * and the row keeps that surface, which the drawer's hand-over needs to say `owned`. The pill's claim, that no other list has the session, stopped
+ * being true at the import. Takes the session rather than its surface so no render site can forget the flag.
  */
-export function surfacePill(surface: SessionSurface): SurfacePill | null {
+export function surfacePill(session: Pick<Session, 'surface' | 'desktopOwned'>): SurfacePill | null {
+  const { surface } = session;
   if (surface === 'dashboard') {
+    if (session.desktopOwned) return null;
     return {
       label: 'dashboard',
       title: 'Headless spawn — this dashboard is the only list it appears in. '

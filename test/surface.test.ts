@@ -13,9 +13,9 @@ export function run(): number {
   let p = 0, f = 0;
 
   if (test('surfacePill: local is silent, the other two speak', () => {
-    assert.strictEqual(surfacePill('local'), null);
-    assert.strictEqual(surfacePill('dashboard')!.label, 'dashboard');
-    assert.strictEqual(surfacePill('cloud')!.label, 'cloud');
+    assert.strictEqual(surfacePill({ surface: 'local' }), null);
+    assert.strictEqual(surfacePill({ surface: 'dashboard' })!.label, 'dashboard');
+    assert.strictEqual(surfacePill({ surface: 'cloud' })!.label, 'cloud');
   })) p++; else f++;
 
   if (test('surfacePill: every pill carries a title — it is the whole point', () => {
@@ -23,21 +23,28 @@ export function run(): number {
     // this session not in my desktop app?". A pill without one is a worse
     // version of no pill.
     for (const s of ['dashboard', 'cloud'] as const) {
-      const pill = surfacePill(s)!;
+      const pill = surfacePill({ surface: s })!;
       assert.ok(pill.title.length > 20, `${s} title too thin: ${pill.title}`);
     }
     // The dashboard tooltip must name the way back in, since that is the
     // question the pill provokes.
-    assert.ok(surfacePill('dashboard')!.title.includes('--resume'));
+    assert.ok(surfacePill({ surface: 'dashboard' })!.title.includes('--resume'));
+  })) p++; else f++;
+
+  if (test('surfacePill: a desktop-owned dashboard row is silent, a plain one still speaks', () => {
+    // Imported into the desktop app, not yet continued there: the transcript still reads `dashboard`, so the row keeps that surface (the drawer's
+    // hand-over reads `owned` off it), but the pill's claim — no other list has this session — is false once the app's sidebar lists it.
+    assert.strictEqual(surfacePill({ surface: 'dashboard', desktopOwned: true }), null);
+    assert.strictEqual(surfacePill({ surface: 'dashboard' })!.label, 'dashboard');
   })) p++; else f++;
 
   if (test('surfacePill covers every value the server can produce', () => {
     // The producer and this renderer are the two halves of the enum. A value
     // added to `sessionSurface` without a case here would render nothing at all
     // — the same silence `local` uses to mean "nothing to say".
-    assert.strictEqual(surfacePill(sessionSurface('sdk-cli'))!.label, 'dashboard');
-    assert.strictEqual(surfacePill(sessionSurface('cli')), null);
-    assert.strictEqual(surfacePill(sessionSurface(null)), null);
+    assert.strictEqual(surfacePill({ surface: sessionSurface('sdk-cli') })!.label, 'dashboard');
+    assert.strictEqual(surfacePill({ surface: sessionSurface('cli') }), null);
+    assert.strictEqual(surfacePill({ surface: sessionSurface(null) }), null);
   })) p++; else f++;
 
   console.log('\nPassed: ' + p + '  Failed: ' + f + '\n');

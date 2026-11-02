@@ -50,7 +50,7 @@ export function Title({ s }: { s: Session }) {
  * handler of their own, so a click on them does what a click on the row does.
  */
 export function Tags({ s, withTitle = true }: { s: Session; withTitle?: boolean }) {
-  const surface = surfacePill(s.surface);
+  const surface = surfacePill(s);
   return (
     <>
       {withTitle && <Title s={s} />}

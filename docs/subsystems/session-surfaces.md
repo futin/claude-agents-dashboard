@@ -39,7 +39,7 @@ than an `isLocalOnly` boolean because `cloud` is already a known third answer:
 | value | means | pill |
 |---|---|---|
 | `local` | an ordinary terminal (B) or desktop-app (A) session — the surface that started it lists it too | none, on purpose |
-| `dashboard` | a headless `-p` run (C/D): **no other list has it** | cyan `dashboard` |
+| `dashboard` | a headless `-p` run (C/D): **no other list has it** | cyan `dashboard`; none once `desktopOwned` (below) |
 | `cloud` | reserved for E. Nothing produces it: a cloud session writes no transcript here, so the scanner cannot see one | grey `cloud` |
 
 It is read off the transcript's own `entrypoint` field — `cli`, `claude-desktop`,
@@ -177,6 +177,10 @@ with the same stat-and-re-read-on-mtime cost as `archivedSessionIds`. Its failur
 row, so `classify` fails open to "not archived"; a wrong "not owned" admits a second writer on one transcript, so this reader treats a record as live
 unless `isArchived` is exactly `true` and only ever adds an id. What it cannot read (no root, an unreadable or malformed record, no string `cliSessionId`)
 it cannot attribute, and contributes nothing. The flag is `true` or absent, never `false`, like `processLive`.
+
+**A `desktopOwned` row shows no `dashboard` pill.** Until the app writes a turn the transcript still reads `claude-agents-dashboard`, so the row keeps
+`surface: 'dashboard'`, which the drawer's hand-over reads to say `owned` ([chat](chat.md)). The pill's claim, that no other list has the session, stopped
+being true at the import, so `surfacePill` (`client/src/lib/surface.ts`) takes the whole session and stays silent for the flag.
 
 ## The two boundaries that will not move from this repo
 

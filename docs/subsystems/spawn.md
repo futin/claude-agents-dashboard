@@ -261,7 +261,7 @@ Once the launch is adopted it is an ordinary row — which was the problem: noth
 said that this session appears in **no other list**, not the desktop app's sidebar (RC or
 not), not `claude.ai`. So `Session.surface`
 (`local | dashboard | cloud`) carries that, and a `sdk-cli` transcript — what `-p` writes
-— renders a cyan `dashboard` pill on the row and in the chat modal's sidecar facts.
+— renders a cyan `dashboard` pill on the row and in the chat modal's sidecar facts, until the desktop app imports the session (`desktopOwned`).
 
 It is derived from the transcript's `entrypoint` field, not from this module's store: the
 store drops an entry at adoption by charter, and a mark that vanished three seconds after
