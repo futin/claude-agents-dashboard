@@ -497,6 +497,24 @@ export function run(): number {
     assert.strictEqual(stepErrLine(step({ tail: null, why: null })), null);
   });
 
+  t('the job drawer: Escape, the backdrop and Back all read one keep-open predicate, and a refused Back re-arms', () => {
+    const source = fs.readFileSync(new URL('../client/src/components/routines/JobDrawer.tsx', import.meta.url), 'utf8');
+    assert.match(source, /keepOpen\.current = dirty && !readOnly;/);
+    assert.match(source, /e\.key === 'Escape' && !keepOpen\.current\) onClose\(\)/);
+    assert.match(source, /className="rtn-back" onClick=\{\(\) => \{ if \(!keepOpen\.current\) onClose\(\); \}\}/);
+    assert.match(source, /useBackClose\(\(\) => \{ if \(keepOpen\.current\) setBackGen\(g => g \+ 1\); else onClose\(\); \}, backGen\)/);
+    const hook = fs.readFileSync(new URL('../client/src/hooks/useBackClose.ts', import.meta.url), 'utf8');
+    assert.match(hook, /latest\.current\(\)\), \[rearm\]\)/);
+  });
+
+  t('the timeout rule lives in shared/routine-file.ts: the form and the boot code keep no copy', () => {
+    const form = fs.readFileSync(new URL('../client/src/lib/routineForm.ts', import.meta.url), 'utf8');
+    assert.ok(!form.includes('([smh])'), 'the grammar is imported');
+    assert.ok(!form.includes("'1h timeout"), 'the default is built from DEFAULT_TIMEOUT_MS');
+    const boot = fs.readFileSync(new URL('../server/lib/routine-boot.ts', import.meta.url), 'utf8');
+    assert.ok(!/const DEFAULT_TIMEOUT_MS\b/.test(boot), 'the default is imported');
+  });
+
   console.log(`\n  ${p} passed, ${f} failed`);
   return f;
 }

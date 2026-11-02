@@ -4,6 +4,7 @@
  * gets the read path and nothing else. Every call `startRoutines` makes goes through `deps`, so a test drives the whole start-up with fakes.
  */
 
+import { DEFAULT_TIMEOUT_MS } from '../../shared/routine-file.js';
 import type { RoutineRun } from '../../shared/types.js';
 import type { Config } from './config.js';
 import { migrateLegacyState, routineDirs } from './routine-config.js';
@@ -40,8 +41,6 @@ export const defaultDeps: RoutineDeps = {
   seedRoutineNotify, notifyRoutineRuns, sendRoutineEvent, foldTickCaps, releaseOwner
 };
 
-/** The spec's default step timeout. A run of a deleted, unknown or invalid job ages out against it rather than staying `running` for ever. */
-export const DEFAULT_TIMEOUT_MS = 60 * 60_000;
 const TIMEOUTS_TTL_MS = 2000;
 
 type LogReader = ReturnType<typeof createLogReader>;

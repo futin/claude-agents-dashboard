@@ -22,6 +22,9 @@ export type RunResult =
   | { status: 409; error: RoutineRunConflict }
   | { status: 500; error: 'spawn-failed' };
 
+/** What the run log can answer for one spawned wrapper. */
+type ReadBack = Extract<RunResult, { status: 202 | 409 }>;
+
 export type StopResult = { status: 204 } | { status: 409; error: 'not-running' };
 
 /** How long Run now waits for the wrapper's `start` record before answering without a run id. */
@@ -42,13 +45,18 @@ function liveLockPid(config: Config, name: string, probe: Probe): number | null 
   return wrapperAlive(pid, name, probe) === true ? pid : null;
 }
 
-/** Each call reads only the log bytes appended since the last one and returns the run id of a manual `start` record for `job` at or after `since`, else null. */
-function createStartWatcher(file: string, job: string, since: number): () => string | null {
+/**
+ * Each call reads only the log bytes appended since the last one and answers from a manual record for `job` at or after `since` written by `pid`, the wrapper
+ * this request spawned: its `start` is the run, its `refused` for `running` means it lost the lock to an overlapping request. Any other record, another
+ * wrapper's above all, answers nothing, and neither does anything at all without a pid. Created before the spawn so its offset predates the child.
+ */
+function createStartWatcher(file: string, job: string, since: number): (pid: number | undefined) => ReadBack | null {
   let offset = 0;
   let ino: number | null = null;
   let pending = '';
   try { const st = fs.statSync(file); offset = st.size; ino = st.ino; } catch { /* no log yet */ }
-  return () => {
+  return pid => {
+    if (pid === undefined) return null;
     let fd: number;
     try { fd = fs.openSync(file, 'r'); } catch { return null; }
     try {
@@ -67,7 +75,9 @@ function createStartWatcher(file: string, job: string, since: number): () => str
     for (const line of lines) {
       let rec: Record<string, unknown>;
       try { rec = JSON.parse(line); } catch { continue; }
-      if (rec.kind === 'start' && rec.job === job && rec.trigger === 'manual' && typeof rec.run === 'string' && Date.parse(String(rec.at)) >= since) return rec.run;
+      if (rec.job !== job || rec.pid !== pid || rec.trigger !== 'manual' || !(Date.parse(String(rec.at)) >= since)) continue;
+      if (rec.kind === 'start' && typeof rec.run === 'string') return { status: 202, run: rec.run };
+      if (rec.kind === 'refused' && rec.why === 'running') return { status: 409, error: 'already-running' };
     }
     return null;
   };
@@ -83,7 +93,9 @@ function validOnly(only: unknown): only is string[] {
 
 /**
  * Launch `name` now, as `--trigger manual`. A paused job runs too: that is how a new job is tried before its toggle installs it. The child's environment is
- * exactly `routineEnv(config)`, not the server's. `run` is null when the wrapper wrote no `start` within 2 s (it refused, or is slow); the spawn still happened.
+ * exactly `routineEnv(config)`, not the server's. `run` is null when the wrapper wrote no `start` within 2 s (it refused for a reason other than `running`, or
+ * is slow); the spawn still happened. An overlapping request can pass the lock check above, since a wrapper locks only once it is up: the one that loses the
+ * lock answers 409 `already-running`, read from its own `refused` record, or `run: null` against a wrapper too old to name itself on that record.
  */
 export async function runJob(config: Config, name: string, only?: unknown, probe: Probe = createProbe()): Promise<RunResult> {
   const pins = only === undefined ? [] : validOnly(only) ? only : null;
@@ -102,19 +114,21 @@ export async function runJob(config: Config, name: string, only?: unknown, probe
   if (pins.length > 0) args.push('--only', ...pins);
   const since = Date.now();
   const watch = createStartWatcher(path.join(routineDirs(config).runs, `${machine}.jsonl`), name, since);
+  let pid: number | undefined;
   try {
     const child = spawnProcess(process.execPath, args, { env: routineEnv(config), detached: true, stdio: 'ignore' });
     // An async spawn failure is an 'error' event; unhandled it would take the server down.
     child.once('error', () => { /* the read-back below times out and answers run: null */ });
     child.unref();
+    pid = child.pid;
   } catch {
     return { status: 500, error: 'spawn-failed' };
   }
 
   const end = since + READBACK_MS;
   for (;;) {
-    const run = watch();
-    if (run !== null) return { status: 202, run };
+    const answer = watch(pid);
+    if (answer !== null) return answer;
     if (Date.now() >= end) return { status: 202, run: null };
     await sleep(POLL_MS);
   }

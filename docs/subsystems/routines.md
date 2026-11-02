@@ -215,7 +215,7 @@ prompt that needs an answer must say what to do instead. The marker is covered i
 | `step-start` | `run`, `step`, `repo`, `cwd`, `at`, `session` (claude only) |
 | `step-end` | `run`, `step`, `at`, `ms`, `exit`, `outcome` (`ok`, `failed`, `skipped`, `timeout`, `stopped`), `why`, `tail` (shell: last 20 lines), `cost`, `tokensIn`, `tokensOut`, `turns`, `model` |
 | `end` | `run`, `at`, `ms`, `ok`, `failed`, `skipped`, `stopped`, `error` (only when the run failed before its first step) |
-| `refused` | `job`, `at`, `trigger`, `why` (`running`, `file gone`, `invalid: <line>: <message>`, `disabled`, `not this machine`), `heldBy` |
+| `refused` | `job`, `at`, `trigger`, `why` (`running`, `file gone`, `invalid: <line>: <message>`, `disabled`, `not this machine`), `pid`, `heldBy` |
 
 `server/lib/routine-log.ts` folds the file into `RoutineRun` (`running`, `ok`, `failed`, `lost`, `refused`). **Lost is derived at read time, never
 written**: a `start` with no `end` whose pid is dead, or alive but not running `run-routine <job>`, is lost. The age rule (older than the job's timeout
@@ -254,6 +254,9 @@ newest dropped time, and nothing at or before `floor` pushes. The first shape, a
 
 `POST /api/routines/:name/run` spawns the wrapper detached with `--trigger manual` through `spawn.ts`'s `spawnProcess`, with exactly `routineEnv(config)` as
 its environment, then reads the run id back from the log for up to 2 s (`READBACK_MS`) and answers `202 {run}`; `run` is `null` if the log had nothing yet.
+Only records carrying the spawned child's pid count, because two overlapping requests can both pass the lock check before either wrapper locks: the one whose
+wrapper loses the lock answers `409 already-running` from that wrapper's `refused` record instead of the other's run id. Any other refusal still reads as
+`run: null`, and so does this one against an installed wrapper older than the `pid` on `refused`.
 A missing or empty body, or a body without `only`, is a whole run. An `only` that is not an array of non-empty strings, is `[]`, has more than 200 entries
 (`ONLY_MAX`), or has an element starting with `-` or containing a control character is `400 bad-only` and nothing spawns; a body that is not valid JSON is
 `400 bad body`. `POST /api/routines/:name/stop` sends SIGTERM to the pid in the lock file after the same command-line check the wrapper uses.
@@ -285,6 +288,8 @@ The owner's pin routes rewrite `pins.json` after every pin change, so a fan-out 
 The Routines section, second in the rail, `client/src/components/routines/`; its two pages, Jobs and Runs, are the rail's sub-items (`routinesTab`). `RoutinesView` owns the `/api/routines` poll (`useRoutines`, on
 `settings.refreshMs`, through `createPollSeq` so a stale answer never lands over a newer one), the single write helper (`useRoutineWrite`: one status
 line under the toolbar, one `busy` key so only the clicked control greys out, and a re-poll after every success), the drawer and the ChatDrawer.
+The drawer guards unsaved edits: while it is dirty, Escape, the backdrop and the browser's Back all leave it open, with no prompt, and only Save, Delete or
+Cancel leave. A New job drawer counts as dirty from the start. Back re-arms after a refusal (`useBackClose`'s `rearm`), since that press spent the history entry.
 
 - **Jobs:** the stats band (`StatsBand`) and the ledger (`JobLedger`, one row per file, with `JobFold` for the unfolded stats and last three runs and
   `JobMenu` for Edit, Run now on one repo, Pause or Resume, Reveal in Finder, Copy launchd label and Delete).
