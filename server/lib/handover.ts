@@ -87,12 +87,23 @@ export function handOverFailedIds(): ReadonlySet<string> {
 
 const timers = new Map<string, ReturnType<typeof setTimeout>>();
 
+type HandOverTimer = (callback: () => void, ms: number) => ReturnType<typeof setTimeout>;
+
+const defaultArm: HandOverTimer = (callback, ms) => setTimeout(callback, ms);
+
+let arm: HandOverTimer = defaultArm;
+
+/** Test seam: how the watch arms its next poll. `null` restores the real `setTimeout`. */
+export function overrideHandOverTimer(fn: HandOverTimer | null): void {
+  arm = fn ?? defaultArm;
+}
+
 /** Start watching a desktop launch. A second call for the same id is a no-op. The timer is unref'd, so a watch never holds the process open. */
 export function watchHandOver(id: string, now: number = Date.now()): void {
   if (timers.has(id)) return;
   const w: HandOverWatch = { id, startedAtMs: now, settledMtimeMs: null };
   const schedule = (): void => {
-    const timer = setTimeout(() => {
+    const timer = arm(() => {
       stepHandOver(w).then(
         step => { if (step === 'wait' && timers.has(id)) schedule(); else timers.delete(id); },
         e => { timers.delete(id); markHandOverFailed(id); console.error('[dashboard] desktop hand-over watch failed:', (e as Error).message); }
