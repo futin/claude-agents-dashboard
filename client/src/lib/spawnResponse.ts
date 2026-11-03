@@ -21,6 +21,9 @@ export function parseSpawnResponse(body: unknown): SpawnResponse | null {
   return null;
 }
 
+/** A 200 whose body cannot be read: the launch may have run, so this never says it failed. */
+export const UNREADABLE_LAUNCH_REPLY = 'The launch reply could not be read — check Sessions before trying again.';
+
 /** What one launch POST means to `useSpawn`. A flag key left out means "leave as is". */
 export interface SpawnOutcome {
   response: SpawnResponse | null;
@@ -43,7 +46,7 @@ export function spawnOutcome(result: WriteResult): SpawnOutcome {
   const flags = { needsToken: false, readOnly: false };
   if (result.ok) {
     const response = parseSpawnResponse(result.body);
-    return { response, error: response ? null : 'The launch reply could not be read — check Sessions before trying again.', ...flags };
+    return { response, error: response ? null : UNREADABLE_LAUNCH_REPLY, ...flags };
   }
   return { response: null, error: replyError(result.body) ?? `Launch failed (${result.status}).`, ...flags };
 }

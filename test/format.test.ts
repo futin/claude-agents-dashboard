@@ -72,28 +72,46 @@ export function run(): number {
     assert.strictEqual(formatAgo(Date.now()), '0s');
   })) p++; else f++;
 
-  // Local parts, so these hold in any TZ. The default locale decides 12- or 24-hour output, so each case accepts exactly its two spellings: a looser match
-  // would miss the lower-casing and the space removal.
+  // Local parts, so these hold in any TZ. The default locale decides the weekday's language and the hour's shape ("Do 14:14", "Wed 0:10"), so the cases spell
+  // what they expect in that locale, and the en-US case pins the exact text.
   const resetAt = (now: Date, reset: Date): string => formatResetTime(reset.toISOString(), now.getTime());
-  const oneOf = (actual: string, ...spellings: string[]): void => assert.ok(spellings.includes(actual), actual);
+  const clock = (d: Date): string => d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }).toLowerCase().replace(' ', '');
+  const dayAndClock = (d: Date): string => d.toLocaleDateString([], { weekday: 'short' }) + ' ' + clock(d);
 
   if (test('formatResetTime: a reset later today has no weekday', () => {
-    oneOf(resetAt(new Date(2026, 10, 3, 10, 0), new Date(2026, 10, 3, 14, 14)), '2:14pm', '14:14');
+    const reset = new Date(2026, 10, 3, 14, 14);
+    assert.strictEqual(resetAt(new Date(2026, 10, 3, 10, 0), reset), clock(reset));
     // Two different days: a formatResetTime that read the real clock could agree with only one of them.
-    oneOf(resetAt(new Date(2026, 2, 10, 10, 0), new Date(2026, 2, 10, 14, 14)), '2:14pm', '14:14');
+    const other = new Date(2026, 2, 10, 14, 14);
+    assert.strictEqual(resetAt(new Date(2026, 2, 10, 10, 0), other), clock(other));
   })) p++; else f++;
 
   if (test('formatResetTime: a reset on a later day leads with its weekday', () => {
-    oneOf(resetAt(new Date(2026, 10, 3, 10, 0), new Date(2026, 10, 5, 14, 14)), 'Thu 2:14pm', 'Thu 14:14');
+    const reset = new Date(2026, 10, 5, 14, 14);
+    assert.strictEqual(resetAt(new Date(2026, 10, 3, 10, 0), reset), dayAndClock(reset));
   })) p++; else f++;
 
   if (test('formatResetTime: under 24 hours away but another calendar day still gets a weekday', () => {
-    oneOf(resetAt(new Date(2026, 10, 3, 23, 50), new Date(2026, 10, 4, 0, 10)), 'Wed 12:10am', 'Wed 00:10');
+    const reset = new Date(2026, 10, 4, 0, 10);
+    assert.strictEqual(resetAt(new Date(2026, 10, 3, 23, 50), reset), dayAndClock(reset));
   })) p++; else f++;
 
   if (test('formatResetTime: the same weekday a week on is still prefixed, so the comparison is the date', () => {
-    oneOf(resetAt(new Date(2026, 10, 3, 10, 0), new Date(2026, 10, 10, 14, 14)), 'Tue 2:14pm', 'Tue 14:14');
+    const reset = new Date(2026, 10, 10, 14, 14);
+    assert.strictEqual(resetAt(new Date(2026, 10, 3, 10, 0), reset), dayAndClock(reset));
   })) p++; else f++;
+
+  // CI's locale. Elsewhere there is no fixed spelling to hold the function to, so this one case says so rather than failing a machine set to another language.
+  if (new Intl.DateTimeFormat().resolvedOptions().locale === 'en-US') {
+    if (test('formatResetTime in en-US: lower-case, no space before am/pm', () => {
+      assert.strictEqual(resetAt(new Date(2026, 10, 3, 10, 0), new Date(2026, 10, 3, 14, 14)), '2:14pm');
+      assert.strictEqual(resetAt(new Date(2026, 10, 3, 10, 0), new Date(2026, 10, 5, 14, 14)), 'Thu 2:14pm');
+      assert.strictEqual(resetAt(new Date(2026, 10, 3, 23, 50), new Date(2026, 10, 4, 0, 10)), 'Wed 12:10am');
+      assert.strictEqual(resetAt(new Date(2026, 10, 3, 10, 0), new Date(2026, 10, 10, 14, 14)), 'Tue 2:14pm');
+    })) p++; else f++;
+  } else {
+    console.log('  - formatResetTime in en-US: skipped, this locale is ' + new Intl.DateTimeFormat().resolvedOptions().locale);
+  }
 
   if (test('formatResetTime still reads the clock with one argument', () => {
     const iso = new Date().toISOString();

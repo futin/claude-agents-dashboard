@@ -5,6 +5,7 @@
 
 import type { HealthResponse, RepoGitStats, Session, SessionsResponse, SpawnRequest } from '../../../shared/types';
 import type { Settings } from './settings';
+import { UNREADABLE_LAUNCH_REPLY } from './spawnResponse';
 import { NAME_CAP } from './spawnOptions';
 
 export type OkRepo = Extract<RepoGitStats, { state: 'ok' }>;
@@ -136,5 +137,7 @@ export function syncFailedText(name: string, error: string | null): string {
 }
 
 export function syncLaunchErrorText(name: string, error: string): string {
+  // The sync may be running: "couldn't start" would invite a second one.
+  if (error === UNREADABLE_LAUNCH_REPLY) return `Sync in ${name}: ${error}`;
   return `Sync in ${name} couldn't start: ${error}`;
 }
