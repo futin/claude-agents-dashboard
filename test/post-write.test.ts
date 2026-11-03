@@ -1,6 +1,6 @@
 import assert from 'node:assert';
 
-import { postWrite } from '../client/src/lib/postWrite.js';
+import { postWrite, replyError } from '../client/src/lib/postWrite.js';
 
 function test(name: string, fn: () => Promise<void>): Promise<boolean> {
   return fn().then(
@@ -82,6 +82,17 @@ export async function run(): Promise<number> {
     await postWrite('/api/x', { token: 't', fetchImpl: noBody.fetchImpl });
     assert.deepStrictEqual(noBody.calls[0].init.headers, { Authorization: 'Bearer t' });
     assert.strictEqual(noBody.calls[0].init.body, undefined);
+  }));
+
+  tally(await test('replyError reads a string error, the empty one included', async () => {
+    assert.strictEqual(replyError({ error: 'x' }), 'x');
+    assert.strictEqual(replyError({ error: '' }), '');
+  }));
+
+  tally(await test('replyError is undefined for anything but a string error on an object', async () => {
+    for (const body of [{ error: 42 }, { error: null }, {}, null, undefined, 'text', []]) {
+      assert.strictEqual(replyError(body), undefined, JSON.stringify(body));
+    }
   }));
 
   console.log(`\n  ${p} passed, ${f} failed`);

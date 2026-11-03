@@ -1,8 +1,8 @@
-/** `refusalKind`: tell a read-only network apart from a token refusal, off the 403's status and body alone. */
+/** `refusalKind`: tell a read-only network apart from a token refusal, off the 403's status and body alone. `refusalFlags`: what each kind sets. */
 
 import assert from 'node:assert';
 
-import { READ_ONLY_TEXT, refusalKind } from '../client/src/lib/writeRefusal.js';
+import { READ_ONLY_TEXT, refusalFlags, refusalKind } from '../client/src/lib/writeRefusal.js';
 
 function test(name: string, fn: () => void): boolean {
   try { fn(); console.log('  ✓ ' + name); return true; }
@@ -30,6 +30,12 @@ export function run(): number {
     test('any status but 403 is not a refusal', () => {
       assert.equal(refusalKind(404, { error: 'read-only from this network' }), null);
       assert.equal(refusalKind(200, {}), null);
+    }),
+    test('a token refusal asks for the token and clears read-only', () => {
+      assert.deepStrictEqual(refusalFlags('token'), { needsToken: true, readOnly: false });
+    }),
+    test('a read-only refusal sets read-only and clears the token prompt', () => {
+      assert.deepStrictEqual(refusalFlags('read-only'), { needsToken: false, readOnly: true });
     }),
     test('the read-only sentence is the spec copy', () => {
       assert.equal(READ_ONLY_TEXT, 'Read-only from this network: open the dashboard through Tailscale, or set ANSWER_TOKEN.');

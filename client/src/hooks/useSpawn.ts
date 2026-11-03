@@ -1,9 +1,8 @@
 import { useCallback, useState } from 'react';
 
 import { useAnswerToken } from './useAnswerToken';
-import { postWrite, replyError } from '../lib/postWrite';
-import { parseSpawnResponse } from '../lib/spawnResponse';
-import { READ_ONLY_TEXT } from '../lib/writeRefusal';
+import { postWrite } from '../lib/postWrite';
+import { spawnOutcome } from '../lib/spawnResponse';
 import type { SpawnRequest, SpawnResponse } from '../../../shared/types';
 
 export interface SpawnControl {
@@ -13,7 +12,7 @@ export interface SpawnControl {
    */
   launch: (req: SpawnRequest) => Promise<SpawnResponse | null>;
   pending: boolean;
-  /** A reason to show the user — a validation error from the server, or a network failure. Cleared on the next attempt. */
+  /** A reason to show the user — a validation error from the server, a network failure, or a 200 whose reply cannot be read. Cleared on the next attempt. */
   error: string | null;
   /** Set when the server refused the token — same meaning as useRemoteAnswer's flag. */
   needsToken: boolean;
@@ -48,23 +47,11 @@ export function useSpawn(): SpawnControl {
     setPending(true);
     setError(null);
     try {
-      const result = await postWrite('/api/spawn', { token, body: req });
-      if (result.status === 0) {
-        setError('Could not reach the server.');
-        return null;
-      }
-      if (result.refusal) {
-        const readOnlyNow = result.refusal === 'read-only';
-        setReadOnly(readOnlyNow);
-        setNeedsToken(!readOnlyNow);
-        if (readOnlyNow) setError(READ_ONLY_TEXT);
-        return null;
-      }
-      setNeedsToken(false);
-      setReadOnly(false);
-      if (result.ok) return parseSpawnResponse(result.body);
-      setError(replyError(result.body) ?? `Launch failed (${result.status}).`);
-      return null;
+      const outcome = spawnOutcome(await postWrite('/api/spawn', { token, body: req }));
+      setError(outcome.error);
+      if (outcome.needsToken !== undefined) setNeedsToken(outcome.needsToken);
+      if (outcome.readOnly !== undefined) setReadOnly(outcome.readOnly);
+      return outcome.response;
     } finally {
       setPending(false);
     }

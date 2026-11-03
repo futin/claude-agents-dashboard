@@ -1,6 +1,6 @@
 import assert from 'node:assert';
 
-import { ageAt, fmtBytes, fmtDuration, fmtTok, formatAgo } from '../client/src/lib/format.js';
+import { ageAt, fmtBytes, fmtDuration, fmtTok, formatAgo, formatResetTime } from '../client/src/lib/format.js';
 
 function test(name: string, fn: () => void): boolean {
   try { fn(); console.log('  ✓ ' + name); return true; }
@@ -70,6 +70,34 @@ export function run(): number {
     const t = Date.now() - 3 * 3_600_000;
     assert.strictEqual(formatAgo(t), '3h');
     assert.strictEqual(formatAgo(Date.now()), '0s');
+  })) p++; else f++;
+
+  // Local parts, so these hold in any TZ. The default locale decides 12- or 24-hour output, so each case accepts exactly its two spellings: a looser match
+  // would miss the lower-casing and the space removal.
+  const resetAt = (now: Date, reset: Date): string => formatResetTime(reset.toISOString(), now.getTime());
+  const oneOf = (actual: string, ...spellings: string[]): void => assert.ok(spellings.includes(actual), actual);
+
+  if (test('formatResetTime: a reset later today has no weekday', () => {
+    oneOf(resetAt(new Date(2026, 10, 3, 10, 0), new Date(2026, 10, 3, 14, 14)), '2:14pm', '14:14');
+    // Two different days: a formatResetTime that read the real clock could agree with only one of them.
+    oneOf(resetAt(new Date(2026, 2, 10, 10, 0), new Date(2026, 2, 10, 14, 14)), '2:14pm', '14:14');
+  })) p++; else f++;
+
+  if (test('formatResetTime: a reset on a later day leads with its weekday', () => {
+    oneOf(resetAt(new Date(2026, 10, 3, 10, 0), new Date(2026, 10, 5, 14, 14)), 'Thu 2:14pm', 'Thu 14:14');
+  })) p++; else f++;
+
+  if (test('formatResetTime: under 24 hours away but another calendar day still gets a weekday', () => {
+    oneOf(resetAt(new Date(2026, 10, 3, 23, 50), new Date(2026, 10, 4, 0, 10)), 'Wed 12:10am', 'Wed 00:10');
+  })) p++; else f++;
+
+  if (test('formatResetTime: the same weekday a week on is still prefixed, so the comparison is the date', () => {
+    oneOf(resetAt(new Date(2026, 10, 3, 10, 0), new Date(2026, 10, 10, 14, 14)), 'Tue 2:14pm', 'Tue 14:14');
+  })) p++; else f++;
+
+  if (test('formatResetTime still reads the clock with one argument', () => {
+    const iso = new Date().toISOString();
+    assert.strictEqual(formatResetTime(iso), formatResetTime(iso, Date.now()));
   })) p++; else f++;
 
   console.log(`\nformat: ${p} passed, ${f} failed`);

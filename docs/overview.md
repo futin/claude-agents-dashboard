@@ -362,11 +362,11 @@ client/src/
                   polls share, and `pollFetch`, the 30s bound every guarded poll's request carries),
                   heldBody (which timeline body a pinned panel folds), markdown, configsEntries,
                   format, settings, persistedReset (Settings › Reset's reach into mounted usePersistedState holders),
-                  sections, deepLink, dictation, openFolder (the Open folder key's status → note), spawnOptions, spawnResponse (`parseSpawnResponse`, the `POST /api/spawn` 200 body → its `SpawnResponse` branch), launchSurface (which launch surfaces the form offers, its initial pick, and the desktop copy), pins, resume, pace, usageProfile,
+                  sections, deepLink, dictation, openFolder (the Open folder key's status → note), spawnOptions, spawnResponse (`parseSpawnResponse`, the `POST /api/spawn` 200 body → its `SpawnResponse` branch; `spawnOutcome`, what `useSpawn` applies for a result), launchSurface (which launch surfaces the form offers, its initial pick, and the desktop copy), pins, resume, pace, usageProfile,
                   usageRatesFormat, usageHistory (the History tab's step path, ticks and figures), panelCollapse, surface, walkChart (the headroom
                   chart's geometry), walkRows (the same walk as day rows), holds,
                   composer (that keyboard's pure rules and the session's latest `wrap_up` suggestion), modelLabel (`claude-opus-5-5` → `Opus 5.5`),
-                  notifyRows (Settings' push-event rows), writeRefusal (a 403's token vs read-only-network kind), postWrite (every write hook's POST and its one read of the reply), pinWrite (what a pin write's reply means to `usePins`),
+                  notifyRows (Settings' push-event rows), writeRefusal (a 403's token vs read-only-network kind, and the flags each kind sets), postWrite (every write hook's POST and its one read of the reply), pinWrite (what a pin write's reply means to `usePins`),
                   pendingReply (the reply panels' phase machine), writeStatus (Settings › Local ›
                   Connection's write-access line),
                   webNotify, backClose, clipboard (copyText with the execCommand fallback), stopControl, apiError (the row's badge text for an API-error turn end), triage (the board/triage piles), answerToken (the token store + authHeaders),

@@ -7,6 +7,7 @@
  */
 
 import type { WriteResult } from './postWrite';
+import { refusalFlags } from './writeRefusal';
 
 export type ReplyOutcome = 'ok' | 'gone' | 'token' | 'read-only' | 'error';
 
@@ -35,8 +36,8 @@ export function replyOutcome(result: WriteResult): ReplyOutcome {
 export function afterSend<S extends string>(outcome: ReplyOutcome, sent: S): ReplyPatch<S> {
   switch (outcome) {
     case 'ok': return { phase: sent, needsToken: false, readOnly: false };
-    case 'token': return { phase: 'idle', needsToken: true, readOnly: false };
-    case 'read-only': return { phase: 'idle', readOnly: true, needsToken: false };
+    case 'token':
+    case 'read-only': return { phase: 'idle', ...refusalFlags(outcome) };
     case 'gone': return { phase: 'gone' };
     default: return { phase: 'idle' };
   }

@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useAnswerToken } from './useAnswerToken';
 import { postWrite } from '../lib/postWrite';
 import { settingsSaveFailure } from '../lib/serverSettingsSave';
+import { refusalFlags } from '../lib/writeRefusal';
 import type { NotifyPatch, ServerSettings, ServerSettingsPatch } from '../../../shared/types';
 
 /** What a caller can ask about: any key a save can carry, the notify policy included. */
@@ -78,9 +79,9 @@ export function useServerSettings(): ServerSettingsControl {
       // A network failure is status 0: the row keeps the server's last number, and the page says why.
       setSaveError(settingsSaveFailure(result.status));
       if (result.refusal) {
-        const readOnlyNow = result.refusal === 'read-only';
-        setReadOnly(readOnlyNow);
-        setNeedsToken(!readOnlyNow);
+        const flags = refusalFlags(result.refusal);
+        setReadOnly(flags.readOnly);
+        setNeedsToken(flags.needsToken);
       } else if (result.ok) {
         setNeedsToken(false);
         setReadOnly(false);
