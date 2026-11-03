@@ -1,6 +1,7 @@
 /**
- * `lib/handover.ts`: one poll of a desktop launch's hand-over watch, driven by hand (`stepHandOver`), never by its timer. The launch store holds a fake
- * child (`setSpawner`), the transcript is a tmpdir JSONL under a fixture HOME, and `open` is a recording runner (`overrideDesktop`).
+ * `lib/handover.ts`: a desktop launch's hand-over watch, one poll at a time: by hand (`stepHandOver`), or through the loop with a recording timer
+ * (`overrideHandOverTimer`). The launch store holds a fake child (`setSpawner`), the transcript is a tmpdir JSONL under a fixture HOME, and `open` is a
+ * recording runner (`overrideDesktop`).
  */
 
 import assert from 'node:assert';
@@ -10,7 +11,10 @@ import os from 'node:os';
 import path from 'node:path';
 
 import { handOverInFlight, overrideDesktop, reserveDesktopLaunch, resetDesktopRail, DESKTOP_RAIL_MAX } from '../server/lib/desktop.js';
-import { HANDOVER_MAX_MS, handOverFailedIds, markHandOverFailed, resetHandOvers, stepHandOver, type HandOverWatch } from '../server/lib/handover.js';
+import {
+  HANDOVER_MAX_MS, HANDOVER_POLL_MS, handOverFailedIds, markHandOverFailed, overrideHandOverTimer, resetHandOvers, stepHandOver, watchHandOver, watchedHandOvers,
+  type HandOverWatch
+} from '../server/lib/handover.js';
 import { launch, resetLaunches, setSpawner } from '../server/lib/spawn.js';
 import type { Config } from '../server/lib/config.js';
 import type { ChildProcess } from 'node:child_process';
@@ -25,23 +29,30 @@ class FakeChild extends EventEmitter {
   unref(): this { return this; }
 }
 
-interface Fixture { home: string; opened: string[][]; children: FakeChild[]; reject: boolean }
+interface ArmedTimer { callback: () => void; ms: number }
+
+interface Fixture { home: string; opened: string[][]; children: FakeChild[]; reject: boolean; armed: ArmedTimer[] }
 
 async function test(name: string, fn: (f: Fixture) => Promise<void>): Promise<boolean> {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), 'handover-test-'));
   const prevHome = process.env.HOME;
-  const f: Fixture = { home, opened: [], children: [], reject: false };
+  const f: Fixture = { home, opened: [], children: [], reject: false, armed: [] };
   process.env.HOME = home;
   resetLaunches(); resetDesktopRail(); resetHandOvers();
   setSpawner(() => { const c = new FakeChild(); f.children.push(c); return c as unknown as ChildProcess; });
   overrideDesktop({
     run: async (_cmd, args) => { f.opened.push(args.slice()); if (f.reject) throw new Error('LSOpenURLsWithRole() failed'); }
   });
+  // `resetHandOvers` hands this to `clearTimeout`, which ignores a plain object.
+  overrideHandOverTimer((callback, ms) => {
+    f.armed.push({ callback, ms });
+    return { unref(): void { /* nothing to hold open */ } } as unknown as ReturnType<typeof setTimeout>;
+  });
   try { await fn(f); console.log('  ✓ ' + name); return true; }
   catch (e) { console.log('  ✗ ' + name); console.log('    ' + (e as Error).message); return false; }
   finally {
     if (prevHome === undefined) delete process.env.HOME; else process.env.HOME = prevHome;
-    setSpawner(null); overrideDesktop({ run: null });
+    setSpawner(null); overrideDesktop({ run: null }); overrideHandOverTimer(null);
     resetLaunches(); resetDesktopRail(); resetHandOvers();
     fs.rmSync(home, { recursive: true, force: true });
   }
@@ -68,6 +79,18 @@ function write(f: Fixture, id: string, records: object[]): void {
   fs.writeFileSync(file, records.map(r => JSON.stringify({ cwd: f.home, timestamp: '2026-10-30T10:00:00.000Z', ...r })).join('\n') + '\n');
   clock += 10;
   fs.utimesSync(file, clock, clock);
+}
+
+/** One `setImmediate` turn: `open` runs through the fixture's async runner, so every promise a poll involves has settled by the end of it. */
+const settle = (): Promise<void> => new Promise(resolve => setImmediate(resolve));
+
+/** Fire the watch's one armed poll and let it finish. */
+async function firePoll(f: Fixture): Promise<void> {
+  assert.equal(f.armed.length, 1, 'exactly one timer is armed');
+  const [timer] = f.armed.splice(0);
+  assert.equal(timer.ms, HANDOVER_POLL_MS);
+  timer.callback();
+  await settle();
 }
 
 export async function run(): Promise<number> {
@@ -193,6 +216,66 @@ export async function run(): Promise<number> {
     assert.equal(handOverFailedIds().size, 1);
     resetHandOvers();
     assert.equal(handOverFailedIds().size, 0);
+  }));
+
+  check(await test('the watch re-polls a fresh launch through wait, wait, hand-over, then stops', async f => {
+    const { id } = launched(f);
+    watchHandOver(id);
+    watchHandOver(id);
+    assert.equal(f.armed.length, 1, 'a second watch of the same id arms nothing');
+    assert.deepEqual(watchedHandOvers(), [id]);
+    assert.deepEqual(f.opened, []);
+    write(f, id, [user, toolUse]);
+    await firePoll(f);
+    assert.equal(f.armed.length, 1, 'the turn is still running');
+    assert.deepEqual(f.opened, []);
+    write(f, id, [user, endTurn]);
+    await firePoll(f);
+    assert.equal(f.armed.length, 1, 'the settle poll');
+    assert.deepEqual(f.opened, []);
+    await firePoll(f);
+    assert.deepEqual(f.opened, [[`claude://resume?session=${id}`]]);
+    assert.equal(f.armed.length, 0);
+    assert.deepEqual(watchedHandOvers(), []);
+  }));
+
+  check(await test('a poll that gives up ends the watch', async f => {
+    const { id } = launched(f);
+    watchHandOver(id);
+    f.children[0].emit('exit', 1, null);
+    write(f, id, [user, endTurn]);
+    await firePoll(f);
+    assert.equal(f.armed.length, 0);
+    assert.deepEqual(watchedHandOvers(), []);
+    assert.deepEqual(f.opened, []);
+  }));
+
+  check(await test('a full rail keeps the watch polling until a slot frees', async f => {
+    const { id } = launched(f);
+    watchHandOver(id);
+    write(f, id, [user, endTurn]);
+    await firePoll(f);
+    for (let i = 0; i < DESKTOP_RAIL_MAX; i++) assert.equal(reserveDesktopLaunch(null).status, 'ok');
+    await firePoll(f);
+    assert.equal(f.armed.length, 1, 'the rail is full, so it polls again');
+    assert.deepEqual(f.opened, []);
+    assert.deepEqual(watchedHandOvers(), [id]);
+    resetDesktopRail();
+    await firePoll(f);
+    assert.deepEqual(f.opened, [[`claude://resume?session=${id}`]]);
+    assert.equal(f.armed.length, 0);
+  }));
+
+  check(await test('a watch dropped while a poll is in flight does not come back', async f => {
+    const { id } = launched(f);
+    watchHandOver(id);
+    const [timer] = f.armed.splice(0);
+    // No transcript, so this poll answers `wait`; the drop lands before its promise settles.
+    timer.callback();
+    resetHandOvers();
+    await settle();
+    assert.equal(f.armed.length, 0);
+    assert.deepEqual(watchedHandOvers(), []);
   }));
 
   console.log(`\nhandover: ${ok}/${total} passed`);

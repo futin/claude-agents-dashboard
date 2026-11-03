@@ -32,7 +32,7 @@ import {
 } from '../server/lib/spawn.js';
 import { setPsRunner } from '../server/lib/scan.js';
 import { resetArchivedCache } from '../server/lib/archived.js';
-import { overrideDesktop, resetDesktopProbe, resetDesktopRail } from '../server/lib/desktop.js';
+import { DESKTOP_RAIL_MAX, handOverInFlight, overrideDesktop, reserveDesktopLaunch, resetDesktopProbe, resetDesktopRail } from '../server/lib/desktop.js';
 import { handOverFailedIds, markHandOverFailed, resetHandOvers, watchedHandOvers } from '../server/lib/handover.js';
 import { withServer } from './api-harness.js';
 import type { Spawner } from '../server/lib/spawn.js';
@@ -673,6 +673,19 @@ export async function run(): Promise<number> {
       assert.equal(second.status, 409);
       assert.equal(second.json?.error, 'already resuming');
       assert.deepEqual(d.calls.map(c => c.args), [[`claude://resume?session=${RES_ID}`]]);
+    });
+  }));
+
+  check(await testAsync('a hand-over on a full rail is 429 "too many launches in flight", opens nothing, and leaves no mark behind', async () => {
+    await withDesktop('CLAUDE_BIN=/bin/echo\n', 'darwin', async (cfg, d) => {
+      for (let i = 0; i < DESKTOP_RAIL_MAX; i++) assert.equal(reserveDesktopLaunch(null).status, 'ok');
+      const refused = await spawnReq(cfg, HAND_OVER);
+      assert.equal(refused.status, 429);
+      assert.equal(refused.json?.error, 'too many launches in flight');
+      assert.deepEqual(d.calls, []);
+      assert.equal(handOverInFlight(RES_ID), false);
+      resetDesktopRail();
+      assert.equal((await spawnReq(cfg, HAND_OVER)).status, 200);
     });
   }));
 
