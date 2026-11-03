@@ -2,7 +2,7 @@ import { useCallback, useState } from 'react';
 
 import { useAnswerToken } from './useAnswerToken';
 import { postWrite, replyError } from '../lib/postWrite';
-import { READ_ONLY_TEXT } from '../lib/writeRefusal';
+import { READ_ONLY_TEXT, refusalFlags } from '../lib/writeRefusal';
 
 export interface StopControl {
   /**
@@ -44,9 +44,8 @@ export function useStopSession(): StopControl {
         return false;
       }
       if (result.refusal) {
-        const readOnlyNow = result.refusal === 'read-only';
-        setNeedsToken(!readOnlyNow);
-        if (readOnlyNow) setError(READ_ONLY_TEXT);
+        setNeedsToken(refusalFlags(result.refusal).needsToken);
+        if (result.refusal === 'read-only') setError(READ_ONLY_TEXT);
         return false;
       }
       setNeedsToken(false);

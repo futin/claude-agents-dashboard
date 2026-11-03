@@ -12,3 +12,8 @@ export function refusalKind(status: number, body: unknown): 'token' | 'read-only
   if (body !== null && typeof body === 'object' && (body as { error?: unknown }).error === 'read-only from this network') return 'read-only';
   return 'token';
 }
+
+/** The flags a refusal sets: each kind sets its own and clears the other. */
+export function refusalFlags(refusal: 'token' | 'read-only'): { needsToken: boolean; readOnly: boolean } {
+  return { needsToken: refusal === 'token', readOnly: refusal === 'read-only' };
+}

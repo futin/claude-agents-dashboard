@@ -585,6 +585,53 @@ export function run(): number {
     assert.deepStrictEqual(s.activity, { tool: 'Bash', detail: 'ls' });
   })) p++; else f++;
 
+  // lastSessionEffort's window. A partial first line usually fails JSON.parse and is skipped anyway, so a plain oversized fixture would not prove the skip:
+  // these size the padding so the window opens exactly on a parseable record.
+  const WINDOW = tr.DEFAULT_TAIL_BYTES;
+  const rawFixture = (text: string): string => {
+    const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'cad-tr-')), 's.jsonl');
+    fs.writeFileSync(file, text);
+    return file;
+  };
+  /** One newline-ended line with no `"effort"` in it, exactly `bytes` long. */
+  const padLine = (bytes: number): string => {
+    const shell = JSON.stringify({ type: 'progress', pad: '' }).length + 1;
+    return JSON.stringify({ type: 'progress', pad: 'a'.repeat(bytes - shell) }) + '\n';
+  };
+  const effLine = (effort: string): string => JSON.stringify(EFF(effort)) + '\n';
+
+  if (test('lastSessionEffort: a truncated tail skips its first line, even one that parses', () => {
+    const first = effLine('max');
+    const file = rawFixture('x' + first + padLine(WINDOW - first.length));
+    const tail = tr.readTail(file, WINDOW)!;
+    assert.strictEqual(tail.truncated, true, 'fixture must truncate');
+    assert.ok(tail.text.startsWith('{'), 'fixture must open the window on a parseable fragment');
+    assert.strictEqual(tr.lastSessionEffort(file), null);
+  })) p++; else f++;
+
+  if (test('lastSessionEffort: the first line of an untruncated file is read', () => {
+    const first = effLine('max');
+    const file = rawFixture(first + padLine(WINDOW - first.length));
+    assert.strictEqual(tr.readTail(file, WINDOW)!.truncated, false, 'fixture must fit the window exactly');
+    assert.strictEqual(tr.lastSessionEffort(file), 'max');
+  })) p++; else f++;
+
+  if (test('lastSessionEffort: an effort older than the window is not found', () => {
+    const file = rawFixture(effLine('high') + padLine(WINDOW + 1024));
+    assert.strictEqual(tr.readTail(file, WINDOW)!.text.includes('"effort"'), false, 'fixture must bury the effort');
+    assert.strictEqual(tr.lastSessionEffort(file), null);
+  })) p++; else f++;
+
+  if (test('lastSessionEffort: an oversized file reads the effort inside the window', () => {
+    assert.strictEqual(tr.lastSessionEffort(rawFixture(effLine('high') + padLine(WINDOW + 1024) + effLine('low'))), 'low');
+  })) p++; else f++;
+
+  if (test('lastSessionEffort: a missing file, an empty one, and one with no effort are all null', () => {
+    assert.strictEqual(tr.lastSessionEffort(path.join(os.tmpdir(), 'cad-tr-no-such-file.jsonl')), null);
+    assert.strictEqual(tr.lastSessionEffort(rawFixture('')), null);
+    assert.strictEqual(tr.lastSessionEffort(rawFixture(padLine(200))), null);
+  })) p++; else f++;
+
   cw.setCompactWindowHome(null);
   cw.setManagedSettingsPath(null);
   cw.resetCompactWindowCache();

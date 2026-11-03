@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 
 import { useAnswerToken } from './useAnswerToken';
 import { postWrite } from '../lib/postWrite';
+import { refusalFlags } from '../lib/writeRefusal';
 import type { HealthResponse, RemoteAnswerState } from '../../../shared/types';
 
 /** Slow poll: the switch only changes when someone flips it. */
@@ -54,9 +55,9 @@ export function useRemoteAnswer(): RemoteAnswerControl {
       // A network failure leaves the pill as it was; the poll will re-sync.
       const result = await postWrite('/api/remote-answer', { token, body: { enabled: !state.enabled } });
       if (result.refusal) {
-        const readOnlyNow = result.refusal === 'read-only';
-        setReadOnly(readOnlyNow);
-        setNeedsToken(!readOnlyNow);
+        const flags = refusalFlags(result.refusal);
+        setReadOnly(flags.readOnly);
+        setNeedsToken(flags.needsToken);
       } else if (result.ok) {
         setNeedsToken(false);
         setReadOnly(false);

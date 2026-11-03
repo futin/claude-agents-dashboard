@@ -247,6 +247,13 @@ export function run(): number {
     assert.strictEqual(syncLaunchErrorText('repo', 'unknown project'), "Sync in repo couldn't start: unknown project");
   })) p++; else f++;
 
+  if (test('an unreadable launch reply never says the sync could not start: it may be running', () => {
+    assert.strictEqual(
+      syncLaunchErrorText('repo', 'The launch reply could not be read — check Sessions before trying again.'),
+      'Sync in repo: The launch reply could not be read — check Sessions before trying again.'
+    );
+  })) p++; else f++;
+
   if (test('the 403 note names where the token is set', () => {
     assert.strictEqual(SYNC_NEEDS_TOKEN, 'Sync needs the Answer token — set it under Settings › Local › Connection.');
   })) p++; else f++;

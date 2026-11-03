@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import MicButton from './MicButton';
 import PinPicker from './PinPicker';
@@ -68,6 +68,13 @@ interface Props {
  */
 export default function SpawnPanel({ onClose, onLaunched, spawnMaxPermission, spawnAvailable, desktopAvailable, launchSurfaceDefault }: Props) {
   const { launch, pending, error, needsToken, setToken, clearError } = useSpawn();
+  const bodyRef = useRef<HTMLDivElement>(null);
+
+  // The error is the form's last line, below the fold at ordinary heights, and Launch stays clickable: out of view it reads as nothing happened and invites a
+  // second launch. scrollTop, not scrollIntoView: that one scrolls every ancestor too.
+  useEffect(() => {
+    if (error && bodyRef.current) bodyRef.current.scrollTop = bodyRef.current.scrollHeight;
+  }, [error]);
   const [indexKey, setIndexKey] = useState(0);
   const { index, loading } = useConfigsIndex(indexKey);
   const { settings } = useSettings();
@@ -179,7 +186,7 @@ export default function SpawnPanel({ onClose, onLaunched, spawnMaxPermission, sp
           <button type="button" className="chat-x" onClick={close} disabled={pending} aria-label="Close">✕</button>
         </div>
 
-        <div className="spawn-body">
+        <div className="spawn-body" ref={bodyRef}>
           {offered.length > 1 && (
             <div className="sp-field">
               <span className="sp-label">open in</span>

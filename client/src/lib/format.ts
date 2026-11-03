@@ -47,9 +47,9 @@ export function formatAgo(ms: number): string {
 }
 
 /** Reset clock time for a usage window: 2:14pm (today), or Thu 2:14pm (later). */
-export function formatResetTime(iso: string): string {
+export function formatResetTime(iso: string, nowMs: number = Date.now()): string {
   const d = new Date(iso);
-  const now = new Date();
+  const now = new Date(nowMs);
   const time = d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }).toLowerCase().replace(' ', '');
   const sameDay = d.toDateString() === now.toDateString();
   if (sameDay) return time;

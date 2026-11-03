@@ -1,3 +1,6 @@
+import { replyError } from './postWrite';
+import type { WriteResult } from './postWrite';
+import { READ_ONLY_TEXT, refusalFlags } from './writeRefusal';
 import type { SpawnResponse } from '../../../shared/types';
 
 /**
@@ -16,4 +19,34 @@ export function parseSpawnResponse(body: unknown): SpawnResponse | null {
     return { surface: 'dashboard', sessionId: b.sessionId };
   }
   return null;
+}
+
+/** A 200 whose body cannot be read: the launch may have run, so this never says it failed. */
+export const UNREADABLE_LAUNCH_REPLY = 'The launch reply could not be read — check Sessions before trying again.';
+
+/** What one launch POST means to `useSpawn`. A flag key left out means "leave as is". */
+export interface SpawnOutcome {
+  response: SpawnResponse | null;
+  error: string | null;
+  needsToken?: boolean;
+  readOnly?: boolean;
+}
+
+/**
+ * Reads a `POST /api/spawn` result into what `useSpawn.launch` applies.
+ *
+ * A 200 whose body cannot be read never says "failed": the server answers 200 only after the launch returned, so the session may well be running, and a person
+ * told it failed retries and starts a second one.
+ */
+export function spawnOutcome(result: WriteResult): SpawnOutcome {
+  if (result.status === 0) return { response: null, error: 'Could not reach the server.' };
+  if (result.refusal) {
+    return { response: null, error: result.refusal === 'read-only' ? READ_ONLY_TEXT : null, ...refusalFlags(result.refusal) };
+  }
+  const flags = { needsToken: false, readOnly: false };
+  if (result.ok) {
+    const response = parseSpawnResponse(result.body);
+    return { response, error: response ? null : UNREADABLE_LAUNCH_REPLY, ...flags };
+  }
+  return { response: null, error: replyError(result.body) ?? `Launch failed (${result.status}).`, ...flags };
 }
