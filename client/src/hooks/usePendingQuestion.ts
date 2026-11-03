@@ -38,7 +38,7 @@ export interface PendingQuestionState {
 export function usePendingQuestion(id: string): PendingQuestionState {
   const [sentLabels, setSentLabels] = useState<string[]>([]);
   const clearLabels = useCallback(() => setSentLabels([]), []);
-  const reply = usePendingReply<PendingQuestion, 'submitted'>({
+  const reply = usePendingReply({
     id, pollPath: 'question', answerPath: 'answer', idOf: q => q.questionId, sentPhase: 'submitted', onFresh: clearLabels
   });
   const { send, dismiss: drop } = reply;

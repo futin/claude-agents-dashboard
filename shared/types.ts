@@ -88,8 +88,9 @@ export interface Session {
   status: 'working' | 'idle' | 'question' | 'incomplete';
   /**
    * Where this session can be seen besides here — see {@link SessionSurface}.
-   * Derived from the transcript's own `entrypoint` field (`sdk-cli` ⇒ headless
-   * spawn), so it needs no stored state and holds across a server restart.
+   * Derived from the transcript's own `entrypoint` field (`sdk-cli` or
+   * `claude-agents-dashboard` ⇒ `dashboard`, `sessionSurface` in `server/lib/scan.ts`),
+   * so it needs no stored state and holds across a server restart.
    */
   surface: SessionSurface;
   /**
@@ -1086,6 +1087,12 @@ export interface NotifyTestResponse {
   outcome: string;
 }
 
+/** The intervals `gitFetchSecs` takes, in seconds; `0` is off. */
+export type GitFetchSecs = 0 | 30 | 60 | 120 | 300 | 600;
+
+/** Compiles only for `never`. Fed `Exclude<Union, List[number]>`, it fails `pnpm typecheck` when a list leaves out a union member. */
+export type NoneMissing<Missing extends never> = Missing;
+
 /**
  * `GET /api/settings`, `POST /api/settings` — the settings the browser may
  * change that are *not* per-device. Only facts a separate process has to agree
@@ -1111,10 +1118,10 @@ export interface ServerSettings {
    */
   recordUsageHistory: boolean;
   /**
-   * Seconds between the server's own `git fetch origin` over the pinned repos; one of 0, 30, 60, 120, 300, 600, where `0` is off. Shared, not per-device:
+   * Seconds between the server's own `git fetch origin` over the pinned repos, where `0` is off. Shared, not per-device:
    * one timer serves every browser, and it idles while nobody is watching the git view. See docs/subsystems/git-stats.md.
    */
-  gitFetchSecs: number;
+  gitFetchSecs: GitFetchSecs;
   /**
    * Which surface the launch form preselects. Shared, not per-device, and only a preselection: the form always sends its own `surface`, and a request
    * with none is a dashboard launch whatever this says (an API caller never inherits it).
@@ -1178,15 +1185,15 @@ export interface EnvOverride {
   source: 'settings.json' | 'environment';
 }
 
+/** `POST /api/remote-answer`: the switch, and how many held waits switching off released. */
+export interface RemoteAnswerToggleResponse extends RemoteAnswerState { released: number }
+
 /**
  * `GET /api/health`. The remote-answer switch, the caller's own connection
  * origin, and the two numbers the hooks read. `origin`, `idleSecs` and
  * `answerSecs` are optional so an older server (or a test double) that omits
  * them simply hides the badge / falls back to the hook's own defaults.
  */
-/** `POST /api/remote-answer`: the switch, and how many held waits switching off released. */
-export interface RemoteAnswerToggleResponse extends RemoteAnswerState { released: number }
-
 export interface HealthResponse extends RemoteAnswerState {
   ok: true;
   origin?: ConnectionOrigin;
@@ -2150,7 +2157,7 @@ export interface SpawnRequest {
    * Resume this session id instead of starting fresh: the child runs
    * `--resume <id>` in the session's own cwd and appends to the same
    * transcript under the same id. Only sessions whose transcript says
-   * `sdk-cli` (the `dashboard` pill) qualify; malformed-when-present is a 400,
+   * `sdk-cli` or `claude-agents-dashboard` (the `dashboard` pill) qualify; malformed-when-present is a 400,
    * never a silent fresh launch. With `surface: 'desktop'` it is the hand-over to the desktop app, and `prompt` is ignored (the link carries none).
    */
   resume?: string;

@@ -180,7 +180,7 @@ same permission ladder and ceiling, prompt still stdin-only — with these diffe
   resolves to the half it is actually writing); `unknown session` otherwise. The child's
   cwd is the *transcript's own* `cwd` — `body.project` is ignored.
 - **`dashboard`-surface only** (`sessionSurface(entrypoint) === 'dashboard'`, i.e.
-  `sdk-cli`): a terminal session is terminal-owned, and resuming one here could race a
+  `sdk-cli` or `claude-agents-dashboard`): a terminal session is terminal-owned, and resuming one here could race a
   still-open interactive session on the same transcript. 400 `only dashboard sessions can
   be resumed`.
 - **Alive sessions 409.** Three questions, because a held socket is only one way to be

@@ -23,7 +23,7 @@ import { READ_ONLY_TEXT } from '../../lib/writeRefusal';
 import { writeStatusLine } from '../../lib/writeStatus';
 import { EFFORTS, MODELS, PERMISSION_MODE_LABEL } from '../../lib/spawnOptions';
 import { LAUNCH_DEFAULT_DESKTOP_MISSING, LAUNCH_DEFAULT_DESKTOP_NOTE, LAUNCH_DEFAULT_HINT } from '../../lib/launchSurface';
-import type { LaunchSurface } from '../../../../shared/types';
+import type { LaunchSurface, NotifyTestResponse } from '../../../../shared/types';
 
 /**
  * Preview colors per theme — board / strip / accent, in that order. A mirror of
@@ -154,7 +154,8 @@ export default function SettingsView() {
     const headers = authHeaders(token);
     try {
       const res = await fetch('/api/notify/test', { method: 'POST', headers });
-      const body = (await res.json()) as { outcome?: string; error?: string };
+      // A refused write (403) carries `error` and no `outcome`.
+      const body = (await res.json()) as Partial<NotifyTestResponse> & { error?: string };
       setPushTestResult(body.outcome ?? body.error ?? 'no response');
     } catch {
       setPushTestResult('the dashboard did not answer');
