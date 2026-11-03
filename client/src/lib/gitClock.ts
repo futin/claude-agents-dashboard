@@ -3,23 +3,25 @@
  * the poll bookkeeping the hook delegates here. Pure — no React, no DOM — so every rule is a plain test. Words come from `gitStatsText.ts`; none is built here.
  *
  * The six interval values are a literal here and another in `server/lib/settings.ts`: no runtime constant crosses `shared/`, so each side pins its own list
- * with a test. The segment labels sit beside their values because the Settings card is their only reader.
+ * with a test, and the `GitFetchSecs` union fails `pnpm typecheck` when either list leaves it. The segment labels sit beside their values because the Settings card is their only reader.
  */
-import type { FetchClock, WriteAccess } from '../../../shared/types';
+import type { FetchClock, GitFetchSecs, NoneMissing, WriteAccess } from '../../../shared/types';
 import { READ_ONLY_TEXT, refusalKind } from './writeRefusal';
 import { GIT_POLL_MS } from './gitPoll';
 import {
   FETCH_NEEDS_TOKEN, FETCH_REFUSED, FETCH_START_FAILED, KEY_NOW, READ_FAILED, READ_FETCHING, READ_OFF, READ_OVERDUE, READ_PENDING, READ_SYNCING, fetchRowSub,
 } from './gitStatsText';
 
-export const GIT_FETCH_OPTIONS: readonly { value: number; label: string }[] = [
+export const GIT_FETCH_OPTIONS = [
   { value: 0, label: 'Off' },
   { value: 30, label: '30s' },
   { value: 60, label: '1m' },
   { value: 120, label: '2m' },
   { value: 300, label: '5m' },
   { value: 600, label: '10m' },
-];
+] as const satisfies readonly { value: GitFetchSecs; label: string }[];
+
+type GitFetchOptionsComplete = NoneMissing<Exclude<GitFetchSecs, (typeof GIT_FETCH_OPTIONS)[number]['value']>>;
 
 /** How long after a fetch is due (or seen running) to ask the server again: long enough for it to have started, short enough to feel live. */
 export const FETCH_FOLLOW_MS = 3_000;

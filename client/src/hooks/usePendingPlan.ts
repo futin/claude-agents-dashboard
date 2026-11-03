@@ -35,7 +35,7 @@ export interface PendingPlanState {
  * approving is only ever possible on the card itself.
  */
 export function usePendingPlan(id: string): PendingPlanState {
-  const reply = usePendingReply<PendingPlan, 'sent'>({ id, pollPath: 'plan', answerPath: 'plan-answer', idOf: p => p.planId, sentPhase: 'sent' });
+  const reply = usePendingReply({ id, pollPath: 'plan', answerPath: 'plan-answer', idOf: p => p.planId, sentPhase: 'sent' });
   const { send, dismiss: drop } = reply;
 
   const reject = useCallback((feedback: string) => send(

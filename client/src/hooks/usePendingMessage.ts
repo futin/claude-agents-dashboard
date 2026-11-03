@@ -33,7 +33,7 @@ export interface PendingMessageState {
  * above), so the panel is purely a composer.
  */
 export function usePendingMessage(id: string): PendingMessageState {
-  const reply = usePendingReply<PendingMessage, 'sent'>({
+  const reply = usePendingReply({
     id, pollPath: 'message', answerPath: 'message-answer', idOf: m => m.messageId, sentPhase: 'sent'
   });
   const { send: post, dismiss: drop } = reply;

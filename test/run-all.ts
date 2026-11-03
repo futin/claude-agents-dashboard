@@ -26,6 +26,7 @@ import { run as runFrontmatter } from './frontmatter.test.js';
 import { run as runManagement } from './management.test.js';
 import { run as runConfigsEntries } from './configs-entries.test.js';
 import { run as runSessionAnalyticsLog } from './sessionAnalyticsLog.test.js';
+import { run as runContractTypes } from './contract-types.test.js';
 import { run as runAnalytics } from './analytics.test.js';
 import { run as runConfigsRename } from './configs-rename.test.js';
 import { run as runPending } from './pending.test.js';
@@ -367,6 +368,7 @@ failed += await runClipboard();
 failed += await runDesktop();
 failed += await runHandOver();
 failed += runLaunchSurface();
+failed += runContractTypes();
 
 console.log(failed > 0 ? `FAILED (${failed})` : 'ALL PASS');
 process.exit(failed > 0 ? 1 : 0);

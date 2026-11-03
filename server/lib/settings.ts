@@ -33,7 +33,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 import { claudeHome } from './paths.js';
-import type { EnvOverride, LaunchSurface, NotifyEvent, NotifyPolicy, ServerSettings, ServerSettingsPatch } from '../../shared/types.js';
+import type { EnvOverride, GitFetchSecs, LaunchSurface, NoneMissing, NotifyEvent, NotifyPolicy, ServerSettings, ServerSettingsPatch } from '../../shared/types.js';
 
 /** Gitignored, repo-local — never inside `~/.claude` (read-only under Docker). */
 export const SETTINGS_FILE = '.dashboard-settings.json';
@@ -72,10 +72,11 @@ export const NOTIFY_EVENTS: readonly NotifyEvent[] = [
 /** Off by default — recording makes the server poll Anthropic unattended. */
 export const DEFAULT_RECORD_USAGE_HISTORY = false;
 
-/** The fetch intervals the Settings card offers, in seconds; 0 is off. A literal on each side of the boundary, each pinned by a test. */
-export const GIT_FETCH_SECS: readonly number[] = [0, 30, 60, 120, 300, 600];
+/** The fetch intervals the Settings card offers, in seconds; 0 is off. A literal on each side of the boundary, each pinned by a test, and the `GitFetchSecs` union ties them together at compile time. */
+export const GIT_FETCH_SECS = [0, 30, 60, 120, 300, 600] as const satisfies readonly GitFetchSecs[];
+type GitFetchSecsComplete = NoneMissing<Exclude<GitFetchSecs, (typeof GIT_FETCH_SECS)[number]>>;
 /** Off by default — fetching makes the server talk to every pinned repo's remote unattended. */
-export const DEFAULT_GIT_FETCH_SECS = 0;
+export const DEFAULT_GIT_FETCH_SECS: GitFetchSecs = 0;
 /** The launch form preselects the dashboard's own headless launch; the desktop app is opt-in. */
 export const DEFAULT_LAUNCH_SURFACE: LaunchSurface = 'dashboard';
 /** On by default — the point of the switch is a phone on the tailnet that writes with nothing stored on it. */
@@ -92,7 +93,7 @@ interface Stored {
   answerSecs: number;
   notify: NotifyPolicy;
   recordUsageHistory: boolean;
-  gitFetchSecs: number;
+  gitFetchSecs: GitFetchSecs;
   launchSurfaceDefault: LaunchSurface;
   trustTailnet: boolean;
   /**
@@ -129,8 +130,8 @@ export function clampAnswerSecs(value: unknown): number | null {
 }
 
 /** The value itself when it is one of {@link GIT_FETCH_SECS}, else null — a stray 45 or "300" is refused, not rounded to a neighbour. */
-export function parseGitFetchSecs(value: unknown): number | null {
-  return typeof value === 'number' && GIT_FETCH_SECS.includes(value) ? value : null;
+export function parseGitFetchSecs(value: unknown): GitFetchSecs | null {
+  return GIT_FETCH_SECS.find(secs => secs === value) ?? null;
 }
 
 /** The value itself when it is one of the two {@link LaunchSurface} literals, else null — a stray `42` or `"terminal"` is refused, not coerced. */

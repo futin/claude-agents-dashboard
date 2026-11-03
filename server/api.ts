@@ -49,7 +49,7 @@ import {
 import { notifyPermission } from './lib/permissions.js';
 import { maybeSend, sendTest } from './lib/notify.js';
 import { getState, setEnabled } from './lib/remoteState.js';
-import { getPinnedProjects, getSettings, setPinOrder, setPinned, setSettings } from './lib/settings.js';
+import { GIT_FETCH_SECS, getPinnedProjects, getSettings, setPinOrder, setPinned, setSettings } from './lib/settings.js';
 import { fetchAll, markGitWatched } from './lib/git-fetch.js';
 import {
   desktopAvailable, handOverInFlight, openDesktopUrl, releaseDesktopLaunch, reserveDesktopLaunch, resumeUrl
@@ -726,7 +726,7 @@ export async function serveSettingsWrite(
   const next = setSettings(body);
   if (!next) {
     return sendBadBody(res, {
-      error: "expected {idleSecs?: number, answerSecs?: number, notify?: NotifyPolicy, recordUsageHistory?: boolean, gitFetchSecs?: 0|30|60|120|300|600, trustTailnet?: boolean, launchSurfaceDefault?: 'dashboard'|'desktop'}"
+      error: `expected {idleSecs?: number, answerSecs?: number, notify?: NotifyPolicy, recordUsageHistory?: boolean, gitFetchSecs?: ${GIT_FETCH_SECS.join('|')}, trustTailnet?: boolean, launchSurfaceDefault?: 'dashboard'|'desktop'}`
     });
   }
   sendJson(res, 200, settingsBody(config, next));
@@ -1118,7 +1118,7 @@ export async function serveNotifyTest(
  * reasoning `serveConfigsProject` documents for its `dirName` query param),
  * the latter through an exact-id match against the enumerated transcripts.
  * Resume, headless or hand-over, additionally requires the target to be a `dashboard`-surface
- * (`sdk-cli`) session that is not still running. Three checks answer that, and
+ * (`sdk-cli` or `claude-agents-dashboard`) session that is not still running. Three checks answer that, and
  * none of them covers the whole set: a held question/plan/reply socket, the
  * launch store (`hasLiveChild` — exact, but only for children *this* process
  * spawned), and a `ps` argv scan (`liveSessionIds` — inexact, but the only one
@@ -1270,7 +1270,7 @@ function resumeTarget(rid: string, requireCwd: boolean):
   const t = findTranscript(projectsRoot(), rid);
   if (!t) return refuse(400, 'unknown session');
   const tr = readTranscript(t.file);
-  // Only headless (`sdk-cli` → the `dashboard` pill) sessions: a terminal
+  // Only `dashboard`-pill sessions (`sessionSurface`: `sdk-cli` or `claude-agents-dashboard`): a terminal
   // session is terminal-owned, and resuming one here could race a still-
   // open interactive session on the same transcript.
   if (!tr || sessionSurface(tr.entrypoint) !== 'dashboard') return refuse(400, 'only dashboard sessions can be resumed');

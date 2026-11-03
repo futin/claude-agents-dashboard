@@ -5,24 +5,37 @@ import { useSettings } from './useSettings';
 import { postWrite } from '../lib/postWrite';
 import { afterDismiss, afterPoll, afterSend, canSend, replyOutcome } from '../lib/pendingReply';
 import type { ReplyOutcome, ReplyPatch, ReplyPhase } from '../lib/pendingReply';
+import type { SessionMessage, SessionPlan, SessionQuestion } from '../../../shared/types';
 
-export interface PendingReplyOptions<T, S extends string> {
+/** What each `/api/sessions/:id/<pollPath>` answers: `serveSessionQuestion`, `serveSessionPlan` and `serveSessionMessage` in `server/api.ts`. */
+export interface PendingReplyPolls {
+  question: SessionQuestion;
+  plan: SessionPlan;
+  message: SessionMessage;
+}
+
+export type PendingPollPath = keyof PendingReplyPolls;
+
+/** The entry a poll path holds while a reply is awaited. */
+export type PendingOf<P extends PendingPollPath> = NonNullable<PendingReplyPolls[P]['pending']>;
+
+export interface PendingReplyOptions<P extends PendingPollPath, S extends string> {
   /** The session the drawer shows. */
   id: string;
-  /** `/api/sessions/:id/<pollPath>` answers `{ pending, error? }`. */
-  pollPath: string;
+  /** `/api/sessions/:id/<pollPath>` answers `{ id, pending, error? }`. */
+  pollPath: P;
   /** `/api/sessions/:id/<answerPath>` takes the reply. */
   answerPath: string;
   /** The pending entry's own id — a new one resets the panel. */
-  idOf: (pending: T) => string;
+  idOf: (pending: PendingOf<P>) => string;
   /** This panel's name for the accepted phase. */
   sentPhase: S;
   /** Called when the panel resets: a new session id, or a new reply id replacing the old one. */
   onFresh?: () => void;
 }
 
-export interface PendingReplyControl<T, S extends string> {
-  pending: T | null;
+export interface PendingReplyControl<P extends PendingPollPath, S extends string> {
+  pending: PendingOf<P> | null;
   phase: ReplyPhase<S>;
   needsToken: boolean;
   readOnly: boolean;
@@ -31,9 +44,9 @@ export interface PendingReplyControl<T, S extends string> {
    * Post `bodyOf(pending)` as the reply. A no-op unless `canSend(pending, phase, text)`; leave `text` out to skip the blank check. `onOk` runs on success,
    * in the same update as the accepted phase.
    */
-  send: <B>(bodyOf: (pending: T) => B, opts?: { text?: string; onOk?: () => void }) => Promise<void>;
+  send: <B>(bodyOf: (pending: PendingOf<P>) => B, opts?: { text?: string; onOk?: () => void }) => Promise<void>;
   /** Post `bodyOf(pending)` as a dismissal. */
-  dismiss: <B>(bodyOf: (pending: T) => B) => Promise<void>;
+  dismiss: <B>(bodyOf: (pending: PendingOf<P>) => B) => Promise<void>;
 }
 
 /**
@@ -42,10 +55,10 @@ export interface PendingReplyControl<T, S extends string> {
  *
  * The poll is also how a panel disappears: any resolution (answered here or in the terminal, expired, hook gone) empties the store, so `pending` goes null.
  */
-export function usePendingReply<T, S extends string>(
-  { id, pollPath, answerPath, idOf, sentPhase, onFresh }: PendingReplyOptions<T, S>
-): PendingReplyControl<T, S> {
-  const [pending, setPending] = useState<T | null>(null);
+export function usePendingReply<P extends PendingPollPath, S extends string>(
+  { id, pollPath, answerPath, idOf, sentPhase, onFresh }: PendingReplyOptions<P, S>
+): PendingReplyControl<P, S> {
+  const [pending, setPending] = useState<PendingOf<P> | null>(null);
   const [phase, setPhase] = useState<ReplyPhase<S>>('idle');
   const [needsToken, setNeedsToken] = useState(false);
   const [readOnly, setReadOnly] = useState(false);
@@ -76,10 +89,10 @@ export function usePendingReply<T, S extends string>(
     let live = true;
 
     async function poll(): Promise<void> {
-      let body: { pending: T | null; error?: boolean } | null = null;
+      let body: PendingReplyPolls[P] | null = null;
       try {
         const res = await fetch(`/api/sessions/${encodeURIComponent(id)}/${pollPath}`);
-        body = (await res.json()) as { pending: T | null; error?: boolean };
+        body = (await res.json()) as PendingReplyPolls[P];
       } catch {
         return; // keep the last snapshot; the next tick retries
       }
@@ -115,7 +128,7 @@ export function usePendingReply<T, S extends string>(
     return replyOutcome(result);
   }, [id, answerPath]);
 
-  const send = useCallback(async <B>(bodyOf: (pending: T) => B, opts: { text?: string; onOk?: () => void } = {}): Promise<void> => {
+  const send = useCallback(async <B>(bodyOf: (pending: PendingOf<P>) => B, opts: { text?: string; onOk?: () => void } = {}): Promise<void> => {
     const current = pending;
     if (!current || !canSend(current, phase, opts.text)) return;
     setPhase('submitting');
@@ -124,7 +137,7 @@ export function usePendingReply<T, S extends string>(
     apply(afterSend(outcome, sentPhase));
   }, [pending, phase, post, apply, sentPhase]);
 
-  const dismiss = useCallback(async <B>(bodyOf: (pending: T) => B): Promise<void> => {
+  const dismiss = useCallback(async <B>(bodyOf: (pending: PendingOf<P>) => B): Promise<void> => {
     const current = pending;
     if (!current || !canSend(current, phase)) return;
     setPhase('submitting');
