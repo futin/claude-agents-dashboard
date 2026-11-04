@@ -16,6 +16,7 @@ import {
   bootId, claimOwner, createProbe, deleteJob, isOwner, isWrapperCommand, readJobs, releaseOwner, sweepLocks, wrapperAlive, writeJob, writePinsSnapshot, RoutineStoreError
 } from '../server/lib/routine-store.js';
 import type { Probe } from '../server/lib/routine-store.js';
+import { resetSettings } from '../server/lib/settings.js';
 
 function test(name: string, fn: () => void): boolean {
   try { fn(); console.log('  ✓ ' + name); return true; }
@@ -185,10 +186,12 @@ export function run(): number {
     const h = homed();
     const cwd = process.cwd();
     process.chdir(tmp());
+    // The settings module caches the pin list, and any earlier writePinsSnapshot call filled it from the real cwd's settings file.
+    resetSettings();
     try {
       writePinsSnapshot(config());
       assert.deepStrictEqual(JSON.parse(fs.readFileSync(path.join(h.state, 'pins.json'), 'utf8')), []);
-    } finally { process.chdir(cwd); h.done(); }
+    } finally { process.chdir(cwd); resetSettings(); h.done(); }
   });
 
   t('claimOwner: no file -> owner; the file holds this pid, boot id, cwd and port', () => {
