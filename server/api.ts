@@ -500,7 +500,7 @@ export function refuseWrite(config: Config, req: IncomingMessage, res: ServerRes
 
 /** True when the id names a transcript we can see. Never joined into a path. */
 function sessionExists(id: string): boolean {
-  try { return listTranscripts(projectsRoot()).some(t => t.id === id); }
+  try { return findTranscript(projectsRoot(), id) !== undefined; }
   catch { return false; }
 }
 
