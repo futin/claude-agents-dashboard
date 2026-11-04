@@ -197,7 +197,7 @@ already decide this?" versus "is the user back?".
   stay above it (same trap as the chat route). They are `$`-anchored on `u.pathname` so
   it can't recur.
 - **⚠️ Path safety:** unchanged from every other endpoint — `ID_RE` plus resolution
-  against `listTranscripts(projectsRoot())`, **never joined into a path**. The store is
+  against the enumerated file names (`findTranscript(projectsRoot(), id)`), **never joined into a path**. The store is
   keyed in memory.
 - **⚠️ Hook timeout:** the CLI kills a hook at its `timeout`, so `settings.json` needs
   `"timeout": 630` ≥ curl's `--max-time` (window + 15) ≥ the server clamp (600s default,

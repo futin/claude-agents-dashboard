@@ -69,7 +69,7 @@ via `tsx`, dev and prod alike).
 - **Fail-open everywhere.** A missing token, an unreadable file, a failed probe — every
   auxiliary feature degrades to "not shown" rather than crashing the monitor.
 - **Path safety.** Endpoints never join request input into filesystem paths. IDs are
-  validated and resolved against enumerated sets (`listTranscripts`,
+  validated and resolved against enumerated sets (`listTranscripts`, `findTranscript`'s directory names,
   `collectServablePaths`); anything else is a 400/404.
 
 ## HTTP surface

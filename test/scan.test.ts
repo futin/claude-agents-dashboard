@@ -1390,6 +1390,117 @@ export function run(): number {
     assert.deepStrictEqual(refs.map(t => t.dirName).sort(), ['-a-repo', '-a-repo--worktrees-x']);
   })) p++; else f++;
 
+  /** 20 transcripts with unique ids across 3 project dirs. */
+  const lookupRoot = () => makeRoot(Array.from({ length: 20 }, (_, i) => ({
+    dirName: `-repo-${i % 3}`, id: `sess-${i}`, mtimeMs: 1_700_000_000_000 + i * 1000, records: [usageRec(i + 1)]
+  })));
+  /** The `fs.statSync` calls `fn` makes on paths under `root`; scan.ts calls it through this same default export. */
+  const countStats = <T>(root: string, fn: () => T): { stats: number; result: T } => {
+    const real = fs.statSync;
+    let stats = 0;
+    (fs as any).statSync = (...args: Parameters<typeof fs.statSync>) => {
+      if (String(args[0]).startsWith(root + path.sep)) stats++;
+      return real(...args);
+    };
+    try { return { result: fn(), stats }; }
+    finally { (fs as any).statSync = real; }
+  };
+
+  if (test('findTranscript stats only the file that matches the id', () => {
+    const root = lookupRoot();
+    const { stats, result: ref } = countStats(root, () => scan.findTranscript(root, 'sess-7'));
+    assert.strictEqual(stats, 1);
+    const file = path.join(root, '-repo-1', 'sess-7.jsonl');
+    assert.deepStrictEqual(ref, {
+      file, dirName: '-repo-1', id: 'sess-7', mtimeMs: 1_700_000_007_000, size: fs.statSync(file).size
+    });
+  })) p++; else f++;
+
+  if (test('findTranscript stats both halves of a split id and returns the newest', () => {
+    const now = 1_700_000_000_000;
+    const root = splitRoot(now);
+    // splitRoot holds only the two halves, where a full sweep also makes 2 stats.
+    fs.writeFileSync(path.join(root, '-a-repo', 'bystander.jsonl'), '{}');
+    const { stats, result: ref } = countStats(root, () => scan.findTranscript(root, 'split-1'));
+    assert.strictEqual(stats, 2);
+    assert.strictEqual(ref!.dirName, '-a-repo--worktrees-x');
+  })) p++; else f++;
+
+  if (test('findTranscript stats nothing on a miss', () => {
+    const root = lookupRoot();
+    const { stats, result: ref } = countStats(root, () => scan.findTranscript(root, 'nope'));
+    assert.strictEqual(stats, 0);
+    assert.strictEqual(ref, undefined);
+  })) p++; else f++;
+
+  if (test('listTranscripts still stats and returns every transcript', () => {
+    const root = lookupRoot();
+    const { stats, result: refs } = countStats(root, () => scan.listTranscripts(root));
+    assert.strictEqual(stats, 20);
+    assert.strictEqual(refs.length, 20);
+  })) p++; else f++;
+
+  if (test('findTranscript sees an append on the next call, so nothing is cached', () => {
+    const root = makeRoot([{ dirName: '-a-repo', id: 's', mtimeMs: 1_700_000_000_000, records: [usageRec(1)] }]);
+    const first = scan.findTranscript(root, 's')!;
+    fs.appendFileSync(first.file, '\n' + JSON.stringify(usageRec(2)));
+    fs.utimesSync(first.file, 1_700_000_100, 1_700_000_100);
+    const second = scan.findTranscript(root, 's')!;
+    assert.strictEqual(second.mtimeMs, 1_700_000_100_000);
+    assert.strictEqual(second.size, fs.statSync(first.file).size);
+    assert.ok(second.size > first.size);
+  })) p++; else f++;
+
+  if (test('findTranscript finds a transcript created after a miss and loses one deleted after a hit', () => {
+    const root = makeRoot([]);
+    const dir = path.join(root, '-a-repo');
+    fs.mkdirSync(dir);
+    assert.strictEqual(scan.findTranscript(root, 's'), undefined);
+    const file = path.join(dir, 's.jsonl');
+    fs.writeFileSync(file, JSON.stringify(usageRec(1)));
+    assert.strictEqual(scan.findTranscript(root, 's')!.file, file);
+    fs.rmSync(file);
+    assert.strictEqual(scan.findTranscript(root, 's'), undefined);
+  })) p++; else f++;
+
+  if (test('findTranscript never joins the id into a path: a traversal id misses a file it would reach', () => {
+    const fixture = fs.mkdtempSync(path.join(os.tmpdir(), 'cad-traversal-'));
+    const root = path.join(fixture, 'root');
+    const other = path.join(root, '-other');
+    fs.mkdirSync(other, { recursive: true });
+    fs.writeFileSync(path.join(other, 'x.jsonl'), '{}');
+    fs.writeFileSync(path.join(fixture, 'outside.jsonl'), '{}');
+    for (const id of ['../-other/x', '../../outside']) {
+      assert.ok(fs.existsSync(path.join(other, id + '.jsonl')), `${id} must reach a real file for this to prove anything`);
+      assert.strictEqual(scan.findTranscript(root, id), undefined);
+    }
+  })) p++; else f++;
+
+  if (test('findTranscript ignores a directory named like a transcript', () => {
+    const root = makeRoot([]);
+    fs.mkdirSync(path.join(root, '-a-repo', 'd.jsonl'), { recursive: true });
+    assert.strictEqual(scan.findTranscript(root, 'd'), undefined);
+  })) p++; else f++;
+
+  if (test('findTranscript over a root that does not exist is undefined, not a throw', () => {
+    assert.strictEqual(scan.findTranscript(path.join(makeRoot([]), 'missing'), 'x'), undefined);
+  })) p++; else f++;
+
+  // An append does not move the directory's mtime, so a session still writing into an old dir must not lose its row to any filter on that mtime.
+  if (test('a fresh transcript in a directory with an old mtime is listed, found and shown', () => {
+    const now = Date.now();
+    const root = makeRoot([{
+      dirName: '-a-repo', id: 'fresh', mtimeMs: now,
+      records: [metaRec('/a/repo', 'main'), at(assistantDone(), new Date(now).toISOString())]
+    }]);
+    const old = (now - 30 * 24 * 60 * 60 * 1000) / 1000;
+    fs.utimesSync(path.join(root, '-a-repo'), old, old);
+    assert.deepStrictEqual(scan.listTranscripts(root).map(t => t.id), ['fresh']);
+    assert.strictEqual(scan.findTranscript(root, 'fresh')!.id, 'fresh');
+    const rows = scan.scanSessions({ lookbackHours: 48 }, { root, now, liveCwds: null, skipProcScan: true, lessons: null }).sessions;
+    assert.deepStrictEqual(rows.map(s => s.id), ['fresh']);
+  })) p++; else f++;
+
   const nestedRoot = (now: number) => {
     const root = makeRoot([{
       dirName: '-a-repo', id: 'sess-1', mtimeMs: now - 10 * 1000,

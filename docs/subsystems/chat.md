@@ -326,8 +326,8 @@ the field to supply ([remote-access](remote-access.md)).
   record and is consumed; if it doesn't parse, `cursor` stops before it and the next poll
   re-reads it. Same rules — and same oracle-equivalence test style — as `agents-cache.ts`.
 - **⚠️ Path safety:** the id is validated with `ID_RE` and resolved through
-  `findTranscript(projectsRoot(), id)` — a `listTranscripts` scan filtered by id, so the
-  file path only ever comes from the scan and is **never joined into a path** (same philosophy as
+  `findTranscript(projectsRoot(), id)` — a walk of the directory names that stats only the ones matching the id, so the
+  file path only ever comes from the walk and is **never joined into a path** (same philosophy as
   `serveSessionDetail` / the configs file endpoint, `serveConfigsFile`).
 - **⚠️ Route order:** the detail regex `/^\/api\/sessions\/([^/?]+)/` in `index.ts` also
   matches `/api/sessions/:id/chat` and would answer it with agents — the chat match

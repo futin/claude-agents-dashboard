@@ -482,10 +482,10 @@ Two properties make it affordable and safe:
 
 The filter is applied at the **call sites**, not inside `listTranscripts()`: `api.ts` passes
 `archivedIds: archivedSessionIds()` into `scanSessions` and into `listRecentProjects`
-([configs](configs.md)), the same injected-Set pattern as `pendingIds`. The other
-`listTranscripts` callers deliberately keep seeing archived transcripts — `analytics.ts`
-`listReports` (a kaizen entry must still resolve its transcript) and the `api.ts` id lookups
-behind the transcript and chat panels (a panel already open would 404 for no gain).
+([configs](configs.md)), the same injected-Set pattern as `pendingIds`. Two other readers
+deliberately keep seeing archived transcripts — `analytics.ts` `listReports` through
+`listTranscripts` (a kaizen entry must still resolve its transcript), and the `api.ts` id lookups
+behind the transcript and chat panels through `findTranscript` (a panel already open would 404 for no gain).
 `usage-ledger.ts` is unfiltered for the same kind of reason — token history is not rewritten
 by a delete — but it no longer calls `listTranscripts` at all: it reads `scan.ts`
 `listUsageTranscripts`, the top-level files *plus* each session's
@@ -517,6 +517,12 @@ stays the raw per-file enumeration — `analytics.ts` needs every half, and so d
 ledger, which gets them through the `listUsageTranscripts` wrapper — and
 `findTranscript` is the same reduction for the single-id lookups that resolve an id to a file to
 read — a plain `find` would serve the abandoned half to the detail or [chat](chat.md) panel.
+It walks the directory names and stats only the matches, because an id lookup needs no other file's mtime.
+
+**The poll stats every transcript, on purpose.** `listTranscripts` is one `statSync` per file per scan, and neither way to skip those stats holds up. Filtering on
+directory mtime loses rows: an append does not move it, and in 87 of 92 project dirs the newest transcript was more than 1 s newer than its dir (2026-11-03, WSL2). And
+knowing a file is still old takes a stat, because any old file can be appended to, so skipping needs a cache with a re-check interval or file watchers: about 3 ms saved
+of a roughly 70 ms poll (431 of 527 transcripts older than 48 h, 2026-11-03, WSL2), in exchange for a resumed old session appearing up to one interval late.
 
 **Signals** come from the **newest message record** (newest tail record with
 `message.role` of `user`/`assistant`): `transcript.ts` exposes `turnComplete` (default

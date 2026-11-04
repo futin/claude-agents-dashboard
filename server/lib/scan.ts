@@ -176,23 +176,31 @@ function jsonlNames(dir: string): string[] {
   }
 }
 
-/** List every `.jsonl` transcript with its mtime, across all project dirs. */
-export function listTranscripts(root: string): TranscriptRef[] {
-  const results: TranscriptRef[] = [];
+/** Visit every `.jsonl` name in every project dir, statting nothing. An unreadable root visits nothing and an unreadable dir is skipped. */
+function forEachJsonlName(root: string, visit: (name: string, dir: string, dirName: string) => void): void {
   let dirs: fs.Dirent[];
   try {
     dirs = fs.readdirSync(root, { withFileTypes: true });
   } catch {
-    return results;
+    return;
   }
   for (const d of dirs) {
     if (!d.isDirectory()) continue;
     const dir = path.join(root, d.name);
-    for (const name of jsonlNames(dir)) {
-      const ref = statRef(path.join(dir, name), d.name);
-      if (ref) results.push(ref);
-    }
+    for (const name of jsonlNames(dir)) visit(name, dir, d.name);
   }
+}
+
+/**
+ * List every `.jsonl` transcript with its mtime, across all project dirs.
+ * Directory mtime cannot narrow this: an append does not move it, so a session still writing to an old file would lose its row.
+ */
+export function listTranscripts(root: string): TranscriptRef[] {
+  const results: TranscriptRef[] = [];
+  forEachJsonlName(root, (name, dir, dirName) => {
+    const ref = statRef(path.join(dir, name), dirName);
+    if (ref) results.push(ref);
+  });
   return results;
 }
 
@@ -277,10 +285,19 @@ function newestPerId(refs: readonly TranscriptRef[]): TranscriptRef[] {
  * could be served the abandoned half of its own transcript.
  *
  * `refs`, when given, is a listing the caller already took this request (`scanSnapshot` lists once and resolves every held wait from it); nothing is
- * read from disk then.
+ * read from disk then. Without them each call walks the directory names and stats only the matches, so an id is compared with enumerated names and
+ * never joined into a path, and nothing is cached: a transcript created a moment ago is found.
  */
 export function findTranscript(root: string, id: string, refs?: readonly TranscriptRef[]): TranscriptRef | undefined {
-  return newestPerId((refs ?? listTranscripts(root)).filter(t => t.id === id))[0];
+  if (refs) return newestPerId(refs.filter(t => t.id === id))[0];
+  const wanted = id + '.jsonl';
+  const matches: TranscriptRef[] = [];
+  forEachJsonlName(root, (name, dir, dirName) => {
+    if (name !== wanted) return;
+    const ref = statRef(path.join(dir, name), dirName);
+    if (ref) matches.push(ref);
+  });
+  return newestPerId(matches)[0];
 }
 
 /**
