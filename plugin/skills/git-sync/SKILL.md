@@ -50,7 +50,8 @@ build it yourself: it sits under the git common dir, which is not always `<root>
    full and stops with `rebase-conflict`, `detail.files` listing the paths.
 
 3. **Survey.** `node "${CLAUDE_PLUGIN_ROOT}/skills/git-sync/tools/git-sync.mjs" survey`. Read-only. It classifies every branch into `protected`, `merged`,
-   `gone-unproven`, `abandoned` or `active`, lists stashes and worktrees, and hands back the decision round ready to ask: `rounds` (a list of calls,
+   `superseded` (every changed file already identical on `origin/<trunk>`, but no merge proof), `gone-unproven`, `abandoned` or `active`, lists
+   stashes and worktrees, and hands back the decision round ready to ask: `rounds` (a list of calls,
    each a list of at most 4 questions), `followups.merged`, and `unattended`, the answers to use when there is no AskUserQuestion. When
    `remoteKind` is `github` and `gh` is `absent`, open-PR protection was off for this run — a branch with an open PR can be offered as merged — so say that in one line right before the decision round, not only at the end.
    Likewise when `trunkPrOnlyReason` is `gh-absent` or `gh-failed`: the survey could not read the trunk's rules, so it treats the trunk as PR-only, and
@@ -69,6 +70,7 @@ build it yourself: it sits under the git common dir, which is not always `<root>
    | `carry` | `Open a PR` / `Leave on <trunk>` | `"carry": "pr"` / `"carry": "keep"` |
    | `merged` | `Delete all` / `Keep all` / `Let me pick` | `"merged": "all"` / `"merged": "none"` / from the follow-up, below |
    | `merged-pick:<n>` (follow-up) | ticked branch names, across every chunk | `"merged": [names]`; `Keep all` adds nothing, so only it ticked is `[]` |
+   | `superseded:<n>` | ticked branch names, across every chunk | `"superseded": [names]`; `Keep all` adds nothing |
    | `asked:<n>` | ticked branch names, across every chunk | `"asked": [names]`; `Keep all` adds nothing |
    | `push:<n>` | ticked branch names, across every chunk | `"push": [names]`; `Push none` adds nothing |
    | `stash:<sha>` | `Branch + push` / `Branch, local` / `Drop` / `Keep stash` | `"stashes": { "<sha>": "branch-push" / "branch-local" / "drop" / "keep" }` |
