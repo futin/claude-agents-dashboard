@@ -769,6 +769,44 @@ function patchEquivalence(ctx, tip, ref, baseSha) {
   return probeSigns.length === 1 && probeSigns[0] === '-' ? 'M3' : null
 }
 
+// R38, §5 superseded: the content-level proof for work that reached `ref` with no commit-level trace — a squash that also carried other files, a
+// tip rebased or amended after its PR merged. `{ files: N }` when every path the branch changed since its merge-base with `ref` is identical in
+// `ref` (same mode and blob, or absent on both sides for a deletion); `null` otherwise, and for unrelated histories. A branch that nets to no
+// change at all (an empty "verification only" commit, an add-then-revert pair) is `{ files: 0 }`. It is deliberately not a merge proof: the
+// branch's own commits and messages are not on `ref`, only its end state, so survey gives it its own bucket and nothing deletes it unticked.
+// One `diff-tree` per side, intersected here, rather than one pathspec per changed file: a big branch would otherwise run into argv limits.
+export function supersededProof(ctx, tip, ref) {
+  const base = git(ctx.root, ['merge-base', ref, tip], { env: ctx.env })
+  if (base.status !== 0) return null
+  const changed = changedPaths(ctx, base.stdout.trim(), tip)
+  if (changed.length === 0) return { files: 0 }
+  const differing = new Set(changedPaths(ctx, tip, ref))
+  return changed.some((p) => differing.has(p)) ? null : { files: changed.length }
+}
+
+// R39, the relaxed M4: is everything `tip` holds beyond a merged PR's head `head` already on `ref`? The number of commits in `head..tip` when it is
+// (0 when `head` is the tip), `null` when not. `head` must be an ancestor of `tip` — a tip that diverged from the PR (rebased, amended) is no proof,
+// and a head this repo doesn't have is not one either. A merge commit in the range rules it out, as for M2 (R11b): cherry skips merges, so their
+// content would go unjudged. Each remaining commit must be patch-equivalent to one on `ref` (cherry's `-`), or leave every path it touches
+// identical on `ref`; the net `head..tip` change then passes `netDiffContained`, the same whitespace- and mode-exact gate M2 and M3 pass (R11a).
+function aboveMergedHead(ctx, head, tip, ref) {
+  if (head === tip) return 0
+  const ancestor = git(ctx.root, ['merge-base', '--is-ancestor', head, tip], { env: ctx.env })
+  if (ancestor.status !== 0) return null
+  if (gitOk(ctx.root, ['rev-list', '--merges', `${head}..${tip}`], { env: ctx.env }) !== '') return null
+  const out = gitOk(ctx.root, ['cherry', ref, tip, head], { env: ctx.env })
+  const lines = out === '' ? [] : out.split('\n')
+  for (const line of lines) {
+    if (line[0] === '-') continue
+    const sha = line.slice(2)
+    const touched = changedPaths(ctx, `${sha}^`, sha)
+    const differing = new Set(changedPaths(ctx, sha, ref))
+    if (touched.some((p) => differing.has(p))) return null
+  }
+  if (!netDiffContained(ctx, head, tip, ref)) return null
+  return Number(gitOk(ctx.root, ['rev-list', '--count', `${head}..${tip}`], { env: ctx.env }))
+}
+
 const GH_TIMEOUT_MS = 20_000
 
 // `ghStatus` is per-root, not per-call: §9's survey reports the tool's situation once, and every `prLookup` for that root warms or reads the same
@@ -817,9 +855,10 @@ export function ghStatus(repo) {
 // §5 M4: is `branch` (whose current tip is `tip`) covered by a GitHub PR? An `open` PR protects the branch from every deletion bucket
 // regardless of what M1-M3 find (§5's bucket table); `merged-at-tip` is one more way into the merged bucket for the case none of those catch —
 // a squash GitHub performed server-side whose rebuilt commit doesn't patch-match the original, because GitHub's own squash message or diff
-// order differs from git's. A MERGED PR whose head has since moved (the branch was reused after merging) is deliberately not proof: `headRefOid`
-// must still equal this exact tip, and the PR must have merged into the trunk (R15): a stacked PR merged into `feat/base` put the work in that
-// branch, not in the trunk, and M4 is only ever consulted when M1-M3 already found the tip missing from the trunk — exactly that case.
+// order differs from git's. A MERGED PR whose head has since moved is proof only as `merged-below-tip` (R39): its head is an ancestor of the tip
+// and every commit added after it is already on `origin/<trunk>` (`aboveMergedHead`); a tip that diverged from the head is not proof. The PR must
+// have merged into the trunk (R15): a stacked PR merged into `feat/base` put the work in that branch, not in the trunk, and M4 is only ever
+// consulted when M1-M3 already found the tip missing from the trunk — exactly that case.
 //
 // A root whose `gh` is `absent` is not asked again: ENOENT is deterministic, so it costs one spawn attempt per survey rather than one per branch.
 // Any other failure is this branch's alone (R17): an `unavailable` answer poisoning the cache would silently drop every later branch's open-PR
@@ -837,10 +876,29 @@ export function prLookup(repo, branch, tip) {
 
   const open = prs.find((pr) => pr.state === 'OPEN')
   if (open) return { state: 'open', number: open.number }
-  const mergedAtTip = prs.find((pr) => pr.state === 'MERGED' && pr.headRefOid === tip && pr.baseRefName === repo.trunk)
+  const merged = prs.filter((pr) => pr.state === 'MERGED' && pr.baseRefName === repo.trunk)
+  const mergedAtTip = merged.find((pr) => pr.headRefOid === tip)
   if (mergedAtTip) return { state: 'merged-at-tip', number: mergedAtTip.number }
+  // R39: a head below the tip, with every later commit already on the published trunk. The head comes from `gh`'s JSON, so it reaches git only
+  // as a full sha; a missing `origin/<trunk>` or object (R12) proves nothing.
+  const ref = `refs/remotes/origin/${repo.trunk}`
+  if (refExists(repo, ref)) {
+    for (const pr of merged) {
+      if (typeof pr.headRefOid !== 'string' || !FULL_SHA.test(pr.headRefOid)) continue
+      let extra = null
+      try {
+        extra = aboveMergedHead(repo, pr.headRefOid, tip, ref)
+      } catch (err) {
+        if (!(err instanceof GitError)) throw err
+      }
+      if (extra !== null) return { state: 'merged-below-tip', number: pr.number, extra }
+    }
+  }
   return { state: 'none', number: null }
 }
+
+// Both answers `prLookup` gives for a merged PR that proves the tip (M4): its head is the tip, or below it with the rest already on the trunk (R39).
+const prMerged = (state) => state === 'merged-at-tip' || state === 'merged-below-tip'
 
 // Is the trunk reachable only through a pull request? One `gh api` read of the branch's active rules — the endpoint merges every ruleset that applies,
 // so a `pull_request` rule anywhere shows up in the one array. A non-GitHub remote or a downgraded repo answers without spawning anything and is never
@@ -1001,6 +1059,14 @@ export function listStashes(repo) {
 }
 
 const PROOF_LABELS = { M1: 'merge or fast-forward', M2: 'rebase or cherry-pick', M3: 'squash' }
+const m4Label = (pr, trunk) =>
+  pr.state === 'merged-below-tip' ? `PR #${pr.number} + ${plural(pr.extra, 'later commit')} already on ${trunk}` : `PR #${pr.number}`
+// The superseded reason doubles as the decision-round option's description (`branchOption`), so it says why deleting is safe.
+function supersededReason(files, trunk) {
+  if (files === 0) return `superseded: no changed files since it left ${trunk}`
+  if (files === 1) return `superseded: its one changed file is identical on origin/${trunk}`
+  return `superseded: all ${files} changed files identical on origin/${trunk}`
+}
 
 // One side's branches from `for-each-ref`, keyed by the name after `prefix`. Fields are `%00`-separated and the full refname is kept, so a name like
 // `feat/a/b` or `fix-#3` comes back byte for byte, never re-split on whitespace or slashes. `%(upstream:track)` is `[gone]`, `[ahead N]`,
@@ -1032,7 +1098,8 @@ function refsUnder(repo, prefix) {
 // exception — that is the machine's standing situation, not a failed check, so M1–M3 stand and the survey's `gh: 'absent'` carries the caveat.
 //
 // Buckets, first match wins (§5): protected (open PR, locked worktree, mid-rebase/bisect in a worktree, or checked out in this tree — including
-// mid-rebase/bisect here, when HEAD reads detached but the branch is still git's to move back onto), merged, gone-unproven, abandoned, active.
+// mid-rebase/bisect here, when HEAD reads detached but the branch is still git's to move back onto), merged, superseded (R38: no merge proof, but
+// every unproven tip's changed files are identical on `origin/<trunk>`), gone-unproven, abandoned, active.
 // `git worktree add -f` can put one branch in several worktrees, so they are grouped per branch: any locked one protects it. `worktree` names the
 // first of them; `survey` checks every one for the merged set.
 //
@@ -1055,6 +1122,24 @@ export function branchRecords(repo, worktrees = listWorktrees(repo), trunkPrOnly
   for (const wt of worktrees.filter((x) => x.branch)) wtsByBranch.set(wt.branch, [...(wtsByBranch.get(wt.branch) ?? []), wt])
   const now = Math.floor(Date.now() / 1000)
   const staleSecs = repo.config.staleDays * 86400
+
+  // R38: superseded is always judged on the published trunk, whichever ref the merge proofs use — content that is only on a local trunk ahead of
+  // origin is not yet anywhere the other machine (or a PR) can see.
+  const supersedeRef = `refs/remotes/origin/${repo.trunk}`
+  const canSupersede = refExists(repo, supersedeRef)
+  const supersedes = new Map()
+  const supersededOf = (sha) => {
+    if (!canSupersede) return null
+    if (!supersedes.has(sha)) {
+      try {
+        supersedes.set(sha, supersededProof(repo, sha, supersedeRef))
+      } catch (err) {
+        if (!(err instanceof GitError)) throw err
+        supersedes.set(sha, null)
+      }
+    }
+    return supersedes.get(sha)
+  }
 
   const proofs = new Map()
   const proofOf = (sha) => {
@@ -1091,10 +1176,14 @@ export function branchRecords(repo, worktrees = listWorktrees(repo), trunkPrOnly
 
     const pr = prLookup(repo, name, unproven.length === 1 ? unproven[0] : tips[0])
     // The record's proof is the local tip's (the remote's when there is no local); M4 stands in for whichever single tip only the PR proves.
-    const m4 = unproven.length === 1 && pr.state === 'merged-at-tip'
+    const m4 = unproven.length === 1 && prMerged(pr.state)
     const prUnknown = pr.state === 'unavailable' && ghStatus(repo) !== 'absent'
     const proof = !prUnknown && (unproven.length === 0 || m4) ? (proofOf(tips[0]) ?? 'M4') : null
-    let reason = proof ? `merged: ${proof === 'M4' ? `PR #${pr.number}` : PROOF_LABELS[proof]} (${proof})` : null
+    let reason = proof ? `merged: ${proof === 'M4' ? m4Label(pr, repo.trunk) : PROOF_LABELS[proof]} (${proof})` : null
+    // R38: superseded only where nothing proved merged and the PR lookup answered; every tip M1–M4 left unproven must hold, and the first of them
+    // (the local one when both are) names the file count.
+    const sup = !prUnknown && !proof && unproven.length > 0 ? unproven.map(supersededOf) : null
+    const superseded = sup && sup.every(Boolean) ? sup[0] : null
 
     const wts = wtsByBranch.get(name) ?? []
     const busy = wts.find((x) => x.inProgress)
@@ -1106,6 +1195,7 @@ export function branchRecords(repo, worktrees = listWorktrees(repo), trunkPrOnly
     else if (name === current) [bucket, reason] = ['protected', 'checked out in the main tree']
     else if (name === mainHeld?.branch) [bucket, reason] = ['protected', `mid-${mainHeld.op} in the main tree`]
     else if (proof) bucket = 'merged'
+    else if (superseded) [bucket, reason] = ['superseded', supersededReason(superseded.files, repo.trunk)]
     else if (local?.gone) [bucket, reason] = ['gone-unproven', 'remote deleted, not provably merged']
     else if (now - newest > staleSecs) [bucket, reason] = ['abandoned', `${Math.floor((now - newest) / 86400)}d without commits`]
     else [bucket, reason] = ['active', 'recent']
@@ -1126,6 +1216,7 @@ export function branchRecords(repo, worktrees = listWorktrees(repo), trunkPrOnly
       unpushed,
       worktree: wts[0]?.path ?? null,
       openPr: pr.state === 'open' ? pr.number : null,
+      superseded,
     })
   }
   return records
@@ -1207,7 +1298,8 @@ function chunks(xs, n) {
 }
 
 // Everything the decision round may ask about, in one place, so `rounds` (what is offered) and `buildPlan` (what an answer may name) are the same
-// predicate and can't drift apart. Asked: abandoned and gone-unproven only — protected and active are never offered for deletion (§5). Push: only
+// predicate and can't drift apart. Superseded (R38) has its own question. Asked: abandoned and gone-unproven only — protected and active are never
+// offered for deletion (§5). Push: only
 // records the survey flagged `unpushed`, and none at all when downgraded (§6). Worktrees: one that is dirty, detached, or on a branch outside the
 // merged set — a clean one on a merged-set branch goes with its branch instead. Locked and mid-rebase/bisect ones are never touched (§5, R18), and a
 // prunable one only needs the metadata prune apply runs anyway.
@@ -1217,6 +1309,7 @@ function offered(survey) {
   return {
     byName,
     merged: survey.mergedSet.map((n) => byName.get(n)).filter(Boolean),
+    superseded: survey.branches.filter((b) => b.bucket === 'superseded'),
     asked: survey.branches.filter((b) => b.bucket === 'abandoned' || b.bucket === 'gone-unproven'),
     push: survey.downgraded ? [] : survey.branches.filter((b) => b.unpushed && b.local),
     stashes: survey.stashes,
@@ -1246,6 +1339,7 @@ function branchOption(survey, rec) {
 const SENTINELS = {
   asked: { label: 'Keep all', description: 'Delete nothing from this list' },
   'merged-pick': { label: 'Keep all', description: 'Delete nothing from this list' },
+  superseded: { label: 'Keep all', description: 'Delete nothing from this list' },
   push: { label: 'Push none', description: 'Push nothing' },
 }
 
@@ -1306,7 +1400,7 @@ function worktreeQuestion(survey, wt) {
   }
 }
 
-// §7's decision round, in the fixed order merged → asked → push → stashes → worktrees, packed into calls of at most 4 questions without reordering
+// §7's decision round, in the fixed order carry → merged → superseded → asked → push → stashes → worktrees, packed into calls of at most 4 questions without reordering
 // (SKILL.md asks them back to back). "Let me pick" on the merged question opens `followups.merged`, which is packed the same way. The merged counts
 // are exactly what `buildPlan` would emit for "Delete all": remote copies only where a remote delete is allowed, worktrees bar prunable ones.
 export function rounds(survey) {
@@ -1342,6 +1436,8 @@ export function rounds(survey) {
       ],
     })
   }
+  const supersededAsk = `Delete which branches whose changes are already on origin/${survey.trunk}? Ticked ones are deleted.`
+  questions.push(...branchChunks(survey, o.superseded, 'superseded', 'Superseded', supersededAsk))
   questions.push(...branchChunks(survey, o.asked, 'asked', 'Abandoned', 'Delete which unmerged branches? Ticked ones are deleted.'))
   questions.push(...branchChunks(survey, o.push, 'push', 'Push', 'Push which branches to origin with an upstream? Ticked ones are pushed.'))
   questions.push(...o.stashes.map((s) => stashQuestion(survey, s)))
@@ -1351,7 +1447,8 @@ export function rounds(survey) {
 }
 
 // R37: the standing answers for a session with no AskUserQuestion. The user approved cleaning up merged work in advance, so the merged set goes, and
-// so does every offered worktree on a merged branch — dirty ones included, which takes the branch along with it. Everything else stays unanswered,
+// so does every offered worktree on a merged branch — dirty ones included, which takes the branch along with it. Everything else stays unanswered —
+// superseded branches too (R38): their content is on the trunk but their commits are not, which is the user's call,
 // which means keep. Built from `offered` like the questions, so `buildPlan` accepts them by construction. The trunk carry is never answered here:
 // opening a PR is publishing work, which an absent user has not approved.
 function unattended(survey, o) {
@@ -1362,7 +1459,7 @@ function unattended(survey, o) {
   return answers
 }
 
-const ANSWER_KEYS = new Set(['carry', 'merged', 'asked', 'push', 'stashes', 'worktrees'])
+const ANSWER_KEYS = new Set(['carry', 'merged', 'superseded', 'asked', 'push', 'stashes', 'worktrees'])
 const STASH_CHOICES = new Set(['branch-push', 'branch-local', 'drop', 'keep'])
 const WORKTREE_CHOICES = new Set(['keep', 'remove'])
 // §10.9: stash actions, worktree removals, branch pushes, remote deletions, local deletions. Stash first so a stash's branch exists before anything
@@ -1414,6 +1511,7 @@ export function buildPlan(survey, answers) {
   if (answers.merged === 'all') merged = o.merged
   else if (answers.merged === 'none') merged = []
   else merged = pick('merged', o.merged, SENTINELS['merged-pick'].label)
+  const superseded = pick('superseded', o.superseded, SENTINELS.superseded.label)
   const asked = pick('asked', o.asked, SENTINELS.asked.label)
   if (survey.downgraded && Array.isArray(answers.push) && answers.push.length > 0) bad('a downgraded repo pushes no branches', answers.push)
   const push = pick('push', o.push, SENTINELS.push.label)
@@ -1439,6 +1537,7 @@ export function buildPlan(survey, answers) {
     }
     deleteBranch(rec, 'merged')
   }
+  for (const rec of superseded) deleteBranch(rec, 'superseded')
   for (const rec of asked) deleteBranch(rec, 'picked')
   for (const rec of push) actions.push({ kind: 'push-branch', target: rec.name, expectTip: rec.local.sha })
   for (const s of o.stashes) {
@@ -1772,6 +1871,7 @@ function pushTrunk(ctx) {
 // would be resolved locally at push time — refused as a malformed plan instead.
 const FULL_SHA = /^[0-9a-f]{40}(?:[0-9a-f]{24})?$/
 const BRANCH_ACTIONS = new Set(['push-branch', 'delete-remote', 'delete-local', 'carry-trunk'])
+const DELETE_BASES = new Set(['merged', 'superseded', 'picked'])
 
 // The plan to apply: `--plan <file>` when given (the SKILL layer's escape hatch, and the tests' hand-written plans), else the plan.json this run's
 // `plan` wrote. Validated in full before anything runs, as strictly as `buildPlan` validates answers: a malformed plan stops with `bad-plan`
@@ -1797,7 +1897,7 @@ function readPlan(ctx, planFile) {
     if (!isPlainObject(a) || !Object.hasOwn(ACTION_RANK, a.kind)) bad('unknown action kind', a)
     if (typeof a.target !== 'string' || a.target === '') bad('an action needs a target', a)
     if (typeof a.expectTip !== 'string' || !FULL_SHA.test(a.expectTip)) bad('expectTip must be a full sha', a)
-    if (a.kind.startsWith('delete-') && a.basis !== 'merged' && a.basis !== 'picked') bad('a deletion needs a basis of merged or picked', a)
+    if (a.kind.startsWith('delete-') && !DELETE_BASES.has(a.basis)) bad('a deletion needs a basis of merged, superseded or picked', a)
     if (BRANCH_ACTIONS.has(a.kind) && git(ctx.root, ['check-ref-format', `refs/heads/${a.target}`], { env: ctx.env }).status !== 0) {
       bad('not a branch name', a)
     }
@@ -1832,7 +1932,19 @@ function mergedOnOrigin(r, action, sha) {
     if (!(err instanceof GitError)) throw err
     return false
   }
-  return action.proof === 'M4' && prLookup(r, action.target, sha).state === 'merged-at-tip'
+  return action.proof === 'M4' && prMerged(prLookup(r, action.target, sha).state)
+}
+
+// R38: a `superseded` deletion re-proves the tip it is about to delete the same way — merged on `origin/<trunk>` by M1–M3, or every changed file
+// still identical there. Survey's word is not trusted: the trunk may have changed one of those files since.
+function supersededOnOrigin(r, sha) {
+  if (mergedOnOrigin(r, { proof: null }, sha)) return true
+  try {
+    return supersededProof(r, sha, `refs/remotes/origin/${r.trunk}`) !== null
+  } catch (err) {
+    if (!(err instanceof GitError)) throw err
+    return false
+  }
 }
 
 // Invariant 7: one line per deleted copy, `<ISO time>\t<hostname>\t<name>\t<local|remote>\t<sha>`, appended and never rewritten — it is the
@@ -1908,6 +2020,7 @@ function deleteRemote(ctx, r, a) {
   if (a.target === r.trunk) return ['skipped', 'protected'] // R23: the trunk is never deleted, whatever the plan says
   if (r.downgraded) return ['skipped', 'downgraded']
   if (a.basis === 'merged' && !mergedOnOrigin(r, a, a.expectTip)) return ['skipped', 'not-merged-on-origin']
+  if (a.basis === 'superseded' && !supersededOnOrigin(r, a.expectTip)) return ['skipped', 'not-superseded-on-origin']
   const ref = `refs/heads/${a.target}`
   const res = git(r.root, [...SAFE_MUTATE_CONFIG, 'push', `--force-with-lease=${ref}:${a.expectTip}`, 'origin', `:${ref}`], { env: r.env })
   if (res.status !== 0) return /stale info/.test(res.stderr) ? ['skipped', 'lease-failed'] : ['failed', 'rejected', res.stderr.trim()]
@@ -1929,6 +2042,7 @@ function deleteLocal(ctx, r, a) {
   if (tip === null) return ['skipped', 'branch-gone']
   if (tip !== a.expectTip) return ['skipped', 'tip-moved']
   if (a.basis === 'merged' && !mergedOnOrigin(r, a, tip)) return ['skipped', 'not-merged-on-origin']
+  if (a.basis === 'superseded' && !supersededOnOrigin(r, tip)) return ['skipped', 'not-superseded-on-origin']
   const res = git(r.root, [...SAFE_MUTATE_CONFIG, 'branch', '-D', '--', a.target], { env: r.env })
   if (res.status !== 0) return ['failed', 'git-failed', res.stderr.trim()]
   logDeletion(ctx, a.target, 'local', tip)
@@ -2231,6 +2345,7 @@ const REASON_TEXT = {
   'in-progress': 'a rebase or bisect is in progress there',
   'git-failed': 'the git command failed',
   'not-merged-on-origin': 'not provably merged into the trunk on origin',
+  'not-superseded-on-origin': 'its changes are no longer all identical on the trunk on origin',
   // R36: an error that is not git's own, caught per action so the rest of the plan still ran.
   internal: 'an unexpected engine error; see detail',
   // R25/R26: these four skip reasons must say the stash itself was kept, except `stash-gone` —
@@ -2354,7 +2469,8 @@ function buildDeletedAndKept(surveyState, applyState) {
 
   const deleted = []
   for (const r of doneDeletes) {
-    const bucket = surveyState.branches.find((b) => b.name === r.target)?.bucket ?? 'unknown'
+    let bucket = surveyState.branches.find((b) => b.name === r.target)?.bucket ?? 'unknown'
+    if (bucket === 'superseded') bucket = `superseded: its changes were already on ${surveyState.trunk}`
     const side = r.kind === 'delete-remote' ? 'remote' : 'local'
     const name = shQuote(r.target)
     const recovery = side === 'local' ? `git branch ${name} ${r.sha}` : `git push origin ${r.sha}:refs/heads/${name}`

@@ -65,6 +65,7 @@ function everyKindSurvey() {
   const branches = [
     rec('done', { bucket: 'merged', proof: 'M1', reason: 'merged', remote: { sha: 'a'.repeat(40), date: 0 } }),
     rec('old', { bucket: 'abandoned', reason: 'old' }),
+    rec('sup', { bucket: 'superseded', reason: 'superseded: no changed files since it left main', superseded: { files: 0 } }),
     rec('solo', { unpushed: 'local-only' }),
     rec('kept', {}),
   ]
@@ -80,7 +81,7 @@ test('T14.6 every fixed label the decision round emits is mapped in SKILL.md, an
   const qs = r.rounds.flat().concat(r.followups.merged.flat())
   const names = new Set(s.branches.map((b) => b.name))
   const prefixes = new Set(qs.map((q) => q.id.split(':')[0]))
-  assert.deepEqual([...prefixes].sort(), ['asked', 'carry', 'merged', 'merged-pick', 'push', 'stash', 'worktree'], 'the fixture reaches every kind')
+  assert.deepEqual([...prefixes].sort(), ['asked', 'carry', 'merged', 'merged-pick', 'push', 'stash', 'superseded', 'worktree'], 'the fixture reaches every kind')
   const text = skill()
   // The carry question's second label names the trunk; SKILL.md writes it with the placeholder.
   const asWritten = (l) => (l === `Leave on ${s.trunk}` ? 'Leave on <trunk>' : l)

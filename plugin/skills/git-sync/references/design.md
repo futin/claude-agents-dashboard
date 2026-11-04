@@ -71,9 +71,15 @@ A branch is **merged** when any one proof holds:
 | M1 | merge, fast-forward | the tip is an ancestor of `<ref>` |
 | M2 | rebase, cherry-pick | `git cherry <ref> <tip>` lists no `+` commit |
 | M3 | squash merge | a synthetic commit carrying the tip's tree with the merge-base as its only parent is patch-equivalent to something in `<ref>` (the `git cherry` check again) |
-| M4 | merged PR | GitHub only, when `gh` is installed and authenticated: a merged PR whose base is the trunk and whose head SHA equals the current tip. A tip that moved after the merge is not proof. |
+| M4 | merged PR | GitHub only, when `gh` is installed and authenticated: a merged PR whose base is the trunk and whose head SHA equals the current tip, or is an ancestor of it with every commit from head to tip already on `origin/<trunk>` (R39). A tip that diverged from the PR head is not proof. |
 
 A `[gone]` upstream is never proof on its own.
+
+A branch no proof holds for is **superseded** (R38) when its work reached the trunk by content alone: every path it changed since its merge-base with
+`origin/<trunk>` is identical there (same mode and blob, or absent on both sides for a deletion). A branch with no changed paths at all — an empty
+"verification only" commit — counts. This catches a squash that also carried other files (M3 misses it) and a tip rebased or amended after its PR merged
+(M4 misses it). It is not a merge proof: the branch's commits and messages are not on the trunk, only their end state, so it never joins the merged set.
+It is always judged on `origin/<trunk>`, whichever ref the merge proofs use, and only when the PR lookup answered (R17).
 
 Buckets, first match wins:
 
@@ -81,6 +87,7 @@ Buckets, first match wins:
 | --- | --- | --- |
 | `protected` | has an open PR (M4's lookup), is checked out in a locked worktree, or is the current HEAD | never offered for deletion |
 | `merged` | any of M1–M4 | offered for deletion in one confirmation |
+| `superseded` | no merge proof, every unproven tip superseded | asked on its own; the user ticks which to delete; never pushed, never deleted unattended |
 | `gone-unproven` | upstream is gone, no proof | asked, whatever its age, labelled "remote deleted, not provably merged" |
 | `abandoned` | unmerged, and the newer of its local and remote tip committer dates is older than the stale threshold (default 30 days) | asked; the user picks which to delete |
 | `active` | everything else | kept; if local-only or ahead of its upstream, offered for pushing |
@@ -120,6 +127,7 @@ questions spread over consecutive calls, still asked back to back before anythin
 | Question | Form |
 | --- | --- |
 | Delete the merged set | one question: delete all (N branches, M remote copies, K worktrees) / let me pick / keep all |
+| Superseded | multiSelect of branch name, age, local/remote presence and why (`all N changed files identical on origin/<trunk>`); ticked = delete, id `superseded:<n>`, answers key `superseded` |
 | Abandoned and gone-unproven | multiSelect of branch name, age, commits ahead, local/remote presence; ticked = delete |
 | Carry local trunk commits | one question, asked first, only when the trunk is PR-only and ahead of origin: open a PR (push `sync/<trunk>-<YYYYMMDD-HHMM>`, reset the local trunk to `origin/<trunk>`, open the PR) / leave on the trunk. Never answered by `unattended`. |
 | Unpushed survivors | multiSelect of local-only or ahead branches; ticked = push with upstream. Not asked in downgraded repos. |
@@ -128,8 +136,8 @@ questions spread over consecutive calls, still asked back to back before anythin
 
 Choosing to delete a branch whose worktree the user keeps is skipped at apply time by invariant 1 and reported as such. An unanswered question means
 keep — no destructive or outward action happens without an answer. A session with no AskUserQuestion answers with `survey.unattended` instead (R37): the
-merged set goes (`"merged": "all"`), and so does every offered worktree on a merged branch, dirty or not. Nothing else is answered, so abandoned,
-gone-unproven and unpushed branches, stashes and unmerged or detached worktrees are kept and asked in prose after the report.
+merged set goes (`"merged": "all"`), and so does every offered worktree on a merged branch, dirty or not. Nothing else is answered, so superseded,
+abandoned, gone-unproven and unpushed branches, stashes and unmerged or detached worktrees are kept and asked in prose after the report.
 
 The `plan` subcommand turns the answers into `plan.json` (the model never writes it): a list of actions — `stash-branch`, `stash-drop`,
 `remove-worktree`, `push-branch`, `delete-remote`, `delete-local`, `carry-trunk` — each carrying the tip or stash SHA the survey saw (`expectTip`).
@@ -168,8 +176,8 @@ model reads a log tail only when a check fails. A `.nvmrc` that does not match t
 ## 10. Safety invariants
 
 1. Never delete a branch that is the trunk, the current HEAD, checked out in a worktree that is not being removed in the same action, or `protected`.
-2. `delete-local` of a `merged` branch re-proves M1–M4 at apply time; of a user-picked branch, re-checks that the tip still equals `expectTip`. Either
-   failing skips the action. A `remove-worktree` on the `merged` basis re-proves the worktree's HEAD the same way, on `origin/<trunk>`.
+2. `delete-local` of a `merged` branch re-proves M1–M4 at apply time; of a `superseded` one, re-proves M1–M3 or superseded on `origin/<trunk>`
+   (`not-superseded-on-origin` otherwise); of a user-picked branch, re-checks that the tip still equals `expectTip`. Any failing skips the action. A `remove-worktree` on the `merged` basis re-proves the worktree's HEAD the same way, on `origin/<trunk>`.
 3. `delete-remote` uses a lease on the expected remote tip, so a branch the other machine has since pushed to is not deleted.
 4. `push-branch` never forces; a non-fast-forward rejection is reported.
 5. Stashes are addressed by SHA, never by `stash@{n}`, because indexes shift as others are dropped. `stash-branch` builds the branch in a temporary detached
@@ -206,7 +214,13 @@ trunk move.
 stub returning canned JSON. Commit dates are fixed with `GIT_COMMITTER_DATE`. Cases:
 
 - Merge proofs: fast-forward merge, true merge, rebase merge and squash merge each classify `merged`; squash followed by one more commit on the branch does
-  not; a merged PR whose tip moved afterwards does not; an open PR classifies `protected`.
+  not; an open PR classifies `protected`.
+- Relaxed M4 (R39): a PR merged at head H plus one later commit whose change reached the trunk separately — by content or by cherry-pick — is merged; the
+  same with the later commit not on the trunk is neither merged nor superseded; a PR merged into another branch proves nothing.
+- Superseded (R38): a docs branch landed byte for byte inside a bigger squash; a tip that diverged from its merged PR's head with all its files on the
+  trunk (superseded, not merged); a branch holding one empty commit; a deletion the trunk also made. A file that differs on the trunk keeps the branch
+  `active` or `abandoned`; an open PR keeps it `protected`. It gets its own question, never `unattended`, deletes with basis `superseded`, and `apply`
+  re-proves it on origin.
 - Buckets: gone upstream without proof → `gone-unproven`; unmerged tip 31 days old → `abandoned`, 29 days → `active`; `git-sync.staleDays` overrides
   the threshold; a remote-only branch pushed from clone B is `active` and absent from any delete action.
 - Worktrees: a locked worktree is never offered; a dirty worktree is asked about; a clean worktree on a merged branch is removed with it; `prune` clears a
@@ -312,6 +326,13 @@ Rulings made while the tasks were implemented that change behaviour this spec de
 - R37 — with no AskUserQuestion the survey's `unattended` answers are applied, not skipped (2026-10-02, the user's call: cleaning up merged work is the
   point of the skill and needs no answer). They are built from `offered`, so `buildPlan` accepts them by construction, and they hold merged work only;
   a dirty worktree on a merged branch is removed and its changed or ignored files are lost.
+- R38 — superseded (§5, 2026-11-04): a content-level bucket for branches whose every changed path is already identical on `origin/<trunk>`. A
+  backlog-manager run on a squash-merge-only repo kept 7 such branches as `active` (all under the stale threshold) and offered two for a push; each had
+  landed squashed, inside a bigger PR, or past its merged PR's head. Superseded branches get their own multiSelect, nothing deletes them unticked,
+  `unattended` never answers it, a superseded record is never `unpushed`, and its deletions carry basis `superseded`, re-proven in `apply`.
+- R39 — relaxed M4 (2026-11-04): a merged PR into the trunk proves the tip when its head is the tip, or an ancestor of it with no merge commit in
+  between and every later commit either patch-equivalent on `origin/<trunk>` (`git cherry`) or leaving every path it touches identical there; the net
+  head→tip change then passes R11's containment gate. `prLookup` reports that case as `merged-below-tip`, and the reason names the later commits.
 - Phase B (2026-10-15): PR-only trunks — `main` of the dashboard repo accepts changes only through a pull request, so git-sync reads the trunk's rules
   (§6), never pushes a PR-only trunk, and offers to carry its local commits to a PR branch (`carry-trunk`, invariant 11). The design and the rest of the
   release pipeline are in `docs/superpowers/specs/2026-10-15-release-pipeline-design.md`.
