@@ -17,6 +17,7 @@ import { readSessionAnalyticsLog } from './lib/sessionAnalyticsLog.js';
 import { archivedSessionIds, desktopLiveSessionIds } from './lib/archived.js';
 import { lastSessionEffort, readTranscript } from './lib/transcript.js';
 import { readAgentsCached } from './lib/agents-cache.js';
+import { readSessionSpend } from './lib/session-spend.js';
 import { getCachedUsageState } from './lib/usage.js';
 import { isRefreshSession } from './lib/token-refresh.js';
 import { readAccountProfile } from './lib/account.js';
@@ -80,7 +81,7 @@ import { runJob, stopJob } from './lib/routine-run.js';
 import { RoutineStoreError, deleteJob, isOwner, readJobs, writeJob, writePinsSnapshot } from './lib/routine-store.js';
 import type {
   AnalyticsResponse, GitQuickRequest, ManagementIndex, MessageWaitResult, OpenFolderResponse, PinsResponse, PinsSavedError, PlanWaitResult, ScopeConfig,
-  SessionMessage, SessionPlan, SessionPrInfo, SessionPrResponse, SessionQuestion, SessionsResponse, SessionChat, SessionDetail, SpawnRequest,
+  SessionMessage, SessionPlan, SessionPrInfo, SessionPrResponse, SessionQuestion, SessionsResponse, SessionChat, SessionDetail, SessionSpend, SpawnRequest,
   ProjectRef, ServerSettings, SpawnResponse,
   UsageHistoryResponse, UsageProfileResponse, WaitResult, ConnectionOrigin, WriteAccess,
   ReconcileReport, RoutineFile, RoutineJob, RoutineJobRow, RoutineRunsResponse, RoutinesResponse, RoutineValidateResponse, Session,
@@ -196,6 +197,31 @@ export function serveSessionDetail(id: string, res: ServerResponse): void {
   }
   res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
   res.end(JSON.stringify(detail));
+}
+
+/** GET /api/sessions/:id/spend — tokens the session has spent, followed incrementally (see session-spend.ts). Same id handling as the detail route. */
+export function serveSessionSpend(id: string, res: ServerResponse): void {
+  const fail = (code: number): void => {
+    const body: SessionSpend = { id, main: 0, subagents: 0, total: 0, compactions: 0, uncountedSubagents: 0, error: true };
+    res.writeHead(code, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+    res.end(JSON.stringify(body));
+  };
+
+  if (!ID_RE.test(id)) return fail(400);
+
+  let body: SessionSpend;
+  try {
+    const ref = findTranscript(projectsRoot(), id);
+    if (!ref) return fail(404);
+    const spend = readSessionSpend(ref.file);
+    if (!spend) return fail(404);
+    body = { id, ...spend };
+  } catch (e) {
+    console.error('[dashboard] session spend failed:', (e as Error).message);
+    return fail(500);
+  }
+  res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+  res.end(JSON.stringify(body));
 }
 
 /**

@@ -11,19 +11,16 @@
  * to maintain (see backlog/ideas/done/idea-1-incremental-cache-for-subagent-tracking.md).
  *
  * Correctness notes:
- *  - Offsets are BYTES and lines are split on 0x0A before decoding — a
- *    multibyte UTF-8 sequence can straddle a read boundary, so string lengths
- *    must never drive the offset.
- *  - A read can end mid-line; the fragment is buffered in `partial` and
- *    prepended to the next read. If the newline-less tail parses as JSON it is
- *    a complete record (a strict prefix of a JSON document never parses), so it
- *    is consumed — matching the oracle, which parses a final unterminated line.
+ *  - Byte offsets, line splitting and the buffered partial line: see jsonl-tail.ts.
+ *    A newline-less tail that parses is consumed, matching the oracle, which parses
+ *    a final unterminated line.
  *  - `size < offset` means truncation/rotation → reset and re-read from 0.
  *  - Any unexpected error falls back to the pure whole-file readAgents.
  *
- * Two callers: the on-demand GET /api/sessions/:id handler, and the 3s
- * /api/sessions poll through scan.ts `subagentRunning` — gated there behind a
- * subagent file written in the last 15 minutes that is still mid-turn. So state
+ * Three callers: the on-demand GET /api/sessions/:id handler, the drawer's
+ * spend read (session-spend.ts), and the 3s /api/sessions poll through scan.ts
+ * `subagentRunning` — gated there behind a subagent file written in the last 15
+ * minutes that is still mid-turn. So state
  * exists only for sessions the UI watches or that are parked on a live subagent
  * (LRU-capped at MAX_ENTRIES).
  */
@@ -32,12 +29,11 @@ import fs from 'node:fs';
 
 import type { AgentJob } from '../../shared/types.js';
 import { createScanState, parseRecordEvents, applyEvent, toAgentJobs, readAgents, type ScanState } from './agents.js';
+import { createTail, followJsonl, type JsonlTail } from './jsonl-tail.js';
 
 interface CacheEntry {
-  /** Bytes consumed into `state` — always a line boundary or a consumed EOF tail. */
-  offset: number;
-  /** Bytes read past `offset` that don't yet form a parseable line. */
-  partial: Buffer;
+  /** How far into the file `state` has consumed. */
+  tail: JsonlTail;
   state: ScanState;
   /** Last materialized snapshot, returned as-is when the file hasn't grown. */
   jobs: AgentJob[];
@@ -49,15 +45,7 @@ const cache = new Map<string, CacheEntry>();
 
 // Stamped now, not 0: `evictIfNeeded` runs right after insertion, and a 0 would make the new entry the LRU pick, evicting itself.
 function freshEntry(): CacheEntry {
-  return { offset: 0, partial: Buffer.alloc(0), state: createScanState(), jobs: [], lastUsed: Date.now() };
-}
-
-function consumeLine(state: ScanState, lineBuf: Buffer): void {
-  const trimmed = lineBuf.toString('utf8').trim();
-  if (!trimmed) return;
-  let rec: any;
-  try { rec = JSON.parse(trimmed); } catch { return; }
-  for (const ev of parseRecordEvents(rec)) applyEvent(state, ev);
+  return { tail: createTail(), state: createScanState(), jobs: [], lastUsed: Date.now() };
 }
 
 function evictIfNeeded(): void {
@@ -89,57 +77,20 @@ export function readAgentsCached(filePath: string): AgentJob[] | null {
     cache.set(filePath, entry);
     evictIfNeeded();
   }
-  if (size < entry.offset) {
+  if (size < entry.tail.offset) {
     // Truncated/rotated in place — everything derived so far is invalid.
     const reset = freshEntry();
     cache.set(filePath, reset);
     entry = reset;
   }
   entry.lastUsed = Date.now();
-  if (size === entry.offset && entry.partial.length === 0) return entry.jobs;
+  if (size === entry.tail.offset && entry.tail.partial.length === 0) return entry.jobs;
 
   try {
-    const toRead = size - entry.offset;
-    let buf: Buffer;
-    if (toRead > 0) {
-      const fd = fs.openSync(filePath, 'r');
-      try {
-        const chunk = Buffer.alloc(toRead);
-        const read = fs.readSync(fd, chunk, 0, toRead, entry.offset);
-        buf = Buffer.concat([entry.partial, chunk.subarray(0, read)]);
-        entry.offset += read;
-      } finally {
-        fs.closeSync(fd);
-      }
-    } else {
-      buf = entry.partial;
-    }
-
-    // Consume complete lines (byte-level split — see header comment).
-    let start = 0;
-    let nl: number;
-    while ((nl = buf.indexOf(0x0a, start)) !== -1) {
-      consumeLine(entry.state, buf.subarray(start, nl));
-      start = nl + 1;
-    }
-    let tail = buf.subarray(start);
-
-    // A newline-less tail that parses is a complete final record — consume it
-    // so output matches the whole-file oracle.
-    if (tail.length > 0) {
-      const text = tail.toString('utf8').trim();
-      if (text) {
-        try {
-          const rec = JSON.parse(text);
-          for (const ev of parseRecordEvents(rec)) applyEvent(entry.state, ev);
-          tail = Buffer.alloc(0);
-        } catch { /* incomplete — keep buffering */ }
-      } else {
-        tail = Buffer.alloc(0);
-      }
-    }
-    entry.partial = tail;
-
+    const state = entry.state;
+    followJsonl(filePath, size, entry.tail, rec => {
+      for (const ev of parseRecordEvents(rec)) applyEvent(state, ev);
+    });
     entry.jobs = toAgentJobs(entry.state);
     return entry.jobs;
   } catch {

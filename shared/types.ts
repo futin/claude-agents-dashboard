@@ -947,6 +947,20 @@ export interface SessionDetail {
   error?: boolean;
 }
 
+/** Payload of `GET /api/sessions/:id/spend` — tokens spent so far, compaction or not. Each figure is `billableApprox`: cache reads are not in it. */
+export interface SessionSpend {
+  id: string;
+  main: number;
+  /** Summed from each subagent's own transcript, never from the harness's `AgentJob.tokens`. */
+  subagents: number;
+  total: number;
+  /** Compact boundaries across main and subagents. The compaction calls are recorded nowhere, so any boundary makes `total` a minimum. */
+  compactions: number;
+  /** Finished subagents with no transcript, or one summing below the harness figure. Any of them makes `total` a minimum. */
+  uncountedSubagents: number;
+  error?: boolean;
+}
+
 /** One tool call rendered as a compact line under an assistant message. */
 export interface ChatToolCall {
   name: string;

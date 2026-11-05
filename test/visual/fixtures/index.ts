@@ -14,6 +14,7 @@ import { releases } from './releases.js';
 import { routineRuns, routines } from './routines.js';
 import { sessionChat } from './session-chat.js';
 import { sessionDetail } from './session-detail.js';
+import { sessionSpend } from './session-spend.js';
 import { sessionMessage } from './session-message.js';
 import { sessionPlan } from './session-plan.js';
 import { sessionPr } from './session-pr.js';
@@ -32,6 +33,7 @@ export const FIXTURE_SESSION_ID: string = SESSION_IDS.working;
 export const fixtures: FixtureMap = {
   '/api/sessions': sessions,
   '/api/sessions/:id': sessionDetail,
+  '/api/sessions/:id/spend': sessionSpend,
   // The tail poll (`?after=<cursor>`) appends what it gets; answering it with the first page again would grow the drawer every 3s.
   '/api/sessions/:id/chat': (url: URL) => url.searchParams.has('after') ? { ...sessionChat, messages: [] } : sessionChat,
   '/api/sessions/:id/plan': sessionPlan,

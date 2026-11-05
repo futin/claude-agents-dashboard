@@ -23,7 +23,7 @@ full id on the clipboard — for `claude --resume <id>` or a prompt in another s
 `copyText` falls back to an off-screen `<textarea>` + `execCommand('copy')` where `navigator.clipboard` is missing (the plain-HTTP LAN shape is not a secure
 context) or rejects.
 
-**The Stop control sits in the sidecar, directly under the context reading** — the same
+**The Stop control sits in the sidecar, directly under the context and tokens-spent readings** — the same
 `sessions/SessionStopControl.tsx` the expanded row renders, so arm, confirm, cancel, `stopping…` + `Force stop`, the token hint and the server's error line
 behave identically in both places. It renders only for a session carrying `Session.stopState` and leaves no gap otherwise. It is in the sidecar and not the
 head on purpose: on a phone the thumb goes to ✕, and a stop beside it gets hit by accident even behind the confirm step (#211). Below `md` it is one line in
@@ -316,6 +316,22 @@ the field to supply ([remote-access](remote-access.md)).
   The empty box shows the suggestion as its placeholder, and a dashed `.qp-suggest` chip under it is the tap target for phones (its `Tab` hint hides
   on a coarse pointer). Tab with text in the box, or Shift+Tab, moves focus as usual.
 
+## Tokens spent
+
+The drawer's second card under Context is the session's running spend (`useSessionSpend`, `lib/sessionSpend.ts`), read from
+`GET /api/sessions/:id/spend` (`server/lib/session-spend.ts`) on the Settings refresh interval, while the drawer is open. Context falls when a compaction runs;
+this figure does not, because transcripts are append-only, a replayed turn dedupes by `message.id` and the summary record is skipped.
+
+- **Figure:** `billableApprox` (input + output + cache writes; cache reads are out), by the same rules as the session analysis: main like `analyzeSession`,
+  subagents like `sumTranscript`. Tests pin the two equal once every subagent has finished.
+- **`≥` means a minimum.** It shows when `compactions > 0`, because the compaction call itself is recorded nowhere (no usage near the boundary in 3 transcripts,
+  0 `agent-*compact*` files in 74 subagent dirs, 2026-11-05), or when `uncountedSubagents > 0`: a finished launch with no transcript, or one summing below the
+  harness figure.
+- **The harness's `AgentJob.tokens` is never added.** It is final context size, not spend, so it is only compared. A running launch with no file yet adds nothing and is not uncounted.
+- **Only a transcript a launch claims counts,** by `agentId`, then by the sidecar's `toolUseId`. Each file joins once, so a resumed row sharing one adds nothing.
+- A failed poll keeps the last good snapshot. An error as the first response draws no card.
+- Below `md` it follows the Context card's band shape: one row of label, total and split.
+
 ## Invariants
 
 - **Offsets are BYTES, lines split on `0x0A` before decoding** — a multibyte UTF-8
@@ -336,6 +352,10 @@ the field to supply ([remote-access](remote-access.md)).
 <!-- docs-sync:
   sources:
     - server/lib/chat.ts
+    - server/lib/session-spend.ts
+    - server/lib/jsonl-tail.ts
+    - client/src/hooks/useSessionSpend.ts
+    - client/src/lib/sessionSpend.ts
     - server/lib/remote-message-prose.ts
     - server/api.ts
     - client/src/components/ChatDrawer.tsx

@@ -12,6 +12,7 @@ import { PrCard } from './PrCard';
 import { SessionStopControl } from './sessions/SessionStopControl';
 import { useBackClose } from '../hooks/useBackClose';
 import { useSessionChat } from '../hooks/useSessionChat';
+import { useSessionSpend } from '../hooks/useSessionSpend';
 import { usePendingQuestion } from '../hooks/usePendingQuestion';
 import { usePendingPlan } from '../hooks/usePendingPlan';
 import { usePullRequest } from '../hooks/usePullRequest';
@@ -21,6 +22,7 @@ import { usePersistedState } from '../hooks/usePersistedState';
 import { useSettings } from '../hooks/useSettings';
 import { CHAT_FILTERS, filterMessages, isChatFilter, type ChatFilter } from '../lib/chatFilter';
 import { fmtTok } from '../lib/format';
+import { spendCard } from '../lib/sessionSpend';
 import { DESKTOP_OPENED_TEXT, DESKTOP_OWNED_TEXT, DESKTOP_STOP_FIRST_TEXT } from '../lib/launchSurface';
 import { handOverErrorText, handOverFailedText, handOverState, resumeEligible, stillRunningNote, STILL_RUNNING_DETAIL, STILL_RUNNING_HINT } from '../lib/resume';
 import { heldBodyUuid } from '../lib/heldBody';
@@ -137,6 +139,8 @@ export default function ChatDrawer({ session, onClose, spawnAvailable, desktopAv
   desktopAvailable?: boolean;
 }) {
   const { messages, hasMore, loading, loadingOlder, error, loadOlder } = useSessionChat(session.id);
+  const spend = useSessionSpend(session.id);
+  const spendView = spend && spendCard(spend);
   const question = usePendingQuestion(session.id);
   const plan = usePendingPlan(session.id);
   const pullRequest = usePullRequest(session.id);
@@ -297,6 +301,16 @@ export default function ChatDrawer({ session, onClose, spawnAvailable, desktopAv
                 <div className={`fill${ctxWarn ? ' warn' : ''}`} style={{ width: `${Math.min(ctxPct, 100)}%` }} />
               </div>
             </div>
+
+            {spendView && (
+              <div className="kv">
+                <div className="k">Tokens spent</div>
+                <div className="v">
+                  <span className="metric" role="img" aria-label={spendView.ariaLabel}>{spendView.total}</span>
+                </div>
+                {spendView.split && <div className="cap">{spendView.split}</div>}
+              </div>
+            )}
 
             {/* In the sidecar, not the head: on a phone the thumb goes to ✕, and a stop beside it gets hit by accident even behind the confirm step.
                 Renders nothing for a session this dashboard did not spawn (no `stopState`). */}

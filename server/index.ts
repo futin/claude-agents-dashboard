@@ -38,7 +38,7 @@ import { spawn } from 'node:child_process';
 import { loadConfig } from './lib/config.js';
 import type { Config } from './lib/config.js';
 import {
-  serveSessions, serveSessionDetail, serveSessionChat,
+  serveSessions, serveSessionDetail, serveSessionChat, serveSessionSpend,
   serveConfigsIndex, serveConfigsProject, serveConfigsFile,
   serveAnalytics, serveHealth, serveDismiss, serveQuestionWait, serveSessionQuestion, serveSessionAnswer,
   serveRemoteAnswerToggle, servePermissionNotify,
@@ -493,6 +493,12 @@ export function createRequestListener(config: Config): http.RequestListener {
       const id = decodePath(chat[1]);
       if (id === null) return badRequest(res);
       return serveSessionChat(id, u.searchParams, res);
+    }
+    const spend = req.url && req.url.match(/^\/api\/sessions\/([^/?]+)\/spend(?:[?#]|$)/);
+    if (spend) {
+      const id = decodePath(spend[1]);
+      if (id === null) return badRequest(res);
+      return serveSessionSpend(id, res);
     }
     // Detail route must be matched before the generic prefix below, which would
     // otherwise swallow `/api/sessions/:id`.
