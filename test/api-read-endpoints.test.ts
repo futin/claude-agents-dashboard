@@ -1,6 +1,6 @@
 /**
- * The three read endpoints, driven through the real route table:
- * `GET /api/sessions`, `GET /api/sessions/:id`, `GET /api/sessions/:id/chat`.
+ * The read endpoints, driven through the real route table:
+ * `GET /api/sessions`, `GET /api/sessions/:id`, `GET /api/sessions/:id/spend`, `GET /api/sessions/:id/chat`.
  *
  * Their readers (`scan.ts`, `agents-cache.ts`, `chat.ts`) are well covered on
  * their own. What is covered *here* is the handler layer above them and the

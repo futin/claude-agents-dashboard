@@ -112,7 +112,7 @@ function evictIfNeeded(): void {
   if (oldestKey !== null) cache.delete(oldestKey);
 }
 
-/** The session's spend so far, or null when its transcript can't be read. A read failure past that point throws. */
+/** The session's spend so far, or null when its transcript can't be read. A later read failure on that transcript throws. */
 export function readSessionSpend(mainPath: string): Omit<SessionSpend, 'id' | 'error'> | null {
   const agents = readAgentsCached(mainPath);
   if (!agents) {
@@ -164,7 +164,14 @@ export function readSessionSpend(mainPath: string): Omit<SessionSpend, 'id' | 'e
     if (joined.has(agentId)) continue;
     joined.add(agentId);
     const filePath = path.join(dir, `agent-${agentId}.jsonl`);
-    const t = follow(entry.files, filePath, fs.statSync(filePath).size, onSubagentRecord);
+    let t: Tally;
+    try {
+      t = follow(entry.files, filePath, fs.statSync(filePath).size, onSubagentRecord);
+    } catch {
+      // Unreadable reads as no transcript: one lost file must not hide the session's whole figure.
+      if (a.status === 'done') uncountedSubagents++;
+      continue;
+    }
     subagents += t.billable;
     compactions += t.compactions;
     if (a.status === 'done' && t.combined < (a.tokens ?? 0)) uncountedSubagents++;

@@ -173,6 +173,27 @@ export function run(): number {
     assert.equal(s.uncountedSubagents, 1);
   });
 
+  t('an unreadable transcript counts as none: uncounted once finished, and main still reads', () => {
+    const finished = fixture([M2, launch('t1'), done('t1', 'a1', 100)]);
+    finished.agent('a1', []);
+    const finishedFile = path.join(finished.main.replace(/\.jsonl$/, ''), 'subagents', 'agent-a1.jsonl');
+    fs.rmSync(finishedFile);
+    fs.mkdirSync(finishedFile); // readdir lists it and the read fails with EISDIR
+    const s = readSessionSpend(finished.main)!;
+    assert.equal(s.main, 6);
+    assert.equal(s.subagents, 0);
+    assert.equal(s.uncountedSubagents, 1);
+
+    const running = fixture([M2, launch('t2'), result('t2', { isAsync: true, agentId: 'a2', status: 'async_launched' })]);
+    running.agent('a2', []);
+    const runningFile = path.join(running.main.replace(/\.jsonl$/, ''), 'subagents', 'agent-a2.jsonl');
+    fs.rmSync(runningFile);
+    fs.mkdirSync(runningFile);
+    const r = readSessionSpend(running.main)!;
+    assert.equal(r.main, 6);
+    assert.equal(r.uncountedSubagents, 0);
+  });
+
   t('a resumed row sharing a transcript counts that transcript once', () => {
     const f = fixture([
       launch('t1'), done('t1', 'a1', 100),

@@ -341,7 +341,7 @@ client/src/
                   drawer and the ChatDrawer), StatsBand, JobLedger / JobFold / JobMenu, JobDrawer (the editor) with JobRows / ScheduleControl (its Form
                   view), RunNowPopover, RunsList, SessionLink,
                   and `ctl.ts`, the one object of state and callbacks every part reads (see subsystems/routines.md)
-  hooks/          useSessions (the main poll), useSessionDetail, useSessionChat,
+  hooks/          useSessions (the main poll), useSessionDetail, useSessionChat, useSessionSpend,
                   useConfigs, useConfigsScope (the scope + the one index
                   fetch, shared by the rail's tree and the page), useAnalytics,
                   useUsageProfile, useUsageRates, useUsageHistory, usePendingQuestion, usePendingPlan,

@@ -325,7 +325,7 @@ this figure does not, because transcripts are append-only, a replayed turn dedup
 - **Figure:** `billableApprox` (input + output + cache writes; cache reads are out), by the same rules as the session analysis: main like `analyzeSession`,
   subagents like `sumTranscript`. Tests pin the two equal once every subagent has finished.
 - **`≥` means a minimum.** It shows when `compactions > 0`, because the compaction call itself is recorded nowhere (no usage near the boundary in 3 transcripts,
-  0 `agent-*compact*` files in 74 subagent dirs, 2026-11-05), or when `uncountedSubagents > 0`: a finished launch with no transcript, or one summing below the
+  0 `agent-*compact*` files in 74 subagent dirs, 2026-11-05), or when `uncountedSubagents > 0`: a finished launch with no readable transcript, or one summing below the
   harness figure.
 - **The harness's `AgentJob.tokens` is never added.** It is final context size, not spend, so it is only compared. A running launch with no file yet adds nothing and is not uncounted.
 - **Only a transcript a launch claims counts,** by `agentId`, then by the sidecar's `toolUseId`. Each file joins once, so a resumed row sharing one adds nothing.
@@ -346,7 +346,7 @@ this figure does not, because transcripts are append-only, a replayed turn dedup
   file path only ever comes from the walk and is **never joined into a path** (same philosophy as
   `serveSessionDetail` / the configs file endpoint, `serveConfigsFile`).
 - **⚠️ Route order:** the detail regex `/^\/api\/sessions\/([^/?]+)/` in `index.ts` also
-  matches `/api/sessions/:id/chat` and would answer it with agents — the chat match
+  matches `/api/sessions/:id/chat` and `/api/sessions/:id/spend` and would answer them with agents — both matches
   **must** stay above it.
 
 <!-- docs-sync:
