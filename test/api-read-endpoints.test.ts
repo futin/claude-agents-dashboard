@@ -1,6 +1,6 @@
 /**
- * The three read endpoints, driven through the real route table:
- * `GET /api/sessions`, `GET /api/sessions/:id`, `GET /api/sessions/:id/chat`.
+ * The read endpoints, driven through the real route table:
+ * `GET /api/sessions`, `GET /api/sessions/:id`, `GET /api/sessions/:id/spend`, `GET /api/sessions/:id/chat`.
  *
  * Their readers (`scan.ts`, `agents-cache.ts`, `chat.ts`) are well covered on
  * their own. What is covered *here* is the handler layer above them and the
@@ -157,6 +157,33 @@ export async function run(): Promise<number> {
       assert.equal(reply.json?.error, 'bad path encoding');
       // Still serving afterwards is the actual claim being made.
       assert.equal((await h.req('/api/sessions')).status, 200);
+    });
+  }));
+
+  /* ----------------------------------------------- /api/sessions/:id/spend */
+
+  check(await testAsync('GET /api/sessions/:id/spend is 200 with the spend shape, not the detail route, and is not cached', async () => {
+    await withServer(ENV, async h => {
+      h.plant(ID, [{ type: 'assistant', message: { role: 'assistant', id: 'm1', content: [], usage: { input_tokens: 1, output_tokens: 2, cache_creation_input_tokens: 3, cache_read_input_tokens: 500 } } }]);
+      const reply = await h.req(`/api/sessions/${ID}/spend`);
+      assert.equal(reply.status, 200);
+      assert.equal(reply.headers['cache-control'], 'no-store');
+      assert.equal(reply.json?.id, ID);
+      assert.equal(reply.json?.main, 6);
+      assert.equal(reply.json?.total, 6);
+      assert.equal(reply.json?.agents, undefined, 'a detail payload would carry agents');
+      assert.equal(reply.json?.error, undefined);
+    });
+  }));
+
+  check(await testAsync('GET /api/sessions/:id/spend is 400 for an id the pattern refuses, 404 for an unknown one, both with error:true', async () => {
+    await withServer(ENV, async h => {
+      const bad = await h.req('/api/sessions/not$a$valid$id/spend');
+      assert.equal(bad.status, 400);
+      assert.equal(bad.json?.error, true);
+      const missing = await h.req('/api/sessions/99999999-9999-4999-8999-999999999999/spend');
+      assert.equal(missing.status, 404);
+      assert.equal(missing.json?.error, true);
     });
   }));
 

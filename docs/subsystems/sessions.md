@@ -657,6 +657,7 @@ Measured at the same scroll position in all three configurations: default `24 / 
     - server/lib/config.ts
     - server/lib/agents.ts
     - server/lib/agents-cache.ts
+    - server/lib/jsonl-tail.ts
     - server/lib/title-cache.ts
     - server/lib/record-cache.ts
     - server/lib/model-identity.ts

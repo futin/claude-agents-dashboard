@@ -81,6 +81,7 @@ remote-answer switch on, a **gate-only write** needs the gate alone ([who may wr
 |---|---|
 | `GET /api/sessions` | the poll snapshot: sessions + totals + usage bars (`?limit=&lookback=&active=` override the scan, repeatable `?project=` filters it before the limit) + every project in the lookback |
 | `GET /api/sessions/:id` | one session's subagent timeline |
+| `GET /api/sessions/:id/spend` | tokens spent so far, main agent plus subagents; compaction never lowers it ([chat](subsystems/chat.md)) |
 | `GET /api/sessions/:id/chat` | paged chat history (byte-offset cursors) |
 | `GET /api/sessions/:id/question` | pending remote question, if any |
 | `POST /api/sessions/:id/answer` | deliver a remote answer (session write path — answer) |
@@ -266,6 +267,8 @@ server/
   lib/releases.ts     GET /api/releases: release-kit's memoised tag reader, pointed at the checkout, plus two test seams
   lib/analyze.ts  whole-session post-mortem → SessionAnalysis
   lib/subagent-usage.ts  sums one session's subagent transcripts → per-subagent token classes
+  lib/session-spend.ts  GET /api/sessions/:id/spend: main + claimed subagent transcripts, followed incrementally
+  lib/jsonl-tail.ts  byte-offset JSONL follower shared by agents-cache.ts and session-spend.ts
   lib/sessionAnalyticsLog.ts  parses ~/.claude/session-analytics-log.md
   lib/analytics.ts  reader for the Analytics tab
   lib/pending.ts  in-memory pending-question store (the first of the four session write paths)
@@ -338,7 +341,7 @@ client/src/
                   drawer and the ChatDrawer), StatsBand, JobLedger / JobFold / JobMenu, JobDrawer (the editor) with JobRows / ScheduleControl (its Form
                   view), RunNowPopover, RunsList, SessionLink,
                   and `ctl.ts`, the one object of state and callbacks every part reads (see subsystems/routines.md)
-  hooks/          useSessions (the main poll), useSessionDetail, useSessionChat,
+  hooks/          useSessions (the main poll), useSessionDetail, useSessionChat, useSessionSpend,
                   useConfigs, useConfigsScope (the scope + the one index
                   fetch, shared by the rail's tree and the page), useAnalytics,
                   useUsageProfile, useUsageRates, useUsageHistory, usePendingQuestion, usePendingPlan,
