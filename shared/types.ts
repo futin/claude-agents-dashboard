@@ -299,7 +299,7 @@ export interface UsageProfileResponse {
 
 /**
  * What the drift comparison concluded for one model. `surface-shift` is the
- * pooled rate crossing the drift band while the rate surface by surface did not
+ * separated rate crossing the drift band while the rate surface by surface did not
  * — the headless/interactive proportion moved, not the price (bug-23).
  */
 export type ModelRateVerdict = 'drift' | 'stable' | 'mix-shift' | 'surface-shift' | 'thin';
@@ -312,10 +312,27 @@ export type ModelRateVerdict = 'drift' | 'stable' | 'mix-shift' | 'surface-shift
  */
 export type ModelRateSurface = 'interactive' | 'headless';
 
+/**
+ * Why a `thin` row or day cell carries no rate, most fundamental first:
+ *
+ * - `unpriced` — another model spent more than a trivial share of the span and
+ *   has no fitted rate of its own, so its spend cannot be priced out.
+ * - `repriced` — another model's rate moved in the current window, so pricing
+ *   it out at its horizon rate would book that move to this model.
+ * - `mixed` — most of the span's points were other models'; what is left to
+ *   this model is too small a residual to trust.
+ * - `floor` — separable, but under the evidence floors (or nothing left at all).
+ */
+export type ModelThinReason = 'floor' | 'mixed' | 'repriced' | 'unpriced';
+
 /** One surface's slice of a model's rate. Nulls mean too thin to say, never zero. */
 export interface ModelSurfaceRate {
   surface: ModelRateSurface;
-  /** Weighted tokens per 1% over the current window, intervals this surface dominates only. */
+  /**
+   * Weighted tokens per 1% over the current window — the separated rate, over
+   * intervals whose own tokens of this model the surface dominates, other
+   * models' spend priced out.
+   */
   weightedPerPct: number | null;
   /** The same over the baseline window. */
   baselineWeightedPerPct: number | null;
@@ -327,7 +344,7 @@ export interface ModelSurfaceRate {
  * Whether the two-term (tokens + requests) split is reported for one model.
  *
  * Separate from {@link ModelRateVerdict} on purpose: that verdict is about
- * drift of the single pooled rate and means the same thing it always has.
+ * drift of the single separated rate and means the same thing it always has.
  * `thin` here is the only failure mode — no counts recorded yet, too little
  * evidence, regressors that cannot be told apart, or a fit that came back
  * physically impossible all reduce to "not enough evidence to separate them".
@@ -390,9 +407,11 @@ export interface ModelWeeklyRate {
  *
  * - `pre-ledger` — the day ended before recording provably began. Nothing was
  *   measured and nothing is wrong; it ages out of the strip on its own.
- * - `none` — recording was on and this model owned no window that day.
- * - `thin` — owned windows, but under the current window's utilization floor,
- *   so the figures are carried and the cell is not coloured.
+ * - `none` — recording was on and this model spent nothing in any usable
+ *   window that day.
+ * - `thin` — figures exist but sit under the floor, **or** this model's spend
+ *   could not be separated from other models' (see `thinReason`); the cell is
+ *   not coloured.
  * - `rated` — enough to colour.
  */
 export type ModelDayState = 'pre-ledger' | 'none' | 'thin' | 'rated';
@@ -400,8 +419,10 @@ export type ModelDayState = 'pre-ledger' | 'none' | 'thin' | 'rated';
 /**
  * One UTC day of one model's token value — a cell on the strip under the tiles.
  *
- * The same pooled ratio as the row's own rate, taken over one date of the same
- * 17-day horizon the verdict is fitted over, and no other span: the strip shows
+ * The same separated rate as the row's own — this model's tokens against the
+ * points left once other models' spend is priced out at their own fitted
+ * rates — taken over one date of the same 17-day horizon the verdict is fitted
+ * over, and no other span: the strip shows
  * the evidence the verdict rests on, so a reader can see whether "drift" is a
  * fortnight moving or one loud afternoon. Days are UTC dates because that is
  * the key the row's `days` counts are already taken on.
@@ -413,7 +434,7 @@ export interface ModelDayRate {
   weightedPerPct: number | null;
   /** Raw tokens per 1%, the courtesy translation. Null under the same condition. */
   rawPerPct: number | null;
-  /** Windows this model owned that day — evidence, carried whatever the state. */
+  /** Windows this model spent in that day — evidence, carried whatever the state. */
   intervals: number;
   /** Utilization points those windows moved. */
   utilSum: number;
@@ -424,6 +445,8 @@ export interface ModelDayRate {
    */
   deviationPct: number | null;
   state: ModelDayState;
+  /** Why the cell is `thin`. Present exactly when `state` is `thin`. */
+  thinReason?: ModelThinReason;
 }
 
 /**
@@ -438,7 +461,11 @@ export interface ModelRateRow {
   model: string;
   /** Plain tokens per 1% — the courtesy translation, at the model's recent mix. */
   rawPerPct: number | null;
-  /** Type-weighted tokens per 1% — the mix-invariant quantity drift is judged on. */
+  /**
+   * Type-weighted tokens per 1% — the mix-invariant quantity drift is judged
+   * on. Separated: every window this model spent in counts, and other models'
+   * spend there is priced out at their own fitted rates.
+   */
   weightedPerPct: number | null;
   baselineRawPerPct: number | null;
   baselineWeightedPerPct: number | null;
@@ -446,12 +473,14 @@ export interface ModelRateRow {
   deviationPct: number | null;
   /**
    * The same change with the headless/interactive mix held fixed: the current
-   * window's points against what its tokens would have cost at each surface's
-   * baseline rate. What `verdict` judges drift on whenever it is non-null;
+   * window's separated points against what this model's tokens would have cost
+   * at each surface's baseline separated rate. What `verdict` judges drift on whenever it is non-null;
    * null until enough of the current window has a surface with a baseline.
    */
   mixAdjustedDeviationPct: number | null;
   verdict: ModelRateVerdict;
+  /** Why `verdict` is `thin`. Present exactly when it is. */
+  thinReason?: ModelThinReason;
   /** Both surfaces, `interactive` then `headless`, whatever the evidence. */
   surfaces: ModelSurfaceRate[];
   /** Intervals behind the current-window fit — the evidence, shown either way. */
@@ -490,28 +519,28 @@ export interface ModelRateRow {
   splitVerdict: ModelSplitVerdict;
   /**
    * Weighted tokens per 1%, fitted **jointly** across every model over the
-   * same current window — including the mixed windows `weightedPerPct` throws
-   * away for want of a dominant model. Null whenever `fitVerdict` is `thin`.
+   * same current window by least squares, where `weightedPerPct` prices other
+   * models out one model at a time. Null whenever `fitVerdict` is `thin`.
    *
-   * Published beside the pooled rate rather than instead of it, and no more
-   * comparable across models than the pooled rate is: a model that fires more
+   * Published beside the separated rate rather than instead of it, and no more
+   * comparable across models than that rate is: a model that fires more
    * requests per token still carries that per-request window cost inside this
    * number too.
    */
   fittedWeightedPerPct: number | null;
   /**
    * Whether the fitted rate above is reported. A model can carry this and
-   * nothing else — a model that never dominates a window has no pooled rate,
-   * and this is the only figure the card can show for it.
+   * nothing else — a model whose spend can never be separated has no
+   * `weightedPerPct`, and this is the only figure the card can show for it.
    */
   fitVerdict: ModelFitVerdict;
   /**
-   * Signed percent of the fitted rate against the pooled one — the disclosure
+   * Signed percent of the fitted rate against the separated one — the disclosure
    * that the two estimators disagree. Null when either rate is null.
    *
    * Computed here rather than in the card so the comparison lives in one
    * place; the client formats it and owns no threshold. **Not** an input to
-   * `verdict` or `deviationPct`: drift is still judged on the pooled rate
+   * `verdict` or `deviationPct`: drift is still judged on the separated rate
    * alone, which is the only quantity with a measured baseline dispersion.
    */
   fitDeviationPct: number | null;

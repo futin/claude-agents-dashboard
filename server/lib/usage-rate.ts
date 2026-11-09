@@ -112,6 +112,14 @@ export interface Interval {
    * interval ever carries one. See {@link mixAdjustedDeviation} for why (bug-23).
    */
   surface?: ModelRateSurface;
+  /**
+   * Each model's own dominant surface: the one holding {@link DOMINANCE} of
+   * *that model's* weighted tokens here, whatever the interval's kind — a
+   * mixed interval has no owner but every model in it still spent from some
+   * surface. Absent when no model has one. The separated estimator stratifies
+   * on this; `surface` above stays the owner-only field bug-23 pinned.
+   */
+  modelSurfaces?: Record<string, ModelRateSurface>;
 }
 
 /**
@@ -219,18 +227,41 @@ function surfaceOf(
   sur: Record<string, Partial<Record<ModelRateSurface, TokenCounts>>>
 ): ModelRateSurface | undefined {
   if (typeof kind !== 'object') return undefined;
-  const total = tok[kind.model] ? weightedTokens(tok[kind.model], kind.model) : 0;
+  return modelSurfaceOf(kind.model, tok, sur);
+}
+
+/** One model's dominant surface over its own whole `tok` — {@link surfaceOf}'s rule, for any model. */
+function modelSurfaceOf(
+  model: string, tok: Record<string, TokenCounts>,
+  sur: Record<string, Partial<Record<ModelRateSurface, TokenCounts>>>
+): ModelRateSurface | undefined {
+  const total = tok[model] ? weightedTokens(tok[model], model) : 0;
   if (total <= 0) return undefined;
   for (const surface of RATE_SURFACES) {
-    const counts = sur[kind.model]?.[surface];
-    if (counts && weightedTokens(counts, kind.model) / total >= DOMINANCE) return surface;
+    const counts = sur[model]?.[surface];
+    if (counts && weightedTokens(counts, model) / total >= DOMINANCE) return surface;
   }
   return undefined;
 }
 
-/** `surface` as an optional key — absent, never `undefined`, so fixtures compare cleanly. */
-function withSurface(interval: Interval, surface: ModelRateSurface | undefined): Interval {
-  return surface === undefined ? interval : { ...interval, surface };
+/**
+ * `surface` and `modelSurfaces` as optional keys — absent, never `undefined`
+ * or `{}`, so fixtures compare cleanly.
+ */
+function withSurface(
+  interval: Interval, tok: Record<string, TokenCounts>,
+  sur: Record<string, Partial<Record<ModelRateSurface, TokenCounts>>>
+): Interval {
+  const surface = surfaceOf(interval.kind, tok, sur);
+  const modelSurfaces: Record<string, ModelRateSurface> = {};
+  for (const model of Object.keys(tok)) {
+    const own = modelSurfaceOf(model, tok, sur);
+    if (own !== undefined) modelSurfaces[model] = own;
+  }
+  let out = interval;
+  if (surface !== undefined) out = { ...out, surface };
+  if (Object.keys(modelSurfaces).length > 0) out = { ...out, modelSurfaces };
+  return out;
 }
 
 /**
@@ -303,10 +334,7 @@ export function joinIntervals(
 
     const { tok, req, reqUsable, sur, coveredMs } = gather(ledger, from.t, to.t);
     const kind = classify(dUtil, tok, coveredMs, durationMs, to.t, ledgerStartMs);
-    out.push(withSurface(
-      { fromT: from.t, toT: to.t, dUtil, tok, req, reqUsable, kind },
-      surfaceOf(kind, tok, sur)
-    ));
+    out.push(withSurface({ fromT: from.t, toT: to.t, dUtil, tok, req, reqUsable, kind }, tok, sur));
   }
   return out;
 }
@@ -397,10 +425,7 @@ export function joinWeeklyIntervals(
       dUtil, tok, coveredMs, durationMs, sample.t, ledgerStartMs,
       EXTERNAL_WEIGHTED_MAX_WEEKLY
     );
-    out.push(withSurface(
-      { fromT: held.t, toT: sample.t, dUtil, tok, req, reqUsable, kind },
-      surfaceOf(kind, tok, sur)
-    ));
+    out.push(withSurface({ fromT: held.t, toT: sample.t, dUtil, tok, req, reqUsable, kind }, tok, sur));
     held = sample;
     heldWeek = week;
   }

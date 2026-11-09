@@ -2,6 +2,7 @@ import assert from 'node:assert';
 
 import type { LedgerLine, TokenCounts } from '../server/lib/usage-ledger.js';
 import type { UsageSample } from '../server/lib/usage-history.js';
+import type { Interval } from '../server/lib/usage-rate.js';
 import {
   DOMINANCE,
   EXTERNAL_WEIGHTED_MAX,
@@ -58,6 +59,39 @@ export function run(): number {
     assert.ok(!('surface' in one({ A: { 'sdk-cli': counts(8_000) } })),
       'the share is of the model\'s whole tok — 2k unattributed keeps it under 90%');
     assert.ok(!('surface' in one(undefined)), 'a line from before surfaces has none');
+  })) p++; else f++;
+
+  // modelSurfaces: each model's own dominant surface, judged on that model's own tokens — not the owner's.
+  const mixedLine = (tok: Record<string, TokenCounts>, sur: LedgerLine['sur']): Interval =>
+    joinIntervals([s(0, 10), s(MIN, 12)], [{ ...l(0, MIN, tok), sur }])[0];
+
+  if (test('a mixed interval records each model\'s own surface, and still no owner surface', () => {
+    const iv = mixedLine(
+      { A: counts(10_000), B: counts(6_000) },
+      { A: { 'sdk-cli': counts(9_000), cli: counts(1_000) }, B: { cli: counts(6_000) } }
+    );
+    assert.strictEqual(iv.kind, 'mixed', 'fixture: 10k vs 6k is under 90% for either');
+    assert.deepStrictEqual(iv.modelSurfaces, { A: 'headless', B: 'interactive' });
+    assert.ok(!('surface' in iv));
+  })) p++; else f++;
+
+  if (test('a model split 80:20 across surfaces gets no modelSurfaces entry', () => {
+    const iv = mixedLine(
+      { A: counts(10_000), B: counts(6_000) },
+      { A: { 'sdk-cli': counts(8_000), cli: counts(2_000) }, B: { cli: counts(6_000) } }
+    );
+    assert.deepStrictEqual(iv.modelSurfaces, { B: 'interactive' });
+  })) p++; else f++;
+
+  if (test('a line from before surfaces carries no modelSurfaces key at all', () => {
+    const iv = mixedLine({ A: counts(10_000), B: counts(6_000) }, undefined);
+    assert.ok(!('modelSurfaces' in iv));
+  })) p++; else f++;
+
+  if (test('an owned interval keeps its surface and also lists its owner in modelSurfaces', () => {
+    const iv = mixedLine({ A: counts(10_000) }, { A: { 'sdk-cli': counts(9_000), cli: counts(1_000) } });
+    assert.strictEqual(iv.surface, 'headless');
+    assert.deepStrictEqual(iv.modelSurfaces, { A: 'headless' });
   })) p++; else f++;
 
   if (test('a window change breaks the chain — that pair is discarded', () => {
