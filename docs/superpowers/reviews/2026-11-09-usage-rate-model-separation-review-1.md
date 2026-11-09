@@ -105,3 +105,21 @@ Today's code (`server/lib/usage-rate.ts:630–649`) also applies no current-side
    4: Task 3 Step 3; 5: Task 5 null-figure tip). Two-key logic (A/B, interactive/headless) is exercised with two keys throughout; distinct values per
    asserted field hold (500k/100k, 400k/80k, 500k/300k).
 7. Conventions — no literal code, soft size respected (296 lines), 160-column prose.
+
+## Re-check (commit 8384f67, plan diff only)
+
+Verdict: **APPROVE**. Every round-1 Important is resolved by the change that addresses it; no new Critical or Important problem.
+
+| Finding | Change | Resolved? |
+|---|---|---|
+| I-1 `NO_FLOOR` clash | plan:121–122 now reuses the file's `NO_FLOOR` and cites `usage-rate-fit.test.ts:35` | Yes — value `{ 1, 0, 0 }` matches the file |
+| I-2 hand-set `mixed` kinds | plan:122–124 states `kind` is hand-set, with the "s already over the cap" reason; plan:130 drops "(nothing owned)" | Yes |
+| I-3 `unpriced` on row and cell | plan:199 (row, third model C at 5%, no horizon rate) and plan:232 (day cell, same C) | Yes — C beside a priced B exercises the per-model loop with two keys |
+| I-4 `ledgerReading` dead copy | plan:257–259 names the real code (`614–635`), states the thin-branch rule; plan:272–273 adds the `repriced`-past-floors and `floor` tests | Yes — the two strings differ from today's "not yet enough to separate" text, so the test discriminates |
+| I-5 current-stratum guards | plan:182–183 admits a current stratum only when `thinReason` is null or `floor`; plan:200 pins [7c]'s strata under the cap | Yes — matches spec:122–123 |
+
+New observations (Minor):
+
+- plan:182, 183, 272 exceed the 160-column wrap (170, 182, 190 chars) — the new-prose convention in the user's CLAUDE.md; reflow those three lines.
+- plan:272 tests the `repriced` hint on a row **past** both day floors; the sharper case is a row **under** a day floor (today it would say "waiting on
+  N of 7 baseline days", the more misleading text). Either discriminates; adding the under-floor case costs one line.
