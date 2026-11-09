@@ -65,32 +65,52 @@ joint fit.
 A separated figure is only as good as the subtraction. Mark the span `thin` (figures carried, not coloured, not judged), never rated, when any of these hold:
 
 - **Too sensitive to the subtraction.** The residual is unstable when M's own points are a small part of `U(S)`: on 2026-11-05 Fable's expected points were
-  134 of 190 and the separated Opus figure swung 838k–1040k depending on the subtraction rates. A fixed cap on the priced-out share was considered and
-  rejected (author's call, after the builder check): applied to a minor model such as Fable beside an Opus driver, it would mark that model `thin` on almost
-  every span, which defeats the goal. The guard is a **sensitivity bound** instead, symmetric for driver and minor models: perturb every `rate_m` by ±`SUB_ERR`
-  (the subtraction rates' plausible error, starting value 15%, back-tested) and mark the span `thin` when either perturbation moves M's separated figure by
-  more than `DRIFT_PCT / 2`. Which spans this keeps rated — and in particular how many Fable days survive beside Opus — is a back-test output, not a promise.
+  134 of 190 and the separated Opus figure swung 838k–1040k depending on the subtraction rates. The guard is a **sensitivity bound**: scale *all* `rate_m`
+  together by `(1 + SUB_ERR)`, and separately all together by `(1 − SUB_ERR)` (`SUB_ERR` = the subtraction rates' plausible error, starting value 15%,
+  back-tested), and mark the span `thin` when either moves M's separated figure by more than `DRIFT_PCT / 2`. Note, from review round 1: with every
+  `rate_m` scaled jointly, the move depends only on the priced-out share `s = Σ(W_m / rate_m) / U(S)` — the figure scales by `(1 − s) / (1 − s/(1 ± SUB_ERR))`
+  — so the bound **is** a cap on `s`, derived rather than picked: at 15% / 10% the `(1 − SUB_ERR)` side binds and the cap is `s ≤ ~0.34`. Implement it as
+  the cap with the derivation in its comment, so retuning `SUB_ERR` or `DRIFT_PCT` moves it. Consequence, accepted: a model that is the minor partner in
+  a span (Fable beside an Opus driver, or Opus on a Fable-heavy day such as 2026-11-09, where `s ≈ 0.76`) gets `thin` there — the residual genuinely cannot
+  price it to ±10%. It still carries its figure on the strip, and its row still shows the existing joint-fit `fittedWeightedPerPct`.
 - **Another model repriced.** `rate_m` is fitted over the whole horizon, so if Fable itself gets pricier this week, its extra points are under-subtracted and
   Opus would read as drift — the exact failure this change exists to remove. So: when any m that contributes to the subtraction in the current window has a
   current-window (3-day) joint-fit rate more than `DRIFT_PCT` away from its horizon `rate_m`, M's **current-window verdict** is `thin` rather than `drift`,
-  and each affected day cell is `thin` too. The repricing then shows where it belongs: on m's own row.
+  and each affected day cell is `thin` too. The repricing then shows where it belongs: on m's own row. Defined (review round 1): an m with **no** 3-day fit
+  (refused by `fitRates`) does not trigger the guard — there is no evidence it repriced; an **affected day cell** is a day inside the current window on which
+  m's priced-out points are above the trivial share used by the missing-rate guard. Accepted limitation, documented: after m reprices, the horizon `rate_m`
+  is a blend of old and new, so baseline-range days are mis-subtracted slightly the other way; the 14 baseline days outweigh the 3 current ones, and the
+  guard already stops a verdict while the move is fresh.
 - **A needed rate is missing.** Some other model spent more than a trivial share of S's weighted tokens and has no joint-fit rate (refused `thin`). A model
   whose spend is that small can be ignored rather than refusing the whole span; the builder picks the threshold and states it.
-- **Too little left.** The residual `U(S) − Σ…` is under the existing `CURRENT_FLOORS.minUtil` (the same floor the strip already uses), or not positive.
+- **Too little left.** The residual `U(S) − Σ…` is under **the span's own** `minUtil` — `BASELINE_FLOORS` (15) for the baseline range, `CURRENT_FLOORS`
+  (5) for the current window and for a day cell, as the strip already uses — or is not positive.
 
-The existing floors (`BASELINE_FLOORS`, `CURRENT_FLOORS`) still apply to the windows on the residual points, not on raw `U(S)`.
+The existing floors (`BASELINE_FLOORS`, `CURRENT_FLOORS`) still apply, with every evidence counter redefined on the new basis (review round 1):
+`intervals` = the usable intervals in S in which M spent anything (the convention `explainRates` already uses), `days` = their distinct UTC dates,
+`utilSum` = the residual points. These feed `DriftRow.intervals / utilSum / days / baselineDays` and `ModelDayRate.intervals / utilSum`.
+
+**Row vs cell when a guard fires.** As today: a row whose current window or baseline is `thin` publishes **null** `weightedPerPct` / `rawPerPct` /
+`deviationPct` for the side that failed (as `driftRow` already does), while its evidence counters are carried; a strip cell that is `thin` **carries** its
+figures uncoloured and unjudged (as `dailyRates` already does).
 
 ## What changes on the card
 
 - **The row's headline rate, its baseline, the drift deviation and the day strip** switch from the pooled ratio to the separated rate. These are the four
-  numbers the maintainer reads; all four must agree on one estimator or a cell and the badge will contradict each other.
+  numbers the maintainer reads; all four must agree on one estimator or a cell and the badge will contradict each other. **`rawPerPct` and
+  `baselineRawPerPct` move with them**: M's raw tokens over the same intervals ÷ the same residual points, because the `mix-shift` verdict is judged on the
+  raw deviation (`driftRow`) and a pooled raw beside a separated weighted would mix estimators.
 - **The joint-fit figure (`fittedWeightedPerPct`) and its disclosure stay as they are.** `fitDeviationPct` keeps comparing it against whatever the row now
   publishes as its rate.
 - **The surface (interactive/headless) mix adjustment keeps working.** It is computed today over owned intervals; it must now be computed on the separated
   basis too, or the verdict would mix two estimators. If doing that properly is large, the builder may keep the surface strata on the old owned-interval basis
   for v1 **only** if it says so in the PR and the docs — the verdict must never silently mix the two.
-- **Labels** stay. One line in the card's explanatory text (where it already explains the pooled rate) says the figure has other models' spend priced out.
-  No new tile, no new row.
+- **Labels** stay. No new tile, no new row. Copy that describes the old basis becomes false and is in scope (`client/src/lib/usageRatesFormat.ts`): the
+  empty-cell text "no windows this model owned" (~line 389), the glossary's `weighted` entry (~441–446, which also gains the one line saying other models'
+  spend is priced out), and the `windows` entry "one model owned (≥90% of tokens)" (~479–481).
+- **Contract and reference docs are in scope whether or not a field is added**: the JSDoc in `shared/types.ts` that says the row and the strip are the pooled
+  ratio over owned windows and that "drift is still judged on the pooled rate alone" (`ModelDayState` / `ModelDayRate` ~393–408, `fitDeviationPct`
+  ~509–517, and the rate fields around ~329–350), and `docs/subsystems/usage-limits.md` §Token value per model and §The day strip.
 - **`DRIFT_PCT` = 20** was set from the pooled rate's measured day-to-day dispersion. The builder re-measures that dispersion for the separated rate over the
   live 17-day horizon and records it with its date in `docs/subsystems/usage-limits.md`. `DRIFT_PCT` and the day floors were derived together from a cv of
   ~24%, so that √(cv²/7 + cv²/2) stays under `DRIFT_PCT` (`usage-rate.ts` comment above `BASELINE_FLOORS`). Author's call: **the floors stay**; if the
@@ -100,8 +120,10 @@ The existing floors (`BASELINE_FLOORS`, `CURRENT_FLOORS`) still apply to the win
 
 ## Goals
 
-- Opus's token value stays put on a day Fable is used heavily beside it.
-- Every model that runs beside others gets a rate that is its own.
+- Opus's token value stays put on a day Fable is used heavily beside it: either a rated figure in its normal band, or `thin` carrying a figure in that band
+  — never a rated or carried figure that is really Fable's spend (2026-11-09: 268k today; ~640k separated, `thin` at `s ≈ 0.76`).
+- Every model that drives the spend in a span (priced-out share under the cap) gets a rate that is its own; a model that is only the minor partner reads
+  `thin` there and keeps its joint-fit figure.
 - The day strip, headline and verdict agree with each other.
 
 ## Non-goals
@@ -129,9 +151,8 @@ Tests (node-assert, synthetic intervals, in the existing `test/usage-rate*.test.
 3. **Carry-over.** B's spend in interval *i* with dUtil 0, the tick landing in interval *i+1* that A owns with small A spend: A's pooled rate is visibly low,
    its separated rate is not. This is the 2026-11-09 shape and the reason for the change.
 4. **Mirror of 3.** A's spend carries into a B-owned interval: B's rate is not inflated either.
-5. **Sensitivity guard, both directions.** A span where M's own points are a small share and a ±`SUB_ERR` change in `rate_m` moves M's figure past
-   `DRIFT_PCT / 2` → `thin`, figures carried. The same minor model in a span where it holds enough of the points → rated. (Covers a Fable-beside-Opus span
-   from Fable's side, not only Opus's.)
+5. **Sensitivity guard at its derived cap.** With `SUB_ERR` 15% and `DRIFT_PCT` 20: a span with priced-out share `s` = 0.40 → `thin`, figures carried; the
+   same model in a span with `s` = 0.25 → rated. Run it from both sides of one Fable+Opus pair, so the guard is shown to treat driver and minor alike.
 5b. **Repriced-neighbour guard.** m's 3-day fit is > `DRIFT_PCT` off its horizon rate → M's current verdict is `thin`, not `drift`; m's own row still shows
    its move.
 6. **Missing-rate guard.** Another model with non-trivial spend and no fit → `thin`; the same model with trivial spend → ignored, span rated.
@@ -142,7 +163,8 @@ Back-test, recorded in the PR with the command output:
 
 - Re-run the separated rate over the live ledger for the 17-day horizon, per UTC day, for every model with a fit, beside the old pooled figure. Report the
   day-to-day dispersion of both and how many days the guard turned `thin`.
-- Confirm 2026-11-09's Opus day reads in Opus's ordinary interactive band rather than ~268–326k.
+- Confirm 2026-11-09's Opus day carries a figure in Opus's ordinary interactive band rather than ~268–326k (expected `thin` by the sensitivity cap).
+- Per guard, how many day cells it turned `thin`.
 - State what was not verified (at minimum: the card was or was not looked at in the browser, and against which data).
 
 ## Left to the builder
