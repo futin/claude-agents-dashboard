@@ -12,7 +12,7 @@ import type { RoutineJob, RoutineJobRow, RoutineRun, RoutineRunsResponse, Routin
 import { DAY, EPOCH, HOUR, MIN, SEC, agoIso, ago } from './epoch.js';
 import { HOME, PROJECTS, SESSION_IDS } from './sessions.js';
 
-const DIR = `${HOME}/claude-global/routines`;
+const DIR = `${HOME}/.claude/routines/jobs`;
 
 function job(over: Partial<RoutineJob> & Pick<RoutineJob, 'name' | 'cron' | 'run'>): RoutineJob {
   return {
