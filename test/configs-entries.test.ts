@@ -1,7 +1,7 @@
 import assert from 'node:assert';
 
-import { buildEntries, filterEntries, projectScopeOf, railRows } from '../client/src/lib/configsEntries.js';
-import type { McpServerInfo, ScopeConfig } from '../shared/types.js';
+import { buildEntries, filterEntries, pinnedProjects, projectScopeOf, railRows } from '../client/src/lib/configsEntries.js';
+import type { McpServerInfo, ProjectRef, ScopeConfig } from '../shared/types.js';
 
 function test(name: string, fn: () => void): boolean {
   try { fn(); console.log('  ✓ ' + name); return true; }
@@ -241,6 +241,14 @@ export function run(): number {
     assert.ok(failed(projectScopeOf(true, { message: 'proxy page' })), 'a 2xx that is not a scope');
     assert.ok(failed(projectScopeOf(true, null)), 'null body');
     assert.ok(failed(projectScopeOf(false, undefined)), 'no reply at all');
+  })) p++; else f++;
+
+  if (test('pinnedProjects: keeps only pinned refs, in the order given; recent-only rows (worktree clones, scratchpads) drop out', () => {
+    const ref = (dirName: string, pinned?: true): ProjectRef => ({ dirName, name: dirName, path: '/' + dirName, lastActiveMs: 0, ...(pinned ? { pinned } : {}) });
+    const list = [ref('repo-a', true), ref('scratch-2026-11-09'), ref('clone-of-a'), ref('repo-b', true)];
+    assert.deepStrictEqual(pinnedProjects(list).map(r => r.dirName), ['repo-a', 'repo-b']);
+    assert.deepStrictEqual(pinnedProjects([ref('only-recent')]), []);
+    assert.deepStrictEqual(pinnedProjects([]), []);
   })) p++; else f++;
 
   console.log(`\nconfigsEntries: ${p} passed, ${f} failed`);

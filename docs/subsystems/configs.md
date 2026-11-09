@@ -5,7 +5,7 @@ A **Claude Configs** section (top-level `SideRail` in `App.tsx`, persisted as
 ever written.
 
 **The scope is a rail destination, not a pane** (`.claude/DESIGN.md` §8.5): Global
-(`~/.claude`) and every recently-active or pinned project sit in the sidebar as Claude Configs'
+(`~/.claude`) and every pinned project sit in the sidebar as Claude Configs'
 sub-nav, the same tree Usage and Settings draw, and only while the section is open. The
 page keeps the persisted state (`configs.scope`) and still resolves a stale value to
 `global` during render — only the control moved. Its ↻ is the shared `.icon-refresh`
@@ -106,12 +106,16 @@ control (the type is a column now, not a collapsible header) and the
   `resolveProject`, `collectServablePaths` and the rail all build from this one list, so a pin makes a
   project spawnable, lists it on the rail, and **widens the servable-path set** to its config files —
   all three intended, and the last is why `POST /api/pins` only accepts a dirName the server itself
-  enumerated. `listOlderProjects` is what is offered for pinning: dirs whose newest transcript is
+  enumerated. **The rail lists pinned rows only** (`pinnedProjects` in `client/src/lib/configsEntries.ts`, applied in
+  `ConfigsScopeProvider`): the index still carries every recent cwd, but a recent-only row — a full clone under a `worktrees/` dir, a
+  scratch workspace, a session scratchpad — is noise there, and pinning is the user's way to say which projects matter. A persisted scope that
+  is not pinned resolves back to Global. The rail reads the index fetched once per load, so a pin made in Management shows there after ↻ or a
+  reload. `listOlderProjects` is what is offered for pinning: dirs whose newest transcript is
   outside the lookback but inside `OLDER_PROJECTS_DAYS` (30), minus anything already listed, any cwd
   under a Claude root (`defaultClaudeRoots`: `os.tmpdir()` and its realpath, `/tmp`, `/private/tmp` —
   session scratchpads — plus `~/.claude` and `~/Library/Application Support/Claude`, the desktop app's
   scratch workspaces) and anything failing bug-21. `GET /api/pins` drops Claude-root cwds from its
-  `recent` offers the same way; they stay on the rail and in the launch select, and a pin already made
+  `recent` offers the same way; they stay in the launch select, and a pin already made
   under one still lists under `pinned`. The 30 days cap only what is *offered*; a pin already made stays
   listed at any age.
   **The order is user-set:** a new pin appends, and Management › Projects' drag grip (or ↑/←/↓/→ on a focused grip) saves the whole list through

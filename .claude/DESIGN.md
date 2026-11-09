@@ -355,7 +355,7 @@ Every class — meter and popover included — is `git-` prefixed and every colo
 ### 8.5 Claude Configs — the scope is a destination, the rest is columns
 
 **The scope is a rail destination, not a pane.** Global (`~/.claude`) and each
-recently-active or pinned project sit in the sidebar as Claude Configs' sub-nav — the same tree Usage
+pinned project sit in the sidebar as Claude Configs' sub-nav — the same tree Usage
 and Settings draw — instead of taking a column inside the page. The live view's three
 panes made the config's first level compete for width with the items under it, and the
 first level is the one that changes least: you pick a scope once and then work inside it.

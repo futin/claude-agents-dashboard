@@ -3,7 +3,7 @@
  * entry groups the middle pane renders. Pure (unit-tested server-side).
  */
 
-import type { ConfigItem, HookInfo, McpServerInfo, ScopeConfig } from '../../../shared/types';
+import type { ConfigItem, HookInfo, McpServerInfo, ProjectRef, ScopeConfig } from '../../../shared/types';
 
 export type FileKind = 'markdown' | 'json' | 'text';
 
@@ -130,6 +130,15 @@ function fromMcpServers(servers: McpServerInfo[]): Entry[] {
     subgroup: itemSubgroup(m.source)
   }));
   return entries.sort(bySubgroupThenLabel);
+}
+
+/**
+ * The projects Claude Configs offers as scopes: the pinned ones only. The server's list is recent ∪ pinned because the launch select and the servable-path
+ * set need every recent cwd, but on the rail a recent-only row is noise — full clones under a "worktrees" dir, scratch workspaces and session scratchpads
+ * all pass the server's filter. A persisted scope that is not pinned resolves back to Global.
+ */
+export function pinnedProjects(projects: ProjectRef[]): ProjectRef[] {
+  return projects.filter(p => p.pinned === true);
 }
 
 /**
