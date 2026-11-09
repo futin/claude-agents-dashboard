@@ -534,6 +534,8 @@ export interface DriftRow {
   /** The same change with the surface mix held fixed — see {@link mixAdjustedDeviation}. */
   mixAdjustedDeviationPct: number | null;
   verdict: ModelRateVerdictKind;
+  /** Why `verdict` is `thin` — the first side that could not be rated, current before baseline. Absent on every other verdict. */
+  thinReason?: ModelThinReason;
   /** One entry per {@link RATE_SURFACES}, always both, in that order. */
   surfaces: ModelSurfaceRate[];
   /** Evidence in the **current** window — reported even when it is too thin to fit. */
@@ -809,13 +811,20 @@ function deviation(current: number, baseline: number): number {
   return ((current - baseline) / baseline) * 100;
 }
 
+/** A separated figure that may be published: no guard fired and both figures are positive. */
+function isRated(rate: SeparatedRate | null): rate is SeparatedRate & { weightedPerPct: number; rawPerPct: number } {
+  return rate !== null && rate.thinReason === null
+    && rate.weightedPerPct !== null && rate.weightedPerPct > 0
+    && rate.rawPerPct !== null && rate.rawPerPct > 0;
+}
+
 /**
  * The current window's rate against its baseline **with the surface mix held
  * at the current window's own**, or null when too little of it can be judged.
  *
- * Why it exists (bug-23): the pooled ratio assumes every token of a model buys
- * the same fraction of the window, and on this machine a headless `claude -p`
- * token measured ~1.8× the window cost of an interactive one. A fortnight that
+ * Why it exists (bug-23): a rate assumes every token of a model buys the same
+ * fraction of the window, and on this machine a headless `claude -p` token
+ * measured ~1.8× the window cost of an interactive one. A fortnight that
  * moved from mostly-interactive to mostly-headless read −22% pooled while each
  * surface, on its own, moved −2% and −4% — Simpson's paradox, reported as a
  * repricing. The day floors and the ±20% band guard against sampling noise;
@@ -825,73 +834,97 @@ function deviation(current: number, baseline: number): number {
  * have cost at each surface's **baseline** rate? Σ(tokens ÷ that surface's
  * baseline rate) is the points they would have charged; against the points
  * they did charge, that is the deviation. A pure mix shift reads 0 here however
- * far the pool moved; a repricing of every surface reads its full size; a
+ * far the rate moved; a repricing of every surface reads its full size; a
  * repricing of one surface reads in proportion to that surface's share.
  *
- * Null — and the pooled verdict stands, unguarded — when the intervals that
- * have a surface *and* a baseline for it carry under
- * {@link SURFACE_COVERAGE_MIN} of the current window's points. That is every
- * model for the first 14 days after surfaces began to be recorded: a stratum
- * baseline is held to the full {@link BASELINE_FLOORS}, no looser, because a
- * guard that could veto a verdict on thinner evidence than the verdict itself
- * would be the noisier of the two.
+ * Everything is on the separated basis: a stratum's points are the residual
+ * once other models' spend is priced out, and its tokens are this model's
+ * alone. The strata sum to the span, so a point carried between ticks cancels
+ * across them. A current stratum the separation cannot price — `mixed`,
+ * `repriced` or `unpriced` — drops out, and coverage falls with it; a stratum
+ * that is merely under its floors still counts, since the floors guard the
+ * headline figure and this one is judged on its coverage instead.
+ *
+ * Null — and the row's own deviation stands, unguarded — when the strata that
+ * have a baseline carry under {@link SURFACE_COVERAGE_MIN} of the current
+ * window's points. That is every model for the first 14 days after surfaces
+ * began to be recorded: a stratum baseline is held to the full
+ * {@link BASELINE_FLOORS}, no looser, because a guard that could veto a verdict
+ * on thinner evidence than the verdict itself would be the noisier of the two.
  */
-export function mixAdjustedDeviation(intervals: Interval[], model: string, nowMs: number): number | null {
+export function mixAdjustedDeviation(
+  intervals: Interval[], model: string, nowMs: number,
+  ctx: SeparationContext = separationContext(intervals, nowMs)
+): number | null {
   const base = baselineRange(nowMs);
   const cur = currentRange(nowMs);
-  const baselineRate = new Map<ModelRateSurface, number>();
+  const span = separatedRate(intervals, model, cur.sinceMs, cur.untilMs, ctx, { floors: CURRENT_FLOORS });
+  if (span === null || span.utilSum <= 0) return null;
+
+  let covered = 0, expected = 0;
   for (const surface of RATE_SURFACES) {
-    const rate = rateFor(intervals, model, base.sinceMs, base.untilMs, BASELINE_FLOORS, surface);
-    if (rate !== null && rate.weightedPerPct > 0) baselineRate.set(surface, rate.weightedPerPct);
+    const baseline = separatedRate(intervals, model, base.sinceMs, base.untilMs, ctx, { floors: BASELINE_FLOORS, surface });
+    if (!isRated(baseline)) continue;
+    const stratum = separatedRate(intervals, model, cur.sinceMs, cur.untilMs, ctx, {
+      floors: CURRENT_FLOORS, surface, checkRepriced: true
+    });
+    if (stratum === null || (stratum.thinReason !== null && stratum.thinReason !== 'floor')) continue;
+    // The figure is null exactly when the residual is not positive, and such a stratum has no points to cover.
+    if (stratum.weightedPerPct === null || stratum.utilSum <= 0) continue;
+    covered += stratum.utilSum;
+    expected += (stratum.weightedPerPct * stratum.utilSum) / baseline.weightedPerPct;
   }
-  let moved = 0, covered = 0, expected = 0;
-  for (const interval of intervals) {
-    if (!ownedBy(interval, model, cur.sinceMs, cur.untilMs)) continue;
-    moved += interval.dUtil;
-    const rate = interval.surface === undefined ? undefined : baselineRate.get(interval.surface);
-    if (rate === undefined) continue;
-    covered += interval.dUtil;
-    expected += totalWeighted(interval.tok) / rate;
-  }
-  if (moved <= 0 || covered <= 0 || covered / moved < SURFACE_COVERAGE_MIN) return null;
+  if (covered <= 0 || covered / span.utilSum < SURFACE_COVERAGE_MIN) return null;
   return (expected / covered - 1) * 100;
 }
 
 /** Each surface's own current and baseline rate — the breakdown under the headline. */
-export function surfaceRates(intervals: Interval[], model: string, nowMs: number): ModelSurfaceRate[] {
+export function surfaceRates(
+  intervals: Interval[], model: string, nowMs: number,
+  ctx: SeparationContext = separationContext(intervals, nowMs)
+): ModelSurfaceRate[] {
   const base = baselineRange(nowMs);
   const cur = currentRange(nowMs);
-  return RATE_SURFACES.map((surface) => ({
-    surface,
-    weightedPerPct:
-      rateFor(intervals, model, cur.sinceMs, cur.untilMs, CURRENT_FLOORS, surface)?.weightedPerPct ?? null,
-    baselineWeightedPerPct:
-      rateFor(intervals, model, base.sinceMs, base.untilMs, BASELINE_FLOORS, surface)?.weightedPerPct ?? null,
-    utilSum: poolRate(intervals, model, cur.sinceMs, cur.untilMs, surface)?.utilSum ?? 0
-  }));
+  return RATE_SURFACES.map((surface) => {
+    const current = separatedRate(intervals, model, cur.sinceMs, cur.untilMs, ctx, {
+      floors: CURRENT_FLOORS, surface, checkRepriced: true
+    });
+    const baseline = separatedRate(intervals, model, base.sinceMs, base.untilMs, ctx, { floors: BASELINE_FLOORS, surface });
+    return {
+      surface,
+      weightedPerPct: isRated(current) ? current.weightedPerPct : null,
+      baselineWeightedPerPct: isRated(baseline) ? baseline.weightedPerPct : null,
+      utilSum: current?.utilSum ?? 0
+    };
+  });
 }
 
 /**
- * Compare a model's trailing rate against its baseline.
+ * Compare a model's trailing rate against its baseline, both on the separated
+ * basis: every other model's spend priced out at its own rate.
  *
  * Verdict order matters — **thin outranks everything**, or the badge would fire
- * hardest exactly when it knows least. That is what the day floors enforce:
- * counting intervals says how much evidence a window holds and nothing about
- * how far apart it is spread, so a floor without one is cleared by a single
- * morning. The evidence counters are reported whatever the verdict — the
- * current window's in full, the baseline's day count beside them — so the card
- * can say "collecting — 4 windows over 2 days" rather than a bare `thin`.
+ * hardest exactly when it knows least. A side the separation cannot price, or
+ * that is under its floors, is thin with that side's reason, current before
+ * baseline; a model that spent nothing in a window counts as `floor`. The
+ * pooled figure is never the fallback. The evidence counters are reported
+ * whatever the verdict — the current window's in full, the baseline's day
+ * count beside them — so the card can say "collecting — 4 windows over 2 days"
+ * rather than a bare `thin`.
  */
-export function driftRow(intervals: Interval[], model: string, nowMs: number): DriftRow {
+export function driftRow(
+  intervals: Interval[], model: string, nowMs: number,
+  ctx: SeparationContext = separationContext(intervals, nowMs)
+): DriftRow {
   const base = baselineRange(nowMs);
   const cur = currentRange(nowMs);
 
-  const baseline = rateFor(intervals, model, base.sinceMs, base.untilMs, BASELINE_FLOORS);
-  const current = rateFor(intervals, model, cur.sinceMs, cur.untilMs, CURRENT_FLOORS);
-  const evidence = poolRate(intervals, model, cur.sinceMs, cur.untilMs);
-  // The baseline's own evidence has to survive its refusal exactly as the
-  // current window's already does, or the card can say it went quiet but not why.
-  const baselineEvidence = poolRate(intervals, model, base.sinceMs, base.untilMs);
+  const currentSep = separatedRate(intervals, model, cur.sinceMs, cur.untilMs, ctx, {
+    floors: CURRENT_FLOORS, checkRepriced: true
+  });
+  const baselineSep = separatedRate(intervals, model, base.sinceMs, base.untilMs, ctx, { floors: BASELINE_FLOORS });
+  const current = isRated(currentSep) ? currentSep : null;
+  const baseline = isRated(baselineSep) ? baselineSep : null;
 
   const row: DriftRow = {
     model,
@@ -902,24 +935,30 @@ export function driftRow(intervals: Interval[], model: string, nowMs: number): D
     deviationPct: null,
     mixAdjustedDeviationPct: null,
     verdict: 'thin',
-    surfaces: surfaceRates(intervals, model, nowMs),
-    intervals: evidence?.intervals ?? 0,
-    utilSum: evidence?.utilSum ?? 0,
-    days: evidence?.days ?? 0,
-    baselineDays: baselineEvidence?.days ?? 0
+    surfaces: surfaceRates(intervals, model, nowMs, ctx),
+    intervals: currentSep?.intervals ?? 0,
+    utilSum: currentSep?.utilSum ?? 0,
+    days: currentSep?.days ?? 0,
+    baselineDays: baselineSep?.days ?? 0
   };
 
-  if (current === null || baseline === null) return row;
-  if (baseline.weightedPerPct <= 0 || baseline.rawPerPct <= 0) return row;
+  if (current === null) {
+    row.thinReason = currentSep?.thinReason ?? 'floor';
+    return row;
+  }
+  if (baseline === null) {
+    row.thinReason = baselineSep?.thinReason ?? 'floor';
+    return row;
+  }
 
   const weightedDev = deviation(current.weightedPerPct, baseline.weightedPerPct);
   const rawDev = deviation(current.rawPerPct, baseline.rawPerPct);
   row.deviationPct = weightedDev;
-  row.mixAdjustedDeviationPct = mixAdjustedDeviation(intervals, model, nowMs);
+  row.mixAdjustedDeviationPct = mixAdjustedDeviation(intervals, model, nowMs, ctx);
   // Drift is judged on the mix-adjusted figure whenever there is one, in both
-  // directions: a pooled −22% that is −3% surface by surface is not drift, and
-  // a pooled −5% hiding a −25% repricing behind a move to the cheaper surface
-  // is. With no adjusted figure the pooled one is judged, as it always was.
+  // directions: a −22% that is −3% surface by surface is not drift, and a −5%
+  // hiding a −25% repricing behind a move to the cheaper surface is. With no
+  // adjusted figure the headline deviation is judged, as it always was.
   const judged = row.mixAdjustedDeviationPct ?? weightedDev;
   row.verdict = Math.abs(judged) > DRIFT_PCT ? 'drift'
     : Math.abs(weightedDev) > DRIFT_PCT ? 'surface-shift'

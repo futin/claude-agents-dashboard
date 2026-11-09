@@ -9,6 +9,7 @@ import {
   CURRENT_MS,
   DRIFT_PCT,
   RAW_SHIFT_PCT,
+  SEPARATION_S_CAP,
   SURFACE_COVERAGE_MIN,
   SPLIT_FLOORS,
   SPLIT_MAX_R2,
@@ -24,10 +25,12 @@ import {
   fitSplits,
   ledgerBreakMs,
   mixAdjustedDeviation,
+  poolRate,
   rateFor,
+  separatedRate,
   totalWeighted
 } from '../server/lib/usage-rate.js';
-import type { Interval, RateFloors } from '../server/lib/usage-rate.js';
+import type { Interval, RateFloors, SeparationContext } from '../server/lib/usage-rate.js';
 
 function test(name: string, fn: () => void): boolean {
   try { fn(); console.log('  ✓ ' + name); return true; }
@@ -449,6 +452,175 @@ export function run(): number {
     const at80 = [...base,
       ...stratum('interactive', 16, 300_000, 2, NOW - MIN), ...stratum('headless', 4, 150_000, 2, NOW - MIN)];
     assert.ok(Math.abs(mixAdjustedDeviation(at80, 'A', NOW)! - -25) < 1e-9);
+  })) p++; else f++;
+
+  // ── the separated basis: other models' spend priced out, per the spec's decision 8 ──
+  //
+  // Models A and B, both priced by hand through an explicit context so these cases test the row and not the joint fit.
+  // A interactive 500k per point, A headless 300k, B 500k. Baseline: 13 days of A-owned, A-headless and 70:30 mixed
+  // intervals. Current: three days in which a few A-owned interactive intervals carry the points of B-only idle ticks.
+
+  type Surf = 'interactive' | 'headless';
+  const ctxOf = (horizon: Record<string, number>, current: Record<string, number> = horizon): SeparationContext =>
+    ({ horizon: new Map(Object.entries(horizon)), current: new Map(Object.entries(current)) });
+  const PRICES = ctxOf({ A: 480_000, B: 500_000 });
+  /** Weighted tokens exactly `w` per model; `dUtil` and the surfaces are the caller's. */
+  const sIv = (toT: number, w: Record<string, number>, dUtil: number, surfaces: Record<string, Surf>): Interval => {
+    const names = Object.keys(w);
+    const tok: Record<string, TokenCounts> = {};
+    for (const [model, weighted] of Object.entries(w)) tok[model] = wtok(weighted);
+    const out: Interval = {
+      fromT: toT - MIN, toT, dUtil, tok, req: {}, reqUsable: true,
+      kind: dUtil === 0 ? 'idle' : names.length === 1 ? { model: names[0] } : 'mixed'
+    };
+    if (names.length === 1 && dUtil > 0) out.surface = surfaces[names[0]];
+    out.modelSurfaces = surfaces;
+    return out;
+  };
+  const INT = { A: 'interactive' as Surf }, HEAD = { A: 'headless' as Surf };
+  const BOTH = { A: 'interactive' as Surf, B: 'interactive' as Surf }, ONLY_B = { B: 'interactive' as Surf };
+  /** A mixed interval where A holds `aShare` of the weighted tokens: A 2M interactive, B sized to the share, B at 500k. */
+  const mixedIv = (toT: number, aShare = 0.7): Interval => {
+    const wB = 2_000_000 * (1 - aShare) / aShare;
+    return sIv(toT, { A: 2_000_000, B: wB }, 4 + wB / 500_000, BOTH);
+  };
+  /** Baseline days 4..16 back: 4 A-owned (4 pts), 3 headless (0.5 pt), 3 mixed per day. */
+  const baseline7c = (days = 13): Interval[] => {
+    const out: Interval[] = [];
+    for (let k = 4; k < 4 + days; k++) {
+      const t0 = NOW - k * DAY;
+      for (let i = 0; i < 4; i++) out.push(sIv(t0 + i * MIN, { A: 2_000_000 }, 4, INT));
+      for (let i = 0; i < 3; i++) out.push(sIv(t0 + (10 + i) * MIN, { A: 150_000 }, 0.5, HEAD));
+      for (let i = 0; i < 3; i++) out.push(mixedIv(t0 + (20 + i) * MIN));
+    }
+    return out;
+  };
+  /**
+   * Current days 0..2 back, per day: 2 B-only idle ticks of 0.6 pt (B 300k, dUtil 0), whose points land on the next
+   * A-owned interval — 2 A-owned intervals of 2 pts each plus the 1.2 carried, 4 headless, `mixed` mixed ones.
+   */
+  const current7c = (opts: { mixed?: number; aShare?: number; headless?: number; headlessDays?: number } = {}): Interval[] => {
+    const { mixed = 2, aShare = 0.7, headless = 4, headlessDays = 3 } = opts;
+    const out: Interval[] = [];
+    for (let k = 0; k < 3; k++) {
+      const t0 = NOW - k * DAY - 10 * MIN;
+      for (let i = 0; i < 2; i++) out.push(sIv(t0 + i * MIN, { B: 300_000 }, 0, ONLY_B));
+      out.push(sIv(t0 + 3 * MIN, { A: 1_000_000 }, 2 + 1.2, INT));
+      out.push(sIv(t0 + 4 * MIN, { A: 1_000_000 }, 2, INT));
+      if (k < headlessDays) {
+        for (let i = 0; i < headless; i++) out.push(sIv(t0 + (10 + i) * MIN, { A: 150_000 }, 0.5, HEAD));
+      }
+      for (let i = 0; i < mixed; i++) out.push(mixedIv(t0 + (20 + i) * MIN, aShare));
+    }
+    return out;
+  };
+  const fixture7c = (): Interval[] => [...baseline7c(), ...current7c()];
+  const within = (actual: number | null, expected: number, tol: number, what: string): void => {
+    assert.ok(actual !== null, `${what} was null`);
+    const err = Math.abs(actual - expected) / expected;
+    assert.ok(err <= tol, `${what}: got ${actual}, expected ${expected} within ${tol * 100}% (off ${(err * 100).toFixed(2)}%)`);
+  };
+  const cur = currentRange(NOW), base = baselineRange(NOW);
+  const deviationOf = (x: number, ref: number): number => ((x - ref) / ref) * 100;
+
+  if (test('[7c] carried points and a 70:30 mix leave A stable, where the owned-interval pool reads a 23% drop', () => {
+    const ivs = fixture7c();
+    // The fixture fools the old basis: owned intervals alone, current vs baseline.
+    const poolCur = poolRate(ivs, 'A', cur.sinceMs, cur.untilMs, 'interactive')!.weightedPerPct;
+    const poolBase = poolRate(ivs, 'A', base.sinceMs, base.untilMs, 'interactive')!.weightedPerPct;
+    assert.ok(Math.abs(deviationOf(poolCur, poolBase)) > DRIFT_PCT, `pool moved only ${deviationOf(poolCur, poolBase)}%`);
+    // …and meets the brief's constraints.
+    let headW = 0, aW = 0;
+    for (const i of ivs) {
+      if (i.toT < cur.sinceMs || !i.tok.A) continue;
+      const w = weightedTokens(i.tok.A, 'A');
+      aW += w;
+      if (i.modelSurfaces?.A === 'headless') headW += w;
+    }
+    assert.ok(headW / aW <= 0.1, `headless share ${headW / aW}`);
+
+    const row = driftRow(ivs, 'A', NOW, PRICES);
+    assert.ok(Math.abs(row.mixAdjustedDeviationPct!) <= 5, `adjusted ${row.mixAdjustedDeviationPct}`);
+    assert.strictEqual(row.verdict, 'stable');
+    within(row.surfaces[0].weightedPerPct, 500_000, 0.03, 'interactive stratum');
+    within(row.surfaces[1].weightedPerPct, 300_000, 0.15, 'headless stratum');
+    assert.ok(!('thinReason' in row), 'a rated row carries no thinReason');
+    // Both current strata sit under the sensitivity cap, so neither drops out of the adjustment.
+    for (const surface of ['interactive', 'headless'] as const) {
+      const r = separatedRate(ivs, 'A', cur.sinceMs, cur.untilMs, PRICES, { floors: CURRENT_FLOORS, surface, checkRepriced: true })!;
+      assert.strictEqual(r.thinReason, null, `${surface} current stratum`);
+      assert.ok(r.pricedOutShare! < SEPARATION_S_CAP, `${surface} s=${r.pricedOutShare}`);
+    }
+  })) p++; else f++;
+
+  if (test('a mixed current window is thin/mixed with no figures, evidence carried and the baseline still published', () => {
+    const row = driftRow([...baseline7c(), ...current7c({ mixed: 4, aShare: 0.5 })], 'A', NOW, PRICES);
+    assert.strictEqual(row.verdict, 'thin');
+    assert.strictEqual(row.thinReason, 'mixed');
+    assert.deepStrictEqual([row.weightedPerPct, row.rawPerPct, row.deviationPct], [null, null, null]);
+    assert.ok(row.intervals > 0 && row.utilSum > 0 && row.days === 3, `${row.intervals}/${row.utilSum}/${row.days}`);
+    within(row.baselineWeightedPerPct, 490_000, 0.05, 'published baseline');
+    assert.strictEqual(row.baselineDays, 13);
+  })) p++; else f++;
+
+  if (test('a thin baseline under a rated current is floor; both thin with different reasons reads the current side\'s', () => {
+    const shortBase = [...baseline7c(3), ...current7c()];
+    const floorRow = driftRow(shortBase, 'A', NOW, PRICES);
+    assert.strictEqual(floorRow.verdict, 'thin');
+    assert.strictEqual(floorRow.thinReason, 'floor');
+    assert.notStrictEqual(floorRow.weightedPerPct, null, 'the rated current figure is still published');
+    assert.strictEqual(floorRow.baselineWeightedPerPct, null);
+    const both = driftRow([...baseline7c(3), ...current7c({ mixed: 4, aShare: 0.5 })], 'A', NOW, PRICES);
+    assert.strictEqual(both.thinReason, 'mixed');
+    const noCurrent = driftRow(baseline7c(), 'A', NOW, PRICES);
+    assert.strictEqual(noCurrent.thinReason, 'floor', 'a model that spent nothing in the window counts as floor');
+    assert.strictEqual(noCurrent.intervals, 0);
+  })) p++; else f++;
+
+  if (test('a neighbour repriced 30% in the current window makes A\'s row repriced, and not its own', () => {
+    const ivs = fixture7c();
+    const moved = ctxOf({ A: 480_000, B: 500_000 }, { A: 480_000, B: 350_000 });
+    const a = driftRow(ivs, 'A', NOW, moved);
+    assert.strictEqual(a.verdict, 'thin');
+    assert.strictEqual(a.thinReason, 'repriced');
+    assert.deepStrictEqual(a.surfaces.map(s => s.weightedPerPct), [null, null]);
+    assert.notStrictEqual(a.baselineWeightedPerPct, null, 'the baseline is not under the repriced check');
+    assert.strictEqual(mixAdjustedDeviation(ivs, 'A', NOW, moved), null, 'repriced strata drop out of the adjustment');
+    assert.notStrictEqual(driftRow(ivs, 'B', NOW, moved).thinReason, 'repriced');
+  })) p++; else f++;
+
+  if (test('a third model at 5% of the current window with no horizon rate makes A\'s row unpriced', () => {
+    const c = current7c();
+    const total = c.reduce((sum, i) => sum + totalWeighted(i.tok), 0);
+    const third = [0, 1, 2].map(k => sIv(NOW - k * DAY - 40 * MIN, { C: total * 0.05 / 3 }, 1, { C: 'interactive' }));
+    const row = driftRow([...baseline7c(), ...c, ...third], 'A', NOW, PRICES);
+    assert.strictEqual(row.verdict, 'thin');
+    assert.strictEqual(row.thinReason, 'unpriced');
+  })) p++; else f++;
+
+  if (test('mix adjustment drops a stratum the separation cannot price, and coverage falls with it', () => {
+    // 50:50 mixed intervals make the interactive stratum mixed; the headless one, which barely touches them, stays.
+    const ivs = [...baseline7c(), ...current7c({ mixed: 4, aShare: 0.5 })];
+    assert.strictEqual(mixAdjustedDeviation(ivs, 'A', NOW, PRICES), null);
+    // The same window priced fully resolves, the strata covering the span.
+    assert.notStrictEqual(mixAdjustedDeviation(fixture7c(), 'A', NOW, PRICES), null);
+  })) p++; else f++;
+
+  if (test('mix adjustment counts a stratum that is merely under its floors', () => {
+    // Headless on one date only: under CURRENT_FLOORS' two days, but a quarter of the current window's points.
+    const ivs = [...baseline7c(), ...current7c({ headless: 40, headlessDays: 1 })];
+    const headless = separatedRate(ivs, 'A', cur.sinceMs, cur.untilMs, PRICES, { floors: CURRENT_FLOORS, surface: 'headless' })!;
+    assert.strictEqual(headless.thinReason, 'floor');
+    assert.ok(headless.utilSum / separatedRate(ivs, 'A', cur.sinceMs, cur.untilMs, PRICES, { floors: CURRENT_FLOORS })!.utilSum > 0.2);
+    const adjusted = mixAdjustedDeviation(ivs, 'A', NOW, PRICES);
+    assert.ok(adjusted !== null && Math.abs(adjusted) <= 5, `adjusted ${adjusted}`);
+  })) p++; else f++;
+
+  if (test('the surface strata publish only rated figures, and utilSum is the current residual either way', () => {
+    const short = driftRow([...baseline7c(), ...current7c({ headless: 1 })], 'A', NOW, PRICES);
+    assert.strictEqual(short.surfaces[1].weightedPerPct, null, 'headless: 3 intervals is under the current floor');
+    assert.ok(short.surfaces[1].utilSum > 0);
+    assert.notStrictEqual(short.surfaces[0].weightedPerPct, null);
   })) p++; else f++;
 
   if (test('too little current data is thin, and the baseline is still reported', () => {
