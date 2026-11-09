@@ -92,6 +92,7 @@ export const usageRates: UsageRatesResponse = {
     row('claude-sonnet-4-5-20250929', 52_000, -0.21, 'drift', 4, 41),
     row('claude-haiku-4-5-20251001', 160_000, 0, 'thin', 0, 3)
   ],
+  windows: 128,
   externalSharePct: 7.1,
   coverage: coverage(1),
   weeklyRecorded: true,

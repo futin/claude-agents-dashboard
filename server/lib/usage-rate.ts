@@ -1157,7 +1157,7 @@ export function externalShare(intervals: Interval[], sinceMs: number, untilMs: n
 export interface CoverageBreakdown {
   /** Every non-`idle` point in the window: the denominator every share below is read against. */
   moved: number;
-  /** Points in `{model}`-owned intervals — the only ones that reach a rate. */
+  /** Points in `{model}`-owned intervals. Ownership, not reach: the separated rate also reads `mixed` and `idle` intervals. */
   priced: number;
   mixed: number;
   external: number;
@@ -1165,6 +1165,20 @@ export interface CoverageBreakdown {
   /** Recorder down: recording had begun and covered none of the span. */
   gap: number;
   partial: number;
+}
+
+/**
+ * Distinct usable intervals in `[sinceMs, untilMs)` in which any of `models` spent tokens. Per-model counts (`SeparatedRate.intervals`) count a shared
+ * interval once for each model, so the card's Windows total reads this instead of a sum.
+ */
+export function distinctWindows(intervals: Interval[], sinceMs: number, untilMs: number, models: Iterable<string>): number {
+  const wanted = [...models];
+  let count = 0;
+  for (const iv of intervals) {
+    if (!usableForRate(iv) || iv.toT < sinceMs || iv.toT >= untilMs) continue;
+    if (wanted.some(m => iv.tok[m] !== undefined && weightedTokens(iv.tok[m], m) > 0)) count++;
+  }
+  return count;
 }
 
 /**

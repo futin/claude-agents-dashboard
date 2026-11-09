@@ -124,7 +124,7 @@ export function baselineText(weightedPerPct: number | null, days: number): strin
 }
 
 const THIN_HINT: Record<Exclude<ModelThinReason, 'floor'>, string> = {
-  mixed: "most of the current window's points were another model's — this model's rate can't be separated from them",
+  mixed: "most of this model's points were priced out as another model's — its rate can't be separated from them",
   repriced: "another model's rate moved in the current window — this one is not judged until it settles",
   unpriced: "another model spent here without a rate of its own yet — this model's rate can't be separated from it"
 };
@@ -321,13 +321,6 @@ export function coverageRows(coverage: UsageCoverage): { value: string; label: s
       label: 'spent on another device · excluded from the fit'
     });
   }
-  if (coverage.mixedPct > 0) {
-    ranked.push({
-      points: coverage.mixedPct,
-      value: share(coverage.mixedPct),
-      label: 'no single model held 90% of the tokens'
-    });
-  }
   if (coverage.partialPct > 0) {
     ranked.push({
       points: coverage.partialPct,
@@ -345,6 +338,31 @@ export function coverageRows(coverage: UsageCoverage): { value: string; label: s
   ranked.sort((a, b) => b.points - a.points);
   return ranked.map(({ value, label }) => ({ value, label }));
 }
+
+/**
+ * The shared-between-models bucket, said once beside the refusals rather than in them: those intervals are **read** — the separated rate prices every
+ * other model out of them — so listing them as refused would say the headline figure rests on less than it does. Null when none moved.
+ */
+export function sharedLine(coverage: UsageCoverage): string | null {
+  if (coverage.movedPct <= 0 || coverage.mixedPct <= 0) return null;
+  return `${formatShareOf(coverage.mixedPct, coverage.movedPct)} of the points moved in windows shared between models — not refused: the separated rate reads `
+    + 'them, pricing each other model out at its own rate.';
+}
+
+/**
+ * Which thin-row notes the card owes. The first-fortnight sentence is true only of a row thin on the day floors; a row thin because its neighbours'
+ * share cannot be priced out is not waiting for days, so it gets a line of its own.
+ */
+export function thinNotes(models: ModelRateRow[]): { floors: boolean; separation: boolean } {
+  const thin = models.filter(m => m.verdict === 'thin');
+  return {
+    floors: thin.some(m => m.thinReason === undefined || m.thinReason === 'floor'),
+    separation: thin.some(m => m.thinReason !== undefined && m.thinReason !== 'floor')
+  };
+}
+
+/** The one line for rows thin on a separation reason, whichever it was. */
+export const SEPARATION_THIN_NOTE = "Rows marked mixed, repriced or unpriced wait until their neighbours' share of the same windows can be priced out.";
 
 /**
  * The caveat that qualifies every row above rather than adding to them: with the
@@ -570,10 +588,9 @@ export function verdictClass(verdict: ModelRateVerdict): string {
  * Counts of *models* on the left, points and windows on the right — the strip
  * reads left to right as "what the fit concluded, then what it read".
  */
-export function ratesStats(models: ModelRateRow[], coverage: UsageCoverage): StatTile[] {
+export function ratesStats(models: ModelRateRow[], coverage: UsageCoverage, windows: number): StatTile[] {
   const n = (v: ModelRateVerdict) => models.filter(m => m.verdict === v).length;
   const drifting = n('drift');
-  const windows = models.reduce((sum, m) => sum + m.intervals, 0);
   const measured = measuredShare(coverage);
   return [
     {

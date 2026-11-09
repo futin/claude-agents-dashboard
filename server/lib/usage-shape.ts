@@ -8,7 +8,7 @@ import type { ProfileState, UsageSample } from './usage-history.js';
 import { deriveProfile } from './usage-history.js';
 import type { LedgerLine } from './usage-ledger.js';
 import {
-  BASELINE_MS, WEEKLY_FLOORS, coverageBreakdown, currentRange, dailyRates, driftRow, externalShare,
+  BASELINE_MS, WEEKLY_FLOORS, coverageBreakdown, currentRange, dailyRates, distinctWindows, driftRow, externalShare,
   fitDeviation, fitRates, fitSplits, joinIntervals, joinWeeklyIntervals, ledgerBreakMs,
   poolRate, rateFor, separationContext
 } from './usage-rate.js';
@@ -148,6 +148,7 @@ export function emptyRates(nowMs: number, recording: boolean, error?: true): Usa
     generatedAt: new Date(nowMs).toISOString(),
     recording,
     models: [],
+    windows: 0,
     externalSharePct: null,
     coverage: zeroCoverage(),
     // `weeklyRecorded` is false because nothing was read to say otherwise — the
@@ -285,6 +286,7 @@ export function shapeUsageRates(opts: {
     generatedAt: new Date(nowMs).toISOString(),
     recording: true,
     models: rows,
+    windows: distinctWindows(intervals, cur.sinceMs, cur.untilMs, models),
     externalSharePct: share === null ? null : share * 100,
     coverage: {
       movedPct: buckets.moved,

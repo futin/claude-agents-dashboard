@@ -483,9 +483,12 @@ export interface ModelRateRow {
   thinReason?: ModelThinReason;
   /** Both surfaces, `interactive` then `headless`, whatever the evidence. */
   surfaces: ModelSurfaceRate[];
-  /** Intervals behind the current-window fit — the evidence, shown either way. */
+  /**
+   * Usable intervals in the current window in which this model spent tokens — the evidence, shown either way. An interval two models spent in
+   * counts once for each, so these do not sum across rows; {@link UsageRatesResponse.windows} is the distinct count.
+   */
   intervals: number;
-  /** Cumulative utilization points behind it. */
+  /** Cumulative utilization points behind the fit: the residual left once other models' spend is priced out, not the points of those intervals. */
   utilSum: number;
   /**
    * Distinct UTC dates those intervals fall on. Evidence, so it is reported
@@ -624,6 +627,11 @@ export interface UsageRatesResponse {
   /** One row per model seen in an attributable interval, richest evidence first. */
   models: ModelRateRow[];
   /**
+   * Distinct usable intervals in the current window in which any row's model spent tokens. Each row's `intervals` counts a shared interval once per
+   * model, so summing the rows overstates; this is the count the Windows total shows.
+   */
+  windows: number;
+  /**
    * Percent of moved utilization that this machine cannot account for — spend
    * from another device on the same account. Null when nothing moved.
    * Disclosed because it is the one systematic bias in the measurement.
@@ -736,9 +744,9 @@ export interface BoostWeekend {
 export interface UsageCoverage {
   /** The denominator: every point the 5-hour counter moved in the horizon. */
   movedPct: number;
-  /** Points in intervals one model owned — the ones a rate is fitted on. */
+  /** Points in intervals one model owned (held 90% of the tokens). An ownership bucket, not what reached a rate: `mixed` intervals are read too. */
   pricedPct: number;
-  /** No model held 90% of the tokens, so no rate could be attributed. */
+  /** No model held 90% of the tokens — shared between models. The separated rate reads these intervals, pricing each other model out at its own rate. */
   mixedPct: number;
   /** Moved on almost no local spend — another device on the same account. */
   externalPct: number;

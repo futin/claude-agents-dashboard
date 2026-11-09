@@ -347,6 +347,10 @@ export async function run(): Promise<number> {
       assert.strictEqual(sub.verdict, 'thin');
       assert.strictEqual(sub.thinReason, 'floor');
       assert.strictEqual(sub.intervals, 12);
+      // The 12 shared windows are also opus's: summing the rows (25 + 12) would count them twice.
+      const opus = body.models.find(m => m.model === 'opus-5')!;
+      assert.strictEqual(opus.intervals + sub.intervals, 37, 'the rows overlap');
+      assert.strictEqual(body.windows, 25, 'distinct windows, each counted once');
       near(sub.utilSum, 23.04, 'the points left after opus is priced out');
       assert.strictEqual(sub.days, 3);
       assert.strictEqual(sub.deviationPct, null);

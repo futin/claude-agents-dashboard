@@ -5,8 +5,8 @@ import { useUsageRates } from '../../hooks/useUsageRates';
 import {
   boostLine, coverageCaveat, coverageRows, cutFraction, DAY_FLOOR_PTS, dayLabel, dayStep, dayTip,
   DRIFT_BAND_PCT, figureTip, formatDeviation, formatShare, formatTok, ledgerReading,
-  measuredShare, movedLabel, movedTotal, pricedShare, RATES_GLOSSARY, ratesStats, showsDays,
-  spanText, surfaceText, verdictClass, verdictText, weekendBoostLine
+  measuredShare, movedLabel, movedTotal, pricedShare, RATES_GLOSSARY, ratesStats, SEPARATION_THIN_NOTE, sharedLine, showsDays,
+  spanText, surfaceText, thinNotes, verdictClass, verdictText, weekendBoostLine
 } from '../../lib/usageRatesFormat';
 import { InfoDot } from './ReadingAids';
 import { Definitions, RowHead, Sheet, StatStrip } from './Sheet';
@@ -253,11 +253,12 @@ export function UsageRates() {
     row => row.weekly.weightedPerPct !== null || row.weekly.fittedWeightedPerPct !== null
   );
   const models = rates.models;
-  const priced = models.filter(m => m.verdict !== 'thin');
   const caveat = coverageCaveat(rates.coverage);
   const covRows = coverageRows(rates.coverage);
   const measured = measuredShare(rates.coverage);
-  const windows = models.reduce((n, m) => n + m.intervals, 0);
+  const windows = rates.windows;
+  const notes = thinNotes(models);
+  const shared = sharedLine(rates.coverage);
   const pricedPts = Math.round(rates.coverage.pricedPct).toLocaleString('en-US');
   const weekdayBoost = boostLine(rates.boost);
   const weekendBoost = weekendBoostLine(rates.boost);
@@ -274,7 +275,7 @@ export function UsageRates() {
         </div>
       )}
 
-      <StatStrip tiles={ratesStats(models, rates.coverage)} />
+      <StatStrip tiles={ratesStats(models, rates.coverage, rates.windows)} />
 
       {/* Two lines, never one sentence: they rest on different controls and fire independently, and a merged line would let the
           weekday reading lend its strength to the weekend one. Neither is a drift question, so neither enters the headline. */}
@@ -332,7 +333,7 @@ export function UsageRates() {
                   <td />
                   <td data-l="Priced" className="n">{pricedPts}</td>
                   <td className="n mut" colSpan={2}>
-                    points of {movedTotal(rates.coverage)} explained
+                    owned outright, of {movedTotal(rates.coverage)} pts moved
                   </td>
                   <td className="n" />
                   <td data-l="Windows" className="n">{windows}</td>
@@ -347,11 +348,12 @@ export function UsageRates() {
               </tbody>
             </table>
             {models.some(showsDays) && <DayLegend />}
-            {priced.length < models.length && (
+            {notes.floors && (
               <p className="note">
                 <b>Collecting is the normal first fortnight</b> — {verdictText('thin').hint}.
               </p>
             )}
+            {notes.separation && <p className="note">{SEPARATION_THIN_NOTE}</p>}
           </>
         )}
       </Sheet>
@@ -407,8 +409,7 @@ export function UsageRates() {
         <Sheet>
           <RowHead
             title="Where the unpriced points went"
-            sub={'Every point the 5-hour counter moved that no rate could be fitted on, and '
-              + 'what refused it'}
+            sub={'Every point the 5-hour counter moved that no rate read, and what refused it'}
             right={<span className="chip">{movedTotal(rates.coverage)} pts moved</span>}
           />
           <table className="dt">
@@ -427,6 +428,7 @@ export function UsageRates() {
               ))}
             </tbody>
           </table>
+          {shared !== null && <p className="note">{shared}</p>}
           {caveat !== null && <p className="note">{caveat}</p>}
         </Sheet>
       )}

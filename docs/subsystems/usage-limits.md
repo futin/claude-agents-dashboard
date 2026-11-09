@@ -1482,8 +1482,8 @@ one figure; without a baseline every deviation is null. Always present, and no
 new disk read: it is the same interval set the row is fitted from.
 
 `coverage` (`UsageCoverage`) is the disclosure the three unpriced kinds exist
-for: `movedPct` as the denominator, `pricedPct` for what reached a rate, then
-`mixedPct`, `externalPct`, `preLedgerPct`, `missingPct` and `partialPct`, which
+for: `movedPct` as the denominator, `pricedPct` for the points in intervals one model
+owned, then `mixedPct`, `externalPct`, `preLedgerPct`, `missingPct` and `partialPct`, which
 sum to `movedPct`. The wire name is `missingPct` rather than `gapPct` — the
 field should say what the bucket *means* now that `gap` no longer means all
 three. Two fields are not utilization points: `recorderBreakHours` is hours,
@@ -1494,6 +1494,18 @@ because it is read by a person, and `startProvable` is false when
 absent. `coverage` is computed over `[now − BASELINE_MS, ∞)`, deliberately the
 **same horizon `externalSharePct` uses**: two disclosure figures on one card
 that quietly spanned different windows would be a defect, not a nuance.
+The buckets are an *ownership* breakdown, not a map of what reached a rate: the
+separated rate also reads `mixed` and `idle` intervals, so `mixedPct` is points
+*shared between models*, which the card says once beside its refusal list
+(`sharedLine`) rather than listing as refused. The Coverage headline is still
+`pricedPct / movedPct`; whether it should count shared points too is the
+maintainer's call.
+
+`windows` (top level of `UsageRatesResponse`) is the distinct count of usable
+intervals in the current window in which any row's model spent tokens
+(`distinctWindows`). Each row's `intervals` counts an interval once per model that
+spent in it, so a window two models share is in both rows; the Ledger tile and the
+Windows total read `windows`, not a sum of the rows.
 
 The **Usage** section is now three sub-tabs — `Forecast | Token value | History` — chosen from
 the Usage tree in the side rail, persisted per device as `usageTab`.
@@ -1541,7 +1553,8 @@ the figure the phone reader came for.
 
    **Share is of the priced points** (`pricedShare`): `utilSum` over the sum of the rows'
    own `utilSum`, so the column sums to 100% and the bars read as one breakdown with the
-   `Priced share` total row underneath them. Not of everything that moved — that would sum
+   `Priced share` total row underneath them (its Priced cell is the owned points, labelled
+   "owned outright, of N pts moved" — not all that the rates read). Not of everything that moved — that would sum
    to the priced share and make each bar answer a question the column is not asking. Null,
    never 0, when nothing is priced.
 3. **The evidence ledger** — what each rate was fitted on, and against what. The `Reading`
@@ -1708,7 +1721,7 @@ how much evidence the pool held and never how far apart it was spread. Measured
 per day, this machine's own weighted rate varies 173k → 281k (cv ≈ 24%), so a
 one-day pool on **either** side of the comparison clears the 20% band by itself.
 Two residuals are stated rather than fixed: at 7 / 2 the 1σ deviation error is
-19.2% against a 20% band (on the pooled ratio; the separated rate measured 21.7% on its 7 rated Opus 5.5 days on 2026-11-09 —
+19.2% against a 20% band (on the pooled ratio; the separated rate measured 17.7% (cv 22.1%, 14 rated Opus 5.5 days, 2026-11-09 ~14:25 UTC) —
 *The separated rate* above has the numbers), so a crossing by chance alone is still not rare; and
 the current window is 3 days wide by construction, which makes it the dominant
 noise term whatever the baseline does. Widening the band is a question for more
