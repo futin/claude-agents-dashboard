@@ -118,14 +118,16 @@ target, not a budget to compress rules into.
   - `mixed`: `pricedOutShare > SEPARATION_S_CAP` (covers `R ≤ 0`).
   - `floor`: `U ≤ 0`, or `intervals < floors.minIntervals`, `utilSum < floors.minUtil`, or `days < floors.minDays`.
 
-Test fixtures: models `A` and `B`, tokens all `in` so weighted = raw, `NO_FLOOR = { minIntervals: 0, minUtil: 0, minDays: 0 }` unless stated, `ctx`
-built by hand. Expected figures within ±1%.
+Test fixtures: models `A` and `B`, tokens all `in` so weighted = raw, the file's existing `NO_FLOOR` (`{ minIntervals: 1, minUtil: 0, minDays: 0 }`,
+`usage-rate-fit.test.ts:35`) unless stated, `ctx` built by hand. Expected figures within ±1%. Interval `kind` is **hand-set** in these fixtures, not
+derived by `dominantModel`: at these prices a genuinely `mixed` interval (A < 90% of weighted tokens) already has `s` above the cap, so "mixed" below means
+`kind: 'mixed'` set by the fixture (review 1).
 
 - [ ] **Step 1: Failing tests** (spec test numbers in brackets):
   - [1] *pure span*: A-owned intervals plus idle intervals carrying A tokens → `W_A total / Σ dUtil`; with no idle intervals it equals `poolRate`'s figure
     exactly; `thinReason` null.
   - [2] *known mix*: 20 mixed intervals each A 1.5M weighted + B 100k weighted, `dUtil` 4 (A 3 pts at 500k + B 1 pt at 100k); `ctx.horizon` B = 100k →
-    A = 500k, `pricedOutShare` 0.25, rated; `poolRate` on the same intervals is null (nothing owned). Then add 5 idle intervals (B 100k, `dUtil` 0) each
+    A = 500k, `pricedOutShare` 0.25, rated; `poolRate` on the same hand-set `mixed` intervals is null. Then add 5 idle intervals (B 100k, `dUtil` 0) each
     followed by an A-owned interval that received their carried point (A 2M, `dUtil` 5): `poolRate` = 400k, `separatedRate` still 500k (W_A 40M, U 105,
     priced out 25).
   - [3] *carry-over*: 10 pairs of (idle interval with B 100k, `dUtil` 0) then (A-owned, A 2M, `dUtil` 5); horizon B = 100k → `poolRate` = 400k,
@@ -177,7 +179,8 @@ built by hand. Expected figures within ±1%.
 - `surfaceRates`: per `RATE_SURFACES`, current/baseline = the stratum's `weightedPerPct` when that stratum is rated under `CURRENT_FLOORS` /
   `BASELINE_FLOORS` (repriced check on current), else null; `utilSum` = current stratum `utilSum` (0 when null).
 - `mixAdjustedDeviation`: baseline rate per surface = rated baseline stratum figure. Over the current window: `moved` = span `utilSum`; for each surface
-  with a baseline rate, `covered += stratum utilSum`, `expected += W_M,stratum / baselineRate`. Null when `moved ≤ 0`, `covered ≤ 0` or
+  with a baseline rate, `covered += stratum utilSum`, `expected += W_M,stratum / baselineRate` — but only for a current stratum whose `thinReason` is null or `floor`; a
+  stratum failing `mixed`/`repriced`/`unpriced` drops out (spec §What changes, "drops out of the mix adjustment"), which lowers coverage. Null when `moved ≤ 0`, `covered ≤ 0` or
   `covered / moved < SURFACE_COVERAGE_MIN`; else `(expected / covered − 1) × 100`. M's tokens only — never `totalWeighted` of the interval. No owned-basis
   path remains.
 
@@ -193,6 +196,8 @@ built by hand. Expected figures within ±1%.
     `intervals`/`utilSum`/`days` carried non-zero; baseline still published. Baseline under `BASELINE_FLOORS` and current rated → `thinReason` `floor`.
     Both thin with different reasons → the current side's.
   - repriced row: B's current 3-day rate 30% off its horizon rate → A's row `thin`/`repriced`; B's own row is not `repriced`.
+  - unpriced row: a third model C at 5% of the current window's weighted tokens with no horizon rate → A's row `thin`/`unpriced`.
+  - [7c] keeps both current strata under `SEPARATION_S_CAP`, so neither drops out of the adjustment.
   - a rated row has no `thinReason` key.
 - [ ] **Step 2:** run `usage-rate-drift`; new cases fail.
 - [ ] **Step 3:** implement. Existing cases in this file built from single-model owned intervals must pass unchanged; if one fails, decide whether it
@@ -224,6 +229,7 @@ built by hand. Expected figures within ±1%.
   - a day with A's points 60% beside B at 100k → `thin`, `thinReason` `mixed`, figure carried within 1% of 500k.
   - B's current rate 30% off horizon: a day inside the current window with B share 5% → `repriced`; the same mix on a baseline-range day → not
     `repriced`; a current-window day with B share 0.5% → not `repriced`.
+  - a day with C (no horizon rate) at 5% of weighted tokens → `thin`, `thinReason` `unpriced`.
   - [8] for one fixture, every rated cell's `deviationPct` equals `(cell / row.baselineWeightedPerPct − 1) × 100` using `driftRow(…, ctx)`'s baseline, and
     a current-window day whose figure equals the row's current figure has the row's `deviationPct`.
   - the existing "thin and still carries its figures" case (line 107–121) still passes and now asserts `thinReason` `floor`.
@@ -248,8 +254,9 @@ built by hand. Expected figures within ±1%.
 **Exact copy** (spec §Why it is thin; labels stay — `thin` is still labelled `collecting`):
 - `verdictText('thin', r).hint`: `floor` or absent → today's string unchanged; `mixed` → `most of the current window's points were another model's —
   this model's rate can't be separated from them`; `repriced` → `another model's rate moved in the current window — this one is not judged until it
-  settles`; `unpriced` → `another model spent here without a rate of its own yet — this model's rate can't be separated from it`. `ledgerReading` passes
-  `row.thinReason`.
+  settles`; `unpriced` → `another model spent here without a rate of its own yet — this model's rate can't be separated from it`. `ledgerReading`
+  (614–635) only calls `verdictText` for non-thin verdicts today; in its thin branch, when `row.thinReason` is present and not `floor`, return
+  `verdictText('thin', row.thinReason).hint` before the day-floor/counter composition; `floor` or absent keeps today's composition.
 - `dayTip`: early return only for `pre-ledger` and `none`; `none` reads `no spend from this model that day`. A `thin` cell with null figures shows the date
   line, the evidence line and its reason line, no rate line. Reason line: `floor` → today's `under ${DAY_FLOOR_PTS} pts — not coloured`; `mixed` →
   `mostly another model's spend — can't be separated, not coloured`; `repriced` → `another model's rate moved — can't be separated, not coloured`;
@@ -262,7 +269,8 @@ built by hand. Expected figures within ±1%.
   percentage points left to it once the other models' spend is priced out.`
 
 - [ ] **Step 1: Failing tests:** one per string above, asserting the exact text (each of the four `dayTip` reasons, the null-figure thin cell — no
-  `NaN`, no `undefined`, no rate line — the three non-floor hints, the floor hint unchanged, the tile sub, the three glossary entries).
+  `NaN`, no `undefined`, no rate line — the three non-floor hints, the floor hint unchanged, `ledgerReading` of a `repriced` row past both day floors returning the `repriced` hint and of a
+  `floor` row returning today's `waiting on …` text, the tile sub, the three glossary entries).
 - [ ] **Step 2:** run `usage-rates-format`; new cases fail.
 - [ ] **Step 3:** implement. Update the `DAY_FLOOR_PTS` doc comment (36–45) to say the floor is one of four reasons a day is `thin`.
 - [ ] **Step 4:** run `usage-rates-format`, `pnpm typecheck`, `pnpm build`; all pass.
