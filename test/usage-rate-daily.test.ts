@@ -9,6 +9,7 @@
  */
 
 import assert from 'node:assert';
+import fs from 'node:fs';
 
 import type { TokenCounts } from '../server/lib/usage-ledger.js';
 import {
@@ -249,6 +250,16 @@ export function run(): number {
     const today = days.find(d => d.date === '2026-08-29')!;
     assert.ok(Math.abs(today.weightedPerPct! - row.weightedPerPct!) < 1e-6);
     assert.ok(Math.abs(today.deviationPct! - row.deviationPct!) < 1e-9);
+  }));
+
+  // dailyRates' default context rebuilds the same horizon fits and hits the band memo, so the two wirings are numerically identical and no behavioural
+  // test can tell them apart; what the wiring buys is one subtraction basis built once per request. Pin it at the call site, as tailnet.test.ts pins
+  // its port, so a refactor that drops the argument fails here instead of silently doubling the work.
+  check(test('shapeUsageRates hands its one separation context to every row and to dailyRates', () => {
+    const src = fs.readFileSync(new URL('../server/lib/usage-shape.ts', import.meta.url), 'utf8');
+    assert.strictEqual(src.match(/separationContext\(/g)!.length, 1, 'built exactly once per request');
+    assert.ok(/dailyRates\(intervals, model, nowMs, startMs, drift\.baselineWeightedPerPct, ctx\)/.test(src), 'dailyRates receives ctx');
+    assert.ok(/driftRow\(intervals, model, nowMs, ctx\)/.test(src), 'driftRow receives ctx');
   }));
 
   console.log(`\n  ${p} passed, ${f} failed`);
