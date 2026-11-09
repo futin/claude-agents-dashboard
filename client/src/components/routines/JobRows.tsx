@@ -4,7 +4,7 @@ import type { JobError } from '../../../../shared/routine-file';
 import { useDraft } from '../../hooks/useDraft';
 import {
   FIELDS, UNREADABLE, formKind, frontmatterReadable, routeErrors, scheduleEdit, schedulePick, timeoutUnitView, timeoutWithUnit, visibleFields,
-  type FieldDef, type FieldId, type FormKind, type Limits, type Machines, type ModelEffort, type Permission, type Repos, type Schedule, type ScheduleStep,
+  type FieldDef, type FieldId, type FormKind, type Limits, type ModelEffort, type Permission, type Repos, type Schedule, type ScheduleStep,
   type Summary, type TimeoutUnit, type Tools
 } from '../../lib/routineForm';
 import { jobPins } from '../../lib/routines';
@@ -27,25 +27,6 @@ function Seg<T extends string | null>({ label, options, value, disabled, pick }:
         <button key={text} type="button" aria-pressed={value === v} className={value === v ? 'on' : ''} disabled={disabled} onClick={() => pick(v)}>{text}</button>
       ))}
     </div>
-  );
-}
-
-function MachinesControl({ v, ctl, disabled, put }: { v: Machines; ctl: RoutineCtl; disabled: boolean; put(v: Machines): void }) {
-  return (
-    <>
-      <div className="rtn-picks">
-        {(['mac', 'wsl'] as const).map(m => (
-          <button key={m} type="button" aria-pressed={v[m]} className={`rtn-pick${v[m] ? ' on' : ''}`} disabled={disabled}
-            onClick={() => put(m === 'mac' ? { ...v, mac: !v.mac } : { ...v, wsl: !v.wsl })}>
-            {m}{ctl.machine === m && <span className="rtn-f-here">this machine</span>}
-          </button>
-        ))}
-      </div>
-      <div className="rtn-f-hint">
-        Which machines install this job. This dashboard is <b>{ctl.machine}</b>: detected from the OS, or set by <code>ROUTINE_MACHINE</code> in{' '}
-        <code>.env</code>.
-      </div>
-    </>
   );
 }
 
@@ -256,7 +237,6 @@ export default function JobRows({ text, onText, errors, readOnly, ctl, onFile }:
         return <ScheduleControl value={v} now={ctl.now} disabled={disabled} onPick={p => apply(schedulePick(text, v, p))}
           onChange={s => apply(scheduleEdit(s))} />;
       }
-      case 'machines': return <MachinesControl v={value as Machines} ctl={ctl} disabled={disabled} put={v => put('machines', v)} />;
       case 'repos': return <ReposControl v={value as Repos} ctl={ctl} disabled={disabled} put={v => put('repos', v)} />;
       case 'script': return <BodyControl label="Script" v={value as string} disabled={disabled} put={v => put('script', v)} />;
       case 'prompt': return <BodyControl label="Prompt" v={value as string} disabled={disabled} put={v => put('prompt', v)} />;

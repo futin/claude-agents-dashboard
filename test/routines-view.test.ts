@@ -6,7 +6,7 @@ import assert from 'node:assert';
 import fs from 'node:fs';
 
 import {
-  chipClass, costDelta, createPollSeq, editsWithoutAsking, foreachLine, formatStat, groupRunsByDay, isFanOut, jobTemplate, launchdLabel, medianMs, nameProblem,
+  chipClass, costDelta, createPollSeq, editsWithoutAsking, foreachLine, formatStat, groupRunsByDay, isFanOut, jobTemplate, jobsSubtitle, launchdLabel, medianMs, nameProblem,
   readForeach, reconcileChip, reconcilePreview, rowText, runClock, dotTone, topFailure, jobPins, pinOutcome, stepErrLine, runKicker, runPill, runsQueryString, setRepos,
   pausedLook, splitNext, splitSteps, stepPill, successRate, topTokenShare, withLate, writeFailureText
 } from '../client/src/lib/routines.js';
@@ -503,6 +503,13 @@ export function run(): number {
     assert.ok(!form.includes("'1h timeout"), 'the default is built from DEFAULT_TIMEOUT_MS');
     const boot = fs.readFileSync(new URL('../server/lib/routine-boot.ts', import.meta.url), 'utf8');
     assert.ok(!/const DEFAULT_TIMEOUT_MS\b/.test(boot), 'the default is imported');
+  });
+
+  t('jobsSubtitle: per-machine copy, no git sync claim', () => {
+    const base = 'Jobs defined in /h/.claude/routines/jobs, run by launchd on this machine. They belong to this machine only — nothing syncs.';
+    assert.strictEqual(jobsSubtitle('/h/.claude/routines/jobs', 'mac'), base);
+    assert.strictEqual(jobsSubtitle('/h/.claude/routines/jobs', 'wsl'), base.replace('launchd', 'cron'));
+    assert.ok(!jobsSubtitle('/d', 'mac').includes('sync through git'));
   });
 
   console.log(`\n  ${p} passed, ${f} failed`);

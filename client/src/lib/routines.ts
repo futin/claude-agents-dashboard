@@ -235,6 +235,11 @@ export function setRepos(text: string, mode: ForeachMode, picks: string[]): stri
   return writeFrontmatterLine(kept, 'foreach', foreachLine(mode, picks).replace(/^foreach: /, ''), 'run');
 }
 
+/** The Jobs subtitle: a job file lives in one machine's folder and is installed only there, so there is nothing to say about syncing. */
+export function jobsSubtitle(dir: string, machine: 'mac' | 'wsl'): string {
+  return `Jobs defined in ${dir}, run by ${machine === 'mac' ? 'launchd' : 'cron'} on this machine. They belong to this machine only — nothing syncs.`;
+}
+
 /** The drawer's three kinds; each is a whole file, so picking one replaces the text. */
 export type JobKind = 'shell' | 'prompt' | 'skill';
 
