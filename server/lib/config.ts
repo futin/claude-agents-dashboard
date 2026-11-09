@@ -132,7 +132,7 @@ export interface Config {
    * single-label names and `.localhost`/`.local`/`.ts.net` are always allowed — this is for public tunnels. See `lib/request-guard.ts`.
    */
   allowedHosts: string[];
-  /** Routine job files (`ROUTINES_DIR`), as written — `~` is expanded by `routineDirs`, not here. */
+  /** Routine job files (`ROUTINES_DIR`), as written — `~` is expanded by `routineDirs`, not here. `''` = unset: `routineDirs` puts them under the state root. */
   routinesDir: string;
   /** Machine name override (`ROUTINE_MACHINE`: `mac` or `wsl`). Empty = detect; any other value is reported by `machineName`, not coerced. */
   routineMachine: string;
@@ -170,7 +170,7 @@ export const DEFAULTS = {
   SYNC_PERMISSION_MODE: 'auto',
   SPAWN_OWN_ENTRYPOINT: false,
   ALLOWED_HOSTS: '',
-  ROUTINES_DIR: '~/claude-global/routines',
+  ROUTINES_DIR: '',
   ROUTINE_MACHINE: '',
   ROUTINES_OWNER: false,
   ROUTINES_STATE_ROOT: ''

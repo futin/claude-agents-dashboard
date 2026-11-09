@@ -72,7 +72,7 @@ function ReposControl({ v, ctl, disabled, put }: { v: Repos; ctl: RoutineCtl; di
             </span>
             <datalist id={listId}>{paths.map(p => <option key={p} value={p} />)}</datalist>
           </div>
-          <div className="rtn-f-hint">Suggests the pinned repos' paths, or type any folder. Empty = the routines folder's parent.</div>
+          <div className="rtn-f-hint">Suggests the pinned repos' paths, or type any folder. Empty = your home folder.</div>
         </>
       )}
     </>

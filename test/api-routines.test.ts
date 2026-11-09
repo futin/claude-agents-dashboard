@@ -318,6 +318,13 @@ export async function run(): Promise<number> {
     });
   }));
 
+  tally(await testAsync('/validate of a job with neither cwd nor foreach says it runs in your home folder', async () => {
+    await withRoutines('', false, async c => {
+      const r = await send(c.h, 'POST', '/api/routines/validate', { text: job({ run: 'shell' }) }, UNTRUSTED);
+      assert.match(String(r.json?.summary), / · your home folder$/);
+    });
+  }));
+
   tally(await testAsync('/validate of a manual job summarises "manual · shell ·" and never says paused, enabled or not', async () => {
     await withRoutines('', false, async c => {
       const text = (enabled: boolean) => ['---', 'cron: manual', 'run: shell', `enabled: ${enabled}`, '---', '```bash', 'echo hi', '```', ''].join('\n');

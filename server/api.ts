@@ -1770,7 +1770,7 @@ function routineSummary(job: RoutineJob): string {
   const when = cron.ok ? describeCron(cron.cron) : job.cron;
   const where = job.foreach === 'pinned' ? 'every pinned repo'
     : Array.isArray(job.foreach) ? `${job.foreach.length} repo${job.foreach.length === 1 ? '' : 's'}`
-      : job.cwd ?? 'the routines folder\'s parent';
+      : job.cwd ?? 'your home folder';
   return [when, job.run, where, job.enabled || isManualCron(job.cron) ? null : 'paused'].filter(Boolean).join(' · ');
 }
 

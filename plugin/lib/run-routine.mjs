@@ -124,8 +124,8 @@ class Wrapper {
     Object.assign(this, args);
     this.machine = resolveMachine();
     const dir = process.env.ROUTINES_DIR || process.env.SCHEDULES_DIR;
-    this.dir = dir ? expandHome(dir) : orLegacy(path.join(home(), 'claude-global', 'routines'), path.join(home(), 'claude-global', 'schedules'));
     this.state = orLegacy(path.join(home(), '.claude', 'routines'), path.join(home(), '.claude', 'schedules'));
+    this.dir = dir ? expandHome(dir) : path.join(this.state, 'jobs');
     this.logPath = path.join(this.state, 'runs', `${this.machine}.jsonl`);
     this.lockPath = path.join(this.state, 'locks', `${this.job}.lock`);
     this.bootId = bootId();
@@ -204,7 +204,7 @@ class Wrapper {
   plan(job) {
     if (job.run === 'claude' && !process.env.CLAUDE_BIN) return { error: 'claude cli not configured' };
     if (job.foreach === null) {
-      const cwd = job.cwd ? expandHome(job.cwd) : path.dirname(this.dir);
+      const cwd = job.cwd ? expandHome(job.cwd) : home();
       return { steps: [{ repo: null, cwd }] };
     }
     let pins;

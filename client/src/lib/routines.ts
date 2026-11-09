@@ -220,7 +220,7 @@ export function readForeach(text: string): { mode: ForeachMode; picks: string[] 
 /**
  * The Repos helper's write side: set the frontmatter to `mode`, touching only the `foreach:` / `cwd:` lines. All and Pick write `foreach:` (in place, its
  * trailing comment kept, or after `run:`) and drop a `cwd:` line, since a file may name only one; Single cwd drops `foreach:` and leaves any `cwd:` as it
- * is, so the default (the routines folder's parent) applies until the file names one. Comment lines are never touched; text with no frontmatter is returned
+ * is, so the default (your home folder) applies until the file names one. Comment lines are never touched; text with no frontmatter is returned
  * unchanged.
  */
 export function setRepos(text: string, mode: ForeachMode, picks: string[]): string {
@@ -247,7 +247,7 @@ const CLAUDE_HEAD = `---
 cron: "0 22 * * *"            # five fields, local time of the machine that runs it
 run: claude                   # shell | claude
 foreach: pinned               # absent = run once in \`cwd\`; pinned = every pinned repo; [a, b] = only these pins, by name
-# cwd: ~/Documents/x          # only without foreach; default = the routines folder's parent
+# cwd: ~/Documents/x          # only without foreach; default = your home folder
 enabled: true                 # absent = true
 model: opus                   # claude only; absent = CLI default
 effort: medium                # claude only

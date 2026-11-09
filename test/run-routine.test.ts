@@ -223,7 +223,7 @@ export async function run(): Promise<number> {
     assert.strictEqual(lines[19], 'err last');
   }));
 
-  tally(await test('no foreach: cwd defaults to the routines folder\'s parent; `cwd: ~/x` expands HOME', () => {
+  tally(await test('no foreach: cwd defaults to $HOME; `cwd: ~/x` expands HOME', () => {
     const fx = setup();
     shellJob(fx, 'here', 'true');
     shellJob(fx, 'there', 'true', ['cwd: ~/proj']);
@@ -231,7 +231,7 @@ export async function run(): Promise<number> {
     assert.strictEqual(wrap(fx, ['here', '--trigger', 'manual']).code, 0);
     assert.strictEqual(wrap(fx, ['there', '--trigger', 'manual']).code, 0);
     const cwds = ofKind(log(fx), 'step-start').map((r) => r.cwd);
-    assert.deepStrictEqual(cwds, [path.dirname(fx.dir), path.join(fx.home, 'proj')]);
+    assert.deepStrictEqual(cwds, [fx.home, path.join(fx.home, 'proj')]);
   }));
 
   tally(await test('a cwd that does not exist fails the step, not the wrapper', () => {
@@ -711,14 +711,24 @@ export async function run(): Promise<number> {
     assert.strictEqual(start.late, false);
   }));
 
-  tally(await test('machine: detected when ROUTINE_MACHINE is unset or not mac|wsl; ROUTINES_DIR defaults to ~/claude-global/routines', () => {
+  tally(await test('machine: detected when ROUTINE_MACHINE is unset or not mac|wsl', () => {
     const fx = setup();
     const detected = process.platform === 'darwin' ? 'mac' : 'wsl';
     writeJob(fx, 'both', ['cron: "0 22 * * *"', 'run: shell'], '```bash\ntrue\n```');
-    assert.strictEqual(wrap(fx, ['both', '--trigger', 'manual'], { ROUTINE_MACHINE: undefined, ROUTINES_DIR: undefined }).code, 0);
+    assert.strictEqual(wrap(fx, ['both', '--trigger', 'manual'], { ROUTINE_MACHINE: undefined }).code, 0);
     assert.strictEqual(wrap(fx, ['both', '--trigger', 'manual'], { ROUTINE_MACHINE: 'linux' }).code, 0);
     const recs = log(fx, detected);
     assert.deepStrictEqual(ofKind(recs, 'start').map((r) => r.machine), [detected, detected]);
+  }));
+
+  tally(await test('ROUTINES_DIR unset: the job is read from <state>/jobs and, with no cwd, runs in $HOME', () => {
+    const fx = setup();
+    const jobs = path.join(fx.state, 'jobs');
+    fs.mkdirSync(jobs, { recursive: true });
+    fs.writeFileSync(path.join(jobs, 'home.md'), ['---', 'cron: "0 22 * * *"', 'run: shell', '---', '```bash\ntrue\n```', ''].join('\n'));
+    const r = wrap(fx, ['home', '--trigger', 'manual'], { ROUTINES_DIR: undefined });
+    assert.strictEqual(r.code, 0, r.stderr);
+    assert.deepStrictEqual(ofKind(log(fx), 'step-start').map((x) => x.cwd), [fx.home]);
   }));
 
   tally(await test('the env names baked before the rename still read: SCHEDULES_DIR finds the job, SCHEDULE_MACHINE picks the log', () => {
@@ -731,14 +741,13 @@ export async function run(): Promise<number> {
     assert.deepStrictEqual(kinds(log(fx, 'wsl')), ['start', 'step-start', 'step-end', 'end']);
   }));
 
-  tally(await test('with only the pre-rename folders on disk, the wrapper reads and logs there and creates no new ones', () => {
+  tally(await test('with only the pre-rename state folder on disk, the wrapper logs there and reads <state>/jobs', () => {
     const fx = setup();
     fs.rmSync(fx.dir, { recursive: true });
-    const oldDir = path.join(fx.home, 'claude-global', 'schedules');
     const oldState = path.join(fx.home, '.claude', 'schedules');
-    fs.mkdirSync(oldDir, { recursive: true });
-    fs.mkdirSync(oldState, { recursive: true });
-    fs.writeFileSync(path.join(oldDir, 'old.md'), ['---', 'cron: "0 22 * * *"', 'run: shell', '---', '```bash\ntrue\n```', ''].join('\n'));
+    const oldJobs = path.join(oldState, 'jobs');
+    fs.mkdirSync(oldJobs, { recursive: true });
+    fs.writeFileSync(path.join(oldJobs, 'old.md'), ['---', 'cron: "0 22 * * *"', 'run: shell', '---', '```bash\ntrue\n```', ''].join('\n'));
     assert.strictEqual(wrap(fx, ['old', '--trigger', 'manual'], { ROUTINES_DIR: undefined }).code, 0);
     assert.deepStrictEqual(kinds(log({ ...fx, state: oldState })), ['start', 'step-start', 'step-end', 'end']);
     assert.strictEqual(fs.existsSync(fx.state), false);
