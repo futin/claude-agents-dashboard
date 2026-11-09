@@ -512,6 +512,15 @@ export function run(): number {
     assert.strictEqual(SUB_BOOTSTRAP, 200);
   })) p++; else f++;
 
+  if (test('bootstrapBands: under 3 distinct UTC days gives no band (a 2-day resample is the sample or unfittable); 3 days give a non-zero one', () => {
+    const lastDays = (n: number): Interval[] => fortnight(alternating).filter(iv => iv.toT >= NOW - (n - 1) * DAY - 7 * 60 * MIN);
+    assert.strictEqual(bootstrapBands(lastDays(2), HORIZON_FROM, UNTIL).size, 0, 'two noisy days: no band for any model');
+    assert.strictEqual(bootstrapBands(lastDays(1), HORIZON_FROM, UNTIL).size, 0, 'one day: none either');
+    const three = bootstrapBands(lastDays(3), HORIZON_FROM, UNTIL);
+    const b = three.get('B')!;
+    assert.ok(b && (b.under > 0 || b.over > 0), `three noisy days: a non-zero band, got ${JSON.stringify(b)}`);
+  })) p++; else f++;
+
   if (test('bootstrapBands: seeded per call — two runs on the same intervals give deep-equal bands', () => {
     const ivs = fortnight(alternating);
     assert.deepStrictEqual(bootstrapBands(ivs, HORIZON_FROM, UNTIL), bootstrapBands(ivs, HORIZON_FROM, UNTIL));

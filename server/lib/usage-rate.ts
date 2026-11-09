@@ -714,6 +714,9 @@ export function bootstrapBands(
     if (day) day.push(iv); else byDay.set(key, [iv]);
   }
   const days = [...byDay.keys()].sort().map(key => byDay.get(key)!);
+  // Under 3 distinct days a resample is fittable (2-day floor) only when it redraws both, and then it is the original sample: every draw is
+  // exactly 1.0 whatever the noise, a band of 0. No band is the honest answer; callers fall back to SUB_ERR.
+  if (days.length < 3) return new Map();
   const draws = new Map<string, number[]>([...point.keys()].map(model => [model, []]));
   const random = seededRandom(SUB_BOOTSTRAP_SEED);
   for (let b = 0; b < resamples && days.length > 0; b++) {

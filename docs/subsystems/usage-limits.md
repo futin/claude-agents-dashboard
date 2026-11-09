@@ -992,7 +992,9 @@ basis: `intervals` = usable intervals in S in which M spent anything, `days` = t
   `pricedOut > 0` and `R ≤ 0`, `R − ΔU ≤ 0`, `R / (R − ΔU) − 1 > limit` or `1 − R / (R + ΔO) > limit`; a span that subtracts nothing cannot be too sensitive
   to the subtraction, so `R ≤ 0` there is a `floor`. A model fitted in fewer than half the resamples has no measured band — its rate is not identified well
   enough to subtract — and takes `UNMEASURED_BAND` (`under` 0.99, `over` 9), so any real share of its points makes the span `mixed`. A `SeparationContext` built
-  by hand (tests) may omit a model's band; it then falls back to `SUB_ERR` (15%) on both sides. `s` is still published, as `pricedOutShare`, but no longer
+  by hand (tests) may omit a model's band; it then falls back to `SUB_ERR` (15%) on both sides, and so does every model when the horizon holds fewer than 3 distinct
+  UTC days: `bootstrapBands` returns no band at all then, because a 2-day resample is fittable only when it redraws both days, which makes it the original sample and
+  every draw exactly 1.0 — a band of 0 whatever the noise. `s` is still published, as `pricedOutShare`, but no longer
   gates anything. Consequence, accepted: a model that is the minor partner in a span reads `thin` there — the residual cannot price it to ±10% — and its row
   still shows the joint-fit `fittedWeightedPerPct`.
   **The bands are memoized, and the bootstrap is the cost.** `separationContext` keys the memo on the UTC hour and the set of models with a horizon rate, not the

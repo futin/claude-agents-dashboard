@@ -41,7 +41,7 @@ const T0 = Date.parse('2026-08-29T09:00:00.000Z');
  * bridging the two dates is discarded — which is why the day-two block is one
  * interval shorter than the arithmetic alone would suggest.
  */
-const RESETS = ['2026-08-29T13:00:00.000Z', '2026-08-30T13:00:00.000Z'];
+const RESETS = ['2026-08-29T13:00:00.000Z', '2026-08-30T13:00:00.000Z', '2026-08-31T13:00:00.000Z'];
 /** One weekly window across every weekly fixture below — none of them spans a reset. */
 const WEEK_RESETS = '2026-09-07T07:59:59.840279+00:00';
 const ENV = 'SHOW_USAGE=false\nSKIP_PROC_SCAN=true\n';
@@ -145,10 +145,13 @@ const DRIVER_PCT_PER_MTOK = 0.4;
 const SUBAGENT_PCT_PER_MTOK = 1.6;
 const RARE_PCT_PER_MTOK = 2.5;
 
-/** Intervals per UTC date in `fittedOnlyFixtureDir`, summing to its 25. */
-const FITTED_PER_DAY = [13, 12];
+/**
+ * Intervals per UTC date in `fittedOnlyFixtureDir`, summing to its 25. Three dates, not two: with fewer than 3 distinct days the
+ * bootstrap gives no band (`bootstrapBands`) and the subtraction falls back to the flat `SUB_ERR`, which these shares fail.
+ */
+const FITTED_PER_DAY = [9, 8, 8];
 /** The last sample it writes. */
-const FITTED_END = T0 + DAY + FITTED_PER_DAY[1] * MIN;
+const FITTED_END = T0 + 2 * DAY + FITTED_PER_DAY[2] * MIN;
 
 /**
  * A driver model that owns half its windows, and a subagent model that owns none.
@@ -336,17 +339,16 @@ export async function run(): Promise<number> {
       // It owns nothing, but the separated rate does not need ownership: its 12
       // spending windows and the points left once opus is priced out are real
       // evidence. Opus's spend is over half of every point in the span, but the
-      // fixture is generated exactly, so opus's bootstrap band is ~0 (fitted in
-      // 109 of 200 resamples, 2026-11-09 — a two-day horizon refuses the draws
-      // that pick one day twice): the subtraction is exact and the figure is
-      // the generated truth rather than the pooled null of owned-only evidence.
-      // The row is still `thin` — two days are no baseline — but by the floors.
+      // fixture is generated exactly over three days, so opus's bootstrap band is
+      // ~0: the subtraction is exact and the figure is the generated truth rather
+      // than the pooled null of owned-only evidence.
+      // The row is still `thin` — three days are no baseline — but by the floors.
       near(sub.weightedPerPct, 625_000, 'the separated rate');
       assert.strictEqual(sub.verdict, 'thin');
       assert.strictEqual(sub.thinReason, 'floor');
       assert.strictEqual(sub.intervals, 12);
       near(sub.utilSum, 23.04, 'the points left after opus is priced out');
-      assert.strictEqual(sub.days, 2);
+      assert.strictEqual(sub.days, 3);
       assert.strictEqual(sub.deviationPct, null);
       // And the joint fit reads the same truth, so the two agree.
       assert.strictEqual(sub.fitVerdict, 'fitted');
