@@ -14,7 +14,7 @@
  */
 
 import type {
-  BoostHour, ModelDayRate, ModelRateRow, ModelRateVerdict, UsageBoost, UsageCoverage
+  BoostHour, ModelDayRate, ModelRateRow, ModelRateVerdict, ModelThinReason, UsageBoost, UsageCoverage
 } from '../../../shared/types';
 import type { StatTile } from './usageProfile';
 
@@ -40,7 +40,8 @@ const CURRENT_DAY_FLOOR = 2;
  * `DRIFT_BAND_PCT` is `DRIFT_PCT`: the cells step at the band the verdict is
  * called on, so a cell outside it means "this day alone would have been called
  * drift". `DAY_FLOOR_PTS` is `CURRENT_FLOORS.minUtil`, the floor under which
- * the server marks a day `thin`; the tip names it. `CURRENT_DAYS` is
+ * the server marks a day `thin` — one of four reasons a day is `thin`, the others being
+ * separation failures (`ModelThinReason`); the tip names it. `CURRENT_DAYS` is
  * `CURRENT_MS` in days — where the strip draws the current window's start.
  */
 export const DRIFT_BAND_PCT = 20;
@@ -122,8 +123,21 @@ export function baselineText(weightedPerPct: number | null, days: number): strin
   return `baseline ${formatTok(weightedPerPct)} · ${dayCount(days)}`;
 }
 
+const THIN_HINT: Record<Exclude<ModelThinReason, 'floor'>, string> = {
+  mixed: "most of this model's points were priced out as another model's — its rate can't be separated from them",
+  repriced: "another model's rate moved in the current window — this one is not judged until it settles",
+  unpriced: "another model spent here without a rate of its own yet — this model's rate can't be separated from it"
+};
+
+const THIN_DAY_REASON: Record<ModelThinReason, string> = {
+  floor: `under ${DAY_FLOOR_PTS} pts — not coloured`,
+  mixed: "mostly another model's spend — can't be separated, not coloured",
+  repriced: "another model's rate moved — can't be separated, not coloured",
+  unpriced: "another model has no rate yet — can't be separated, not coloured"
+};
+
 /** Badge copy per verdict. The hint is the sentence the badge cannot fit. */
-export function verdictText(verdict: ModelRateVerdict): { label: string; hint: string } {
+export function verdictText(verdict: ModelRateVerdict, thinReason?: ModelThinReason): { label: string; hint: string } {
   switch (verdict) {
     case 'drift':
       return {
@@ -147,8 +161,10 @@ export function verdictText(verdict: ModelRateVerdict): { label: string; hint: s
     default:
       return {
         label: 'collecting',
-        hint: `a verdict needs ${BASELINE_DAY_FLOOR} separate days behind the baseline`
-          + ` and ${CURRENT_DAY_FLOOR} behind the current window`
+        hint: thinReason === undefined || thinReason === 'floor'
+          ? `a verdict needs ${BASELINE_DAY_FLOOR} separate days behind the baseline`
+            + ` and ${CURRENT_DAY_FLOOR} behind the current window`
+          : THIN_HINT[thinReason]
       };
   }
 }
@@ -305,13 +321,6 @@ export function coverageRows(coverage: UsageCoverage): { value: string; label: s
       label: 'spent on another device · excluded from the fit'
     });
   }
-  if (coverage.mixedPct > 0) {
-    ranked.push({
-      points: coverage.mixedPct,
-      value: share(coverage.mixedPct),
-      label: 'no single model held 90% of the tokens'
-    });
-  }
   if (coverage.partialPct > 0) {
     ranked.push({
       points: coverage.partialPct,
@@ -329,6 +338,31 @@ export function coverageRows(coverage: UsageCoverage): { value: string; label: s
   ranked.sort((a, b) => b.points - a.points);
   return ranked.map(({ value, label }) => ({ value, label }));
 }
+
+/**
+ * The shared-between-models bucket, said once beside the refusals rather than in them: those intervals are **read** — the separated rate prices every
+ * other model out of them — so listing them as refused would say the headline figure rests on less than it does. Null when none moved.
+ */
+export function sharedLine(coverage: UsageCoverage): string | null {
+  if (coverage.movedPct <= 0 || coverage.mixedPct <= 0) return null;
+  return `${formatShareOf(coverage.mixedPct, coverage.movedPct)} of the points moved in windows shared between models — not refused: the separated rate reads `
+    + 'them, pricing each other model out at its own rate.';
+}
+
+/**
+ * Which thin-row notes the card owes. The first-fortnight sentence is true only of a row thin on the day floors; a row thin because its neighbours'
+ * share cannot be priced out is not waiting for days, so it gets a line of its own.
+ */
+export function thinNotes(models: ModelRateRow[]): { floors: boolean; separation: boolean } {
+  const thin = models.filter(m => m.verdict === 'thin');
+  return {
+    floors: thin.some(m => m.thinReason === undefined || m.thinReason === 'floor'),
+    separation: thin.some(m => m.thinReason !== undefined && m.thinReason !== 'floor')
+  };
+}
+
+/** The one line for rows thin on a separation reason, whichever it was. */
+export const SEPARATION_THIN_NOTE = "Rows marked mixed, repriced or unpriced wait until their neighbours' share of the same windows can be priced out.";
 
 /**
  * The caveat that qualifies every row above rather than adding to them: with the
@@ -385,15 +419,17 @@ export function dayLabel(date: string): string {
 export function dayTip(day: ModelDayRate, today: string): string {
   const when = `${dayLabel(day.date)} (UTC)${day.date === today ? ' · today so far' : ''}`;
   if (day.state === 'pre-ledger') return `${when}\nbefore recording began`;
-  if (day.state === 'none' || day.weightedPerPct === null) {
-    return `${when}\nno windows this model owned`;
+  if (day.state === 'none') return `${when}\nno spend from this model that day`;
+  // A thin day whose residual was <= 0 carries no figure; it still says why.
+  const lines = [when];
+  if (day.weightedPerPct !== null && Number.isFinite(day.weightedPerPct)) {
+    lines.push(`${formatTok(day.weightedPerPct)} weighted tok / 1%`);
   }
-  const lines = [when, `${formatTok(day.weightedPerPct)} weighted tok / 1%`];
-  if (day.deviationPct !== null && Number.isFinite(day.deviationPct)) {
+  if (day.weightedPerPct !== null && day.deviationPct !== null && Number.isFinite(day.deviationPct)) {
     lines.push(`${formatDeviation(day.deviationPct)} vs baseline`);
   }
   lines.push(`${day.intervals} window${day.intervals === 1 ? '' : 's'} · ${day.utilSum.toFixed(1)} pts`);
-  if (day.state === 'thin') lines.push(`under ${DAY_FLOOR_PTS} pts — not coloured`);
+  if (day.state === 'thin') lines.push(THIN_DAY_REASON[day.thinReason ?? 'floor']);
   return lines.join('\n');
 }
 
@@ -443,6 +479,7 @@ export const RATES_GLOSSARY: readonly {
     text: 'Tokens per 1% of the limit, with each token type weighted by what it '
       + 'costs the window. Mix-invariant, so a change here is a real repricing. '
       + 'Drift is judged on this and nothing else.'
+      + " Other models' spend in the same windows is priced out at their own fitted rates, so a busier neighbour does not move it."
   },
   {
     key: 'raw',
@@ -469,16 +506,15 @@ export const RATES_GLOSSARY: readonly {
     text: `One cell per UTC day of the 17 the verdict is fitted over, coloured by how far that `
       + "day's weighted rate sits from the model's baseline: red is fewer tokens per 1% "
       + `(pricier), cyan is more (cheaper), grey is within the ±${DRIFT_BAND_PCT}% band the `
-      + `verdict uses. Hatched days moved under ${DAY_FLOOR_PTS} pts and are shown but not `
+      + `verdict uses. Hatched days moved under ${DAY_FLOOR_PTS} pts or could not be separated from other models' spend, and are shown but not `
       + 'coloured; dotted days predate recording. The dashed rule is the exact start of the '
       + `${CURRENT_DAYS}-day current window — it cuts through a day because the window does.`
   },
   {
     key: 'window',
     term: 'Window · pts',
-    text: 'One window is one 5-hour limit period that one model owned (≥90% of '
-      + 'tokens). pts are the utilization percentage points those windows moved '
-      + 'in total.'
+    text: 'One window is one 5-hour limit period in which this model spent tokens, alone or beside other models. '
+      + "pts are the utilization percentage points left to it once the other models' spend is priced out."
   },
   {
     key: 'across',
@@ -552,10 +588,9 @@ export function verdictClass(verdict: ModelRateVerdict): string {
  * Counts of *models* on the left, points and windows on the right — the strip
  * reads left to right as "what the fit concluded, then what it read".
  */
-export function ratesStats(models: ModelRateRow[], coverage: UsageCoverage): StatTile[] {
+export function ratesStats(models: ModelRateRow[], coverage: UsageCoverage, windows: number): StatTile[] {
   const n = (v: ModelRateVerdict) => models.filter(m => m.verdict === v).length;
   const drifting = n('drift');
-  const windows = models.reduce((sum, m) => sum + m.intervals, 0);
   const measured = measuredShare(coverage);
   return [
     {
@@ -575,7 +610,7 @@ export function ratesStats(models: ModelRateRow[], coverage: UsageCoverage): Sta
       key: 'collecting',
       label: 'Collecting',
       value: String(n('thin')),
-      sub: n('thin') === 0 ? 'nothing waiting on evidence' : 'not enough windows yet'
+      sub: n('thin') === 0 ? 'nothing waiting on evidence' : 'not enough windows, or not separable'
     },
     {
       key: 'coverage',
@@ -617,6 +652,7 @@ export function ledgerReading(row: ModelRateRow): string {
     return weekly === null ? verdictText(row.verdict).hint
       : `${verdictText(row.verdict).hint}. ${weekly}`;
   }
+  if (row.thinReason !== undefined && row.thinReason !== 'floor') return verdictText('thin', row.thinReason).hint;
   // Both gates, with this row's own counts — the baseline first, because it is
   // the one that takes a fortnight and therefore the one still unmet at the end.
   const parts: string[] = [];

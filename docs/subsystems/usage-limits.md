@@ -638,23 +638,39 @@ moved from mostly-interactive to mostly-headless read **−21.9%, `drift`**
 pooled while each surface moved −1.6% and −4.1%. So the verdict is judged on
 the **mix-adjusted** deviation whenever there is one (`mixAdjustedDeviation`):
 the current window's points against what the same tokens would have cost at
-each surface's own baseline rate. A pooled move past ±20% that the adjusted
+each surface's own baseline rate. A headline move past ±20% that the adjusted
 figure does not confirm is **`surface-shift`**, never drift; an adjusted move
-past ±20% the pool hides behind a move to the pricier surface *is* drift. The
-adjusted figure is null — and the pooled verdict stands, as before — until the
+past ±20% the headline hides behind a move to the pricier surface *is* drift. The
+adjusted figure is null — and the headline verdict stands, as before — until the
 intervals that have a surface *and* that surface's baseline (the full baseline
 floors, per stratum) carry ≥ 80% (`SURFACE_COVERAGE_MIN`) of the current
 window's points: for the first two weeks after surfaces began to be recorded
-the guard is simply not there. An interval's surface is the one holding ≥ 90%
-(`DOMINANCE`) of its owning model's weighted tokens, measured against the
-model's whole `tok` so a partly-attributed interval has none. The row shows the
+the guard is simply not there. The row shows the
 two surfaces' current rates under the model name (`interactive 455k · headless
-249k`) and the adjusted figure under the pooled chip, because a pooled rate
+249k`) and the adjusted figure under the headline chip, because a rate
 over two goods priced ~1.8× apart is only readable with the two shown apart.
+
+**Both strata are on the separated basis** (*The separated rate* under the fitter, below), with no owned-basis fallback. A model's surface in an interval is the
+one holding ≥ 90% (`DOMINANCE`) of **that model's own** weighted tokens there — the ledger's per-model surface counts, `sur[model]`, which `joinIntervals`
+reads into `modelSurfaces` — so a model has a surface in a `mixed` interval too, not only where it owns the tick. Each stratum is `separatedRate` with
+`surface` set: M's tokens in that stratum against that stratum's residual points. An interval where M spent nothing still carries points that cancel carry-over,
+so it joins every stratum at a share — M's stratum tokens over M's stratified tokens in the span — and the strata sum back to the span. An interval where M
+spent but no surface reaches `DOMINANCE` stays in the span total and in no stratum. A current stratum that is `mixed`, `repriced` or `unpriced` drops out of
+`mixAdjustedDeviation` and its points leave the coverage, so the adjusted figure goes null once coverage drops under `SURFACE_COVERAGE_MIN`; a stratum
+merely under its floors still counts. `surfaceRates` publishes the same
+per-stratum figures, so the breakdown under the model name and the adjustment the verdict uses are one set of numbers.
 Why a headless token costs more window is not on disk: see *The headless gap is not on disk* below. The raw "1% ≈ N tokens" figure is a courtesy translation at the
 model's recent mix, kept as its own labelled tile (`RAW TOKENS`) beside the
 headline one, and omitted entirely when there is no raw rate; when raw moves and
 weighted did not, the card says **mix shift**, never drift.
+
+**Nor is a rate invariant to the other models that ran beside it — so every 5-hour figure prices them out.** The headline, its baseline, the deviation, the
+surface strata and the day strip are all the **separated rate**: this model's weighted tokens against the points left once every other model's spend in the
+same span is priced out at that model's own joint-fit rate. Until 2026-11-09 they were the pooled ratio over the intervals one model owned, and on that day
+the card read Opus 5.5 at 268k per 1% (later 326k) against its ordinary ~470–650k: Fable 5.1 ran beside it as a reviewer, and Fable's points — mostly
+carried across the whole-percent tick into intervals Opus happened to own — were booked to Opus. Opus had not got pricier; Fable had been used more. The
+estimator, its four guards and why a span can read `thin` are under *The separated rate* in the fitter section below. Design record:
+`docs/superpowers/specs/2026-11-09-usage-rate-model-separation-design.md`.
 
 **No rate here is comparable across models.** Each is fitted from this machine's
 own usage against a single ratio, so a model that fires more requests per token
@@ -808,10 +824,10 @@ with each pair. Then each interval is classified:
 | coverage < 80%, and the span ends at or before the provable start of recording | `pre-ledger` | nothing — but nothing is wrong: the ledger did not exist yet, and this ages out of every window on its own |
 | coverage < 80% with **zero** milliseconds covered, after that start | `gap` | nothing — the recorder was down. The only one of the three that reports a fault |
 | coverage < 80% with something covered | `partial` | nothing — the recorder ran but the tokens are incomplete, which is not the same as absent |
-| `Δutil ≤ 0.01` | `idle` | nothing (but it is a measurement, not a hole) |
+| `Δutil ≤ 0.01` | `idle` | both joint fits and the separated rate — its tokens feed a tick that lands elsewhere (a measurement, not a hole) |
 | weighted tokens < 5 000 | `external` | the disclosed burn share only |
-| one model holds ≥ 90% of weighted tokens | `{model}` | that model's rate |
-| otherwise | `mixed` | both joint fits — never a pooled rate |
+| one model holds ≥ 90% of weighted tokens | `{model}` | both joint fits and the separated rate, like any usable interval; ownership itself feeds only the pooled ratio (weekly, boost) |
+| otherwise | `mixed` | both joint fits and the separated rate — never a pooled rate |
 
 The first three used to be one kind called `gap`, and splitting them was worth
 doing because **92% of what it reported was a startup artifact**: measured over
@@ -905,25 +921,110 @@ edge ticks are split pro rata, which assumes uniform spend inside those two
 minutes; that is the one approximation, it is bounded, and the alternative was
 measuring nothing.
 
-**Dominance, not decomposition — for the *rate*.** With a handful of models and
-one equation per interval, a least-squares split of one interval is
-under-determined exactly when it matters (two models always used together), and
-a wrong split is indistinguishable from drift. So every number the drift
-comparison rests on — `rawPerPct`, `weightedPerPct`, the baselines, the
-deviation and the verdict — still comes from `DOMINANCE`-owned intervals only,
-and `mixed` is discarded for them.
+#### The separated rate — every other model priced out
 
-**`mixed` is discarded by no fit at all, though.** Both joint fits below — the
-two-term split and the one-term rate — are joint across models, so they need no
-ownership and read `mixed` too. That is where the information about telling two
-models apart actually lives (on live logs, 50 of 58 `mixed` intervals contained
-fable, against its 16 owned ones). `DOMINANCE` is therefore load-bearing for the
-pooled rate and the drift verdict, and irrelevant to either joint fit.
+**Dominance, not decomposition — for ownership.** With a handful of models and one equation per interval, a least-squares split of *one* interval is
+under-determined exactly when it matters (two models always used together), and a wrong split is indistinguishable from drift. So no interval is split.
+`DOMINANCE` still names an interval's owner, and ownership still feeds `poolRate` / `rateFor` — Σ tokens / Σ dUtil over the intervals one model owns. That
+pooled ratio now serves only the weekly figures (`ModelWeeklyRate`, over `joinWeeklyIntervals`), the off-peak boost detector (`lib/usage-boost.ts`) and
+`scripts/probe-usage-split.ts`. **No 5-hour figure on the card reads it.**
 
-**Pooled Σtokens / Σutil, not a mean of per-interval ratios.** A mean lets a
-0.02% interval with a noisy numerator count as much as an hour of steady work.
-Pooling weights each interval by the movement it explains, and the confidence
-floors are what keep it robust — which is why a median was not needed.
+**`mixed` is discarded by no 5-hour figure.** Both joint fits below and the separated rate read it; that is where the information about telling two models
+apart actually lives (on live logs, 50 of 58 `mixed` intervals contained fable, against its 16 owned ones). `DOMINANCE` is therefore load-bearing for the
+pooled ratio and for a model's surface in an interval, and irrelevant to either joint fit and to the separated rate's span totals.
+
+**Why the pooled ratio could not price a model that shares its sessions.** Measured 2026-11-09 over the live ledger, three things went wrong on mixed days,
+the first being the big one:
+
+1. **Carry-over across the whole-percent tick.** Utilization is read in whole points and intervals are 1–2 minutes long, so a point earned mostly by Fable in
+   a `mixed` interval often ticks over in the *next* interval, which Opus happens to own. On 2026-11-09 the five Opus-owned intervals recorded 5 points while
+   their own tokens, priced at the models' known rates, explain ~2.6. The two-term fit's own comment already said spend often lands in one interval and its
+   visible rise in the next; the pooled ratio ignored it.
+2. **Owned-only sampling.** On 2026-11-09, 44 of 61 points sat in `mixed` intervals the pooled ratio discards, leaving 5 points to price Opus from, every
+   carried-over point counting in full.
+3. **Idle intervals dropped.** An interval whose utilization did not move is `idle`, never owned, so its tokens vanished from the numerator while the tick
+   they fed was counted elsewhere — selection on the dependent variable. Adding idle intervals back raised the separated Opus figure ~10–20% a day.
+
+The in-interval leak through the 90% rule is small (pricing the minor models inside Opus-owned intervals moved the 17-day Opus pooled rate +2%, 482k → 490k,
+2026-11-09), so the fix is not a tighter `DOMINANCE`: the rule works inside an interval and cannot see carry-over *between* intervals.
+
+**The estimator** (`separatedRate`). For model M over a span S — a UTC day, the 3-day current window or the baseline range:
+
+```
+separatedPerPct(M, S) = W_M(S) / ( U(S) − Σ_{m ≠ M} W_m(S) / rate_m )
+```
+
+- `U(S)` is Σ dUtil over every interval in S that `usableForRate` admits — owned, `mixed` **and** `idle`, never `external` or anything `isUnpriced` names.
+  It is the joint fit's interval set, and every usable interval counts, those where M spent nothing included: that is what cancels a point carried from one
+  tick onto the next, whoever holds it.
+- `W_x(S)` is model x's weighted tokens over those intervals (`weightedTokens` with the model id). `rawPerPct` is M's raw tokens over the same residual, so
+  the `mix-shift` verdict compares raw and weighted on one estimator.
+- `rate_m` is the other model's horizon rate from the shared `SeparationContext` (`separationContext`): **one** `fitRates` run over the full 17-day
+  horizon `[now − BASELINE_MS, ∞)` — not `baselineRange()` — built once per request in `shapeUsageRates`, so the headline, the baseline and every day cell
+  subtract identically. The joint fit already solves every model with mixed and idle intervals included, so the subtraction rates carry no carry-over bias of
+  their own. The current window is in-sample for that fit; the repriced guard is what catches the case where that matters. The card's 3-day
+  `fittedWeightedPerPct` is a separate figure and unchanged.
+
+In a span where only M ran the subtraction is zero and the figure is the pooled ratio with idle intervals added back. The evidence counters move to the same
+basis: `intervals` = usable intervals in S in which M spent anything, `days` = their distinct UTC dates, `utilSum` = the residual points.
+
+**Four guards, and the reason each publishes.** A separated figure is only as good as the subtraction. When a guard fires the span is `thin` and carries a
+`thinReason` (`ModelThinReason` on `ModelDayRate` and `ModelRateRow`, present exactly when the span is `thin`); when several fire the more specific wins,
+`unpriced` > `repriced` > `mixed` > `floor`:
+
+- **`unpriced` — a needed rate is missing.** Another model holds more than `UNPRICED_TRIVIAL_SHARE` (1%) of the span's weighted tokens and has no horizon
+  rate (the joint fit refused it). At ~5× the Fable/Opus price ratio, 1% of tokens is ≈ 5% of points — under `DRIFT_PCT / 2` — so a model at or under that
+  share is ignored, not subtracted, rather than refusing the span.
+- **`repriced` — another model's rate moved, judged by what it does to M.** `rate_m` spans the whole horizon, so if a neighbour itself got pricier this week its
+  extra points would be under-subtracted and M would read as drift — the failure this estimator exists to remove. For each m with both a horizon rate and a
+  3-day joint-fit rate, the guard re-prices **that one** m at its 3-day rate (the others stay at horizon) and recomputes M's figure; if the swap moves it by more
+  than `DRIFT_PCT / 2` (`limit`, 0.10) or leaves no positive residual, M's current-window side is `thin`, and so is every day cell reaching into the current
+  window. There is no token-share gate: a neighbour with a trivial share cannot move M's figure 10%, and a noisy 3-day fit on a few points cannot either unless
+  its spend matters — the repricing then shows on m's own row. An m the 3-day fit refuses does not trigger it: there is no evidence it repriced. It runs only on
+  the current window (`checkRepriced`), never the baseline, and only when the span's own residual `R` is positive: with `R ≤ 0` the swap has no figure to move
+  and `mixed` already holds the span, so such a span reads `mixed`, not `repriced`.
+- **`mixed` — too sensitive to the subtraction, by each neighbour's measured error.** Every other model m carries an error band from a day-block bootstrap of the
+  horizon fit (`bootstrapBands`): the horizon's UTC days are resampled with replacement (`SUB_BOOTSTRAP` = 200 resamples, whole days because intervals within a
+  day share a workload; fixed seed `SUB_BOOTSTRAP_SEED`, so one ledger gives one band), `fitRates` is rerun on each, and `errorBand` takes the 5th and 95th
+  percentile of `draw / point` by nearest rank: `under_m = max(0, 1 − p5)` (capped at 0.99), `over_m = max(0, p95 − 1)`. With `P_m = W_m(S) / rate_m` the
+  points priced out for m and `R = U(S) − Σ P_m`, the one-sided moves combine root-sum-square across models, the errors being independent:
+  `ΔU = √Σ (P_m · (1/(1 − under_m) − 1))²` (true rates lower, more priced out) and `ΔO = √Σ (P_m · (1 − 1/(1 + over_m)))²`. The span is `mixed` when
+  `pricedOut > 0` and `R ≤ 0`, `R − ΔU ≤ 0`, `R / (R − ΔU) − 1 > limit` or `1 − R / (R + ΔO) > limit`; a span that subtracts nothing cannot be too sensitive
+  to the subtraction, so `R ≤ 0` there is a `floor`. A model fitted in fewer than half the resamples has no measured band — its rate is not identified well
+  enough to subtract — and takes `UNMEASURED_BAND` (`under` 0.99, `over` 9), so any real share of its points makes the span `mixed`. A `SeparationContext` built
+  by hand (tests) may omit a model's band; it then falls back to `SUB_ERR` (15%) on both sides, and so does every model when the horizon holds fewer than 3 distinct
+  UTC days: `bootstrapBands` returns no band at all then, because a 2-day resample is fittable only when it redraws both days, which makes it the original sample and
+  every draw exactly 1.0 — a band of 0 whatever the noise. `s` is still published, as `pricedOutShare`, but no longer
+  gates anything. Consequence, accepted: a model that is the minor partner in a span reads `thin` there — the residual cannot price it to ±10% — and its row
+  still shows the joint-fit `fittedWeightedPerPct`.
+  **The bands are memoized, and the bootstrap is the cost.** `separationContext` keys the memo on the UTC hour and the set of models with a horizon rate, not the
+  interval count, because the recorder adds an interval a minute and a count key would miss on nearly every card open. One bootstrap is `SUB_BOOTSTRAP` full
+  `fitRates` runs, ~6.8 ms each on the live 12,424-interval horizon (2026-11-09): `separationContext` measured 773–849 ms cold (bootstrap included) and 4–5 ms on
+  a memo hit (2026-11-09, 12,437 intervals), paid once an hour plus once when a model enters the horizon. A hit pairs bands from earlier in the hour with the
+  current point rates; bands are ratios, so that is second-order. `resetSeparationMemo` exists for tests, whose fixtures share a clock hour but not their data.
+- **`floor` — too little left.** Under the span's own floors (`BASELINE_FLOORS` for the baseline, `CURRENT_FLOORS` for the current window, the current
+  `minUtil` alone for a day cell), counted on the residual basis above, or a residual that is not positive.
+
+**Row vs cell.** A row whose current or baseline side is `thin` publishes null `weightedPerPct` / `rawPerPct` / `deviationPct` for that side and carries its
+evidence counters; its `thinReason` is the failing side's, current before baseline, and a side where M spent nothing counts as `floor`. A day cell that is
+`thin` carries its figures, uncoloured and unjudged. The pooled figure is never the fallback.
+
+**Accepted limitation — a repriced neighbour mis-subtracts the baseline slightly the other way.** After m reprices, its horizon `rate_m` is a blend of old and
+new, so baseline-range days are priced out at a rate that is partly the new one. The 14 baseline days outweigh the 3 current ones, and the repriced guard
+already stops a verdict while the move is fresh; nothing corrects the baseline days, and nothing tries to.
+
+**Judging both guards by effect is what lets a current row be rated at all.** The first version capped the priced-out share `s` at a flat ≈ 0.34 (from an assumed
+15% error) and tripped `repriced` on any non-trivial neighbour whose 3-day fit moved more than `DRIFT_PCT`. Measured 2026-11-09 13:42 UTC over the live ledger,
+Haiku 5.5's 3-day fit (−53%, on a few of its own points) and Sonnet 5.5's (−43%) tripped `repriced` on every model, and the flat cap would have turned every
+current row `mixed` anyway; Opus 5.5 had 7 of 15 days rated. Re-measured 2026-11-09 ~14:25 UTC over 12,437 intervals with the measured bands, the bootstrap's
+5th–95th percentile spreads at `SUB_BOOTSTRAP` = 200 are Fable 3.5% under / 4.4% over, Opus 15.5% / 20.1%, Sonnet 16.0% / 23.8% and Haiku 40.3% / 497% — the
+flat 15% was about right for Opus and Sonnet, too generous for Fable and hopeless for Haiku. Opus 5.5's current row then read `stable` at 595k against a 536k
+baseline (+11.0%), 14 of 15 days were rated (one `repriced`), and 2026-11-09 was rated at 546k (priced-out share 0.46). Fable, Haiku and Sonnet had no rated
+day: each is the minor partner nearly everywhere, which is the accepted consequence above, not a fault. The constants `DRIFT_PCT` and the floors were left alone
+(spec §What changes).
+
+**Pooled Σtokens / Σutil, not a mean of per-interval ratios** — on both bases. A mean lets a 0.02% interval with a noisy numerator count as much as an hour
+of steady work; summing weights each interval by the movement it explains, and the floors keep it robust, which is why a median was not needed.
 
 **Baseline** is `[now−17d, now−3d)`; **current** is `[now−3d, …)`, open at the
 top so an interval stamped a moment ahead of the request clock is not dropped at
@@ -947,6 +1048,13 @@ there is no adjusted figure) → `surface-shift` (weighted > ±20%, adjusted not
 `mix-shift` (raw > ±25%) → `stable`, and **thin outranks everything**: a rate fitted on too little data can
 deviate by any amount, so calling that drift would make the badge fire hardest
 exactly when it knows least.
+
+**The separated rate's dispersion is measured on the rated days only, and the floors' inequality holds.** The cv ≈ 24% above was the pooled ratio's. Re-measured
+2026-11-09 ~14:25 UTC over the live 17-day horizon, Opus 5.5 — the only model with rated days — had a separated cv of **22.1%** over its 14 rated days, giving
+`√(cv²/7 + cv²/2)` = 17.7%, under `DRIFT_PCT` 20 (the inequality holds up to cv ≈ 24.9%). Before the guards were judged by effect (13:42 UTC the same day) only 7
+days were rated and the cv was 27.0% (21.7, over 20): the rise then was the sample the guards left, not the subtraction. `DRIFT_PCT` (20) and the floors
+(`BASELINE_FLOORS` 30 / 15 / 7, `CURRENT_FLOORS` 10 / 5 / 2) are unchanged by design (spec §What changes, last bullet); retuning them is a follow-up the
+maintainer approves.
 
 ### The two-term fit: tokens and requests, separated
 
@@ -1147,20 +1255,16 @@ otherwise assume the higher floor was an oversight. The refusal vocabulary is
 `RateRefusal`: `thin-evidence` → `unidentified` → `negative`, reported
 most-informative first.
 
-**And it is excluded from every drift verdict.** The pooled rate stays the
-headline and stays the quantity `verdict` and `deviationPct` are computed on.
-Three reasons, all of them about not knowing rather than about preference:
-`BASELINE_FLOORS` / `CURRENT_FLOORS` and `DRIFT_PCT` were tuned against the
-*measured* day-to-day dispersion of the pooled ratio (cv ≈ 24%) and nothing has
-measured the fitted rate's; swapping the drift quantity would silently rewrite
-every verdict with no way for a reader to see it happened; and the two-term
-fit's own cross-model ratio came back **refuted** on live data, so a fitted
-number is not automatically the more trustworthy one. `bug-13`'s limit —
-this card must not claim cross-model comparability — applies to the fitted rate
-exactly as it does to the pooled one. Regularising toward the clean-interval
-rate was also considered and rejected: this file answers ill-conditioning by
-refusing, and a prior would make the fitted number partly an echo of the pooled
-number it exists to check independently.
+**Its rate is not the drift quantity — but it prices every other model out of it.** The headline, `verdict` and `deviationPct` are the separated rate, not
+`fittedWeightedPerPct`. The original reasons still hold: `BASELINE_FLOORS` / `CURRENT_FLOORS` and `DRIFT_PCT` were tuned against the *measured* day-to-day
+dispersion of the pooled ratio (cv ≈ 24%) and nothing has measured the fitted rate's; swapping the drift quantity would silently rewrite every verdict with no
+way for a reader to see it happened; and the two-term fit's own cross-model ratio came back **refuted** on live data, so a fitted number is not automatically
+the more trustworthy one. Since 2026-11-09 the fit has two further jobs inside the separated rate, both through `separationContext`: one run over the full
+17-day horizon is the `rate_m` each other model's spend is subtracted at, and the 3-day run the card already publishes is what the `repriced` guard compares
+it against. Neither makes the fitted figure the published rate, and `fitDeviationPct` still compares `fittedWeightedPerPct` against whatever the row
+publishes — now the separated rate. `bug-13`'s limit — this card must not claim cross-model comparability — applies to the fitted rate exactly as it does to
+the separated one. Regularising toward the clean-interval rate was also considered and rejected: this file answers ill-conditioning by refusing, and a prior
+would make the fitted number partly an echo of the rate it exists to check independently.
 
 ### The weekly window: what a point of the *week* costs
 
@@ -1303,28 +1407,28 @@ honest empty body exactly like `serveUsageProfile`. A model with **neither**
 still gets no row: a row of nulls reads as a broken fit rather than as an
 absence of evidence.
 
-A fitted-only row is legitimately all-null on the pooled side — no rates,
-`verdict: 'thin'`, and `intervals` / `utilSum` / `days` at zero — with
-`fittedWeightedPerPct` as the only number on it. That is honest and is not
-special-cased anywhere; `driftRow` produces it unaided. The sort key is
-unchanged (`utilSum` desc, then model name), so fitted-only rows land last.
+A model that owns no interval — a subagent beside a driver model — still has a separated rate, because every usable interval counts. It is usually the minor
+partner, so its row reads `thin` with `thinReason` `mixed` (or `repriced` / `unpriced`), null rates, its evidence counters carried, and
+`fittedWeightedPerPct` as the only rate on it; a model that spent nothing in the current window reads `thin` / `floor` with the counters at zero. That is
+honest and is not special-cased anywhere; `driftRow` produces it unaided. The sort key is unchanged (`utilSum` desc — now the residual points — then model
+name), so a minor partner sorts below the model that drove the spend.
 
 Each row also carries `pctPerMWeighted`, `pctPerRequest` and `splitVerdict`
 from the two-term fit, and `fittedWeightedPerPct`, `fitVerdict` and
 `fitDeviationPct` from the one-term fit. **Both fits run over the same
-`currentRange(nowMs)` window the row's own pooled rate describes**, so a row's
+`currentRange(nowMs)` window the row's own separated rate describes**, so a row's
 three numbers never describe different spans. `splitVerdict: 'thin'` and
 `fitVerdict: 'thin'` each cover every refusal of their own fit — the row does
 not say which, and `scripts/probe-usage-split.ts` is where the reasons live.
 `fitDeviationPct` is computed on the server (`fitDeviation`) so the comparison
 lives in one place and the card owns no threshold; it is null when either rate
-is null and null rather than `Infinity` when the pooled rate is not positive.
-Every drift field on the row is the single-ratio number it always was: both
-fits are **additive**.
+is null and null rather than `Infinity` when the row's rate is not positive.
+Every drift field on the row is the separated rate, never a fit's figure: both
+fits are **additive** (the one-term fit's rates are what the separation subtracts, not what it publishes).
 
 On the card the fitted rate is a third tile beside the raw one (omitted
 entirely when there is no fitted rate — never a dash), and the badge above it is
-still the pooled rate's verdict. The empty state names both routes onto the card,
+still the separated rate's verdict. The empty state names both routes onto the card,
 because 90% dominance is no longer the only one.
 
 Every row also carries a `weekly` object (`ModelWeeklyRate`), **always present**
@@ -1364,22 +1468,22 @@ through `weeklyCoverage` rather than hidden by loosening the floor.
 
 Every row also carries **`daily`** (`ModelDayRate[]`): one cell per UTC date of
 the 17-day horizon the verdict is fitted over, oldest first, from `dailyRates`
-(pure). Each is `poolRate` over that date **clipped to the horizon** — the first
+(pure). Each is `separatedRate` over that date **clipped to the horizon** — the first
 date starts where the baseline range does, so the strip never counts an interval
 the fit did not — with the figure carried whatever the evidence and a `state`
 saying what the cell may claim: `pre-ledger` (the date ended before
 `ledgerStartMs`; never with the start unprovable, the same rule the coverage
-buckets follow), `none` (no owned window), `thin` (owned windows under
+buckets follow), `none` (the model spent nothing that day), `thin` (a separation guard fired, or the residual is under
 `CURRENT_FLOORS.minUtil`, 5 pts — with the ~1-point rounding in `Σ dUtil` a
 3-point day is a ±33% number, and colouring it would put a rounding artefact on
-the strip in the same red as a real move), or `rated`. `deviationPct` is against
+the strip in the same red as a real move; `thinReason` says which), or `rated`. `deviationPct` is against
 the row's own `baselineWeightedPerPct`, so the cells and the badge judge against
 one figure; without a baseline every deviation is null. Always present, and no
 new disk read: it is the same interval set the row is fitted from.
 
 `coverage` (`UsageCoverage`) is the disclosure the three unpriced kinds exist
-for: `movedPct` as the denominator, `pricedPct` for what reached a rate, then
-`mixedPct`, `externalPct`, `preLedgerPct`, `missingPct` and `partialPct`, which
+for: `movedPct` as the denominator, `pricedPct` for the points in intervals one model
+owned, then `mixedPct`, `externalPct`, `preLedgerPct`, `missingPct` and `partialPct`, which
 sum to `movedPct`. The wire name is `missingPct` rather than `gapPct` — the
 field should say what the bucket *means* now that `gap` no longer means all
 three. Two fields are not utilization points: `recorderBreakHours` is hours,
@@ -1390,6 +1494,18 @@ because it is read by a person, and `startProvable` is false when
 absent. `coverage` is computed over `[now − BASELINE_MS, ∞)`, deliberately the
 **same horizon `externalSharePct` uses**: two disclosure figures on one card
 that quietly spanned different windows would be a defect, not a nuance.
+The buckets are an *ownership* breakdown, not a map of what reached a rate: the
+separated rate also reads `mixed` and `idle` intervals, so `mixedPct` is points
+*shared between models*, which the card says once beside its refusal list
+(`sharedLine`) rather than listing as refused. The Coverage headline is still
+`pricedPct / movedPct`; whether it should count shared points too is the
+maintainer's call.
+
+`windows` (top level of `UsageRatesResponse`) is the distinct count of usable
+intervals in the current window in which any row's model spent tokens
+(`distinctWindows`). Each row's `intervals` counts an interval once per model that
+spent in it, so a window two models share is in both rows; the Ledger tile and the
+Windows total read `windows`, not a sum of the rows.
 
 The **Usage** section is now three sub-tabs — `Forecast | Token value | History` — chosen from
 the Usage tree in the side rail, persisted per device as `usageTab`.
@@ -1437,7 +1553,8 @@ the figure the phone reader came for.
 
    **Share is of the priced points** (`pricedShare`): `utilSum` over the sum of the rows'
    own `utilSum`, so the column sums to 100% and the bars read as one breakdown with the
-   `Priced share` total row underneath them. Not of everything that moved — that would sum
+   `Priced share` total row underneath them (its Priced cell is the owned points, labelled
+   "owned outright, of N pts moved" — not all that the rates read). Not of everything that moved — that would sum
    to the priced share and make each bar answer a question the column is not asking. Null,
    never 0, when nothing is priced.
 3. **The evidence ledger** — what each rate was fitted on, and against what. The `Reading`
@@ -1485,7 +1602,7 @@ reading it.
 ### The day strip
 
 The card said `drift −38%` and showed two numbers; nothing on it showed the days
-those numbers were pooled from, so a reader could not tell a fortnight moving
+those numbers were measured over, so a reader could not tell a fortnight moving
 from one loud afternoon. Under each model's row in the table, spanning every
 column, is one square per UTC day of the horizon (`DayStrip` in
 `UsageRates.tsx`) — a series is one model's shape over time, which is the one
@@ -1496,7 +1613,7 @@ chosen from three mocked variants
 against the 2026-09-10 live data
 (`docs/superpowers/specs/2026-09-10-token-value-day-strip-mockups.html`).
 
-**Colour is polarity, not magnitude.** A cell is that day's weighted rate
+**Colour is polarity, not magnitude.** A cell is that day's separated weighted rate
 against *this model's* baseline, stepped at the verdict's own ±20% band and at
 ±40% (`dayStep`): fewer tokens per 1% — pricier — runs `--red`, more runs
 `--cyan`, within the band is a neutral grey. A cell outside the band therefore
@@ -1514,6 +1631,15 @@ validator against both the midnight and daylight surfaces (pole separation
 hatched with a dashed border is `thin`, a bare cell is `none`, a dotted border is
 `pre-ledger`. A `thin` day still carries its figures in the panel, with the reason
 it is not coloured.
+
+**A cell is the separated rate for that day, so a day another model shared no longer reads as this one's.** `dailyRates` runs `separatedRate` over each
+UTC date clipped to the horizon, with the same shared `SeparationContext` the row's headline and baseline use, so a cell and the badge cannot disagree about
+what was subtracted. The only floor is `CURRENT_FLOORS.minUtil` on the residual points (`DAY_FLOOR_PTS`, 5); the `repriced` guard runs only on days that
+reach into the current window. A thin cell's reason is its `thinReason`, and `dayTip` prints it from `THIN_DAY_REASON`: `floor` keeps "under 5 pts — not
+coloured"; `mixed`, `repriced` and `unpriced` say the day can't be separated from another model's spend (mostly another model's spend / another model's rate
+moved / another model has no rate yet). A thin day whose residual was not positive carries no figure, only its evidence line and that reason. On
+2026-11-09 the Opus 5.5 cell read **546k**, rated, at a priced-out share of 0.46 (the measured bands let a share that high through where the flat 0.34 cap would
+have read `mixed`), where the pooled cell had read 378k at 17 points at 13:42 UTC and 268k earlier that day.
 
 **The dashed amber rule is the current window's true start** (`cutFraction`),
 `CURRENT_DAYS` before `generatedAt`. It cuts *through* a day cell because the
@@ -1595,7 +1721,8 @@ how much evidence the pool held and never how far apart it was spread. Measured
 per day, this machine's own weighted rate varies 173k → 281k (cv ≈ 24%), so a
 one-day pool on **either** side of the comparison clears the 20% band by itself.
 Two residuals are stated rather than fixed: at 7 / 2 the 1σ deviation error is
-19.2% against a 20% band, so a crossing by chance alone is still not rare; and
+19.2% against a 20% band (on the pooled ratio; the separated rate measured 17.7% (cv 22.1%, 14 rated Opus 5.5 days, 2026-11-09 ~14:25 UTC) —
+*The separated rate* above has the numbers), so a crossing by chance alone is still not rare; and
 the current window is 3 days wide by construction, which makes it the dominant
 noise term whatever the baseline does. Widening the band is a question for more
 than four days of data.

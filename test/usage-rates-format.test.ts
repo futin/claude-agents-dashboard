@@ -25,6 +25,9 @@ import {
   movedLabel,
   movedTotal,
   ledgerReading,
+  SEPARATION_THIN_NOTE,
+  sharedLine,
+  thinNotes,
   spanText,
   pricedShare,
   RATES_GLOSSARY,
@@ -313,10 +316,29 @@ export function run(): number {
     assert.deepStrictEqual(coverageRows(LIVE), [
       { value: '22%', label: 'predates recording · ages out on its own' },
       { value: '9%', label: 'spent on another device · excluded from the fit' },
-      { value: '8%', label: 'no single model held 90% of the tokens' },
       { value: '2%', label: 'windows the recorder only part-covered' },
       { value: '0.3%', label: 'recorder down 19.5 h' }
     ]);
+  })) p++; else f++;
+
+  if (test('mixed is shared, not refused: out of the refusal list, said once by sharedLine', () => {
+    assert.ok(!coverageRows(LIVE).some(r => /90%|shared/.test(r.label)), 'no refusal row for the shared bucket');
+    const line = sharedLine(LIVE)!;
+    assert.ok(line.startsWith('8% of the points moved in windows shared between models'), line);
+    assert.ok(/not refused/.test(line), line);
+    assert.strictEqual(sharedLine(cov({ mixedPct: 0 })), null);
+    assert.strictEqual(sharedLine(cov({ movedPct: 0, mixedPct: 5 })), null);
+  })) p++; else f++;
+
+  if (test('thinNotes: the first-fortnight line needs a floor-thin row; the separation line a separation-thin one', () => {
+    const t = (thinReason?: ModelRateRow['thinReason']) => rowOf({ verdict: 'thin', thinReason });
+    assert.deepStrictEqual(thinNotes([rowOf({ verdict: 'stable' })]), { floors: false, separation: false });
+    assert.deepStrictEqual(thinNotes([t()]), { floors: true, separation: false }, 'no reason is a floor');
+    assert.deepStrictEqual(thinNotes([t('floor')]), { floors: true, separation: false });
+    assert.deepStrictEqual(thinNotes([t('mixed'), t('repriced'), t('unpriced')]), { floors: false, separation: true },
+      'every thin row separation-thin: the fortnight sentence would be false');
+    assert.deepStrictEqual(thinNotes([t('mixed'), t('floor')]), { floors: true, separation: true });
+    assert.ok(/mixed, repriced or unpriced/.test(SEPARATION_THIN_NOTE));
   })) p++; else f++;
 
   if (test('a bucket that cost nothing produces no row at all', () => {
@@ -397,8 +419,8 @@ export function run(): number {
 
   if (test('ratesStats: the five figures, in the order the page reads them', () => {
     const models = verdicts('stable', 'drift', 'mix-shift', 'thin', 'thin');
-    const tiles = ratesStats(models, LIVE);
-    assert.strictEqual(ratesStats(verdicts('surface-shift', 'thin'), LIVE)[0].value, '1', 'a surface shift is priced');
+    const tiles = ratesStats(models, LIVE, 585);
+    assert.strictEqual(ratesStats(verdicts('surface-shift', 'thin'), LIVE, 0)[0].value, '1', 'a surface shift is priced');
     assert.deepStrictEqual(tiles.map(t => t.key),
       ['priced', 'drifting', 'collecting', 'coverage', 'ledger']);
     assert.strictEqual(tiles[0].value, '3', 'stable + drift + mix-shift are priced');
@@ -407,15 +429,15 @@ export function run(): number {
     assert.strictEqual(tiles[2].value, '2');
     assert.strictEqual(tiles[3].value, measuredShare(LIVE));
     assert.strictEqual(tiles[3].sub, movedLabel(LIVE));
-    assert.strictEqual(tiles[4].value, String(models.length * 585), 'windows, summed');
+    assert.strictEqual(tiles[4].value, '585', 'the distinct windows the response carries, not a sum of the rows (a shared window is in several rows)');
   })) p++; else f++;
 
   if (test('ratesStats: nothing drifting is not a warning, and nothing moved is a dash', () => {
-    const calm = ratesStats(verdicts('stable', 'stable'), cov({ movedPct: 0 }));
+    const calm = ratesStats(verdicts('stable', 'stable'), cov({ movedPct: 0 }), 0);
     assert.strictEqual(calm[1].value, '0');
     assert.strictEqual(calm[1].warn, false);
     assert.strictEqual(calm[3].value, '—', 'a share of nothing is not 0%');
-    const empty = ratesStats([], cov({ movedPct: 0 }));
+    const empty = ratesStats([], cov({ movedPct: 0 }), 0);
     assert.deepStrictEqual(empty.map(t => t.value), ['0', '0', '0', '—', '0']);
   })) p++; else f++;
 
@@ -533,7 +555,7 @@ export function run(): number {
     const blank = { weightedPerPct: null, rawPerPct: null, intervals: 0, utilSum: 0, deviationPct: null } as const;
     assert.strictEqual(
       dayTip(day({ date: '2026-09-01', state: 'none', ...blank }), '2026-09-10'),
-      'Sep 1 (UTC)\nno windows this model owned'
+      'Sep 1 (UTC)\nno spend from this model that day'
     );
     assert.strictEqual(
       dayTip(day({ date: '2026-08-27', state: 'pre-ledger', ...blank }), '2026-09-10'),
@@ -560,6 +582,71 @@ export function run(): number {
     const entry = RATES_GLOSSARY.find(g => g.key === 'daily');
     assert.ok(entry !== undefined && entry.text.length > 0);
     assert.strictEqual(figureTip('daily'), entry!.text);
+  })) p++; else f++;
+
+  // ── why a span is thin ──
+
+  if (test('verdictText(thin): each reason has its own hint, floor and absent keep the day-floor one', () => {
+    const floor = verdictText('thin').hint;
+    assert.strictEqual(verdictText('thin', 'floor').hint, floor);
+    assert.match(floor, /7 separate days/);
+    assert.strictEqual(verdictText('thin', 'mixed').hint,
+      "most of this model's points were priced out as another model's — its rate can't be separated from them");
+    assert.strictEqual(verdictText('thin', 'repriced').hint,
+      "another model's rate moved in the current window — this one is not judged until it settles");
+    assert.strictEqual(verdictText('thin', 'unpriced').hint,
+      "another model spent here without a rate of its own yet — this model's rate can't be separated from it");
+    for (const r of ['mixed', 'repriced', 'unpriced'] as const) assert.strictEqual(verdictText('thin', r).label, 'collecting');
+  })) p++; else f++;
+
+  if (test('dayTip: each thin reason names itself on the last line', () => {
+    const thin = (thinReason?: 'floor' | 'mixed' | 'repriced' | 'unpriced') =>
+      dayTip(day({ date: '2026-09-10', state: 'thin', intervals: 3, utilSum: 3, weightedPerPct: 396_000, deviationPct: 73.3, thinReason }), '2026-09-11');
+    const head = 'Sep 10 (UTC)\n396k weighted tok / 1%\n+73.3% vs baseline\n3 windows · 3.0 pts\n';
+    assert.strictEqual(thin('floor'), `${head}under 5 pts — not coloured`);
+    assert.strictEqual(thin(), `${head}under 5 pts — not coloured`);
+    assert.strictEqual(thin('mixed'), `${head}mostly another model's spend — can't be separated, not coloured`);
+    assert.strictEqual(thin('repriced'), `${head}another model's rate moved — can't be separated, not coloured`);
+    assert.strictEqual(thin('unpriced'), `${head}another model has no rate yet — can't be separated, not coloured`);
+  })) p++; else f++;
+
+  if (test('dayTip: a thin cell with null figures has no rate line and no NaN', () => {
+    const tip = dayTip(day({
+      date: '2026-09-10', state: 'thin', intervals: 2, utilSum: 1.5, weightedPerPct: null, rawPerPct: null, deviationPct: null, thinReason: 'mixed'
+    }), '2026-09-11');
+    assert.strictEqual(tip, "Sep 10 (UTC)\n2 windows · 1.5 pts\nmostly another model's spend — can't be separated, not coloured");
+    assert.ok(!/NaN|undefined|weighted tok/.test(tip), tip);
+  })) p++; else f++;
+
+  if (test('ledgerReading: a non-floor thin reason replaces the gate counters; floor keeps them', () => {
+    const past = { verdict: 'thin', days: 9, baselineDays: 12, intervals: 6 } as const;
+    assert.strictEqual(ledgerReading(rowOf({ ...past, thinReason: 'repriced' })), verdictText('thin', 'repriced').hint);
+    assert.strictEqual(ledgerReading(rowOf({ ...past, thinReason: 'mixed' })), verdictText('thin', 'mixed').hint);
+    assert.strictEqual(ledgerReading(rowOf({ verdict: 'thin', days: 1, baselineDays: 3, thinReason: 'floor' })),
+      'waiting on 3 of 7 baseline days and 1 of 2 current days');
+    assert.strictEqual(ledgerReading(rowOf({ verdict: 'thin', days: 1, baselineDays: 3 })),
+      'waiting on 3 of 7 baseline days and 1 of 2 current days');
+  })) p++; else f++;
+
+  if (test('the mixed hint is span-neutral: a baseline-side mixed reason reads true too', () => {
+    const hint = verdictText('thin', 'mixed').hint;
+    assert.ok(!/current/i.test(hint), `names no span: ${hint}`);
+    // The server publishes the baseline's reason when the current side is rated; the reading is the same text.
+    const baselineMixed = rowOf({ verdict: 'thin', days: 9, baselineDays: 12, intervals: 6, thinReason: 'mixed', weightedPerPct: 220_077 });
+    assert.strictEqual(ledgerReading(baselineMixed), hint);
+    // `repriced` is only ever judged on the current window, so its hint naming that window is true wherever it is published.
+    assert.ok(/current window/.test(verdictText('thin', 'repriced').hint));
+    assert.ok(!/window|baseline/.test(verdictText('thin', 'unpriced').hint));
+  })) p++; else f++;
+
+  if (test('collecting tile and glossary carry the separation copy', () => {
+    assert.strictEqual(ratesStats(verdicts('thin'), LIVE, 0)[2].sub, 'not enough windows, or not separable');
+    const g = (k: string) => RATES_GLOSSARY.find(e => e.key === k)!.text;
+    assert.ok(g('weighted').endsWith(" Other models' spend in the same windows is priced out at their own fitted rates, so a busier neighbour does not move it."));
+    assert.ok(g('daily').includes("Hatched days moved under 5 pts or could not be separated from other models' spend, and are shown but not coloured"), g('daily'));
+    assert.strictEqual(g('window'),
+      'One window is one 5-hour limit period in which this model spent tokens, alone or beside other models. '
+      + 'pts are the utilization percentage points left to it once the other models\' spend is priced out.');
   })) p++; else f++;
 
   // ── the off-peak boost lines ──

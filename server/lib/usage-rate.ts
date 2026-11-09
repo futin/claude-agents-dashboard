@@ -16,10 +16,12 @@
 
 import { sameWindow } from './usage-history.js';
 import type { UsageSample } from './usage-history.js';
-import { addCounts, emptyCounts, scaleCounts, weightedTokens } from './usage-ledger.js';
+import { addCounts, emptyCounts, rawTokens, scaleCounts, weightedTokens } from './usage-ledger.js';
 import type { LedgerLine, TokenCounts } from './usage-ledger.js';
 import { HEADLESS_ENTRYPOINT } from './entrypoint.js';
-import type { ModelDayRate, ModelDayState, ModelRateSurface, ModelSurfaceRate } from '../../shared/types.js';
+import type {
+  ModelDayRate, ModelDayState, ModelRateSurface, ModelSurfaceRate, ModelThinReason
+} from '../../shared/types.js';
 
 /** Weighted share of an interval one model must hold to own it. */
 export const DOMINANCE = 0.9;
@@ -112,6 +114,14 @@ export interface Interval {
    * interval ever carries one. See {@link mixAdjustedDeviation} for why (bug-23).
    */
   surface?: ModelRateSurface;
+  /**
+   * Each model's own dominant surface: the one holding {@link DOMINANCE} of
+   * *that model's* weighted tokens here, whatever the interval's kind — a
+   * mixed interval has no owner but every model in it still spent from some
+   * surface. Absent when no model has one. The separated estimator stratifies
+   * on this; `surface` above stays the owner-only field bug-23 pinned.
+   */
+  modelSurfaces?: Record<string, ModelRateSurface>;
 }
 
 /**
@@ -219,18 +229,41 @@ function surfaceOf(
   sur: Record<string, Partial<Record<ModelRateSurface, TokenCounts>>>
 ): ModelRateSurface | undefined {
   if (typeof kind !== 'object') return undefined;
-  const total = tok[kind.model] ? weightedTokens(tok[kind.model], kind.model) : 0;
+  return modelSurfaceOf(kind.model, tok, sur);
+}
+
+/** One model's dominant surface over its own whole `tok` — {@link surfaceOf}'s rule, for any model. */
+function modelSurfaceOf(
+  model: string, tok: Record<string, TokenCounts>,
+  sur: Record<string, Partial<Record<ModelRateSurface, TokenCounts>>>
+): ModelRateSurface | undefined {
+  const total = tok[model] ? weightedTokens(tok[model], model) : 0;
   if (total <= 0) return undefined;
   for (const surface of RATE_SURFACES) {
-    const counts = sur[kind.model]?.[surface];
-    if (counts && weightedTokens(counts, kind.model) / total >= DOMINANCE) return surface;
+    const counts = sur[model]?.[surface];
+    if (counts && weightedTokens(counts, model) / total >= DOMINANCE) return surface;
   }
   return undefined;
 }
 
-/** `surface` as an optional key — absent, never `undefined`, so fixtures compare cleanly. */
-function withSurface(interval: Interval, surface: ModelRateSurface | undefined): Interval {
-  return surface === undefined ? interval : { ...interval, surface };
+/**
+ * `surface` and `modelSurfaces` as optional keys — absent, never `undefined`
+ * or `{}`, so fixtures compare cleanly.
+ */
+function withSurface(
+  interval: Interval, tok: Record<string, TokenCounts>,
+  sur: Record<string, Partial<Record<ModelRateSurface, TokenCounts>>>
+): Interval {
+  const surface = surfaceOf(interval.kind, tok, sur);
+  const modelSurfaces: Record<string, ModelRateSurface> = {};
+  for (const model of Object.keys(tok)) {
+    const own = modelSurfaceOf(model, tok, sur);
+    if (own !== undefined) modelSurfaces[model] = own;
+  }
+  let out = interval;
+  if (surface !== undefined) out = { ...out, surface };
+  if (Object.keys(modelSurfaces).length > 0) out = { ...out, modelSurfaces };
+  return out;
 }
 
 /**
@@ -303,10 +336,7 @@ export function joinIntervals(
 
     const { tok, req, reqUsable, sur, coveredMs } = gather(ledger, from.t, to.t);
     const kind = classify(dUtil, tok, coveredMs, durationMs, to.t, ledgerStartMs);
-    out.push(withSurface(
-      { fromT: from.t, toT: to.t, dUtil, tok, req, reqUsable, kind },
-      surfaceOf(kind, tok, sur)
-    ));
+    out.push(withSurface({ fromT: from.t, toT: to.t, dUtil, tok, req, reqUsable, kind }, tok, sur));
   }
   return out;
 }
@@ -397,10 +427,7 @@ export function joinWeeklyIntervals(
       dUtil, tok, coveredMs, durationMs, sample.t, ledgerStartMs,
       EXTERNAL_WEIGHTED_MAX_WEEKLY
     );
-    out.push(withSurface(
-      { fromT: held.t, toT: sample.t, dUtil, tok, req, reqUsable, kind },
-      surfaceOf(kind, tok, sur)
-    ));
+    out.push(withSurface({ fromT: held.t, toT: sample.t, dUtil, tok, req, reqUsable, kind }, tok, sur));
     held = sample;
     heldWeek = week;
   }
@@ -410,6 +437,7 @@ export function joinWeeklyIntervals(
 // ── Rates, baselines and drift ───────────────────────────────────────────────
 
 const DAY_MS = 86_400_000;
+const HOUR_MS = 3_600_000;
 
 /** How far back the baseline reaches. */
 export const BASELINE_MS = 17 * DAY_MS;
@@ -507,6 +535,8 @@ export interface DriftRow {
   /** The same change with the surface mix held fixed — see {@link mixAdjustedDeviation}. */
   mixAdjustedDeviationPct: number | null;
   verdict: ModelRateVerdictKind;
+  /** Why `verdict` is `thin` — the first side that could not be rated, current before baseline. Absent on every other verdict. */
+  thinReason?: ModelThinReason;
   /** One entry per {@link RATE_SURFACES}, always both, in that order. */
   surfaces: ModelSurfaceRate[];
   /** Evidence in the **current** window — reported even when it is too thin to fit. */
@@ -596,17 +626,308 @@ export function rateFor(
   return fitted;
 }
 
+// ── The separated rate ───────────────────────────────────────────────────────
+
+/**
+ * The fallback error band, both sides, for a neighbour with no measured one — only a context built by hand (tests) lacks a model's band, since
+ * {@link separationContext} measures every model with a horizon rate. For a single neighbour it reproduces the old flat cap: `s` ≈ 0.34 at `DRIFT_PCT` 20.
+ */
+export const SUB_ERR = 0.15;
+
+/**
+ * Resamples in the day-block bootstrap that measures each neighbour's error band. Each one is a full {@link fitRates}, ~6.8 ms on the live
+ * 12,424-interval horizon (2026-11-09), so 200 is ~1.4 s — paid once an hour through the memo, not per request.
+ */
+export const SUB_BOOTSTRAP = 200;
+
+/** Fixed so the same ledger gives the same bands on every call; any constant would do. */
+export const SUB_BOOTSTRAP_SEED = 0x5eed_2026;
+
+/** A model fitted in fewer than half the resamples: its rate is not identified well enough to subtract, so any real share of its points trips `mixed`. */
+const UNMEASURED_BAND: ErrorBand = { under: 0.99, over: 9 };
+
+/**
+ * A model holding at most this share of a span's weighted tokens is ignored by
+ * the missing-rate guard, and not subtracted when it has no rate.
+ * At the ~5× Fable/Opus price ratio, 1% of tokens is ≈ 5% of points — under
+ * `DRIFT_PCT / 2`, so leaving it in the residual cannot move a verdict.
+ */
+export const UNPRICED_TRIVIAL_SHARE = 0.01;
+
+/** How far a model's true rate may sit below (`under`) and above (`over`) its horizon point rate, as fractions of it. */
+export interface ErrorBand {
+  under: number;
+  over: number;
+}
+
+/** Each model's weighted tokens per point, from the joint fit, keyed by model id. */
+export interface SeparationContext {
+  /** One fit over the whole 17-day horizon — the rate each model is priced out at. */
+  horizon: ReadonlyMap<string, number>;
+  /** The 3-day fit — read only by the repriced guard. */
+  current: ReadonlyMap<string, number>;
+  /** Each horizon model's bootstrap band, read by the sensitivity guard. A model absent from it takes {@link SUB_ERR} both sides. */
+  error: ReadonlyMap<string, ErrorBand>;
+}
+
+/**
+ * The band from one model's bootstrap draws (`draw / point`), by nearest rank: the p-th percentile of n sorted draws is the
+ * `⌈p·n⌉`-th. Exactly half the resamples still counts as measured.
+ */
+export function errorBand(draws: readonly number[], resamples: number): ErrorBand {
+  if (draws.length === 0 || draws.length < resamples / 2) return { ...UNMEASURED_BAND };
+  const sorted = [...draws].sort((a, b) => a - b);
+  const rank = (p: number): number => sorted[Math.max(0, Math.ceil(p * sorted.length) - 1)];
+  return {
+    under: Math.min(UNMEASURED_BAND.under, Math.max(0, 1 - rank(0.05))),
+    over: Math.max(0, rank(0.95) - 1)
+  };
+}
+
+/** mulberry32: a 32-bit seeded generator, enough to pick day keys and nothing else. */
+function seededRandom(seed: number): () => number {
+  let a = seed >>> 0;
+  return () => {
+    a = (a + 0x6d2b79f5) >>> 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4_294_967_296;
+  };
+}
+
+/**
+ * Each model's error band from a day-block bootstrap of the fit over `[sinceMs, untilMs)`: whole UTC days resampled with replacement,
+ * because intervals within a day share a workload and a tick boundary, so resampling them one by one would understate the spread.
+ * `point` defaults to that window's own fit; only models in it get a band. Seeded per call, so two calls on the same intervals agree.
+ */
+export function bootstrapBands(
+  intervals: Interval[], sinceMs: number, untilMs: number,
+  point: ReadonlyMap<string, number> = new Map([...fitRates(intervals, sinceMs, untilMs)].map(([m, fit]) => [m, fit.weightedPerPct])),
+  resamples: number = SUB_BOOTSTRAP
+): Map<string, ErrorBand> {
+  const byDay = new Map<string, Interval[]>();
+  for (const iv of intervals) {
+    if (!usableForRate(iv) || iv.toT < sinceMs || iv.toT >= untilMs) continue;
+    const key = utcDate(iv.toT);
+    const day = byDay.get(key);
+    if (day) day.push(iv); else byDay.set(key, [iv]);
+  }
+  const days = [...byDay.keys()].sort().map(key => byDay.get(key)!);
+  // Under 3 distinct days a resample is fittable (2-day floor) only when it redraws both, and then it is the original sample: every draw is
+  // exactly 1.0 whatever the noise, a band of 0. No band is the honest answer; callers fall back to SUB_ERR.
+  if (days.length < 3) return new Map();
+  const draws = new Map<string, number[]>([...point.keys()].map(model => [model, []]));
+  const random = seededRandom(SUB_BOOTSTRAP_SEED);
+  for (let b = 0; b < resamples && days.length > 0; b++) {
+    const sample: Interval[] = [];
+    for (let d = 0; d < days.length; d++) sample.push(...days[Math.floor(random() * days.length)]);
+    for (const [model, fit] of fitRates(sample, sinceMs, untilMs)) {
+      const rate = point.get(model);
+      if (rate !== undefined && rate > 0) draws.get(model)!.push(fit.weightedPerPct / rate);
+    }
+  }
+  return new Map([...draws].map(([model, list]) => [model, errorBand(list, resamples)]));
+}
+
+/**
+ * The last bootstrap, keyed on the UTC hour and the set of models with a horizon rate. Not on the interval count: the recorder adds an
+ * interval a minute, so a count key would miss on nearly every card open. A hit pairs bands from earlier in the hour with the current
+ * point rates; bands are ratios, so that is second-order.
+ */
+let bandMemo: { key: string; error: ReadonlyMap<string, ErrorBand> } | null = null;
+
+/** Forget the memoized bands — for tests, whose fixtures share a clock hour and a model set but not their data. */
+export function resetSeparationMemo(): void {
+  bandMemo = null;
+}
+
+/**
+ * The subtraction rates, built once per request so the headline, the baseline
+ * and every day cell price other models out identically. `current` takes the
+ * caller's existing 3-day fit when it has one rather than solving it twice.
+ */
+export function separationContext(
+  intervals: Interval[], nowMs: number, current?: Map<string, RateFit>
+): SeparationContext {
+  const perPct = (fits: Map<string, RateFit>): Map<string, number> =>
+    new Map([...fits].map(([model, fit]) => [model, fit.weightedPerPct]));
+  const cur = currentRange(nowMs);
+  const sinceMs = nowMs - BASELINE_MS;
+  const horizon = perPct(fitRates(intervals, sinceMs, Number.POSITIVE_INFINITY));
+  const key = `${Math.floor(nowMs / HOUR_MS)}|${[...horizon.keys()].sort().join('\n')}`;
+  if (bandMemo === null || bandMemo.key !== key) {
+    bandMemo = { key, error: bootstrapBands(intervals, sinceMs, Number.POSITIVE_INFINITY, horizon) };
+  }
+  return {
+    horizon,
+    current: perPct(current ?? fitRates(intervals, cur.sinceMs, cur.untilMs)),
+    error: bandMemo.error
+  };
+}
+
+/** One model's separated rate over a span, its evidence, and why it is thin when it is. */
+export interface SeparatedRate {
+  /** `W_M / R`. Null when the residual `R` is not positive. */
+  weightedPerPct: number | null;
+  /** Raw tokens over the same residual. Null under the same condition. */
+  rawPerPct: number | null;
+  /** Usable intervals in the span in which this model spent anything. */
+  intervals: number;
+  /** The residual points, floored at zero. */
+  utilSum: number;
+  /** Distinct UTC dates of those intervals. */
+  days: number;
+  /** `(U − R) / U`. Null when `U ≤ 0`. */
+  pricedOutShare: number | null;
+  /** Null when the figure is rated; otherwise the first guard that fired, by precedence. */
+  thinReason: ModelThinReason | null;
+}
+
+/** M's surface in one interval: its own, else the owner surface when M owns it. */
+function surfaceFor(interval: Interval, model: string): ModelRateSurface | undefined {
+  const own = interval.modelSurfaces?.[model];
+  if (own !== undefined) return own;
+  if (typeof interval.kind === 'object' && interval.kind.model === model) return interval.surface;
+  return undefined;
+}
+
+/**
+ * M's tokens against the points left once every other model's spend is priced
+ * out at its own horizon rate: `W_M / (U − Σ_{m≠M} W_m / rate_m)`, over every
+ * usable interval with `toT` in `[sinceMs, untilMs)`.
+ *
+ * Every usable interval counts, those where M spent nothing included — that is
+ * what cancels a point carried from one tick onto the next whoever holds it.
+ * With `surface`, the span is M's stratum: intervals whose M tokens the surface
+ * dominates, plus a share of every interval where M spent nothing, weighted by
+ * M's tokens in that stratum against all of M's stratified tokens. Intervals
+ * where M spent but no surface dominates are in no stratum.
+ *
+ * Null only when M spent nothing in the span (or stratum). Figures are carried
+ * whatever `thinReason` says; a caller that publishes rows nulls them itself.
+ */
+export function separatedRate(
+  intervals: Interval[], model: string, sinceMs: number, untilMs: number, ctx: SeparationContext,
+  opts: { floors: RateFloors; surface?: ModelRateSurface; checkRepriced?: boolean }
+): SeparatedRate | null {
+  const span = intervals.filter(iv => usableForRate(iv) && iv.toT >= sinceMs && iv.toT < untilMs);
+  const own = (iv: Interval): number => (iv.tok[model] ? weightedTokens(iv.tok[model], model) : 0);
+
+  // The spread share for intervals M spent nothing in: M's tokens in this
+  // stratum against M's tokens in every stratum. 1 without a surface.
+  let spread = 1;
+  if (opts.surface !== undefined) {
+    let inStratum = 0, stratified = 0;
+    for (const iv of span) {
+      const w = own(iv);
+      if (w <= 0) continue;
+      const surface = surfaceFor(iv, model);
+      if (surface === undefined) continue;
+      stratified += w;
+      if (surface === opts.surface) inStratum += w;
+    }
+    spread = stratified > 0 ? inStratum / stratified : 0;
+  }
+
+  let wM = 0, rawM = 0, util = 0, pricedOut = 0, total = 0, count = 0;
+  const others = new Map<string, number>();
+  const dates = new Set<string>();
+  for (const iv of span) {
+    const w = own(iv);
+    let factor: number;
+    if (w > 0) factor = opts.surface === undefined || surfaceFor(iv, model) === opts.surface ? 1 : 0;
+    else factor = spread;
+    if (factor <= 0) continue;
+    if (w > 0) {
+      wM += w;
+      rawM += rawTokens(iv.tok[model]);
+      total += w;
+      dates.add(utcDate(iv.toT));
+      count++;
+    }
+    util += factor * iv.dUtil;
+    for (const [other, counts] of Object.entries(iv.tok)) {
+      if (other === model) continue;
+      const wo = factor * weightedTokens(counts, other);
+      total += wo;
+      others.set(other, (others.get(other) ?? 0) + wo);
+      const rate = ctx.horizon.get(other);
+      if (rate !== undefined && rate > 0) pricedOut += wo / rate;
+    }
+  }
+  if (wM <= 0) return null;
+
+  const residual = util - pricedOut;
+  const pricedOutShare = util > 0 ? pricedOut / util : null;
+  const figures = residual > 0;
+
+  // Both guards measure how far M's figure W_M / R could move, against DRIFT_PCT / 2: half the drift band, so a move
+  // the subtraction alone could cause never reads as drift.
+  const limit = DRIFT_PCT / 200;
+  const bandSide = (value: number | undefined): number => (value !== undefined && Number.isFinite(value) ? Math.max(0, value) : SUB_ERR);
+  let unpriced = false, repriced = false, squaresUnder = 0, squaresOver = 0;
+  for (const [other, w] of others) {
+    const horizon = ctx.horizon.get(other);
+    if (horizon === undefined) {
+      if (total > 0 && w / total > UNPRICED_TRIVIAL_SHARE) unpriced = true;
+      continue;
+    }
+    if (!(horizon > 0)) continue;
+    const points = w / horizon;
+    const band = ctx.error.get(other);
+    // A true rate lower than the point prices more out (R shrinks); higher, less. Root-sum-square: the neighbours' errors are independent.
+    squaresUnder += (points * (1 / (1 - Math.min(bandSide(band?.under), 0.99)) - 1)) ** 2;
+    squaresOver += (points * (1 - 1 / (1 + bandSide(band?.over)))) ** 2;
+    // With no positive residual there is no figure for a swap to move; `mixed` already holds the span.
+    const current = ctx.current.get(other);
+    if (opts.checkRepriced && residual > 0 && current !== undefined && current > 0) {
+      const swapped = residual + points - w / current;
+      if (swapped <= 0 || Math.abs(residual / swapped - 1) > limit) repriced = true;
+    }
+  }
+  const moveUnder = Math.sqrt(squaresUnder), moveOver = Math.sqrt(squaresOver);
+  // Only a span that subtracts something can be too sensitive to the subtraction; U ≤ 0 alone is a floor.
+  const mixed = pricedOut > 0 && (
+    residual <= 0 || residual - moveUnder <= 0
+    || residual / (residual - moveUnder) - 1 > limit
+    || 1 - residual / (residual + moveOver) > limit
+  );
+  const utilSum = Math.max(0, residual);
+  const under = util <= 0 || count < opts.floors.minIntervals || utilSum < opts.floors.minUtil
+    || dates.size < opts.floors.minDays;
+  const thinReason: ModelThinReason | null =
+    unpriced ? 'unpriced'
+      : repriced ? 'repriced'
+        : mixed ? 'mixed'
+          : under ? 'floor'
+            : null;
+
+  return {
+    weightedPerPct: figures ? wM / residual : null,
+    rawPerPct: figures ? rawM / residual : null,
+    intervals: count, utilSum, days: dates.size, pricedOutShare, thinReason
+  };
+}
+
 function deviation(current: number, baseline: number): number {
   return ((current - baseline) / baseline) * 100;
+}
+
+/** A separated figure that may be published: no guard fired and both figures are positive. */
+function isRated(rate: SeparatedRate | null): rate is SeparatedRate & { weightedPerPct: number; rawPerPct: number } {
+  return rate !== null && rate.thinReason === null
+    && rate.weightedPerPct !== null && rate.weightedPerPct > 0
+    && rate.rawPerPct !== null && rate.rawPerPct > 0;
 }
 
 /**
  * The current window's rate against its baseline **with the surface mix held
  * at the current window's own**, or null when too little of it can be judged.
  *
- * Why it exists (bug-23): the pooled ratio assumes every token of a model buys
- * the same fraction of the window, and on this machine a headless `claude -p`
- * token measured ~1.8× the window cost of an interactive one. A fortnight that
+ * Why it exists (bug-23): a rate assumes every token of a model buys the same
+ * fraction of the window, and on this machine a headless `claude -p` token
+ * measured ~1.8× the window cost of an interactive one. A fortnight that
  * moved from mostly-interactive to mostly-headless read −22% pooled while each
  * surface, on its own, moved −2% and −4% — Simpson's paradox, reported as a
  * repricing. The day floors and the ±20% band guard against sampling noise;
@@ -616,73 +937,97 @@ function deviation(current: number, baseline: number): number {
  * have cost at each surface's **baseline** rate? Σ(tokens ÷ that surface's
  * baseline rate) is the points they would have charged; against the points
  * they did charge, that is the deviation. A pure mix shift reads 0 here however
- * far the pool moved; a repricing of every surface reads its full size; a
+ * far the rate moved; a repricing of every surface reads its full size; a
  * repricing of one surface reads in proportion to that surface's share.
  *
- * Null — and the pooled verdict stands, unguarded — when the intervals that
- * have a surface *and* a baseline for it carry under
- * {@link SURFACE_COVERAGE_MIN} of the current window's points. That is every
- * model for the first 14 days after surfaces began to be recorded: a stratum
- * baseline is held to the full {@link BASELINE_FLOORS}, no looser, because a
- * guard that could veto a verdict on thinner evidence than the verdict itself
- * would be the noisier of the two.
+ * Everything is on the separated basis: a stratum's points are the residual
+ * once other models' spend is priced out, and its tokens are this model's
+ * alone. The strata sum to the span, so a point carried between ticks cancels
+ * across them. A current stratum the separation cannot price — `mixed`,
+ * `repriced` or `unpriced` — drops out, and coverage falls with it; a stratum
+ * that is merely under its floors still counts, since the floors guard the
+ * headline figure and this one is judged on its coverage instead.
+ *
+ * Null — and the row's own deviation stands, unguarded — when the strata that
+ * have a baseline carry under {@link SURFACE_COVERAGE_MIN} of the current
+ * window's points. That is every model for the first 14 days after surfaces
+ * began to be recorded: a stratum baseline is held to the full
+ * {@link BASELINE_FLOORS}, no looser, because a guard that could veto a verdict
+ * on thinner evidence than the verdict itself would be the noisier of the two.
  */
-export function mixAdjustedDeviation(intervals: Interval[], model: string, nowMs: number): number | null {
+export function mixAdjustedDeviation(
+  intervals: Interval[], model: string, nowMs: number,
+  ctx: SeparationContext = separationContext(intervals, nowMs)
+): number | null {
   const base = baselineRange(nowMs);
   const cur = currentRange(nowMs);
-  const baselineRate = new Map<ModelRateSurface, number>();
+  const span = separatedRate(intervals, model, cur.sinceMs, cur.untilMs, ctx, { floors: CURRENT_FLOORS });
+  if (span === null || span.utilSum <= 0) return null;
+
+  let covered = 0, expected = 0;
   for (const surface of RATE_SURFACES) {
-    const rate = rateFor(intervals, model, base.sinceMs, base.untilMs, BASELINE_FLOORS, surface);
-    if (rate !== null && rate.weightedPerPct > 0) baselineRate.set(surface, rate.weightedPerPct);
+    const baseline = separatedRate(intervals, model, base.sinceMs, base.untilMs, ctx, { floors: BASELINE_FLOORS, surface });
+    if (!isRated(baseline)) continue;
+    const stratum = separatedRate(intervals, model, cur.sinceMs, cur.untilMs, ctx, {
+      floors: CURRENT_FLOORS, surface, checkRepriced: true
+    });
+    if (stratum === null || (stratum.thinReason !== null && stratum.thinReason !== 'floor')) continue;
+    // The figure is null exactly when the residual is not positive, and such a stratum has no points to cover.
+    if (stratum.weightedPerPct === null || stratum.utilSum <= 0) continue;
+    covered += stratum.utilSum;
+    expected += (stratum.weightedPerPct * stratum.utilSum) / baseline.weightedPerPct;
   }
-  let moved = 0, covered = 0, expected = 0;
-  for (const interval of intervals) {
-    if (!ownedBy(interval, model, cur.sinceMs, cur.untilMs)) continue;
-    moved += interval.dUtil;
-    const rate = interval.surface === undefined ? undefined : baselineRate.get(interval.surface);
-    if (rate === undefined) continue;
-    covered += interval.dUtil;
-    expected += totalWeighted(interval.tok) / rate;
-  }
-  if (moved <= 0 || covered <= 0 || covered / moved < SURFACE_COVERAGE_MIN) return null;
+  if (covered <= 0 || covered / span.utilSum < SURFACE_COVERAGE_MIN) return null;
   return (expected / covered - 1) * 100;
 }
 
 /** Each surface's own current and baseline rate — the breakdown under the headline. */
-export function surfaceRates(intervals: Interval[], model: string, nowMs: number): ModelSurfaceRate[] {
+export function surfaceRates(
+  intervals: Interval[], model: string, nowMs: number,
+  ctx: SeparationContext = separationContext(intervals, nowMs)
+): ModelSurfaceRate[] {
   const base = baselineRange(nowMs);
   const cur = currentRange(nowMs);
-  return RATE_SURFACES.map((surface) => ({
-    surface,
-    weightedPerPct:
-      rateFor(intervals, model, cur.sinceMs, cur.untilMs, CURRENT_FLOORS, surface)?.weightedPerPct ?? null,
-    baselineWeightedPerPct:
-      rateFor(intervals, model, base.sinceMs, base.untilMs, BASELINE_FLOORS, surface)?.weightedPerPct ?? null,
-    utilSum: poolRate(intervals, model, cur.sinceMs, cur.untilMs, surface)?.utilSum ?? 0
-  }));
+  return RATE_SURFACES.map((surface) => {
+    const current = separatedRate(intervals, model, cur.sinceMs, cur.untilMs, ctx, {
+      floors: CURRENT_FLOORS, surface, checkRepriced: true
+    });
+    const baseline = separatedRate(intervals, model, base.sinceMs, base.untilMs, ctx, { floors: BASELINE_FLOORS, surface });
+    return {
+      surface,
+      weightedPerPct: isRated(current) ? current.weightedPerPct : null,
+      baselineWeightedPerPct: isRated(baseline) ? baseline.weightedPerPct : null,
+      utilSum: current?.utilSum ?? 0
+    };
+  });
 }
 
 /**
- * Compare a model's trailing rate against its baseline.
+ * Compare a model's trailing rate against its baseline, both on the separated
+ * basis: every other model's spend priced out at its own rate.
  *
  * Verdict order matters — **thin outranks everything**, or the badge would fire
- * hardest exactly when it knows least. That is what the day floors enforce:
- * counting intervals says how much evidence a window holds and nothing about
- * how far apart it is spread, so a floor without one is cleared by a single
- * morning. The evidence counters are reported whatever the verdict — the
- * current window's in full, the baseline's day count beside them — so the card
- * can say "collecting — 4 windows over 2 days" rather than a bare `thin`.
+ * hardest exactly when it knows least. A side the separation cannot price, or
+ * that is under its floors, is thin with that side's reason, current before
+ * baseline; a model that spent nothing in a window counts as `floor`. The
+ * pooled figure is never the fallback. The evidence counters are reported
+ * whatever the verdict — the current window's in full, the baseline's day
+ * count beside them — so the card can say "collecting — 4 windows over 2 days"
+ * rather than a bare `thin`.
  */
-export function driftRow(intervals: Interval[], model: string, nowMs: number): DriftRow {
+export function driftRow(
+  intervals: Interval[], model: string, nowMs: number,
+  ctx: SeparationContext = separationContext(intervals, nowMs)
+): DriftRow {
   const base = baselineRange(nowMs);
   const cur = currentRange(nowMs);
 
-  const baseline = rateFor(intervals, model, base.sinceMs, base.untilMs, BASELINE_FLOORS);
-  const current = rateFor(intervals, model, cur.sinceMs, cur.untilMs, CURRENT_FLOORS);
-  const evidence = poolRate(intervals, model, cur.sinceMs, cur.untilMs);
-  // The baseline's own evidence has to survive its refusal exactly as the
-  // current window's already does, or the card can say it went quiet but not why.
-  const baselineEvidence = poolRate(intervals, model, base.sinceMs, base.untilMs);
+  const currentSep = separatedRate(intervals, model, cur.sinceMs, cur.untilMs, ctx, {
+    floors: CURRENT_FLOORS, checkRepriced: true
+  });
+  const baselineSep = separatedRate(intervals, model, base.sinceMs, base.untilMs, ctx, { floors: BASELINE_FLOORS });
+  const current = isRated(currentSep) ? currentSep : null;
+  const baseline = isRated(baselineSep) ? baselineSep : null;
 
   const row: DriftRow = {
     model,
@@ -693,24 +1038,30 @@ export function driftRow(intervals: Interval[], model: string, nowMs: number): D
     deviationPct: null,
     mixAdjustedDeviationPct: null,
     verdict: 'thin',
-    surfaces: surfaceRates(intervals, model, nowMs),
-    intervals: evidence?.intervals ?? 0,
-    utilSum: evidence?.utilSum ?? 0,
-    days: evidence?.days ?? 0,
-    baselineDays: baselineEvidence?.days ?? 0
+    surfaces: surfaceRates(intervals, model, nowMs, ctx),
+    intervals: currentSep?.intervals ?? 0,
+    utilSum: currentSep?.utilSum ?? 0,
+    days: currentSep?.days ?? 0,
+    baselineDays: baselineSep?.days ?? 0
   };
 
-  if (current === null || baseline === null) return row;
-  if (baseline.weightedPerPct <= 0 || baseline.rawPerPct <= 0) return row;
+  if (current === null) {
+    row.thinReason = currentSep?.thinReason ?? 'floor';
+    return row;
+  }
+  if (baseline === null) {
+    row.thinReason = baselineSep?.thinReason ?? 'floor';
+    return row;
+  }
 
   const weightedDev = deviation(current.weightedPerPct, baseline.weightedPerPct);
   const rawDev = deviation(current.rawPerPct, baseline.rawPerPct);
   row.deviationPct = weightedDev;
-  row.mixAdjustedDeviationPct = mixAdjustedDeviation(intervals, model, nowMs);
+  row.mixAdjustedDeviationPct = mixAdjustedDeviation(intervals, model, nowMs, ctx);
   // Drift is judged on the mix-adjusted figure whenever there is one, in both
-  // directions: a pooled −22% that is −3% surface by surface is not drift, and
-  // a pooled −5% hiding a −25% repricing behind a move to the cheaper surface
-  // is. With no adjusted figure the pooled one is judged, as it always was.
+  // directions: a −22% that is −3% surface by surface is not drift, and a −5%
+  // hiding a −25% repricing behind a move to the cheaper surface is. With no
+  // adjusted figure the headline deviation is judged, as it always was.
   const judged = row.mixAdjustedDeviationPct ?? weightedDev;
   row.verdict = Math.abs(judged) > DRIFT_PCT ? 'drift'
     : Math.abs(weightedDev) > DRIFT_PCT ? 'surface-shift'
@@ -723,14 +1074,17 @@ export function driftRow(intervals: Interval[], model: string, nowMs: number): D
  * One model's token value, one UTC date at a time, over the same 17-day horizon
  * the verdict is fitted over — the days behind {@link driftRow}'s two numbers.
  *
- * Each cell is {@link poolRate} over that date **clipped to the horizon**: the
- * first date starts where the baseline range does, not at its own midnight, so
- * the strip never counts an interval the fit did not. No floors are applied to
- * the figure — a day carries whatever it pooled — but a day under the current
- * window's utilization floor is marked `thin`, because with the ~1-point
- * rounding in `Σ dUtil` a 3-point day is a ±33% number, and colouring it would
- * put a rounding artefact on the strip in the same red as a real move. The
- * floor is {@link CURRENT_FLOORS}' own, not a new number.
+ * Each cell is {@link separatedRate} over that date **clipped to the horizon**:
+ * the first date starts where the baseline range does, not at its own midnight,
+ * so the strip never counts an interval the fit did not. Other models' spend is
+ * priced out at the same `ctx` rates the row's two figures use, so a day with a
+ * sibling model running beside this one no longer reads as this model's. Only
+ * the utilization floor applies, the current window's own ({@link CURRENT_FLOORS}),
+ * because with the ~1-point rounding in `Σ dUtil` a 3-point day is a ±33% number.
+ * A day the separation cannot price (`thinReason`) is `thin` and still carries
+ * its figures — the pooled figure is never the fallback — and the repriced
+ * guard runs only on days inside the current window, where a sibling's current
+ * rate is the one that mattered.
  *
  * A date that ended before the ledger provably began is `pre-ledger`: nothing
  * was measured, nothing is wrong, and it ages out on its own. With the start
@@ -742,31 +1096,38 @@ export function driftRow(intervals: Interval[], model: string, nowMs: number): D
  */
 export function dailyRates(
   intervals: Interval[], model: string, nowMs: number,
-  ledgerStartMs: number | null, baselineWeightedPerPct: number | null
+  ledgerStartMs: number | null, baselineWeightedPerPct: number | null,
+  ctx: SeparationContext = separationContext(intervals, nowMs)
 ): ModelDayRate[] {
   const sinceMs = nowMs - BASELINE_MS;
   const firstDay = Math.floor(sinceMs / DAY_MS) * DAY_MS;
   const lastDay = Math.floor(nowMs / DAY_MS) * DAY_MS;
   const judged = baselineWeightedPerPct !== null && baselineWeightedPerPct > 0;
+  const currentSince = currentRange(nowMs).sinceMs;
+  const floors = { minIntervals: 0, minUtil: CURRENT_FLOORS.minUtil, minDays: 0 };
   const out: ModelDayRate[] = [];
   for (let day = firstDay; day <= lastDay; day += DAY_MS) {
-    const pooled = poolRate(intervals, model, Math.max(day, sinceMs), day + DAY_MS);
+    const sep = separatedRate(intervals, model, Math.max(day, sinceMs), day + DAY_MS, ctx, {
+      floors, checkRepriced: day + DAY_MS > currentSince
+    });
     let state: ModelDayState;
     if (ledgerStartMs !== null && day + DAY_MS <= ledgerStartMs) state = 'pre-ledger';
-    else if (pooled === null) state = 'none';
-    else if (pooled.utilSum < CURRENT_FLOORS.minUtil) state = 'thin';
+    else if (sep === null) state = 'none';
+    else if (sep.thinReason !== null) state = 'thin';
     else state = 'rated';
-    out.push({
+    const cell: ModelDayRate = {
       date: utcDate(day),
-      weightedPerPct: pooled?.weightedPerPct ?? null,
-      rawPerPct: pooled?.rawPerPct ?? null,
-      intervals: pooled?.intervals ?? 0,
-      utilSum: pooled?.utilSum ?? 0,
-      deviationPct: pooled !== null && judged
-        ? deviation(pooled.weightedPerPct, baselineWeightedPerPct)
+      weightedPerPct: sep?.weightedPerPct ?? null,
+      rawPerPct: sep?.rawPerPct ?? null,
+      intervals: sep?.intervals ?? 0,
+      utilSum: sep?.utilSum ?? 0,
+      deviationPct: sep?.weightedPerPct != null && judged
+        ? deviation(sep.weightedPerPct, baselineWeightedPerPct)
         : null,
       state
-    });
+    };
+    if (state === 'thin' && sep?.thinReason) cell.thinReason = sep.thinReason;
+    out.push(cell);
   }
   return out;
 }
@@ -796,7 +1157,7 @@ export function externalShare(intervals: Interval[], sinceMs: number, untilMs: n
 export interface CoverageBreakdown {
   /** Every non-`idle` point in the window: the denominator every share below is read against. */
   moved: number;
-  /** Points in `{model}`-owned intervals — the only ones that reach a rate. */
+  /** Points in `{model}`-owned intervals. Ownership, not reach: the separated rate also reads `mixed` and `idle` intervals. */
   priced: number;
   mixed: number;
   external: number;
@@ -804,6 +1165,20 @@ export interface CoverageBreakdown {
   /** Recorder down: recording had begun and covered none of the span. */
   gap: number;
   partial: number;
+}
+
+/**
+ * Distinct usable intervals in `[sinceMs, untilMs)` in which any of `models` spent tokens. Per-model counts (`SeparatedRate.intervals`) count a shared
+ * interval once for each model, so the card's Windows total reads this instead of a sum.
+ */
+export function distinctWindows(intervals: Interval[], sinceMs: number, untilMs: number, models: Iterable<string>): number {
+  const wanted = [...models];
+  let count = 0;
+  for (const iv of intervals) {
+    if (!usableForRate(iv) || iv.toT < sinceMs || iv.toT >= untilMs) continue;
+    if (wanted.some(m => iv.tok[m] !== undefined && weightedTokens(iv.tok[m], m) > 0)) count++;
+  }
+  return count;
 }
 
 /**

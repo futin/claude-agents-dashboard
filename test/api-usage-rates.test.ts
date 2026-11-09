@@ -18,10 +18,12 @@ import { emptyRates, shapeUsageRates } from '../server/lib/usage-shape.js';
 import { getSettings, SETTINGS_FILE } from '../server/lib/settings.js';
 import { readRecentSamples } from '../server/lib/usage-history.js';
 import { LEDGER_FILE, ledgerStartMs, readLedgerSince } from '../server/lib/usage-ledger.js';
-import { BASELINE_MS, fitDeviation } from '../server/lib/usage-rate.js';
+import { BASELINE_MS, fitDeviation, resetSeparationMemo } from '../server/lib/usage-rate.js';
 import { testAsync, withServer } from './api-harness.js';
 
 function test(name: string, fn: () => void): boolean {
+  // The bands are memoized per clock hour and model set, and fixtures here share both; each case starts cold.
+  resetSeparationMemo();
   try { fn(); console.log('  ✓ ' + name); return true; }
   catch (e) { console.log('  ✗ ' + name); console.log('    ' + (e as Error).message); return false; }
 }
@@ -39,7 +41,7 @@ const T0 = Date.parse('2026-08-29T09:00:00.000Z');
  * bridging the two dates is discarded — which is why the day-two block is one
  * interval shorter than the arithmetic alone would suggest.
  */
-const RESETS = ['2026-08-29T13:00:00.000Z', '2026-08-30T13:00:00.000Z'];
+const RESETS = ['2026-08-29T13:00:00.000Z', '2026-08-30T13:00:00.000Z', '2026-08-31T13:00:00.000Z'];
 /** One weekly window across every weekly fixture below — none of them spans a reset. */
 const WEEK_RESETS = '2026-09-07T07:59:59.840279+00:00';
 const ENV = 'SHOW_USAGE=false\nSKIP_PROC_SCAN=true\n';
@@ -143,10 +145,13 @@ const DRIVER_PCT_PER_MTOK = 0.4;
 const SUBAGENT_PCT_PER_MTOK = 1.6;
 const RARE_PCT_PER_MTOK = 2.5;
 
-/** Intervals per UTC date in `fittedOnlyFixtureDir`, summing to its 25. */
-const FITTED_PER_DAY = [13, 12];
+/**
+ * Intervals per UTC date in `fittedOnlyFixtureDir`, summing to its 25. Three dates, not two: with fewer than 3 distinct days the
+ * bootstrap gives no band (`bootstrapBands`) and the subtraction falls back to the flat `SUB_ERR`, which these shares fail.
+ */
+const FITTED_PER_DAY = [9, 8, 8];
 /** The last sample it writes. */
-const FITTED_END = T0 + DAY + FITTED_PER_DAY[1] * MIN;
+const FITTED_END = T0 + 2 * DAY + FITTED_PER_DAY[2] * MIN;
 
 /**
  * A driver model that owns half its windows, and a subagent model that owns none.
@@ -324,26 +329,35 @@ export async function run(): Promise<number> {
   let p = 0, f = 0;
   const check = (r: boolean): void => { if (r) p++; else f++; };
 
-  check(test('a model that owns no window still gets a row, carrying only its fitted rate', () => {
+  check(test('a model that owns no window still gets a row, its separated rate agreeing with its fitted one', () => {
     const dir = fittedOnlyFixtureDir();
     try {
       const body = bodyFor(dir, FITTED_END + MIN);
       const sub = body.models.find(m => m.model === 'haiku-4-5');
       assert.ok(sub, 'the subagent model must reach the body: '
         + JSON.stringify(body.models.map(m => m.model)));
-      // Every pooled number is null and every pooled counter is zero, because
-      // it owns nothing — honest, and not worked around.
-      assert.strictEqual(sub.weightedPerPct, null);
-      assert.strictEqual(sub.rawPerPct, null);
+      // It owns nothing, but the separated rate does not need ownership: its 12
+      // spending windows and the points left once opus is priced out are real
+      // evidence. Opus's spend is over half of every point in the span, but the
+      // fixture is generated exactly over three days, so opus's bootstrap band is
+      // ~0: the subtraction is exact and the figure is the generated truth rather
+      // than the pooled null of owned-only evidence.
+      // The row is still `thin` — three days are no baseline — but by the floors.
+      near(sub.weightedPerPct, 625_000, 'the separated rate');
       assert.strictEqual(sub.verdict, 'thin');
-      assert.strictEqual(sub.intervals, 0);
-      assert.strictEqual(sub.utilSum, 0);
-      assert.strictEqual(sub.days, 0);
+      assert.strictEqual(sub.thinReason, 'floor');
+      assert.strictEqual(sub.intervals, 12);
+      // The 12 shared windows are also opus's: summing the rows (25 + 12) would count them twice.
+      const opus = body.models.find(m => m.model === 'opus-5')!;
+      assert.strictEqual(opus.intervals + sub.intervals, 37, 'the rows overlap');
+      assert.strictEqual(body.windows, 25, 'distinct windows, each counted once');
+      near(sub.utilSum, 23.04, 'the points left after opus is priced out');
+      assert.strictEqual(sub.days, 3);
       assert.strictEqual(sub.deviationPct, null);
-      // And the fitted rate is the only number on the row.
+      // And the joint fit reads the same truth, so the two agree.
       assert.strictEqual(sub.fitVerdict, 'fitted');
       near(sub.fittedWeightedPerPct, 625_000, 'the subagent\'s fitted rate');
-      assert.strictEqual(sub.fitDeviationPct, null, 'no pooled rate to compare against');
+      assert.ok(Math.abs(sub.fitDeviationPct!) < 1e-6, `the two agree: ${sub.fitDeviationPct}`);
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
     }
@@ -356,25 +370,27 @@ export async function run(): Promise<number> {
       const names = body.models.map(m => m.model);
       assert.ok(!names.includes('sonnet-5'),
         'two mixed windows is under every floor — there is nothing to say: ' + JSON.stringify(names));
-      assert.deepStrictEqual(names, ['opus-5', 'haiku-4-5'], 'and the other two are unaffected');
+      // Ordered by the separated utilSum, which now credits the subagent's own points.
+      assert.deepStrictEqual(names, ['haiku-4-5', 'opus-5'], 'and the other two are unaffected');
       // The rare model's own spend is in the design, so it does not distort the
       // two rows that survive: both rates are still the generated truth.
-      near(body.models[0].fittedWeightedPerPct, 2_500_000, 'the driver\'s fitted rate');
-      near(body.models[1].fittedWeightedPerPct, 625_000, 'the subagent\'s fitted rate');
+      near(body.models.find(m => m.model === 'opus-5')!.fittedWeightedPerPct, 2_500_000, 'the driver\'s fitted rate');
+      near(body.models.find(m => m.model === 'haiku-4-5')!.fittedWeightedPerPct, 625_000, 'the subagent\'s fitted rate');
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
     }
   }));
 
-  check(test('rows stay ordered by evidence, so a fitted-only row sorts last', () => {
+  check(test('rows stay ordered by evidence, which is now the separated utilSum', () => {
     const dir = fittedOnlyFixtureDir();
     try {
       const body = bodyFor(dir, FITTED_END + MIN);
-      // Not alphabetical — `haiku-4-5` sorts before `opus-5` by name and after
-      // it by evidence, so this pins the sort key rather than the tie-break.
-      assert.deepStrictEqual(body.models.map(m => m.model), ['opus-5', 'haiku-4-5']);
-      assert.strictEqual(body.models[1].utilSum, 0, 'a fitted-only row has no pooled evidence at all');
-      assert.ok(body.models[0].utilSum > 0);
+      // Owning no window no longer sorts a model last: the subagent's residual
+      // (23.04 points) outweighs the driver's (20.0), so evidence puts it first.
+      // Both rows have evidence; the order is the sort key, not the name.
+      assert.deepStrictEqual(body.models.map(m => m.model), ['haiku-4-5', 'opus-5']);
+      assert.ok(body.models[0].utilSum > body.models[1].utilSum, 'descending by utilSum');
+      assert.ok(body.models[1].utilSum > 0);
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
     }
@@ -392,15 +408,42 @@ export async function run(): Promise<number> {
     const dir = fittedOnlyFixtureDir();
     try {
       const body = bodyFor(dir, FITTED_END + MIN);
-      const driver = body.models[0];
-      // Both estimators see the same generated truth here, so they agree
-      // exactly — and the badge is the pooled rate's verdict either way.
-      near(driver.weightedPerPct, 2_500_000, 'the driver\'s pooled rate');
+      const driver = body.models.find(m => m.model === 'opus-5')!;
+      // The subagent's spend is over a third of the points here, but its band
+      // is measured at ~0 on this exact fixture, so the separated figure is
+      // published and the two estimators agree on the generated truth.
+      near(driver.weightedPerPct, 2_500_000, 'the driver\'s separated rate');
       near(driver.fittedWeightedPerPct, 2_500_000, 'the driver\'s fitted rate');
       assert.ok(Math.abs(driver.fitDeviationPct!) < 1e-6, `the two agree: ${driver.fitDeviationPct}`);
-      assert.strictEqual(driver.verdict, 'thin', 'no baseline yet — the fitted rate cannot change that');
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
+    }
+
+    // A withheld figure: the rare model has no horizon rate and ~1.8% of the
+    // tokens, so the driver's span is `unpriced` and there is nothing to compare
+    // the fit to — null, not a deviation against a withheld figure.
+    const rare = fittedOnlyFixtureDir({ rare: true });
+    try {
+      const driver = bodyFor(rare, FITTED_END + MIN).models.find(m => m.model === 'opus-5')!;
+      assert.strictEqual(driver.weightedPerPct, null);
+      assert.strictEqual(driver.thinReason, 'unpriced');
+      near(driver.fittedWeightedPerPct, 2_500_000, 'the driver\'s fitted rate');
+      assert.strictEqual(driver.fitDeviationPct, null);
+    } finally {
+      fs.rmSync(rare, { recursive: true, force: true });
+    }
+
+    // A single model has no one to price out, so the separated rate is rated and
+    // both estimators see the same generated truth: they agree exactly.
+    const solo = fixtureDir();
+    try {
+      const row = bodyFor(solo, FIXTURE_END + MIN).models[0];
+      near(row.weightedPerPct, 900_000, 'the separated rate');
+      near(row.fittedWeightedPerPct, 900_000, 'the fitted rate');
+      assert.ok(Math.abs(row.fitDeviationPct!) < 1e-6, `the two agree: ${row.fitDeviationPct}`);
+      assert.strictEqual(row.verdict, 'thin', 'no baseline yet — the fitted rate cannot change that');
+    } finally {
+      fs.rmSync(solo, { recursive: true, force: true });
     }
   }));
 
@@ -706,13 +749,15 @@ export async function run(): Promise<number> {
       assert.deepStrictEqual(body.models.map(m => m.model), ['opus-5', 'fable-5'],
         'sorting is on the 5-hour utilSum, so the weekly-only model is last');
       const row = body.models[1];
-      // Every 5-hour number is honestly absent: it owns no window that moved.
+      // Every 5-hour figure is honestly absent: no point moved while it ran, so
+      // the residual is zero and the figure is refused. Its 14 spending windows
+      // still count as evidence — the separated counters are not owned-only.
       assert.strictEqual(row.weightedPerPct, null);
       assert.strictEqual(row.rawPerPct, null);
       assert.strictEqual(row.verdict, 'thin');
       assert.strictEqual(row.fitVerdict, 'thin');
       assert.strictEqual(row.fittedWeightedPerPct, null);
-      assert.strictEqual(row.intervals, 0);
+      assert.strictEqual(row.intervals, 14);
       assert.strictEqual(row.utilSum, 0);
       // And the weekly half is the only thing the card can show for it.
       assert.strictEqual(row.weekly.verdict, 'fitted');
