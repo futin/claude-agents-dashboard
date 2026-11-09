@@ -51,6 +51,8 @@ Each has a test in the owning task below.
   `client/src/lib/routines.ts:104-122` (the `<machines> only` pill branch) and `:322` (the `not-this-machine` message)
 - Test: `test/routine-file.test.ts`, `test/plugin-manifest.test.ts:80-84`, `test/routine-store.test.ts`, `test/routine-reconcile.test.ts`, `test/routine-run.test.ts`,
   `test/run-routine.test.ts` (fixture lines 70/74, refusal matrix 420-425), `test/api-routines.test.ts`, `test/routines-view.test.ts`, `test/routine-boot.test.ts`
+- Modify (compile fix — `tsconfig.json` includes `test`): `test/visual/fixtures/routines.ts:18-20,144,150-158,178` drops `machines` / `onThisMachine`; the
+  `wsl-backup` job (:144) is deleted outright, since a wsl-only job has no meaning in a mac fixture now
 
 **Interfaces:**
 - Produces: `parseJob(name: string, text: string, machine: 'mac' | 'wsl'): ParsedJob` — machine is **required**, so the compiler finds every caller.
@@ -104,8 +106,10 @@ Each has a test in the owning task below.
     template lands after `run:`/`foreach:` as before (existing cases keep passing once their texts lose `machines:`).
   - `routine-form`: `every new-job template parses on mac and wsl` — each template text from `client/src/lib/routines.ts` gives `errors: []` from
     `parseJob(name, text, 'mac')` and `'wsl'` (fails today on the `machines:` line under Task 1's parser).
-  - `routines-view`: the Jobs subtitle reads `Jobs defined in <dir>, run by launchd on this machine. They belong to this machine only — nothing syncs.`
-    (`cron` in place of `launchd` when `machine` is `wsl`), and contains no `sync through git`.
+  - `routines-view`: Task 2 produces `jobsSubtitle(dir: string, machine: 'mac' | 'wsl'): string` in `client/src/lib/routines.ts`, and `RoutinesView.tsx`
+    renders it (keeping `<code>` around the dir is optional; plain text is fine). Test: `jobsSubtitle('/h/.claude/routines/jobs', 'mac')` ===
+    `Jobs defined in /h/.claude/routines/jobs, run by launchd on this machine. They belong to this machine only — nothing syncs.`; with `'wsl'` the same with
+    `cron` in place of `launchd`; neither contains `sync through git`.
 - [ ] **Step 2: Run** both files with `npx tsx` → FAIL.
 - [ ] **Step 3: Implement.** Remove the Machines field everywhere listed; drop `machines:` lines (and their comment line) from both templates; set the
   subtitle copy above exactly. Leave `.rtn-*` class names of surviving elements untouched.
@@ -160,7 +164,10 @@ Each has a test in the owning task below.
 - Produces: `importSharedJobs(config: Config, host?: Partial<RoutineHost>): ImportResult` where
   `ImportResult = { state: 'imported', from: string, count: number } | { state: 'skipped', why: 'explicit-dir' | 'done' | 'overlap' | 'jobs-exist' | 'no-old' }`.
   `'no-old'` and `'jobs-exist'` still write the marker (`count: 0`) and, for `'no-old'`, create the empty jobs folder.
-- Produces: `rewriteImported(text: string, oldParentTilde: string): string` (exported for tests) — the three text edits.
+- Produces: `rewriteImported(text: string, oldParentTilde: string): string` (exported for tests) — the three text edits, in this order: (1) remove the
+  `machines:` line and any following indented `- item` lines; (2) `serializeEnabled(text, false)` (replaces in place, or inserts after `run:`); (3) only when
+  neither `cwd:` nor `foreach:` is present, `writeFrontmatterLine(text, 'cwd', oldParentTilde, 'run')` — so `cwd:` lands directly after `run:`, and
+  `enabled:` (when it was absent) after that.
 - Produces: marker `<state root>/jobs-imported.json` = `{ at: ISO string, from: string | null, count: number }`.
 
 - [ ] **Step 1: Write the failing tests in `test/routine-import.test.ts`** (tmp home via the host seam; no real home touched):
@@ -174,8 +181,9 @@ Each has a test in the owning task below.
     - unparseable file (`run: bogus`) → the same edits apply; output is still unparseable only for `run`.
     - text with no frontmatter → returned unchanged.
   - `importSharedJobs`:
-    - `imports every .md disabled`: old `~/claude-global/routines` with `a.md` (enabled, mac+wsl) and `b.md` (disabled, wsl) → state `imported`, `count: 2`,
-      `jobs/a.md` and `jobs/b.md` parse on `'mac'` with `enabled: false`; marker `{from: '<home>/claude-global/routines', count: 2}`.
+    - `imports every .md disabled`: old `~/claude-global/routines` with `a.md` (enabled, mac+wsl), `b.md` (disabled, wsl) and `c.md` (`run: bogus`,
+      `machines: [mac]`) → state `imported`, `count: 3`; `jobs/a.md` and `jobs/b.md` parse on `'mac'` with `enabled: false`; `jobs/c.md` exists, has no
+      `machines:` line, has `enabled: false`, and its only parse error is the `run` one; marker `{from: '<home>/claude-global/routines', count: 3}`.
     - `falls back to the legacy schedules folder`: only `~/claude-global/schedules` exists → imported from it.
     - `prefers routines over schedules` when both exist.
     - `ignores non-.md files, subfolders and dotfiles` (`notes.txt`, `sub/`, `.x.123.tmp`) → `count` counts only `.md`.
@@ -193,26 +201,26 @@ Each has a test in the owning task below.
   (first existing of the two constants) → copy into `<state>/.jobs-import.tmp` (removed first if left over) → `renameSync` to `jobs/` → write marker. Old
   folder's parent written with `~` when it is under home. Uses only `node:fs`/`node:path`.
 - [ ] **Step 4: Wire into boot.** `RoutineDeps` gains `importSharedJobs`; `startRoutines` runs `step('job import', …)` immediately after the claim succeeds and
-  before `lock sweep`, logging `[dashboard] routines: imported <n> job(s) from <from>, all disabled` on `imported` (nothing on `skipped`). Tests in
+  before `lock sweep`, logging `[dashboard] routines: imported <n> job(s) from <from>, all disabled` on `imported`, and
+  `[dashboard] routines: job import skipped — <jobs dir> overlaps <old dir>` on `overlap` (spec §Settled 3); every other `skipped` is silent. Tests in
   `test/routine-boot.test.ts`: `import runs after the claim and before the lock sweep` (record call order with stub deps); `a throwing import still runs
   the reconcile`; `a non-owner never imports`.
 - [ ] **Step 5: Run** `npx tsx test/routine-import.test.ts`, `npx tsx test/routine-boot.test.ts`, `pnpm typecheck` → PASS.
 - [ ] **Step 6: Commit** `feat(routines): import the old shared job folder once, every job disabled`.
 
-### Task 5: Docs and visual fixture
+### Task 5: Docs
 
 **Files:**
 - Modify: `docs/subsystems/routines.md` (intro :3-4, Renamed section :16-34 incl. the rollout order line, layout table :39-47 adds `jobs/` and
-  `jobs-imported.json`, format table :60/:73 drops `machines`, :83 launchd rule wording, Machine identity :91-96, reconcile desired set :118-120, wrapper
-  refusals :182 and :218, run conflicts :280, page section :302, docs-sync stamp block at the end), `docs/overview.md:62` and the `routine-*` map lines
-  (add `routine-import.ts`)
-- Modify: `test/visual/fixtures/routines.ts` (drop `machines` / `onThisMachine`)
+  `jobs-imported.json`, format table :60/:73 drops `machines` and :76 says the `cwd` default is the home folder, :83 launchd rule wording, Machine identity :91-96, reconcile desired set :118-120, wrapper
+  refusals :182 and :218, run conflicts :280, page section :302, docs-sync stamp block at the end), `docs/overview.md:62`, `:474` (the Map line's
+  "git-synced folder") and the `routine-*` map lines (add `routine-import.ts`)
 
 - [ ] **Step 1: Update the docs** to describe exactly what Tasks 1-4 built: jobs live in `<state root>/jobs`, never synced; no `machines:`; the import and
   its marker; default cwd home; the new rollout order — merge, restart the owner, then `pnpm plugin:sync`, then re-enable jobs (spec §Rollout order). Add a
   short "Per machine since 2026-11-09" note in the Renamed section replacing the `~/claude-global/routines` fallback row.
-- [ ] **Step 2: Update the visual fixture**; run `pnpm typecheck` → clean; run
-  `grep -rn "machines:\|onThisMachine\|not-this-machine\|claude-global/routines" docs/subsystems/routines.md docs/overview.md client/src server shared plugin/lib/run-routine.mjs test`
+- [ ] **Step 2: Run** `pnpm typecheck` → clean; run
+  `grep -rn "machines:\|onThisMachine\|not-this-machine\|claude-global/routines\|folder's parent\|git-synced\|sync through git" docs/subsystems/routines.md docs/overview.md client/src server shared plugin/lib/run-routine.mjs test`
   → only hits that describe the removed key as no longer used, the import-source constant and its tests, and the Renamed-section history.
 - [ ] **Step 3: Commit** `docs(routines): jobs are per machine`.
 
