@@ -37,7 +37,7 @@ function username(): string {
   }
 }
 
-const realHost = (): RoutineHost => ({ platform: process.platform, readProcVersion, env: process.env, homedir: os.homedir, username, exists: fs.existsSync });
+export const realHost = (): RoutineHost => ({ platform: process.platform, readProcVersion, env: process.env, homedir: os.homedir, username, exists: fs.existsSync });
 
 /** Where job files lived while they were git-synced (`~/claude-global`), then under their pre-2026-10-23 name: the one-time import's sources, in preference order. */
 export const OLD_SHARED_DIRS = ['~/claude-global/routines', '~/claude-global/schedules'];
@@ -49,7 +49,7 @@ function orLegacy(next: string, old: string, host: RoutineHost): string {
 }
 
 /** `$HOME` as the wrapper sees it (`process.env.HOME || os.homedir()` in `plugin/lib/run-routine.mjs`), so both sides pick the same folders. */
-function homeOf(host: RoutineHost): string {
+export function homeOf(host: RoutineHost): string {
   return host.env.HOME || host.homedir();
 }
 
@@ -58,7 +58,7 @@ function userOf(host: RoutineHost): string {
   return host.env.USER || host.env.LOGNAME || host.username();
 }
 
-function expandHome(p: string, home: string): string {
+export function expandHome(p: string, home: string): string {
   return p === '~' ? home : p.startsWith('~/') ? path.join(home, p.slice(2)) : p;
 }
 

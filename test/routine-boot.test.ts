@@ -45,6 +45,7 @@ function fakeDeps(claim: 'owner' | { ownedBy: string } = 'owner'): Fake {
   const deps: RoutineDeps = {
     migrateLegacyState: () => { calls.push('migrateLegacyState'); return false; },
     claimOwner: () => { calls.push('claimOwner'); return claim; },
+    importSharedJobs: () => { calls.push('importSharedJobs'); return { state: 'skipped', why: 'done' }; },
     sweepLocks: () => { calls.push('sweepLocks'); return []; },
     writePinsSnapshot: rec('writePinsSnapshot'),
     rotateIfLarge: () => { calls.push('rotateIfLarge'); return []; },
@@ -121,12 +122,12 @@ export async function run(): Promise<number> {
   let f = 0;
   const tally = (ok: boolean): void => { if (ok) p++; else f++; };
 
-  tally(await testAsync('owner: the eight calls in order (state move before the claim, pins before reconcile), then the runs watcher folds and pushes through the deps', async () => {
+  tally(await testAsync('owner: the nine calls in order (state move before the claim, pins before reconcile), then the runs watcher folds and pushes through the deps', async () => {
     await withHome(true, async config => {
       const fake = fakeDeps();
       startRoutines(config, fake.deps);
       assert.deepStrictEqual(fake.calls, [
-        'migrateLegacyState', 'claimOwner', 'sweepLocks', 'writePinsSnapshot', 'rotateIfLarge', 'applyReconcile', 'startReconcileWatchers',
+        'migrateLegacyState', 'claimOwner', 'importSharedJobs', 'sweepLocks', 'writePinsSnapshot', 'rotateIfLarge', 'applyReconcile', 'startReconcileWatchers',
         'createLogReader', 'seedRoutineNotify', 'notifyRoutineRuns', 'foldTickCaps', 'watch'
       ]);
       assert.deepStrictEqual(fake.sent, ['r1']);
@@ -189,6 +190,60 @@ export async function run(): Promise<number> {
       assert.deepStrictEqual(ownerStatus(), { ownedBy: '' });
       stopRoutines();
       assert.deepStrictEqual(fake.calls, ['migrateLegacyState', 'claimOwner']);
+    });
+  }));
+
+  tally(await testAsync('import runs after the claim and before the lock sweep', async () => {
+    await withHome(true, config => {
+      const fake = fakeDeps();
+      startRoutines(config, fake.deps);
+      const c = fake.calls;
+      assert.ok(c.indexOf('claimOwner') < c.indexOf('importSharedJobs') && c.indexOf('importSharedJobs') < c.indexOf('sweepLocks'), c.join(','));
+    });
+  }));
+
+  tally(await testAsync('a throwing import still runs the reconcile', async () => {
+    await withHome(true, config => {
+      const fake = fakeDeps();
+      fake.deps.importSharedJobs = () => { fake.calls.push('importSharedJobs'); throw new Error('boom'); };
+      const err = console.error;
+      const logged: string[] = [];
+      console.error = (...a: unknown[]) => { logged.push(a.join(' ')); };
+      try { startRoutines(config, fake.deps); } finally { console.error = err; }
+      assert.ok(fake.calls.includes('applyReconcile') && fake.calls.includes('sweepLocks'), fake.calls.join(','));
+      assert.ok(logged.some(l => l.includes('job import failed')), logged.join('\n'));
+    });
+  }));
+
+  tally(await testAsync('a non-owner never imports', async () => {
+    await withHome(false, config => {
+      const fake = fakeDeps();
+      startRoutines(config, fake.deps);
+      assert.ok(!fake.calls.includes('importSharedJobs'), fake.calls.join(','));
+    });
+  }));
+
+  tally(await testAsync('the import logs what it copied, and an overlap; any other skip is silent', async () => {
+    await withHome(true, config => {
+      const outcomes = [
+        { state: 'imported', from: '/old/routines', count: 3 }, { state: 'skipped', why: 'overlap' }, { state: 'skipped', why: 'done' }
+      ] as const;
+      const logs: string[][] = [];
+      const log = console.log;
+      for (const r of outcomes) {
+        const fake = fakeDeps();
+        fake.deps.importSharedJobs = () => r;
+        const got: string[] = [];
+        console.log = (...a: unknown[]) => { got.push(a.join(' ')); };
+        try { startRoutines(config, fake.deps); } finally { console.log = log; }
+        logs.push(got.filter(l => l.includes('job')));
+        stopRoutines();
+        resetRoutineBoot();
+      }
+      assert.deepStrictEqual(logs[0], ['[dashboard] routines: imported 3 job(s) from /old/routines, all disabled']);
+      assert.strictEqual(logs[1].length, 1);
+      assert.ok(logs[1][0].startsWith('[dashboard] routines: job import skipped — ') && logs[1][0].includes('overlaps'), logs[1][0]);
+      assert.deepStrictEqual(logs[2], []);
     });
   }));
 
