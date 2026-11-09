@@ -15,7 +15,7 @@ import type { RoutineHost } from './routine-config.js';
 
 export type ImportResult =
   | { state: 'imported'; from: string; count: number }
-  | { state: 'skipped'; why: 'explicit-dir' | 'done' | 'overlap' | 'jobs-exist' | 'no-old' };
+  | { state: 'skipped'; why: 'explicit-dir' | 'explicit-old' | 'done' | 'overlap' | 'jobs-exist' | 'no-old' };
 
 const MARKER = 'jobs-imported.json';
 const TMP = '.jobs-import.tmp';
@@ -57,9 +57,14 @@ function overlaps(a: string, b: string): boolean {
  * Also marks done when there is nothing to import or `jobs/` already exists, so a later-restored old folder cannot resurrect deleted jobs.
  */
 export function importSharedJobs(config: Config, host: Partial<RoutineHost> = {}): ImportResult {
-  if (config.routinesDir) return { state: 'skipped', why: 'explicit-dir' };
-  const dirs = routineDirs(config, host);
   const home = homeOf({ ...realHost(), ...host });
+  const olds = OLD_SHARED_DIRS.map((d) => expandHome(d, home));
+  // An `.env` written before this change can still name the old shared folder; that is a leftover, not a choice, and its files no longer parse.
+  if (config.routinesDir) {
+    const dir = path.resolve(expandHome(config.routinesDir, home));
+    return { state: 'skipped', why: olds.some((o) => path.resolve(o) === dir) ? 'explicit-old' : 'explicit-dir' };
+  }
+  const dirs = routineDirs(config, host);
   const jobs = dirs.routines;
   const markerPath = path.join(dirs.state, MARKER);
   const mark = (from: string | null, count: number): void => {
@@ -67,7 +72,6 @@ export function importSharedJobs(config: Config, host: Partial<RoutineHost> = {}
     fs.writeFileSync(markerPath, JSON.stringify({ at: new Date().toISOString(), from, count }) + '\n');
   };
   if (fs.existsSync(markerPath)) return { state: 'skipped', why: 'done' };
-  const olds = OLD_SHARED_DIRS.map((d) => expandHome(d, home));
   if (olds.some((o) => overlaps(jobs, o))) return { state: 'skipped', why: 'overlap' };
   if (fs.existsSync(jobs)) { mark(null, 0); return { state: 'skipped', why: 'jobs-exist' }; }
   const from = olds.find(isDir);

@@ -48,12 +48,16 @@ that is a folder. Every copied file has its `machines:` key removed, `enabled: f
 `foreach:` (the old default was the folder's parent, the new one is home); everything else, comments included, is kept, and a file that does not parse is
 still copied so it can be fixed in the drawer. The copy goes into `<state root>/.jobs-import.tmp` and is renamed to `jobs/`, so a crash leaves no
 half-filled folder. `<state root>/jobs-imported.json` (`{at, from, count}`) records that it ran, and it never runs again, so a job deleted later stays
-deleted. It is skipped (the result names why: `explicit-dir`, `done`, `overlap`, `jobs-exist`, `no-old`; only `overlap` logs) when `ROUTINES_DIR` is set, when
+deleted. It is skipped (the result names why: `explicit-dir`, `explicit-old`, `done`, `overlap`, `jobs-exist`, `no-old`) when `ROUTINES_DIR` is set, when
 the marker exists, when `jobs/` would overlap an old folder, when `jobs/` already exists (the marker is written with `count: 0`), or when there is no old
-folder. The old folder is left untouched; deleting `schedules/` from `~/claude-global` is the user's own follow-up.
+folder. A set `ROUTINES_DIR` (or `SCHEDULES_DIR`) that names one of the old shared folders is `explicit-old`: still honoured, still no import, but boot
+prints a warning on stderr, since those files carry `machines:` and none of them loads. `overlap` logs a line too; the other skips are silent. The old
+folder is left untouched; deleting `schedules/` from `~/claude-global` is the user's own follow-up.
 
-**Rollout order on each machine:** merge, restart the owner server first (it imports, everything is disabled, and its reconcile removes every installed OS
-job), then `pnpm plugin:sync`, then re-enable what should run here. Reversed, the old installed jobs would fire the new wrapper against the old folder.
+**Rollout order on each machine:** merge; remove any `ROUTINES_DIR=` / `SCHEDULES_DIR=` line naming `~/claude-global/…` from the owner checkout's `.env`
+(otherwise the import is skipped and every job fails to parse); restart the owner server (it imports, everything is disabled, and its reconcile removes
+every installed OS job); then `pnpm plugin:sync`; then re-enable what should run here. With `plugin:sync` first, the old installed jobs would fire the new
+wrapper against the old folder.
 
 | Path | Holds | Written by |
 |---|---|---|

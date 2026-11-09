@@ -153,10 +153,23 @@ export function run(): number {
     assert.ok(!fs.existsSync(s.jobs));
   });
   t('an explicit ROUTINES_DIR skips with no marker and no jobs folder', () => {
-    const s = sandbox({ routinesDir: '~/claude-global/routines' });
+    const s = sandbox({ routinesDir: '~/my-jobs' });
     plant(path.join(s.home, 'claude-global', 'routines'), { 'a.md': ENABLED_BOTH });
     assert.deepStrictEqual(importSharedJobs(s.config, s.host), { state: 'skipped', why: 'explicit-dir' });
     assert.ok(!fs.existsSync(s.marker) && !fs.existsSync(s.jobs));
+  });
+  t('an explicit ROUTINES_DIR naming an old shared folder skips as explicit-old, either name, ~ or absolute, trailing slash too', () => {
+    for (const dir of ['~/claude-global/routines', '~/claude-global/schedules/', 'HOME/claude-global/schedules']) {
+      const s = sandbox();
+      const cfg = { ...s.config, routinesDir: dir.replace('HOME', s.home) };
+      plant(path.join(s.home, 'claude-global', 'schedules'), { 'a.md': ENABLED_BOTH });
+      assert.deepStrictEqual(importSharedJobs(cfg, s.host), { state: 'skipped', why: 'explicit-old' }, dir);
+      assert.ok(!fs.existsSync(s.marker) && !fs.existsSync(s.jobs), dir);
+    }
+  });
+  t('an explicit ROUTINES_DIR only next to an old folder name is not explicit-old', () => {
+    const s = sandbox({ routinesDir: '~/claude-global/routines-x' });
+    assert.deepStrictEqual(importSharedJobs(s.config, s.host), { state: 'skipped', why: 'explicit-dir' });
   });
   t('no old folder: empty jobs folder and a count-0 marker', () => {
     const s = sandbox();

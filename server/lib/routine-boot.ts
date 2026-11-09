@@ -138,7 +138,10 @@ export function startRoutines(config: Config, deps: RoutineDeps = defaultDeps): 
   step('job import', () => {
     const r = deps.importSharedJobs(config);
     if (r.state === 'imported') console.log(`[dashboard] routines: imported ${r.count} job(s) from ${r.from}, all disabled`);
-    else if (r.why === 'overlap') console.log(`[dashboard] routines: job import skipped — ${routineDirs(config).routines} overlaps ${OLD_SHARED_DIRS.join(' or ')}`);
+    else if (r.why === 'explicit-old') {
+      console.error(`[dashboard] routines: job import skipped — ROUTINES_DIR/SCHEDULES_DIR in .env still names the old shared folder ${config.routinesDir}; `
+        + 'its jobs carry machines: and will not load. Remove that line from .env and restart to import them, disabled, into this machine\'s own folder');
+    } else if (r.why === 'overlap') console.log(`[dashboard] routines: job import skipped — ${routineDirs(config).routines} overlaps ${OLD_SHARED_DIRS.join(' or ')}`);
   });
   step('lock sweep', () => { deps.sweepLocks(config); });
   step('pins snapshot', () => { deps.writePinsSnapshot(config); });

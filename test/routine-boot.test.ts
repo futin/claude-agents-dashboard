@@ -247,6 +247,26 @@ export async function run(): Promise<number> {
     });
   }));
 
+  tally(await testAsync('an explicit-old skip warns on stderr naming the folder and the .env fix; explicit-dir stays silent', async () => {
+    await withHome(true, config => {
+      const errs: string[][] = [];
+      const err = console.error;
+      for (const why of ['explicit-old', 'explicit-dir'] as const) {
+        const fake = fakeDeps();
+        fake.deps.importSharedJobs = () => ({ state: 'skipped', why });
+        const got: string[] = [];
+        console.error = (...a: unknown[]) => { got.push(a.join(' ')); };
+        try { startRoutines({ ...config, routinesDir: '~/claude-global/schedules' }, fake.deps); } finally { console.error = err; }
+        errs.push(got.filter(l => l.includes('job import')));
+        stopRoutines();
+        resetRoutineBoot();
+      }
+      assert.strictEqual(errs[0].length, 1, errs[0].join('|'));
+      assert.ok(errs[0][0].includes('~/claude-global/schedules') && errs[0][0].includes('Remove that line from .env'), errs[0][0]);
+      assert.deepStrictEqual(errs[1], []);
+    });
+  }));
+
   tally(await testAsync('stopRoutines: the runs watcher and reconcile watchers off, the owner file released; a second stop is a no-op', async () => {
     await withHome(true, config => {
       const fake = fakeDeps();
