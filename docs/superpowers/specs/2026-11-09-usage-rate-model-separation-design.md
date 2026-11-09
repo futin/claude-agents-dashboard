@@ -94,6 +94,17 @@ The existing floors (`BASELINE_FLOORS`, `CURRENT_FLOORS`) still apply, with ever
 `deviationPct` for the side that failed (as `driftRow` already does), while its evidence counters are carried; a strip cell that is `thin` **carries** its
 figures uncoloured and unjudged (as `dailyRates` already does).
 
+**Why it is thin is published (author's call, review round 2).** Today `thin` means only "under the floors", and three client strings say so: the day tip's
+"under ${DAY_FLOOR_PTS} pts — not coloured" (`usageRatesFormat.ts` ~396), the Collecting tile's "not enough windows yet" (~578) and the `collecting` verdict
+hint "a verdict needs N separate days…" (~148–152). Under the new guards that is false for a thin span the separation could not price. So `shared/types.ts`
+gains an optional `thinReason?: 'floor' | 'mixed' | 'repriced' | 'unpriced'` on `ModelDayRate` and on `ModelRateRow` (server: `DriftRow`; for the side that made the row's
+verdict `thin`; current window wins when both are), present exactly when that span is `thin`: `floor` = under `BASELINE_FLOORS`/`CURRENT_FLOORS` or the
+residual floor; `mixed` = sensitivity cap; `repriced` = repriced-neighbour guard; `unpriced` = missing-rate guard. When several fire, precedence is
+`unpriced` > `repriced` > `mixed` > `floor` (the more specific reason wins). Types first, then server, then client. The three strings read
+the reason: `floor` keeps today's wording; the other three say the span "can't be separated from other models' spend" (`mixed`: "mostly another model's
+spend"; `repriced`: "another model's rate moved"; `unpriced`: "another model has no rate yet"); the Collecting tile's sub-line counts both kinds
+("not enough windows, or not separable"). Exact final wording is the builder's, within those meanings.
+
 ## What changes on the card
 
 - **The row's headline rate, its baseline, the drift deviation and the day strip** switch from the pooled ratio to the separated rate. These are the four
@@ -102,9 +113,16 @@ figures uncoloured and unjudged (as `dailyRates` already does).
   raw deviation (`driftRow`) and a pooled raw beside a separated weighted would mix estimators.
 - **The joint-fit figure (`fittedWeightedPerPct`) and its disclosure stay as they are.** `fitDeviationPct` keeps comparing it against whatever the row now
   publishes as its rate.
-- **The surface (interactive/headless) mix adjustment keeps working.** It is computed today over owned intervals; it must now be computed on the separated
-  basis too, or the verdict would mix two estimators. If doing that properly is large, the builder may keep the surface strata on the old owned-interval basis
-  for v1 **only** if it says so in the PR and the docs — the verdict must never silently mix the two.
+- **The surface (interactive/headless) mix adjustment moves to the separated basis; there is no owned-basis fallback.** `driftRow` judges
+  `mixAdjustedDeviationPct ?? weightedDev`, so leaving `mixAdjustedDeviation` owned-only would keep judging the 2026-11-09 shape at ~−48% → `drift`, the bug
+  this change removes (review round 2). Stratification, defined (author's call): in every usable interval, M's **surface** is the surface holding
+  ≥ `DOMINANCE` of M's **own** weighted tokens there (the ledger already records per-model surface counts, `sur[model]`, read by `joinIntervals`; today
+  `surfaceOf` asks this only of the owner). The interval's residual points go to that surface in proportion to M's expected share, exactly as in the span
+  formula, so each surface stratum gets `W_M,surface / (U − Σ_m W_m/rate_m)` over its own intervals; an interval where no surface reaches `DOMINANCE` stays in
+  the span total and in no stratum, as unattributed intervals do today. The same guards apply per stratum: a stratum that fails one is `thin` and drops out
+  of the mix adjustment, which then falls back to the plain separated deviation (`mixAdjustedDeviationPct` null), never to an owned-basis figure.
+- **`DriftRow.surfaces` (`surfaceRates`) moves with it**: each surface's rate is the stratum's separated rate above, so the surface breakdown the card shows
+  (`surfaceText`) and the adjustment the verdict uses are the same numbers.
 - **Labels** stay. No new tile, no new row. Copy that describes the old basis becomes false and is in scope (`client/src/lib/usageRatesFormat.ts`): the
   empty-cell text "no windows this model owned" (~line 389), the glossary's `weighted` entry (~441–446, which also gains the one line saying other models'
   spend is priced out), and the `windows` entry "one model owned (≥90% of tokens)" (~479–481).
@@ -137,8 +155,8 @@ figures uncoloured and unjudged (as `dailyRates` already does).
 
 - A second competing number on the card. The separated rate **replaces** the pooled one in the row; it does not sit beside it.
 - Hiding the guard. A span the separation cannot price must read `thin`, never quietly fall back to the pooled figure.
-- Any new outbound call, dependency, or file written. This is a pure change to `lib/usage-rate.ts`, `lib/usage-shape.ts`, `shared/types.ts` (only if a field
-  or state is added), the card, tests and docs.
+- Any new outbound call, dependency, or file written. This is a pure change to `lib/usage-rate.ts`, `lib/usage-shape.ts`, `shared/types.ts`, the card, tests
+  and docs.
 
 ## Verification the builder owes
 
@@ -157,6 +175,11 @@ Tests (node-assert, synthetic intervals, in the existing `test/usage-rate*.test.
    its move.
 6. **Missing-rate guard.** Another model with non-trivial spend and no fit → `thin`; the same model with trivial spend → ignored, span rated.
 7. **Residual floor.** Residual points under the floor or ≤ 0 → `thin`.
+7b. **Thin reason.** Tests 5 (s = 0.40), 5b, 6 and 7 each assert `thinReason` = `mixed`, `repriced`, `unpriced`, `floor` respectively, on both the
+    day cell and the row; a rated span has no `thinReason`; a span failing both the sensitivity cap and the residual floor reads `mixed`.
+7c. **Surface strata on the separated basis.** A span where M is Opus at 70% of weighted tokens beside Fable, M's own tokens ≥ 90% interactive in some
+    intervals and ≥ 90% headless in others: `surfaces` carries each stratum's separated rate (not the owned-only one), and `mixAdjustedDeviationPct` is
+    computed from those; a mixed span that the owned-only adjustment would call `drift` is not `drift` here.
 8. **Strip/verdict agreement.** The day cells' deviation and the row's deviation are both computed against the same separated baseline.
 
 Back-test, recorded in the PR with the command output:
@@ -170,7 +193,5 @@ Back-test, recorded in the PR with the command output:
 ## Left to the builder
 
 - Where the separated estimator lives inside `lib/usage-rate.ts` and how it reuses `usableForRate`, `fitRates` and the existing floors.
-- Whether `ModelDayState` needs a new reason for "cannot separate" or `thin` is enough (author leans to `thin` plus the existing evidence counters; if a new
-  state is added, `shared/types.ts` first, then server, then client, per the repo's rule).
 - The exact trivial-share threshold in the missing-rate guard, and the final `SUB_ERR` after the back-test.
 - The wording of the one explanatory line on the card.
