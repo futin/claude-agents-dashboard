@@ -77,8 +77,8 @@ export function run(): number {
 
   if (test('the generated modules load under plain node with no package.json, and parseJob works — a broken specifier fails here', () => {
     const entry = pathToFileURL(path.join(root, 'plugin', 'lib', 'routine-file.mjs')).href;
-    const file = ['---', 'cron: "0 9 * * *"', 'machines: [mac]', 'run: claude', '---', '/git-sync', ''].join('\n');
-    const script = `const m = await import(${JSON.stringify(entry)}); const r = m.parseJob('tiny', ${JSON.stringify(file)}); `
+    const file = ['---', 'cron: "0 9 * * *"', 'run: claude', '---', '/git-sync', ''].join('\n');
+    const script = `const m = await import(${JSON.stringify(entry)}); const r = m.parseJob('tiny', ${JSON.stringify(file)}, 'mac'); `
       + 'process.stdout.write(JSON.stringify({ errors: r.errors, cron: r.job && r.job.cron }));';
     const out = execFileSync(process.execPath, ['--input-type=module', '-e', script], { encoding: 'utf8', cwd: path.join(root, 'plugin') });
     assert.deepStrictEqual(JSON.parse(out), { errors: [], cron: '0 9 * * *' });

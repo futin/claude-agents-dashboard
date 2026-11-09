@@ -60,7 +60,7 @@ function Row({ row, ctl, folded, onFold, menu, setMenu }: {
   const line = withLate(lastLine, !row.running && row.last?.late === true);
   const [day, clock] = splitNext(nextLine);
   const dot = dotTone(pill, !pausedLook(job));
-  const runnable = ctl.owner && row.onThisMachine && job !== null;
+  const runnable = ctl.owner && job !== null;
   const busy = ctl.busy === `run:${row.name}`;
   const actRef = useRef<HTMLSpanElement>(null);
   const closeRef = useRef(setMenu);
@@ -101,17 +101,11 @@ function Row({ row, ctl, folded, onFold, menu, setMenu }: {
           <div className="rtn-sub">
             <span className="rtn-muted">{when}</span>
             {fan && <span className="git-chip dim rtn-mach">{ctl.phone ? fan.short : fan.long}</span>}
-            {job?.machines.map(m => (
-              <span key={m} className={`git-chip rtn-mach${m === ctl.machine ? ' rtn-here' : ''} rtn-hide`}>{m}</span>
-            ))}
-            {job && !row.onThisMachine && <span className="git-chip rtn-mach rtn-phone">{job.machines.join(' + ')} only</span>}
           </div>
-          {(row.onThisMachine || job === null) && (
-            <div className="rtn-phone rtn-pline">
-              {line && <span className="rtn-muted">{line}</span>}
-              <span className={chipClass(pill.tone)}>{pill.text}</span>
-            </div>
-          )}
+          <div className="rtn-phone rtn-pline">
+            {line && <span className="rtn-muted">{line}</span>}
+            <span className={chipClass(pill.tone)}>{pill.text}</span>
+          </div>
         </div>
         <span className="rtn-hide">{job ? <span className={chipClass(job.run === 'claude' ? 'run' : 'dim')}>{job.run}</span> : null}</span>
         <div className="rtn-cell rtn-hide">

@@ -26,8 +26,8 @@ const made: string[] = [];
 const HELD = 4_000_001;
 const WRAPPER_CMD = (job: string): string => `/opt/node/bin/node /plugin/lib/run-routine.mjs ${job} --trigger schedule`;
 
-const JOB = (extra: string[] = [], machines = 'mac'): string =>
-  ['---', 'cron: "0 9 * * *"', `machines: [${machines}]`, 'run: claude', ...extra, '---', '/git-sync', ''].join('\n');
+const JOB = (extra: string[] = []): string =>
+  ['---', 'cron: "0 9 * * *"', 'run: claude', ...extra, '---', '/git-sync', ''].join('\n');
 
 interface Fixture { home: string; routines: string; runs: string; locks: string; wrapper: string; config: Config; done: () => void }
 
@@ -305,14 +305,12 @@ export async function run(): Promise<number> {
     } finally { fx.done(); }
   }));
 
-  check(await test('a file that does not parse, or does not name this machine, is 409 without spawning (the wrapper would only log refused)', async () => {
+  check(await test('a file that does not parse is 409 without spawning (the wrapper would only log refused)', async () => {
     const fx = fixture();
     try {
       fs.writeFileSync(path.join(fx.routines, 'broken.md'), '---\ncron: nonsense\n---\nx\n');
-      fs.writeFileSync(path.join(fx.routines, 'elsewhere.md'), JOB([], 'wsl'));
       const calls = fakeSpawner();
       assert.deepStrictEqual(await runJob(fx.config, 'broken', undefined, NO_PROBE), { status: 409, error: 'invalid' });
-      assert.deepStrictEqual(await runJob(fx.config, 'elsewhere', undefined, NO_PROBE), { status: 409, error: 'not-this-machine' });
       assert.strictEqual(calls.length, 0);
     } finally { fx.done(); }
   }));

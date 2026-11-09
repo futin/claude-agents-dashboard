@@ -100,12 +100,11 @@ function validOnly(only: unknown): only is string[] {
 export async function runJob(config: Config, name: string, only?: unknown, probe: Probe = createProbe()): Promise<RunResult> {
   const pins = only === undefined ? [] : validOnly(only) ? only : null;
   if (pins === null) return { status: 400, error: 'bad-only' };
-  const stored = SAFE_NAME.test(name) ? readJobs(routineDirs(config).routines).find(j => j.name === name) : undefined;
+  const machine = machineName(config).name;
+  const stored = SAFE_NAME.test(name) ? readJobs(routineDirs(config).routines, machine).find(j => j.name === name) : undefined;
   if (!stored) return { status: 404 };
   // The wrapper would refuse both of these and a 2 s wait for a log line that never comes would then read as a slow success.
   if (!stored.job) return { status: 409, error: 'invalid' };
-  const machine = machineName(config).name;
-  if (!stored.job.machines.includes(machine)) return { status: 409, error: 'not-this-machine' };
   if (liveLockPid(config, name, probe) !== null) return { status: 409, error: 'already-running' };
   const wrapper = installedWrapper();
   if (!wrapper) return { status: 409, error: 'no-plugin' };

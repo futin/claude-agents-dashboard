@@ -149,9 +149,8 @@ class Wrapper {
     try { text = fs.readFileSync(path.join(this.dir, `${this.job}.md`), 'utf8'); } catch (e) {
       return { why: e.code === 'ENOENT' ? 'file gone' : `invalid: 0: ${e.code ?? 'unreadable'}` };
     }
-    const { job, errors } = parseJob(this.job, text);
+    const { job, errors } = parseJob(this.job, text, this.machine);
     if (!job) return { why: `invalid: ${errors[0].line}: ${errors[0].message}` };
-    if (!job.machines.includes(this.machine)) return { why: 'not this machine' };
     if (!job.enabled && this.trigger === 'schedule') return { why: 'disabled' };
     return { job };
   }

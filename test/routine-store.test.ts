@@ -53,8 +53,8 @@ function waitFor(cond: () => boolean, ms: number): boolean {
   return cond();
 }
 
-const GOOD = ['---', 'cron: "0 9 * * *"', 'machines: [mac]', 'run: claude', '---', '/git-sync', ''].join('\n');
-const SHELL = (body: string): string => ['---', 'cron: "0 9 * * *"', 'machines: [mac]', 'run: shell', '---', '```bash', body, '```', ''].join('\n');
+const GOOD = ['---', 'cron: "0 9 * * *"', 'run: claude', '---', '/git-sync', ''].join('\n');
+const SHELL = (body: string): string => ['---', 'cron: "0 9 * * *"', 'run: shell', '---', '```bash', body, '```', ''].join('\n');
 
 /** A probe over a table: pid -> command line (null = alive but unreadable); a pid absent from the table is dead. */
 function fakeProbe(table: Record<number, string | null>): Probe {
@@ -84,7 +84,7 @@ export function run(): number {
     fs.writeFileSync(path.join(dir, 'notes.txt'), GOOD);
     fs.writeFileSync(path.join(dir, '.hidden.md'), GOOD);
     fs.mkdirSync(path.join(dir, 'sub.md'));
-    const jobs = readJobs(dir);
+    const jobs = readJobs(dir, 'mac');
     assert.deepStrictEqual(jobs.map(j => j.name), ['a-job', 'b-job', 'broken']);
     assert.strictEqual(jobs.filter(j => j.job !== null).length, 2);
     const bad = jobs[2];
@@ -96,7 +96,7 @@ export function run(): number {
   });
 
   t('readJobs: a missing folder is an empty list', () => {
-    assert.deepStrictEqual(readJobs(path.join(tmp(), 'nope')), []);
+    assert.deepStrictEqual(readJobs(path.join(tmp(), 'nope'), 'mac'), []);
   });
 
   t('writeJob: replaces, leaves no temp file, creates the folder', () => {
@@ -129,7 +129,7 @@ export function run(): number {
     writeJob(dir, 'gone', GOOD);
     assert.strictEqual(deleteJob(dir, 'gone'), true);
     assert.strictEqual(deleteJob(dir, 'gone'), false);
-    assert.deepStrictEqual(readJobs(dir), []);
+    assert.deepStrictEqual(readJobs(dir, 'mac'), []);
   });
 
   t('writeJob: a reader in another process never sees a partial 1 MB file', () => {

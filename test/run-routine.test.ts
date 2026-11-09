@@ -67,11 +67,11 @@ function writeJob(fx: Fx, name: string, fm: string[], body: string): void {
 }
 
 function shellJob(fx: Fx, name: string, script: string, fm: string[] = []): void {
-  writeJob(fx, name, ['cron: "0 22 * * *"', 'machines: [mac]', 'run: shell', ...fm], ['```bash', script, '```'].join('\n'));
+  writeJob(fx, name, ['cron: "0 22 * * *"', 'run: shell', ...fm], ['```bash', script, '```'].join('\n'));
 }
 
 function claudeJob(fx: Fx, name: string, fm: string[] = [], body = 'Do the thing.\nThen stop.'): void {
-  writeJob(fx, name, ['cron: "0 22 * * *"', 'machines: [mac]', 'run: claude', ...fm], body);
+  writeJob(fx, name, ['cron: "0 22 * * *"', 'run: claude', ...fm], body);
 }
 
 function writePins(fx: Fx, pins: Array<{ dirName: string; name: string; path: string | null; listed: boolean }>): void {
@@ -417,12 +417,10 @@ export async function run(): Promise<number> {
   // The refusal matrix: each a `refused` record, no `start`, exit 0.
   const refusals: Array<[string, 'schedule' | 'manual', (fx: Fx) => void, string | RegExp]> = [
     ['file deleted', 'schedule', () => {}, 'file gone'],
-    ['invalid file', 'schedule', (fx) => writeJob(fx, 'job', ['cron: "0 22 * * *"', 'machines: [mac]', 'run: bogus'], 'x'), 'invalid: 4: run must be shell or claude'],
+    ['invalid file', 'schedule', (fx) => writeJob(fx, 'job', ['cron: "0 22 * * *"', 'run: bogus'], 'x'), 'invalid: 3: run must be shell or claude'],
     ['disabled', 'schedule', (fx) => shellJob(fx, 'job', 'true', ['enabled: false']), 'disabled'],
-    ['machines: [wsl] on mac', 'schedule', (fx) => writeJob(fx, 'job', ['cron: "0 22 * * *"', 'machines: [wsl]', 'run: shell'], '```bash\ntrue\n```'), 'not this machine'],
     ['file deleted', 'manual', () => {}, 'file gone'],
-    ['invalid file', 'manual', (fx) => writeJob(fx, 'job', ['cron: "0 22 * * *"', 'machines: [mac]', 'run: bogus'], 'x'), 'invalid: 4: run must be shell or claude'],
-    ['machines: [wsl] on mac', 'manual', (fx) => writeJob(fx, 'job', ['cron: "0 22 * * *"', 'machines: [wsl]', 'run: shell'], '```bash\ntrue\n```'), 'not this machine'],
+    ['invalid file', 'manual', (fx) => writeJob(fx, 'job', ['cron: "0 22 * * *"', 'run: bogus'], 'x'), 'invalid: 3: run must be shell or claude'],
   ];
   for (const [what, trigger, make, why] of refusals) {
     tally(await test(`${trigger} + ${what} → refused why "${why}", no start, exit 0`, () => {
@@ -542,7 +540,7 @@ export async function run(): Promise<number> {
     for (const trigger of ['schedule', 'manual']) assert.strictEqual(wrap(fx, ['think', '--trigger', trigger]).code, 0);
     const recs = log(fx);
     assert.deepStrictEqual(kinds(recs), ['refused', 'refused']);
-    for (const rec of recs) assert.strictEqual(rec.why, 'invalid: 5: permission-mode must be plan, acceptEdits or auto');
+    for (const rec of recs) assert.strictEqual(rec.why, 'invalid: 4: permission-mode must be plan, acceptEdits or auto');
     assert.ok(!fs.existsSync(path.join(fx.rec, 'argv')), 'claude never launched');
   }));
 
@@ -686,7 +684,7 @@ export async function run(): Promise<number> {
     const fx = setup();
     const slot = new Date(Date.now() - 20 * 60_000);
     slot.setSeconds(0, 0);
-    writeJob(fx, 'late', [`cron: "${slot.getMinutes()} ${slot.getHours()} * * *"`, 'machines: [mac]', 'run: shell'], '```bash\ntrue\n```');
+    writeJob(fx, 'late', [`cron: "${slot.getMinutes()} ${slot.getHours()} * * *"`, 'run: shell'], '```bash\ntrue\n```');
     assert.strictEqual(wrap(fx, ['late', '--trigger', 'schedule']).code, 0);
     const start = log(fx)[0];
     assert.strictEqual(start.trigger, 'schedule');
@@ -696,7 +694,7 @@ export async function run(): Promise<number> {
 
   tally(await test('--trigger schedule on a `cron: manual` job runs and records no slot and no late flag', () => {
     const fx = setup();
-    writeJob(fx, 'hand', ['cron: manual', 'machines: [mac]', 'run: shell'], '```bash\ntrue\n```');
+    writeJob(fx, 'hand', ['cron: manual', 'run: shell'], '```bash\ntrue\n```');
     assert.strictEqual(wrap(fx, ['hand', '--trigger', 'schedule']).code, 0);
     const start = log(fx)[0];
     assert.strictEqual(start.kind, 'start');
@@ -706,7 +704,7 @@ export async function run(): Promise<number> {
 
   tally(await test('mirror: --trigger schedule on time → slot set, late false', () => {
     const fx = setup();
-    writeJob(fx, 'prompt', ['cron: "* * * * *"', 'machines: [mac]', 'run: shell'], '```bash\ntrue\n```');
+    writeJob(fx, 'prompt', ['cron: "* * * * *"', 'run: shell'], '```bash\ntrue\n```');
     assert.strictEqual(wrap(fx, ['prompt', '--trigger', 'schedule']).code, 0);
     const start = log(fx)[0];
     assert.ok(!Number.isNaN(Date.parse(start.slot)));
@@ -716,7 +714,7 @@ export async function run(): Promise<number> {
   tally(await test('machine: detected when ROUTINE_MACHINE is unset or not mac|wsl; ROUTINES_DIR defaults to ~/claude-global/routines', () => {
     const fx = setup();
     const detected = process.platform === 'darwin' ? 'mac' : 'wsl';
-    writeJob(fx, 'both', ['cron: "0 22 * * *"', 'machines: [mac, wsl]', 'run: shell'], '```bash\ntrue\n```');
+    writeJob(fx, 'both', ['cron: "0 22 * * *"', 'run: shell'], '```bash\ntrue\n```');
     assert.strictEqual(wrap(fx, ['both', '--trigger', 'manual'], { ROUTINE_MACHINE: undefined, ROUTINES_DIR: undefined }).code, 0);
     assert.strictEqual(wrap(fx, ['both', '--trigger', 'manual'], { ROUTINE_MACHINE: 'linux' }).code, 0);
     const recs = log(fx, detected);
@@ -727,7 +725,7 @@ export async function run(): Promise<number> {
     const fx = setup();
     const old = path.join(fx.home, 'old-jobs');
     fs.mkdirSync(old);
-    fs.writeFileSync(path.join(old, 'both.md'), ['---', 'cron: "0 22 * * *"', 'machines: [mac, wsl]', 'run: shell', '---', '```bash\ntrue\n```', ''].join('\n'));
+    fs.writeFileSync(path.join(old, 'both.md'), ['---', 'cron: "0 22 * * *"', 'run: shell', '---', '```bash\ntrue\n```', ''].join('\n'));
     const r = wrap(fx, ['both', '--trigger', 'manual'], { ROUTINES_DIR: undefined, ROUTINE_MACHINE: undefined, SCHEDULES_DIR: old, SCHEDULE_MACHINE: 'wsl' });
     assert.strictEqual(r.code, 0, r.stderr);
     assert.deepStrictEqual(kinds(log(fx, 'wsl')), ['start', 'step-start', 'step-end', 'end']);
@@ -740,19 +738,28 @@ export async function run(): Promise<number> {
     const oldState = path.join(fx.home, '.claude', 'schedules');
     fs.mkdirSync(oldDir, { recursive: true });
     fs.mkdirSync(oldState, { recursive: true });
-    fs.writeFileSync(path.join(oldDir, 'old.md'), ['---', 'cron: "0 22 * * *"', 'machines: [mac]', 'run: shell', '---', '```bash\ntrue\n```', ''].join('\n'));
+    fs.writeFileSync(path.join(oldDir, 'old.md'), ['---', 'cron: "0 22 * * *"', 'run: shell', '---', '```bash\ntrue\n```', ''].join('\n'));
     assert.strictEqual(wrap(fx, ['old', '--trigger', 'manual'], { ROUTINES_DIR: undefined }).code, 0);
     assert.deepStrictEqual(kinds(log({ ...fx, state: oldState })), ['start', 'step-start', 'step-end', 'end']);
     assert.strictEqual(fs.existsSync(fx.state), false);
     assert.strictEqual(fs.existsSync(fx.dir), false);
   }));
 
-  tally(await test('ROUTINE_MACHINE=wsl writes runs/wsl.jsonl and refuses a mac-only file there', () => {
+  tally(await test('ROUTINE_MACHINE=wsl writes runs/wsl.jsonl and nothing to mac.jsonl', () => {
     const fx = setup();
-    shellJob(fx, 'maconly', 'true');
-    assert.strictEqual(wrap(fx, ['maconly', '--trigger', 'manual'], { ROUTINE_MACHINE: 'wsl' }).code, 0);
-    assert.deepStrictEqual(log(fx, 'wsl').map((r) => r.why), ['not this machine']);
+    shellJob(fx, 'anywhere', 'true');
+    assert.strictEqual(wrap(fx, ['anywhere', '--trigger', 'manual'], { ROUTINE_MACHINE: 'wsl' }).code, 0);
+    assert.deepStrictEqual(kinds(log(fx, 'wsl')), ['start', 'step-start', 'step-end', 'end']);
     assert.deepStrictEqual(log(fx, 'mac'), []);
+  }));
+
+  tally(await test('a file still carrying machines: is refused invalid', () => {
+    const fx = setup();
+    writeJob(fx, 'job', ['cron: "0 22 * * *"', 'machines: [mac]', 'run: shell'], '```bash\ntrue\n```');
+    assert.strictEqual(wrap(fx, ['job', '--trigger', 'manual']).code, 0);
+    const recs = log(fx);
+    assert.deepStrictEqual(kinds(recs), ['refused']);
+    assert.ok(/^invalid: /.test(String(recs[0].why)) && String(recs[0].why).includes('machines'), String(recs[0].why));
   }));
 
   tally(await test('a job name outside [a-z0-9-]+ is a usage error: exit 64, nothing logged, no path touched', () => {

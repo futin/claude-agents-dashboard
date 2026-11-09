@@ -30,13 +30,13 @@ const UID = 501;
 const NODE = '/opt/node/bin/node';
 const SEVEN = ['PATH', 'HOME', 'CLAUDE_BIN', 'SPAWN_MAX_PERMISSION', 'SYNC_PERMISSION_MODE', 'ROUTINE_MACHINE', 'ROUTINES_DIR'];
 
-const SHELL = (machines = 'mac, wsl', extra: string[] = []): string =>
-  ['---', 'cron: "0 7 * * 1-5"', `machines: [${machines}]`, 'run: shell', ...extra, '---', '```bash', 'echo hi', '```', ''].join('\n');
-const MANUAL = ['---', 'cron: manual', 'machines: [mac, wsl]', 'run: shell', '---', '```bash', 'echo hi', '```', ''].join('\n');
-const CLAUDE = ['---', 'cron: "0 9 * * *"', 'machines: [mac, wsl]', 'run: claude', '---', '/git-sync', ''].join('\n');
+const SHELL = (extra: string[] = []): string =>
+  ['---', 'cron: "0 7 * * 1-5"', 'run: shell', ...extra, '---', '```bash', 'echo hi', '```', ''].join('\n');
+const MANUAL = ['---', 'cron: manual', 'run: shell', '---', '```bash', 'echo hi', '```', ''].join('\n');
+const CLAUDE = ['---', 'cron: "0 9 * * *"', 'run: claude', '---', '/git-sync', ''].join('\n');
 
 function job(name: string, text: string): RoutineJob {
-  const p = parseJob(name, text);
+  const p = parseJob(name, text, 'mac');
   assert.ok(p.job, `fixture ${name} should parse: ${JSON.stringify(p.errors)}`);
   return p.job;
 }
@@ -298,7 +298,7 @@ export async function run(): Promise<number> {
   check(await test('mac: a disabled file → remove; apply boots it out and deletes the plist', async () => {
     await withWorld({}, async (w) => {
       await installed(w);
-      w.write('pull-pins', SHELL('mac, wsl', ['enabled: false']));
+      w.write('pull-pins', SHELL(['enabled: false']));
       assert.deepStrictEqual(actions(await planReconcile(w.cfg)), ['pull-pins:remove:disabled']);
       w.fake.calls = [];
       const r = await applyReconcile(w.cfg);
@@ -337,16 +337,15 @@ export async function run(): Promise<number> {
 
   check(await test('scheduled: enabled and not manual', () => {
     assert.strictEqual(scheduled(job('a', SHELL())), true);
-    assert.strictEqual(scheduled(job('a', SHELL('mac, wsl', ['enabled: false']))), false);
+    assert.strictEqual(scheduled(job('a', SHELL(['enabled: false']))), false);
     assert.strictEqual(scheduled(job('a', MANUAL)), false);
     assert.strictEqual(scheduled(job('a', MANUAL.replace('run: shell', 'run: shell\nenabled: false'))), false);
   }));
 
-  check(await test('mac: a file naming only wsl → remove (not this machine); a deleted file → remove (file gone)', async () => {
+  check(await test('mac: an installed label with no file behind it → remove (file gone)', async () => {
     await withWorld({}, async (w) => {
       await installed(w);
-      w.write('pull-pins', SHELL('wsl'));
-      assert.deepStrictEqual(actions(await planReconcile(w.cfg)), ['pull-pins:remove:not this machine']);
+      w.write('pull-pins', SHELL());
       fs.rmSync(path.join(w.dir, 'pull-pins.md'));
       assert.deepStrictEqual(actions(await planReconcile(w.cfg)), ['pull-pins:remove:file gone']);
     });
@@ -425,7 +424,7 @@ export async function run(): Promise<number> {
 
   check(await test('a foreach job whose pin is absent still installs (the wrapper skips it at run time)', async () => {
     await withWorld({}, async (w) => {
-      w.write('lookout-pull', SHELL('mac', ['foreach: [lookout]']));
+      w.write('lookout-pull', SHELL(['foreach: [lookout]']));
       const r = await applyReconcile(w.cfg);
       assert.strictEqual(r.state, 'in-sync', JSON.stringify(r));
       assert.ok(fs.existsSync(w.plist('lookout-pull')));
@@ -704,7 +703,7 @@ export async function run(): Promise<number> {
   check(await test('three applyReconcile calls at once → one run, then one shared trailing run, never interleaved', async () => {
     await withWorld({}, async (w) => {
       w.write('pull-pins', SHELL());
-      w.write('other-job', SHELL('mac'));
+      w.write('other-job', SHELL());
       w.fake.delayMs = 5;
       const a = applyReconcile(w.cfg);
       const b = applyReconcile(w.cfg);

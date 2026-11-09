@@ -115,7 +115,7 @@ function StepRow({ step, run, row, ctl }: { step: RoutineStep; run: RoutineRun; 
   const pill = stepPill(step, run.state);
   const failed = step.outcome === 'failed' || step.outcome === 'timeout';
   const err = step.outcome !== null && step.outcome !== 'ok' ? stepErrLine(step) : null;
-  const again = failed && step.repo !== null && row !== null && ctl.owner && row.onThisMachine && row.job !== null && !row.running;
+  const again = failed && step.repo !== null && row !== null && ctl.owner && row.job !== null && !row.running;
   return (
     <div className="rtn-runrow">
       <span />

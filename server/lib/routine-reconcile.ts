@@ -208,13 +208,12 @@ export function scheduled(job: RoutineJob): boolean {
   return job.enabled && !isManualCron(job.cron);
 }
 
-/** Why a file that exists is not desired on `machine`, or null when it is. */
-function notDesired(stored: StoredJob, machine: 'mac' | 'wsl', claudeBin: string): string | null {
+/** Why a file that exists is not desired on this machine, or null when it is. */
+function notDesired(stored: StoredJob, claudeBin: string): string | null {
   const job = stored.job;
   if (!job || stored.errors.length > 0) return 'invalid';
   if (isManualCron(job.cron)) return 'manual';
   if (!job.enabled) return 'disabled';
-  if (!job.machines.includes(machine)) return 'not this machine';
   if (job.run === 'claude' && claudeBin === '') return 'claude cli not configured';
   return null;
 }
@@ -261,8 +260,8 @@ async function plan(config: Config): Promise<PlanContext | ReconcileReport> {
 
   const desired = new Map<string, Desired>();
   const skipped = new Map<string, string>();
-  for (const stored of readJobs(dirs.routines)) {
-    let why = notDesired(stored, machine.name, config.claudeBin);
+  for (const stored of readJobs(dirs.routines, machine.name)) {
+    let why = notDesired(stored, config.claudeBin);
     let text = '';
     if (!why) {
       try { text = render(stored.job as RoutineJob); } catch { why = 'invalid'; }

@@ -7,7 +7,7 @@
 import { DEFAULT_TIMEOUT_MS } from '../../shared/routine-file.js';
 import type { RoutineRun } from '../../shared/types.js';
 import type { Config } from './config.js';
-import { migrateLegacyState, routineDirs } from './routine-config.js';
+import { migrateLegacyState, machineName, routineDirs } from './routine-config.js';
 import { createLogReader, rotateIfLarge } from './routine-log.js';
 import { sendRoutineEvent } from './notify.js';
 import { notifyRoutineRuns, seedRoutineNotify } from './routine-notify.js';
@@ -69,7 +69,7 @@ function timeoutMsFor(config: Config): (job: string) => number {
     const now = Date.now();
     if (!timeouts || timeouts.dir !== dir || now - timeouts.at > TIMEOUTS_TTL_MS) {
       const byJob = new Map<string, number>();
-      for (const s of readJobs(dir)) if (s.job) byJob.set(s.name, s.job.timeoutMs);
+      for (const s of readJobs(dir, machineName(config).name)) if (s.job) byJob.set(s.name, s.job.timeoutMs);
       timeouts = { dir, at: now, byJob };
     }
     const ms = timeouts.byJob.get(job);

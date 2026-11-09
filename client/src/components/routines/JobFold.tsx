@@ -69,7 +69,7 @@ function StepLine({ step, run, row, ctl }: { step: RoutineStep; run: RoutineRun;
   const pill = stepPill(step, run.state);
   const err = step.outcome !== null && step.outcome !== 'ok' && step.outcome !== 'skipped' ? stepErrLine(step) : step.outcome === 'skipped' ? step.why : null;
   const failed = step.outcome === 'failed' || step.outcome === 'timeout';
-  const again = failed && step.repo !== null && row !== null && ctl.owner && row.onThisMachine && row.job !== null && !row.running;
+  const again = failed && step.repo !== null && row !== null && ctl.owner && row.job !== null && !row.running;
   const name = step.repo ?? step.cwd?.replace(/\/+$/, '').split('/').pop() ?? run.job;
   const took = step.ms !== null ? formatStat(step.ms, 'ms') : run.state === 'running' && step.outcome === null ? formatStat(ctl.now.getTime() - Date.parse(step.startedAt), 'ms') : '—';
 

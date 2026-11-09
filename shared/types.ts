@@ -2239,7 +2239,6 @@ export interface RoutineJob {
   name: string;
   /** Five-field cron or `manual`, local time of the machine that runs it. */
   cron: string;
-  machines: ('mac' | 'wsl')[];
   run: 'shell' | 'claude';
   /** `pinned` = every pinned repo, a list = only those pins (by name or dirName), null = one step in `cwd`. */
   foreach: 'pinned' | string[] | null;
@@ -2328,7 +2327,7 @@ export interface RoutineStats {
  * The `error` of a 409 from `POST /api/routines/<name>/run` (`server/lib/routine-run.ts`). One union for both sides, so a code the server adds is a type
  * error in the client's `writeFailureText` rather than a bare "failed (HTTP 409)".
  */
-export type RoutineRunConflict = 'already-running' | 'no-plugin' | 'invalid' | 'not-this-machine';
+export type RoutineRunConflict = 'already-running' | 'no-plugin' | 'invalid';
 
 /** Reconcile's verdict, as the toolbar chip reads it; `not-owner` is what every server but the owner reports (spec §Owning server). */
 export type ReconcileState = 'in-sync' | 'drift' | 'failed' | 'pending' | 'not-owner' | 'no-plugin' | 'cron-down' | 'bad-machine' | 'no-claude';
@@ -2347,11 +2346,9 @@ export interface RoutineFile {
 
 /** One ledger row of `GET /api/routines`: the file plus what this machine knows about it. */
 export interface RoutineJobRow extends RoutineFile {
-  /** The job names this machine in `machines:`. */
-  onThisMachine: boolean;
   /** The OS scheduler holds a job for it now (an older version counts). Only an owner can tell: false whenever the report could not be planned. */
   installed: boolean;
-  /** The next fire, ISO; null for an invalid, paused or other-machine job. */
+  /** The next fire, ISO; null for an invalid or paused job. */
   nextAt: string | null;
   /** The newest run that is not running (a refusal included). */
   last: RoutineRun | null;
