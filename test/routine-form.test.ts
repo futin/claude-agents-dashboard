@@ -144,7 +144,7 @@ export function run(): number {
     assert.deepStrictEqual(r.summary({ mode: 'cwd', picks: [], cwd: '~/x' }, ctx), { text: '~/x', tone: 'set' });
     const neither = r.read('---\nrun: shell\n---\n');
     assert.deepStrictEqual(neither, { mode: 'cwd', picks: [], cwd: '' });
-    assert.deepStrictEqual(r.summary({ mode: 'cwd', picks: [], cwd: '' }, ctx), { text: "Routines folder's parent", tone: 'dim' });
+    assert.deepStrictEqual(r.summary({ mode: 'cwd', picks: [], cwd: '' }, ctx), { text: 'Your home folder', tone: 'dim' });
     assert.strictEqual(r.read('---\nforeach: everything\n---\n'), UNREADABLE);
     // A value holding ` #` would read back cut at the comment, so it is written quoted and reads back whole.
     const hashed = r.write('---\nrun: shell\n---\n', { mode: 'cwd', picks: [], cwd: '~/a #b' });

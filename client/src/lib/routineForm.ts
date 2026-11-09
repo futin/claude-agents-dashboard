@@ -229,7 +229,7 @@ const repos: FieldDef<Repos> = {
       if (v.picks.length === 0) return { text: 'No repos picked', tone: 'err' };
       return { text: `${v.picks.length} repo${v.picks.length === 1 ? '' : 's'}: ${v.picks.join(', ')}`, tone: 'set' };
     }
-    return v.cwd ? { text: v.cwd, tone: 'set' } : { text: "Routines folder's parent", tone: 'dim' };
+    return v.cwd ? { text: v.cwd, tone: 'set' } : { text: 'Your home folder', tone: 'dim' };
   },
 };
 
