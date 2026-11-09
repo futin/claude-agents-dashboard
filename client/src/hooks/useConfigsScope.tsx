@@ -1,5 +1,6 @@
 import { createContext, useContext, useMemo, useState, type ReactNode } from 'react';
 
+import { pinnedProjects } from '../lib/configsEntries';
 import { useConfigsIndex, type IndexState } from './useConfigs';
 import { usePersistedState } from './usePersistedState';
 import type { ProjectRef } from '../../../shared/types';
@@ -27,11 +28,11 @@ import type { ProjectRef } from '../../../shared/types';
  *   ↻ in the band is the control that does, and config changes over days.
  */
 export interface ConfigsScopeState extends IndexState {
-  /** Recently-active projects for the rail's tree; empty until the index lands. */
+  /** Pinned projects for the rail's tree (`pinnedProjects`); empty until the index lands. */
   projects: ProjectRef[];
   /**
    * Resolved scope id: `'global'`, or a `dirName` that still exists in the
-   * index. A persisted project that aged out of the recent list resolves back
+   * index's pinned projects. A persisted project that was unpinned or aged out resolves back
    * to `'global'` during render — no effect, same as the old page-local state.
    */
   scope: string;
@@ -49,7 +50,7 @@ export function ConfigsScopeProvider({ active, children }: { active: boolean; ch
   const { index, loading, error } = useConfigsIndex(refreshKey, active);
 
   const value = useMemo<ConfigsScopeState>(() => {
-    const projects = index !== null ? index.projects : [];
+    const projects = index !== null ? pinnedProjects(index.projects) : [];
     const known = scopeSel === 'global' || projects.some(p => p.dirName === scopeSel);
     return {
       index, loading, error,

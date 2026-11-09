@@ -93,7 +93,7 @@ const SUBNAV: Partial<Record<Section, SubNav<'usageTab'> | SubNav<'managementTab
 };
 
 /**
- * Claude Configs' sub-nav: Global + every recently-active or pinned project (DESIGN.md
+ * Claude Configs' sub-nav: Global + every pinned project (DESIGN.md
  * §8.5). Unlike Usage and Settings this tree is *data* — its rows come from
  * `GET /api/configs`, shared with the page through `ConfigsScopeProvider`
  * so the index is fetched exactly once. Mounted from the first paint now that
