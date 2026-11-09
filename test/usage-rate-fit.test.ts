@@ -14,11 +14,16 @@ import type { TokenCounts } from '../server/lib/usage-ledger.js';
 import {
   CURRENT_FLOORS,
   SPLIT_MIN_INDEPENDENT_SHARE,
+  SEPARATION_S_CAP,
+  SUB_ERR,
   explainRates,
   fitRates,
-  rateFor
+  poolRate,
+  rateFor,
+  separatedRate
 } from '../server/lib/usage-rate.js';
-import type { Interval, RateFloors } from '../server/lib/usage-rate.js';
+import type { Interval, RateFloors, SeparationContext } from '../server/lib/usage-rate.js';
+import type { ModelRateSurface } from '../shared/types.js';
 
 function test(name: string, fn: () => void): boolean {
   try { fn(); console.log('  ✓ ' + name); return true; }
@@ -264,6 +269,263 @@ export function run(): number {
     assert.strictEqual(included.refusal, 'thin-evidence', 'one interval is under the floor either way');
     assert.strictEqual(at(NOW + MIN, FIT_FROM, NOW + MIN), undefined,
       'an interval at exactly untilMs is outside it, so B is not a model of this fit at all');
+  })) p++; else f++;
+
+  // ── separatedRate: one model's tokens against the points left once the others are priced out ──
+
+  /** Within ±1% — the brief's tolerance for every separated figure. */
+  const within1 = (actual: number | null | undefined, expected: number, what: string): void => {
+    assert.ok(actual !== null && actual !== undefined, `${what}: got ${actual}`);
+    const err = Math.abs(actual - expected) / expected;
+    assert.ok(err <= 0.01, `${what}: got ${actual}, expected ${expected} (rel err ${err})`);
+  };
+  /** A hand-built interval: weighted tokens per model, `kind` set by hand (idle when dUtil is 0, else owner/mixed). */
+  const sv = (o: {
+    toT: number; w: Record<string, number>; dUtil: number; kind?: Interval['kind'];
+    surface?: ModelRateSurface; modelSurfaces?: Record<string, ModelRateSurface>;
+  }): Interval => {
+    const tok: Record<string, TokenCounts> = {};
+    for (const [model, w] of Object.entries(o.w)) tok[model] = wtok(w);
+    const names = Object.keys(o.w);
+    const kind = o.kind ?? (o.dUtil === 0 ? 'idle' : names.length === 1 ? { model: names[0] } : 'mixed');
+    const out: Interval = { fromT: o.toT - MIN, toT: o.toT, dUtil: o.dUtil, tok, req: {}, reqUsable: true, kind };
+    if (o.surface) out.surface = o.surface;
+    if (o.modelSurfaces) out.modelSurfaces = o.modelSurfaces;
+    return out;
+  };
+  const ctxOf = (horizon: Record<string, number>, current: Record<string, number> = {}): SeparationContext =>
+    ({ horizon: new Map(Object.entries(horizon)), current: new Map(Object.entries(current)) });
+  const SINCE = NOW - 10 * DAY;
+  const UNTIL = Number.POSITIVE_INFINITY;
+  const D0 = NOW - 2 * DAY;
+  const t = (i: number, day = 0): number => D0 + day * DAY + i * MIN;
+  const sep = (ivs: Interval[], model: string, ctx: SeparationContext, opts: Partial<{
+    floors: RateFloors; surface: ModelRateSurface; checkRepriced: boolean;
+  }> = {}) => separatedRate(ivs, model, SINCE, UNTIL, ctx, { floors: NO_FLOOR, ...opts });
+
+  /** [2]'s 20 mixed intervals: A 1.5M (3 pts at 500k) + B 100k (1 pt at 100k), dUtil 4. */
+  const knownMix = (): Interval[] =>
+    Array.from({ length: 20 }, (_, i) => sv({ toT: t(i), w: { A: 1_500_000, B: 100_000 }, dUtil: 4 }));
+  /** [3]: 10 pairs of an idle interval carrying B 100k, then A-owned 2M holding the carried point (dUtil 5). */
+  const carryOver = (): Interval[] => {
+    const out: Interval[] = [];
+    for (let i = 0; i < 10; i++) {
+      out.push(sv({ toT: t(2 * i), w: { B: 100_000 }, dUtil: 0 }));
+      out.push(sv({ toT: t(2 * i + 1), w: { A: 2_000_000 }, dUtil: 5 }));
+    }
+    return out;
+  };
+
+  if (test('separated [1]: a pure span is W/ΣdUtil with idle added back, and poolRate exactly without idle', () => {
+    const owned = Array.from({ length: 5 }, (_, i) => sv({ toT: t(i), w: { A: 1_000_000 }, dUtil: 2 }));
+    const idle = Array.from({ length: 3 }, (_, i) => sv({ toT: t(10 + i), w: { A: 200_000 }, dUtil: 0 }));
+    const ctx = ctxOf({});
+    const pure = sep(owned, 'A', ctx)!;
+    assert.strictEqual(pure.weightedPerPct, poolRate(owned, 'A', SINCE, UNTIL)!.weightedPerPct);
+    assert.strictEqual(pure.thinReason, null);
+    const withIdle = sep([...owned, ...idle], 'A', ctx)!;
+    within1(withIdle.weightedPerPct, 5_600_000 / 10, 'idle tokens added back');
+    assert.strictEqual(withIdle.rawPerPct, withIdle.weightedPerPct, 'all-`in` fixture: raw = weighted');
+    assert.strictEqual(withIdle.thinReason, null);
+  })) p++; else f++;
+
+  if (test('separated [2]: a known mix recovers A at 500k where poolRate has nothing', () => {
+    const ivs = knownMix();
+    const r = sep(ivs, 'A', ctxOf({ B: 100_000 }))!;
+    within1(r.weightedPerPct, 500_000, 'A separated');
+    within1(r.pricedOutShare, 0.25, 'priced-out share');
+    assert.strictEqual(r.thinReason, null);
+    assert.strictEqual(poolRate(ivs, 'A', SINCE, UNTIL), null, 'no owned interval');
+  })) p++; else f++;
+
+  if (test('separated [2]: carried points beside the mix still give 500k while poolRate reads 400k', () => {
+    const ivs = knownMix();
+    for (let i = 0; i < 5; i++) {
+      ivs.push(sv({ toT: t(100 + 2 * i), w: { B: 100_000 }, dUtil: 0 }));
+      ivs.push(sv({ toT: t(101 + 2 * i), w: { A: 2_000_000 }, dUtil: 5 }));
+    }
+    within1(poolRate(ivs, 'A', SINCE, UNTIL)!.weightedPerPct, 400_000, 'poolRate');
+    const r = sep(ivs, 'A', ctxOf({ B: 100_000 }))!;
+    within1(r.weightedPerPct, 40_000_000 / 80, 'W_A 40M over U 105 − 25 priced out');
+    within1(r.pricedOutShare, 25 / 105, 'priced-out share');
+  })) p++; else f++;
+
+  if (test('separated [3]: carry-over onto A-owned ticks reads 400k pooled, 500k separated', () => {
+    const ivs = carryOver();
+    within1(poolRate(ivs, 'A', SINCE, UNTIL)!.weightedPerPct, 400_000, 'poolRate');
+    const r = sep(ivs, 'A', ctxOf({ B: 100_000 }))!;
+    within1(r.weightedPerPct, 500_000, 'separated');
+    within1(r.pricedOutShare, 0.2, 'priced-out share');
+    assert.strictEqual(r.thinReason, null);
+    assert.strictEqual(r.intervals, 10, 'only the intervals A spent in');
+  })) p++; else f++;
+
+  if (test('separated [4]: the mirror — B carries A\'s points, 80k pooled, 100k separated', () => {
+    const ivs: Interval[] = [];
+    for (let i = 0; i < 10; i++) {
+      ivs.push(sv({ toT: t(2 * i), w: { A: 500_000 }, dUtil: 0 }));
+      ivs.push(sv({ toT: t(2 * i + 1), w: { B: 400_000 }, dUtil: 5 }));
+    }
+    within1(poolRate(ivs, 'B', SINCE, UNTIL)!.weightedPerPct, 80_000, 'poolRate');
+    within1(sep(ivs, 'B', ctxOf({ A: 500_000 }))!.weightedPerPct, 100_000, 'separated');
+  })) p++; else f++;
+
+  if (test('separated: a day another model ran alone leaves A\'s figure and evidence counters unchanged', () => {
+    const base = carryOver();
+    const solo = Array.from({ length: 10 }, (_, i) => sv({ toT: t(i, 1), w: { B: 1_000_000 }, dUtil: 10 }));
+    const ctx = ctxOf({ B: 100_000 });
+    const before = sep(base, 'A', ctx)!;
+    const after = sep([...base, ...solo], 'A', ctx)!;
+    within1(after.weightedPerPct, before.weightedPerPct!, 'figure');
+    assert.strictEqual(after.intervals, before.intervals);
+    assert.strictEqual(after.days, before.days);
+    assert.strictEqual(after.days, 1);
+  })) p++; else f++;
+
+  /** Mixed intervals, A priced at 500k and B at 100k: `aPts` + `bPts` points each. */
+  const pair = (aPts: number, bPts: number, n = 10): Interval[] =>
+    Array.from({ length: n }, (_, i) =>
+      sv({ toT: t(i), w: { A: aPts * 500_000, B: bPts * 100_000 }, dUtil: aPts + bPts }));
+  const AB = ctxOf({ A: 500_000, B: 100_000 });
+
+  if (test('separated [5]: the sensitivity cap marks the minor partner mixed, from both sides of one pair', () => {
+    const forty = pair(3, 2);
+    const a40 = sep(forty, 'A', AB)!;
+    assert.strictEqual(a40.thinReason, 'mixed', 'B priced at 40% of U');
+    within1(a40.weightedPerPct, 500_000, 'figure carried');
+    assert.strictEqual(sep(forty, 'B', AB)!.thinReason, 'mixed', 'A priced at 60% of U');
+    const bQuarter = pair(3, 1);
+    assert.strictEqual(sep(bQuarter, 'A', AB)!.thinReason, null);
+    assert.strictEqual(sep(bQuarter, 'B', AB)!.thinReason, 'mixed');
+    const aQuarter = pair(1, 3);
+    const b = sep(aQuarter, 'B', AB)!;
+    assert.strictEqual(b.thinReason, null);
+    within1(b.weightedPerPct, 100_000, 'B rated');
+    assert.strictEqual(sep(aQuarter, 'A', AB)!.thinReason, 'mixed');
+  })) p++; else f++;
+
+  if (test('separated [5]: SEPARATION_S_CAP is derived — 0.34 at 15%/20, exactly the 10% move point', () => {
+    assert.strictEqual(SUB_ERR, 0.15);
+    assert.ok(Math.abs(SEPARATION_S_CAP - 0.34) < 0.001, `cap ${SEPARATION_S_CAP}`);
+    const move = (s: number): number => {
+      const ivs = pair(1 - s, s, 10);
+      const base = sep(ivs, 'A', AB)!.weightedPerPct!;
+      const scaled = sep(ivs, 'A', ctxOf({ A: 500_000 * 0.85, B: 100_000 * 0.85 }))!.weightedPerPct!;
+      return Math.abs(scaled / base - 1);
+    };
+    assert.ok(move(0.34) <= 0.10 + 1e-9, `at 0.34 moved ${move(0.34)}`);
+    assert.ok(Math.abs(move(0.34) - 0.10) < 1e-9, 'exactly 10% at the cap');
+    assert.ok(move(0.36) > 0.10, `at 0.36 moved ${move(0.36)}`);
+    assert.ok(Math.abs(move(0.36) - 0.110) < 0.001, `≈11.0% at 0.36, got ${move(0.36)}`);
+  })) p++; else f++;
+
+  if (test('separated [5b]: a neighbour repriced by more than DRIFT_PCT marks the span repriced, only when asked', () => {
+    const ivs = knownMix();
+    const moved = ctxOf({ B: 100_000 }, { B: 130_000 });
+    assert.strictEqual(sep(ivs, 'A', moved, { checkRepriced: true })!.thinReason, 'repriced');
+    assert.strictEqual(sep(ivs, 'A', moved)!.thinReason, null, 'not checked without checkRepriced');
+    assert.strictEqual(sep(ivs, 'A', ctxOf({ B: 100_000 }, { B: 115_000 }), { checkRepriced: true })!.thinReason, null, '15% is inside');
+    assert.strictEqual(sep(ivs, 'A', ctxOf({ B: 100_000 }), { checkRepriced: true })!.thinReason, null, 'no current fit, no evidence');
+    const bLed = pair(1, 3);
+    const selfMoved = ctxOf({ A: 500_000, B: 100_000 }, { A: 500_000, B: 130_000 });
+    assert.strictEqual(sep(bLed, 'B', selfMoved, { checkRepriced: true })!.thinReason, null, 'never looks at M itself');
+  })) p++; else f++;
+
+  if (test('separated [6]: an unpriced neighbour over 1% of tokens marks unpriced; 0.5% is ignored', () => {
+    const five = Array.from({ length: 10 }, (_, i) =>
+      sv({ toT: t(i), w: { A: 950_000, B: 50_000 }, dUtil: 2, kind: { model: 'A' } }));
+    assert.strictEqual(sep(five, 'A', ctxOf({}))!.thinReason, 'unpriced');
+    const half = Array.from({ length: 10 }, (_, i) =>
+      sv({ toT: t(i), w: { A: 995_000, B: 5_000 }, dUtil: 2, kind: { model: 'A' } }));
+    const r = sep(half, 'A', ctxOf({}))!;
+    assert.strictEqual(r.thinReason, null);
+    within1(r.weightedPerPct, 995_000 / 2, 'B not subtracted: W_A / U');
+  })) p++; else f++;
+
+  if (test('separated [7]: a residual under the floor is floor; exactly at it is rated; U = 0 is floor with null figures', () => {
+    const floors: RateFloors = { minIntervals: 1, minUtil: 5, minDays: 0 };
+    const one = (dUtil: number) => [sv({ toT: t(0), w: { A: 2_000_000, B: 50_000 }, dUtil })];
+    const under = sep(one(5.4), 'A', ctxOf({ B: 100_000 }), { floors })!;
+    assert.ok(under.utilSum < 5 && under.pricedOutShare! < SEPARATION_S_CAP);
+    assert.strictEqual(under.thinReason, 'floor');
+    assert.strictEqual(sep(one(5.5), 'A', ctxOf({ B: 100_000 }), { floors })!.thinReason, null);
+    const idle = Array.from({ length: 3 }, (_, i) => sv({ toT: t(i), w: { A: 100_000 }, dUtil: 0 }));
+    const zero = sep(idle, 'A', ctxOf({}))!;
+    assert.strictEqual(zero.thinReason, 'floor');
+    assert.strictEqual(zero.weightedPerPct, null);
+    assert.strictEqual(zero.rawPerPct, null);
+    assert.strictEqual(zero.pricedOutShare, null);
+  })) p++; else f++;
+
+  if (test('separated [7b]: reason precedence — unpriced > repriced > mixed > floor', () => {
+    const floors: RateFloors = { minIntervals: 1, minUtil: 5, minDays: 0 };
+    const B100 = ctxOf({ B: 100_000 });
+    const mixedUnder = [sv({ toT: t(0), w: { A: 1_000_000, B: 200_000 }, dUtil: 5 })];
+    assert.strictEqual(sep(mixedUnder, 'A', B100, { floors })!.thinReason, 'mixed', 's 0.40 and residual 3');
+    const negative = sep([sv({ toT: t(0), w: { A: 1_000_000, B: 300_000 }, dUtil: 2 })], 'A', B100)!;
+    assert.strictEqual(negative.thinReason, 'mixed', 'residual −1');
+    assert.strictEqual(negative.weightedPerPct, null);
+    assert.strictEqual(negative.rawPerPct, null);
+    assert.strictEqual(negative.utilSum, 0);
+    const unpricedMixed = [sv({ toT: t(0), w: { A: 1_000_000, B: 100_000, C: 300_000 }, dUtil: 4 })];
+    assert.strictEqual(sep(unpricedMixed, 'A', ctxOf({ C: 100_000 }))!.thinReason, 'unpriced');
+    assert.strictEqual(
+      sep(pair(3, 2), 'A', ctxOf({ A: 500_000, B: 100_000 }, { B: 130_000 }), { checkRepriced: true })!.thinReason,
+      'repriced');
+  })) p++; else f++;
+
+  if (test('separated: a stratum is the intervals whose own A tokens the surface dominates', () => {
+    const ivs: Interval[] = [];
+    for (let i = 0; i < 10; i++) {
+      ivs.push(sv({ toT: t(i), w: { A: 1_500_000, B: 100_000 }, dUtil: 4, modelSurfaces: { A: 'interactive', B: 'interactive' } }));
+      ivs.push(sv({ toT: t(20 + i), w: { A: 900_000, B: 100_000 }, dUtil: 4, modelSurfaces: { A: 'headless' } }));
+    }
+    const ctx = ctxOf({ B: 100_000 });
+    within1(sep(ivs, 'A', ctx, { surface: 'interactive' })!.weightedPerPct, 500_000, 'interactive');
+    within1(sep(ivs, 'A', ctx, { surface: 'headless' })!.weightedPerPct, 300_000, 'headless');
+    const owned: Interval[] = [];
+    for (let i = 0; i < 10; i++) {
+      owned.push(sv({ toT: t(i), w: { A: 1_500_000 }, dUtil: 3, surface: 'interactive' }));
+      owned.push(sv({ toT: t(20 + i), w: { A: 900_000 }, dUtil: 3, surface: 'headless' }));
+    }
+    within1(sep(owned, 'A', ctx, { surface: 'interactive' })!.weightedPerPct, 500_000, 'owner-surface fallback, interactive');
+    within1(sep(owned, 'A', ctx, { surface: 'headless' })!.weightedPerPct, 300_000, 'owner-surface fallback, headless');
+  })) p++; else f++;
+
+  if (test('separated: intervals without A are spread over A\'s strata by A\'s share — all of it to a lone stratum', () => {
+    const ivs: Interval[] = [];
+    for (let i = 0; i < 4; i++) {
+      ivs.push(sv({ toT: t(2 * i), w: { B: 100_000 }, dUtil: 0 }));
+      ivs.push(sv({ toT: t(2 * i + 1), w: { A: 2_000_000 }, dUtil: 5, modelSurfaces: { A: 'interactive' } }));
+    }
+    const ctx = ctxOf({ B: 100_000 });
+    const span = sep(ivs, 'A', ctx)!;
+    within1(span.weightedPerPct, 500_000, 'span');
+    assert.strictEqual(sep(ivs, 'A', ctx, { surface: 'interactive' })!.weightedPerPct, span.weightedPerPct);
+    assert.strictEqual(sep(ivs, 'A', ctx, { surface: 'headless' }), null, 'A spent nothing there');
+  })) p++; else f++;
+
+  if (test('separated: with two strata, intervals without A split by A\'s token share (0.625 / 0.375)', () => {
+    const ivs: Interval[] = [];
+    for (let i = 0; i < 4; i++) {
+      ivs.push(sv({ toT: t(2 * i), w: { B: 100_000 }, dUtil: 0 }));
+      ivs.push(sv({ toT: t(2 * i + 1), w: { A: 2_000_000 }, dUtil: 5, modelSurfaces: { A: 'interactive' } }));
+      ivs.push(sv({ toT: t(20 + i), w: { A: 1_200_000 }, dUtil: 4, modelSurfaces: { A: 'headless' } }));
+    }
+    const ctx = ctxOf({ B: 100_000 });
+    // interactive holds 8M of A's 12.8M stratified tokens: 0.625 of the 4 B points are priced out there.
+    within1(sep(ivs, 'A', ctx, { surface: 'interactive' })!.weightedPerPct, 8_000_000 / (20 - 2.5), 'interactive');
+    within1(sep(ivs, 'A', ctx, { surface: 'headless' })!.weightedPerPct, 4_800_000 / (16 - 1.5), 'headless');
+  })) p++; else f++;
+
+  if (test('separated [7b]: unpriced outranks repriced', () => {
+    const ivs = [sv({ toT: t(0), w: { A: 1_000_000, B: 100_000, C: 100_000 }, dUtil: 4 })];
+    const ctx = ctxOf({ C: 100_000 }, { C: 130_000 });
+    assert.strictEqual(sep(ivs, 'A', ctx, { checkRepriced: true })!.thinReason, 'unpriced');
+  })) p++; else f++;
+
+  if (test('separated: null only when the model spent nothing in the span', () => {
+    assert.strictEqual(sep(knownMix(), 'C', ctxOf({ A: 500_000, B: 100_000 })), null);
   })) p++; else f++;
 
   console.log(`\n  ${p} passed, ${f} failed`);

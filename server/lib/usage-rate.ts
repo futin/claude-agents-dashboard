@@ -16,10 +16,12 @@
 
 import { sameWindow } from './usage-history.js';
 import type { UsageSample } from './usage-history.js';
-import { addCounts, emptyCounts, scaleCounts, weightedTokens } from './usage-ledger.js';
+import { addCounts, emptyCounts, rawTokens, scaleCounts, weightedTokens } from './usage-ledger.js';
 import type { LedgerLine, TokenCounts } from './usage-ledger.js';
 import { HEADLESS_ENTRYPOINT } from './entrypoint.js';
-import type { ModelDayRate, ModelDayState, ModelRateSurface, ModelSurfaceRate } from '../../shared/types.js';
+import type {
+  ModelDayRate, ModelDayState, ModelRateSurface, ModelSurfaceRate, ModelThinReason
+} from '../../shared/types.js';
 
 /** Weighted share of an interval one model must hold to own it. */
 export const DOMINANCE = 0.9;
@@ -619,6 +621,188 @@ export function rateFor(
   if (fitted.utilSum < floors.minUtil) return null;
   if (fitted.days < floors.minDays) return null;
   return fitted;
+}
+
+// ── The separated rate ───────────────────────────────────────────────────────
+
+/**
+ * The plausible error of the subtraction rates — how far one model's horizon
+ * joint-fit rate may sit from the truth when it prices that model's spend out
+ * of another's span. The starting value, back-tested in the spec's Task 6.
+ */
+export const SUB_ERR = 0.15;
+
+/**
+ * The largest priced-out share `s` a separated figure may rest on.
+ *
+ * Scaling every subtraction rate together by `k` moves M's figure by the
+ * factor `(1 − s) / (1 − s/k)` — it depends on `s` alone. The guard wants that
+ * move under `DRIFT_PCT / 2` (r = 0.10) for `k = 1 ± SUB_ERR`. Solving each side
+ * for `s`: `(1 − SUB_ERR)` gives `r / ((1 + r) / (1 − SUB_ERR) − 1)` ≈ 0.34, and
+ * `(1 + SUB_ERR)` gives `r / (1 − (1 − r) / (1 + SUB_ERR))` ≈ 0.46. The cap is the
+ * smaller, so retuning either constant moves it.
+ */
+export const SEPARATION_S_CAP: number = (() => {
+  const r = DRIFT_PCT / 200;
+  const under = r / ((1 + r) / (1 - SUB_ERR) - 1);
+  const over = r / (1 - (1 - r) / (1 + SUB_ERR));
+  return Math.min(under, over);
+})();
+
+/**
+ * A model holding at most this share of a span's weighted tokens is ignored by
+ * the missing-rate and repriced guards, and not subtracted when it has no rate.
+ * At the ~5× Fable/Opus price ratio, 1% of tokens is ≈ 5% of points — under
+ * `DRIFT_PCT / 2`, so leaving it in the residual cannot move a verdict.
+ */
+export const UNPRICED_TRIVIAL_SHARE = 0.01;
+
+/** Each model's weighted tokens per point, from the joint fit, keyed by model id. */
+export interface SeparationContext {
+  /** One fit over the whole 17-day horizon — the rate each model is priced out at. */
+  horizon: ReadonlyMap<string, number>;
+  /** The 3-day fit — read only by the repriced guard. */
+  current: ReadonlyMap<string, number>;
+}
+
+/**
+ * The subtraction rates, built once per request so the headline, the baseline
+ * and every day cell price other models out identically. `current` takes the
+ * caller's existing 3-day fit when it has one rather than solving it twice.
+ */
+export function separationContext(
+  intervals: Interval[], nowMs: number, current?: Map<string, RateFit>
+): SeparationContext {
+  const perPct = (fits: Map<string, RateFit>): Map<string, number> =>
+    new Map([...fits].map(([model, fit]) => [model, fit.weightedPerPct]));
+  const cur = currentRange(nowMs);
+  return {
+    horizon: perPct(fitRates(intervals, nowMs - BASELINE_MS, Number.POSITIVE_INFINITY)),
+    current: perPct(current ?? fitRates(intervals, cur.sinceMs, cur.untilMs))
+  };
+}
+
+/** One model's separated rate over a span, its evidence, and why it is thin when it is. */
+export interface SeparatedRate {
+  /** `W_M / R`. Null when the residual `R` is not positive. */
+  weightedPerPct: number | null;
+  /** Raw tokens over the same residual. Null under the same condition. */
+  rawPerPct: number | null;
+  /** Usable intervals in the span in which this model spent anything. */
+  intervals: number;
+  /** The residual points, floored at zero. */
+  utilSum: number;
+  /** Distinct UTC dates of those intervals. */
+  days: number;
+  /** `(U − R) / U`. Null when `U ≤ 0`. */
+  pricedOutShare: number | null;
+  /** Null when the figure is rated; otherwise the first guard that fired, by precedence. */
+  thinReason: ModelThinReason | null;
+}
+
+/** M's surface in one interval: its own, else the owner surface when M owns it. */
+function surfaceFor(interval: Interval, model: string): ModelRateSurface | undefined {
+  const own = interval.modelSurfaces?.[model];
+  if (own !== undefined) return own;
+  if (typeof interval.kind === 'object' && interval.kind.model === model) return interval.surface;
+  return undefined;
+}
+
+/**
+ * M's tokens against the points left once every other model's spend is priced
+ * out at its own horizon rate: `W_M / (U − Σ_{m≠M} W_m / rate_m)`, over every
+ * usable interval with `toT` in `[sinceMs, untilMs)`.
+ *
+ * Every usable interval counts, those where M spent nothing included — that is
+ * what cancels a point carried from one tick onto the next whoever holds it.
+ * With `surface`, the span is M's stratum: intervals whose M tokens the surface
+ * dominates, plus a share of every interval where M spent nothing, weighted by
+ * M's tokens in that stratum against all of M's stratified tokens. Intervals
+ * where M spent but no surface dominates are in no stratum.
+ *
+ * Null only when M spent nothing in the span (or stratum). Figures are carried
+ * whatever `thinReason` says; a caller that publishes rows nulls them itself.
+ */
+export function separatedRate(
+  intervals: Interval[], model: string, sinceMs: number, untilMs: number, ctx: SeparationContext,
+  opts: { floors: RateFloors; surface?: ModelRateSurface; checkRepriced?: boolean }
+): SeparatedRate | null {
+  const span = intervals.filter(iv => usableForRate(iv) && iv.toT >= sinceMs && iv.toT < untilMs);
+  const own = (iv: Interval): number => (iv.tok[model] ? weightedTokens(iv.tok[model], model) : 0);
+
+  // The spread share for intervals M spent nothing in: M's tokens in this
+  // stratum against M's tokens in every stratum. 1 without a surface.
+  let spread = 1;
+  if (opts.surface !== undefined) {
+    let inStratum = 0, stratified = 0;
+    for (const iv of span) {
+      const w = own(iv);
+      if (w <= 0) continue;
+      const surface = surfaceFor(iv, model);
+      if (surface === undefined) continue;
+      stratified += w;
+      if (surface === opts.surface) inStratum += w;
+    }
+    spread = stratified > 0 ? inStratum / stratified : 0;
+  }
+
+  let wM = 0, rawM = 0, util = 0, pricedOut = 0, total = 0, count = 0;
+  const others = new Map<string, number>();
+  const dates = new Set<string>();
+  for (const iv of span) {
+    const w = own(iv);
+    let factor: number;
+    if (w > 0) factor = opts.surface === undefined || surfaceFor(iv, model) === opts.surface ? 1 : 0;
+    else factor = spread;
+    if (factor <= 0) continue;
+    if (w > 0) {
+      wM += w;
+      rawM += rawTokens(iv.tok[model]);
+      total += w;
+      dates.add(utcDate(iv.toT));
+      count++;
+    }
+    util += factor * iv.dUtil;
+    for (const [other, counts] of Object.entries(iv.tok)) {
+      if (other === model) continue;
+      const wo = factor * weightedTokens(counts, other);
+      total += wo;
+      others.set(other, (others.get(other) ?? 0) + wo);
+      const rate = ctx.horizon.get(other);
+      if (rate !== undefined && rate > 0) pricedOut += wo / rate;
+    }
+  }
+  if (wM <= 0) return null;
+
+  const residual = util - pricedOut;
+  const pricedOutShare = util > 0 ? pricedOut / util : null;
+  const figures = residual > 0;
+
+  let unpriced = false, repriced = false;
+  for (const [other, w] of others) {
+    if (total <= 0 || w / total <= UNPRICED_TRIVIAL_SHARE) continue;
+    const horizon = ctx.horizon.get(other);
+    if (horizon === undefined) { unpriced = true; continue; }
+    const current = ctx.current.get(other);
+    if (opts.checkRepriced && current !== undefined && Math.abs(current / horizon - 1) * 100 > DRIFT_PCT) {
+      repriced = true;
+    }
+  }
+  const utilSum = Math.max(0, residual);
+  const under = util <= 0 || count < opts.floors.minIntervals || utilSum < opts.floors.minUtil
+    || dates.size < opts.floors.minDays;
+  const thinReason: ModelThinReason | null =
+    unpriced ? 'unpriced'
+      : repriced ? 'repriced'
+        : pricedOutShare !== null && pricedOutShare > SEPARATION_S_CAP ? 'mixed'
+          : under ? 'floor'
+            : null;
+
+  return {
+    weightedPerPct: figures ? wM / residual : null,
+    rawPerPct: figures ? rawM / residual : null,
+    intervals: count, utilSum, days: dates.size, pricedOutShare, thinReason
+  };
 }
 
 function deviation(current: number, baseline: number): number {
