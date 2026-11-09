@@ -48,7 +48,7 @@ app's scope.
 - The `orLegacy` fallback to `~/claude-global/routines` / `~/claude-global/schedules` for the **jobs folder** goes away on both sides (server
   `routine-config.ts`, wrapper `run-routine.mjs`). Those two paths survive only as import sources. The state-root `orLegacy` (`~/.claude/schedules`) and the
   `SCHEDULES_DIR` → `ROUTINES_DIR` env-name fallback are untouched.
-- The folder is created with owner-only permissions, as the routines folder is today.
+- The folder is created the way `writeJob` creates it today (`mkdirSync` recursive, default mode); no new permission rule.
 
 ### The `machines:` key
 
@@ -56,19 +56,24 @@ app's scope.
   line and saying the key is no longer used because every job runs on the machine that holds it (my call: an explicit error beats a silent ignore, since the
   drawer would otherwise keep writing it back, and beats the generic `unknown key machines`).
 - The launchd rule ("cron: launchd cannot combine day-of-month and weekday") used to fire when `machines` named mac. It now fires when the machine doing the
-  validation is mac. `parseJob` is shared and pure, so it takes the machine as an input; the server, the client (which knows `ctl.machine`) and the wrapper
-  each pass their own. How it is threaded through is the builder's call.
+  validation is mac. `parseJob` is shared and pure, so it takes the machine as an input; the server and the wrapper each pass their own. The client never calls
+  `parseJob` (the drawer validates through `POST /api/routines/validate`), so it needs no change for this. How it is threaded through is the builder's call.
 - `onThisMachine` on `RoutineJobRow`, the `not-this-machine` run conflict (409), and the wrapper's `refused · not this machine` all go away: every job in the
   folder is on this machine. Run-log readers must still accept old `refused` records whose `why` is `not this machine`.
 - The UI loses the Machines section of the editor drawer, the machine chips and `<machines> only` pill in the ledger, and the `machines:` lines in the new-job
   templates. The drawer and the ledger may say once, somewhere unobtrusive, that jobs here belong to this machine (`ctl.machine`); exact wording and place
   are the builder's call, following existing class names.
+- Existing copy that becomes false is rewritten: the Jobs page subtitle in `RoutinesView.tsx` ("Files sync through git; each machine installs only the jobs
+  that name it") says instead that the jobs in this folder belong to this machine; the `not-this-machine` message in `client/src/lib/routines.ts` goes with
+  the conflict.
 - The routine summary string (`routineSummary` in `server/api.ts`) drops its machines segment.
 
 ### Default working directory
 
 A job with neither `cwd:` nor `foreach:` runs today in the routines folder's parent, `~/claude-global`. With the folder at `~/.claude/routines/jobs` that
-parent becomes a dashboard-internal directory, which is wrong. The default becomes **the user's home directory** (my call), server display and wrapper alike.
+parent becomes a dashboard-internal directory, which is wrong. The default becomes **the user's home directory** (my call), server display and wrapper alike. Every
+place that says "the routines folder's parent" says "your home folder" instead: `JobRows.tsx` (the Repos hint "Empty = …"), `client/src/lib/routines.ts`
+(the Repos helper's JSDoc and the new-job template's `# cwd:` comment), the server's summary fallback in `server/api.ts`, and `docs/subsystems/routines.md`.
 The import writes `cwd: <old folder's parent, with ~>` into every imported file that had neither key, so an imported job runs where it ran before.
 
 ### The import
@@ -84,24 +89,30 @@ The import writes `cwd: <old folder's parent, with ~>` into every imported file 
   - add `cwd:` as above when the file had neither `cwd:` nor `foreach:`;
   - every other byte as it was, comments included. A file that does not parse is still copied, with the same line edits applied as text where they can be,
     so the user sees and fixes it in the drawer rather than losing it.
-- How: write into a temporary sibling folder, then rename it to `jobs/`, so a crash mid-import leaves no half-filled folder (and the "folder does not exist"
-  trigger stays true for the next start).
+- How: write into a temporary sibling folder, then rename it to `jobs/`, so a crash mid-import leaves no half-filled folder. A leftover temporary folder
+  from an earlier crash is removed first. If `jobs/` already exists while the marker is absent (a crash between the rename and the marker write, or a folder
+  the user made by hand), the import copies nothing and writes the marker with `count: 0` — it never renames onto an existing folder.
 - Afterwards: log one line naming how many files were imported and from where. The usual reconcile then removes the OS jobs the old files had installed,
   because everything is disabled.
 
-### Rollout order (unchanged rule, restated)
+### Rollout order
 
-The wrapper is a plugin snapshot, so the order on each machine is: merge, `pnpm plugin:sync`, restart the owner server. Until `plugin:sync` runs, an old
-wrapper would refuse new-format files (`machines is required`); since everything imports disabled, only Run now could hit that in the gap.
+The wrapper is a plugin snapshot, and installed jobs carry the old `ROUTINES_DIR` baked in (`routineEnv`), so the order on each machine is: merge, **restart
+the owner server first** (it imports, everything is disabled, and its reconcile removes every installed OS job), **then** `pnpm plugin:sync`, then re-enable
+what should run here. The reverse order has a gap in which the old plists / crontab lines fire the new wrapper against the old folder, whose files still carry
+`machines:` and are refused `invalid:` on every fire. In the chosen order the only gap is Run now between the restart and `plugin:sync`: the old wrapper
+refuses the new-format file (`machines is required`). The docs' existing "merge, `pnpm plugin:sync`, restart" line is updated for this change.
 
 ## Docs and tests
 
 - `docs/subsystems/routines.md` (layout table, format table, machine identity, reconcile's desired set, wrapper refusals, API conflicts), `docs/overview.md`
   (the `ROUTINES_DIR` default and the Routines line), `.env.example` if it names `ROUTINES_DIR`, and the client's new-job templates.
 - Tests that pin `machines` or the old folder: `test/routine-file`, `routine-config`, `routine-store`, `routine-reconcile`, `routine-run`, `run-routine`,
-  `api-routines`, `routine-form`, `routines-view`, `routine-boot`, and the visual fixture `test/visual/fixtures/routines.ts`. New tests cover the import:
-  imports all files disabled with `machines:` stripped, adds `cwd:` only when needed, keeps comments, copies an unparseable file, runs once (no re-import
-  after a delete), never runs on a non-owner or with `ROUTINES_DIR` set, leaves the old folder byte-identical, and a crash mid-import leaves no `jobs/`.
+  `api-routines`, `routine-form`, `routines-view`, `routine-boot`, `plugin-manifest` (its plain-node smoke fixture has `machines: [mac]` and asserts no
+  errors), and the visual fixture `test/visual/fixtures/routines.ts`. New tests cover the import: imports all files disabled with `machines:` stripped, adds
+  `cwd:` only when needed, keeps comments, copies an unparseable file, runs once (no re-import after a delete), never runs on a non-owner or with
+  `ROUTINES_DIR` set, leaves the old folder byte-identical, a crash mid-import leaves no `jobs/`, and an existing `jobs/` with no marker gets the marker
+  (`count: 0`) and no copy.
 - `pnpm plugin:gen` after editing `shared/routine-file.ts`.
 
 ## Settled after the builder check
