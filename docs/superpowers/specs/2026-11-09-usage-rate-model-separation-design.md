@@ -80,11 +80,13 @@ on almost every day under every variant tried — they are the minor partner nea
   percentile against its point rate: `under_m = max(0, 1 − p5/rate_m)`, `over_m = max(0, p95/rate_m − 1)`. With `P_m = W_m(S) / rate_m` and residual
   `R = U(S) − Σ P_m`, the two one-sided moves of the subtracted points combine root-sum-square across models — `ΔU = √Σ (P_m · (1/(1 − min(under_m, 0.99))
   − 1))²` (true rates lower, more priced out) and `ΔO = √Σ (P_m · (1 − 1/(1 + over_m)))²` — and the span is `thin` (`mixed`) when `R ≤ 0`, `R − ΔU ≤ 0`,
-  `R / (R − ΔU) − 1 > DRIFT_PCT / 2`, or `1 − R / (R + ΔO) > DRIFT_PCT / 2`. A model fitted in fewer than half the resamples has no measured band: it takes
+  `R / (R − ΔU) − 1 > DRIFT_PCT / 200`, or `1 − R / (R + ΔO) > DRIFT_PCT / 200` (fractions; 0.10 at `DRIFT_PCT` 20). A model fitted in fewer than half the resamples has no measured band: it takes
   `under` 0.99 and `over` 9, so any non-negligible share of its points makes the span `mixed` (its rate is not identified well enough to subtract). A
   context built by hand (tests) may omit a model's band; it then falls back to `SUB_ERR` (15%) on both sides, which for a single neighbour reproduces the
-  old cap. The bands are part of `SeparationContext`, built once with the horizon fit, and memoized per UTC hour and horizon interval count: one bootstrap
-  costs ~200 × 6.8 ms ≈ 1.4 s of the event loop (measured 2026-11-09, 12,424 intervals), paid at most once an hour. `SEPARATION_S_CAP` goes; `s` is still
+  old cap. The bands are part of `SeparationContext`, built once with the horizon fit, and memoized per UTC hour and the set of models with a horizon
+  rate (not the interval count: the recorder adds an interval a minute, so a count key would miss on nearly every card open): one bootstrap costs
+  ~200 × 6.8 ms ≈ 1.4 s of the event loop (measured 2026-11-09, 12,424 intervals), paid once an hour plus once when a model enters the horizon. A hit
+  pairs bands from earlier in the hour with the current point rates; bands are ratios, so that is second-order. `SEPARATION_S_CAP` goes; `s` is still
   published as `pricedOutShare`. Consequence, accepted: a model that is the minor partner in a span (Fable beside an Opus driver) is usually `thin` there —
   the residual genuinely cannot price it to ±10%. It still carries its figure on the strip, and its row still shows the existing joint-fit
   `fittedWeightedPerPct`.
@@ -115,7 +117,7 @@ figures uncoloured and unjudged (as `dailyRates` already does).
 hint "a verdict needs N separate days…" (~148–152). Under the new guards that is false for a thin span the separation could not price. So `shared/types.ts`
 gains an optional `thinReason?: 'floor' | 'mixed' | 'repriced' | 'unpriced'` on `ModelDayRate` and on `ModelRateRow` (server: `DriftRow`; for the side that made the row's
 verdict `thin`; current window wins when both are), present exactly when that span is `thin`: `floor` = under `BASELINE_FLOORS`/`CURRENT_FLOORS` or the
-residual floor; `mixed` = sensitivity cap; `repriced` = repriced-neighbour guard; `unpriced` = missing-rate guard. When several fire, precedence is
+residual floor; `mixed` = sensitivity bound; `repriced` = repriced-neighbour guard; `unpriced` = missing-rate guard. When several fire, precedence is
 `unpriced` > `repriced` > `mixed` > `floor` (the more specific reason wins). Types first, then server, then client. The three strings read
 the reason: `floor` keeps today's wording; the other three say the span "can't be separated from other models' spend" (`mixed`: "mostly another model's
 spend"; `repriced`: "another model's rate moved"; `unpriced`: "another model has no rate yet"); the Collecting tile's sub-line counts both kinds
@@ -156,7 +158,7 @@ spend"; `repriced`: "another model's rate moved"; `unpriced`: "another model has
 
 - Opus's token value stays put on a day Fable is used heavily beside it: either a rated figure in its normal band, or `thin` carrying a figure in that band
   — never a rated or carried figure that is really Fable's spend (2026-11-09: 268k today; ~640k separated, `thin` at `s ≈ 0.76`).
-- Every model that drives the spend in a span (priced-out share under the cap) gets a rate that is its own; a model that is only the minor partner reads
+- Every model that drives the spend in a span (within the sensitivity bound) gets a rate that is its own; a model that is only the minor partner reads
   `thin` there and keeps its joint-fit figure.
 - The day strip, headline and verdict agree with each other.
 
@@ -191,15 +193,15 @@ Tests (node-assert, synthetic intervals, in the existing `test/usage-rate*.test.
    neighbour can be priced out of a bigger share). Two neighbours at 15% each with half the priced-out points each → the root-sum-square move, not the
    sum. A neighbour fitted in under half the resamples → `mixed` whenever its points move M's figure. `R − ΔU ≤ 0` → `mixed`, never `Infinity`.
 5a. **The bootstrap band.** `separationContext` on a fixture whose days all price m identically → m's band ≈ 0 both sides; on a fixture where m's per-day
-   rate alternates 400k/600k → a non-zero band on both sides; two calls on the same intervals → identical bands (seeded); a second call within the same
-   UTC hour and interval count does not refit (memo).
+   rate alternates 400k/600k → a non-zero band on both sides; two bootstrap runs on the same intervals, memo bypassed → identical bands (seeded); a second call within the same
+   UTC hour with the same horizon model set does not refit (memo); a new model in the horizon does.
 5b. **Repriced-neighbour guard by effect.** m's 3-day fit 30% off its horizon rate and m holding a large share of the priced-out points → M's current
    verdict is `thin` (`repriced`), not `drift`; m's own row still shows its move. The same 30% move with m's points a small share, so the swap moves M's
    figure < 10% → not `repriced`. A swap that leaves no positive residual → `repriced`.
 6. **Missing-rate guard.** Another model with non-trivial spend and no fit → `thin`; the same model with trivial spend → ignored, span rated.
 7. **Residual floor.** Residual points under the floor or ≤ 0 → `thin`.
 7b. **Thin reason.** Tests 5 (s = 0.40), 5b, 6 and 7 each assert `thinReason` = `mixed`, `repriced`, `unpriced`, `floor` respectively, on both the
-    day cell and the row; a rated span has no `thinReason`; a span failing both the sensitivity cap and the residual floor reads `mixed`.
+    day cell and the row; a rated span has no `thinReason`; a span failing both the sensitivity bound and the residual floor reads `mixed`.
 7c. **Surface strata on the separated basis.** A span where M is Opus at 70% of weighted tokens beside Fable, M's own tokens ≥ 90% interactive in some
     intervals and ≥ 90% headless in others: `surfaces` carries each stratum's separated rate (not the owned-only one), and `mixAdjustedDeviationPct` is
     computed from those; a mixed span that the owned-only adjustment would call `drift` is not `drift` here.

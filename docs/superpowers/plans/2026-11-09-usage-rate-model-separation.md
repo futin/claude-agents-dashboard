@@ -303,11 +303,11 @@ bullets are the authority; Task 2's `mixed` / `repriced` definitions and constan
 `pricedOutShare`, `unpriced`, `floor` and every caller's `checkRepriced` choice are unchanged.
 
 **Files:**
-- Modify: `server/lib/usage-rate.ts` (constants ~635–677, `SeparationContext` / `separationContext` ~729, guard block ~785–800), `server/lib/usage-shape.ts`
+- Modify: `server/lib/usage-rate.ts` (constants ~631–660, `SeparationContext` / `separationContext` ~663–685, guard block ~785–800), `server/lib/usage-shape.ts`
   (~221, if the memo needs nothing there, leave it)
 - Modify: `test/usage-rate-fit.test.ts` ([5], [5b] and the `SEPARATION_S_CAP` asserts ~296–473), `test/usage-rate-drift.test.ts` (~464–552),
   `test/usage-rate-daily.test.ts` (the repriced day cases, Task 4's "B share 5% / 0.5%")
-- Modify: `docs/subsystems/usage-limits.md` (§guards ~962–1004, the cv paragraph ~1038, the row ~1394, the strip ~1607–1611)
+- Modify: `docs/subsystems/usage-limits.md` (§guards ~962–1004, the cv paragraph ~1033, the row ~1394, the strip ~1607–1611)
 
 **Interfaces:**
 - `export const SUB_BOOTSTRAP = 200`; `SUB_ERR` (0.15) stays, documented as the fallback band for a model with no measured one.
@@ -317,15 +317,17 @@ bullets are the authority; Task 2's `mixed` / `repriced` definitions and constan
 - A pure helper turns a list of bootstrap draws (ratios `draw / point`) and the resample count into a band: fewer draws than half the resamples →
   `{ under: 0.99, over: 9 }`; otherwise `under = max(0, 1 − p5)`, `over = max(0, p95 − 1)`, percentiles by one stated method (nearest-rank is fine),
   `under` clamped at 0.99. Export it for the tests.
-- The bootstrap: usable intervals of the horizon `[since, until)` grouped by UTC day; `SUB_BOOTSTRAP` resamples of the day keys with replacement from a
+- The bootstrap (exported, takes the intervals and the window): usable intervals of the horizon window — the same `[nowMs − BASELINE_MS, +∞)` the point
+  fit reads — grouped by UTC day; `SUB_BOOTSTRAP` resamples of the day keys with replacement from a
   fixed-seed PRNG (seeded per call, so two calls agree); `fitRates` on each concatenated resample over the same window; per model, the draws where it was
   fitted. Only models with a horizon point rate get a band.
-- `separationContext` builds `error` beside `horizon`, memoized in one module-level slot keyed on the UTC hour of `nowMs` plus `intervals.length`
-  (a hit returns the previous context's `error` map, the same object). Export a reset for tests if the memo would leak between cases.
+- `separationContext` builds `error` beside `horizon`, memoized in one module-level slot keyed on the UTC hour of `nowMs` plus the sorted set of
+  models with a horizon rate — not `intervals.length`, which the recorder grows every minute (spec amendment) — so a hit returns the previous context's
+  `error` map, the same object. Export a memo reset, unconditionally; every test that builds a context through the bootstrap resets first.
 
 **Behaviour:**
 - `mixed`, with `P_m = W_m / rate_m` over the span's priced neighbours and `R = U − Σ P_m`: `R ≤ 0`, or `R − ΔU ≤ 0`, or `R / (R − ΔU) − 1 > DRIFT_PCT /
-  200`, or `1 − R / (R + ΔO) > DRIFT_PCT / 200`, with `ΔU = √Σ (P_m · (1 / (1 − under_m) − 1))²` and `ΔO = √Σ (P_m · (1 − 1 / (1 + over_m)))²`. No path
+  200`, or `1 − R / (R + ΔO) > DRIFT_PCT / 200`, with `ΔU = √Σ (P_m · (1 / (1 − min(under_m, 0.99)) − 1))²` (the clamp lives here, so a hand-built band of 1 is safe too) and `ΔO = √Σ (P_m · (1 − 1 / (1 + over_m)))²`. No path
   publishes `Infinity` or `NaN`.
 - `repriced` (when `checkRepriced`): for each neighbour m with both a `horizon` and a `current` rate, the residual with m's `P_m` recomputed at its
   `current` rate (others at horizon); trips when that residual ≤ 0 or `|R / R_swap − 1| > DRIFT_PCT / 200`. No token-share gate.
@@ -334,12 +336,14 @@ bullets are the authority; Task 2's `mixed` / `repriced` definitions and constan
 - Sensitivity, one neighbour, empty `error` map (fallback 15%): `s` = 0.40 → `mixed`; `s` = 0.25 → rated; from both sides of one Fable+Opus pair.
 - Same `s` = 0.40 span with the neighbour's band `{ 0.03, 0.03 }` → rated.
 - Two neighbours, fallback band, each half of `s` = 0.40 → rated (root-sum-square move ≈ 9.1%); the same total on one neighbour → `mixed` (≈ 13.3%).
-- Neighbour band `{ 0.99, 9 }` with its `P_m` at 1% of `U` → `mixed`, figures carried finite or null, never `Infinity`.
-- Band helper: 99 draws of 200 → `{ 0.99, 9 }`; 100 identical draws of 1.0 → `{ 0, 0 }`; a draw list spanning 0.8–1.3 → `under` ≈ 0.2-ish and `over` ≈
+- Neighbour band `{ 0.99, 9 }` with its `P_m` at 2% of `U` → `mixed` through the `R − ΔU ≤ 0` branch (`ΔU` 1.98·U > `R` 0.98·U), figures finite or
+  null, never `Infinity`; at 0.1% of `U` → `mixed` through the ratio branch (≈ 11%).
+- Band helper: 99 draws of 200 → `{ 0.99, 9 }`; 100 draws of 200, all 1.0 → `{ 0, 0 }` (exactly half is measured); 200 of 200 all 1.0 → `{ 0, 0 }`; a draw list spanning 0.8–1.3 → `under` ≈ 0.2-ish and `over` ≈
   0.3-ish by the stated percentile method (assert the exact values your method gives, and name the method in the test).
 - Bootstrap on a fixture whose every day prices m identically → m's band < 0.5% both sides; on a fixture where m's per-day rate alternates 400k / 600k →
-  both sides > 2%; two calls on the same intervals → deep-equal bands; a second `separationContext` call in the same UTC hour with the same interval count
-  → the same `error` object (identity).
+  both sides > 2% (each fixture through the exported bootstrap, or after a memo reset). Determinism: the exported bootstrap run twice on the same
+  intervals → deep-equal bands (no memo involved). Memo: after a reset, two `separationContext` calls in the same UTC hour with the same horizon model set
+  → the same `error` object (identity); a third with an extra model in the horizon → a new object with a band for that model.
 - Repriced by effect: horizon m 500k, current m 650k, `P_m` 40% of `U` → `repriced` with `checkRepriced`, rated without it (move ≈ 13.3%); same rates with
   `P_m` 10% of `U` → not `repriced` (≈ 2.5%); current m 200k with `P_m` 50% of `U` → `repriced` (residual ≤ 0 after the swap); m absent from `current` →
   not `repriced`.
@@ -349,7 +353,7 @@ bullets are the authority; Task 2's `mixed` / `repriced` definitions and constan
 
 - [ ] **Step 1:** constants, band helper and bootstrap, with their tests.
 - [ ] **Step 2:** `SeparationContext.error`, memo, and the two guards, replacing the superseded tests.
-- [ ] **Step 3:** run `usage-rate-fit`, `usage-rate-drift`, `usage-rate-daily`, `api-usage-rates` and `usage-shape` test files (one at a time, foreground),
+- [ ] **Step 3:** run `usage-rate-fit`, `usage-rate-drift`, `usage-rate-daily` and `api-usage-rates` test files (one at a time, foreground),
   plus `pnpm typecheck`. Commit `fix(usage): judge the separation guards by their effect on the figure`.
 - [ ] **Step 4: Re-run the back-test** (Task 6's script, same live data) and save the new output beside the old. Expect, against the amendment's B = 1000
   measurement: Opus 5.5 current row rated, ~14 of 15 rated days, 2026-11-09 rated near 526k, cv under the inequality at 20. If the Opus current row is not
