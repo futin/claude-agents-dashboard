@@ -48,9 +48,9 @@ that is a folder. Every copied file has its `machines:` key removed, `enabled: f
 `foreach:` (the old default was the folder's parent, the new one is home); everything else, comments included, is kept, and a file that does not parse is
 still copied so it can be fixed in the drawer. The copy goes into `<state root>/.jobs-import.tmp` and is renamed to `jobs/`, so a crash leaves no
 half-filled folder. `<state root>/jobs-imported.json` (`{at, from, count}`) records that it ran, and it never runs again, so a job deleted later stays
-deleted. It is skipped (and says why: `explicit-dir`, `done`, `overlap`, `jobs-exist`, `no-old`) when `ROUTINES_DIR` is set, when the marker exists, when
-`jobs/` would overlap an old folder, when `jobs/` already exists (the marker is written with `count: 0`), or when there is no old folder. The old folder is
-left untouched; deleting `schedules/` from `~/claude-global` is the user's own follow-up.
+deleted. It is skipped (the result names why: `explicit-dir`, `done`, `overlap`, `jobs-exist`, `no-old`; only `overlap` logs) when `ROUTINES_DIR` is set, when
+the marker exists, when `jobs/` would overlap an old folder, when `jobs/` already exists (the marker is written with `count: 0`), or when there is no old
+folder. The old folder is left untouched; deleting `schedules/` from `~/claude-global` is the user's own follow-up.
 
 **Rollout order on each machine:** merge, restart the owner server first (it imports, everything is disabled, and its reconcile removes every installed OS
 job), then `pnpm plugin:sync`, then re-enable what should run here. Reversed, the old installed jobs would fire the new wrapper against the old folder.
@@ -201,7 +201,7 @@ puts every plugin's `bin/` on the Bash PATH of every session.
 `plugin/lib/run-routine.mjs <job> [--trigger schedule|manual] [--only <pin>...]`: plain Node, built-ins only, nothing imported from `server/`. It is the
 only process that runs a job. In order:
 
-1. Read `<dir>/<job>.md` and validate it with the same module the server uses. On a `--trigger schedule` fire with a missing, invalid, disabled or
+1. Read `<dir>/<job>.md` and validate it with the same module the server uses. On a `--trigger schedule` fire with a missing, invalid or disabled
    file it appends a `refused` record and exits 0, because the dashboard may have been down when the file changed. A manual run of a disabled
    file is allowed (that is Run now on a paused job); the other two refuse manually too.
 2. Take `locks/<job>.lock` by linking a complete temp file into place (it fails on an existing lock, and no reader sees it empty), pid and boot id inside.
