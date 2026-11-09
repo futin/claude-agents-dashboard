@@ -971,14 +971,17 @@ export function driftRow(
  * One model's token value, one UTC date at a time, over the same 17-day horizon
  * the verdict is fitted over — the days behind {@link driftRow}'s two numbers.
  *
- * Each cell is {@link poolRate} over that date **clipped to the horizon**: the
- * first date starts where the baseline range does, not at its own midnight, so
- * the strip never counts an interval the fit did not. No floors are applied to
- * the figure — a day carries whatever it pooled — but a day under the current
- * window's utilization floor is marked `thin`, because with the ~1-point
- * rounding in `Σ dUtil` a 3-point day is a ±33% number, and colouring it would
- * put a rounding artefact on the strip in the same red as a real move. The
- * floor is {@link CURRENT_FLOORS}' own, not a new number.
+ * Each cell is {@link separatedRate} over that date **clipped to the horizon**:
+ * the first date starts where the baseline range does, not at its own midnight,
+ * so the strip never counts an interval the fit did not. Other models' spend is
+ * priced out at the same `ctx` rates the row's two figures use, so a day with a
+ * sibling model running beside this one no longer reads as this model's. Only
+ * the utilization floor applies, the current window's own ({@link CURRENT_FLOORS}),
+ * because with the ~1-point rounding in `Σ dUtil` a 3-point day is a ±33% number.
+ * A day the separation cannot price (`thinReason`) is `thin` and still carries
+ * its figures — the pooled figure is never the fallback — and the repriced
+ * guard runs only on days inside the current window, where a sibling's current
+ * rate is the one that mattered.
  *
  * A date that ended before the ledger provably began is `pre-ledger`: nothing
  * was measured, nothing is wrong, and it ages out on its own. With the start
@@ -990,31 +993,38 @@ export function driftRow(
  */
 export function dailyRates(
   intervals: Interval[], model: string, nowMs: number,
-  ledgerStartMs: number | null, baselineWeightedPerPct: number | null
+  ledgerStartMs: number | null, baselineWeightedPerPct: number | null,
+  ctx: SeparationContext = separationContext(intervals, nowMs)
 ): ModelDayRate[] {
   const sinceMs = nowMs - BASELINE_MS;
   const firstDay = Math.floor(sinceMs / DAY_MS) * DAY_MS;
   const lastDay = Math.floor(nowMs / DAY_MS) * DAY_MS;
   const judged = baselineWeightedPerPct !== null && baselineWeightedPerPct > 0;
+  const currentSince = currentRange(nowMs).sinceMs;
+  const floors = { minIntervals: 0, minUtil: CURRENT_FLOORS.minUtil, minDays: 0 };
   const out: ModelDayRate[] = [];
   for (let day = firstDay; day <= lastDay; day += DAY_MS) {
-    const pooled = poolRate(intervals, model, Math.max(day, sinceMs), day + DAY_MS);
+    const sep = separatedRate(intervals, model, Math.max(day, sinceMs), day + DAY_MS, ctx, {
+      floors, checkRepriced: day + DAY_MS > currentSince
+    });
     let state: ModelDayState;
     if (ledgerStartMs !== null && day + DAY_MS <= ledgerStartMs) state = 'pre-ledger';
-    else if (pooled === null) state = 'none';
-    else if (pooled.utilSum < CURRENT_FLOORS.minUtil) state = 'thin';
+    else if (sep === null) state = 'none';
+    else if (sep.thinReason !== null) state = 'thin';
     else state = 'rated';
-    out.push({
+    const cell: ModelDayRate = {
       date: utcDate(day),
-      weightedPerPct: pooled?.weightedPerPct ?? null,
-      rawPerPct: pooled?.rawPerPct ?? null,
-      intervals: pooled?.intervals ?? 0,
-      utilSum: pooled?.utilSum ?? 0,
-      deviationPct: pooled !== null && judged
-        ? deviation(pooled.weightedPerPct, baselineWeightedPerPct)
+      weightedPerPct: sep?.weightedPerPct ?? null,
+      rawPerPct: sep?.rawPerPct ?? null,
+      intervals: sep?.intervals ?? 0,
+      utilSum: sep?.utilSum ?? 0,
+      deviationPct: sep?.weightedPerPct != null && judged
+        ? deviation(sep.weightedPerPct, baselineWeightedPerPct)
         : null,
       state
-    });
+    };
+    if (state === 'thin' && sep?.thinReason) cell.thinReason = sep.thinReason;
+    out.push(cell);
   }
   return out;
 }

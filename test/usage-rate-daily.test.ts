@@ -15,9 +15,10 @@ import {
   BASELINE_MS,
   CURRENT_FLOORS,
   dailyRates,
+  driftRow,
   poolRate
 } from '../server/lib/usage-rate.js';
-import type { Interval } from '../server/lib/usage-rate.js';
+import type { Interval, SeparationContext } from '../server/lib/usage-rate.js';
 
 function test(name: string, fn: () => void): boolean {
   try { fn(); console.log('  ✓ ' + name); return true; }
@@ -39,7 +40,19 @@ const own = (toT: number, dUtil: number, weightedPerPct: number, model = 'A'): I
   req: {}, reqUsable: false, kind: { model }
 });
 
+const ctxOf = (horizon: Record<string, number>, current: Record<string, number> = horizon): SeparationContext =>
+  ({ horizon: new Map(Object.entries(horizon)), current: new Map(Object.entries(current)) });
+
+/** One interval `dUtil` points wide in which each model spent exactly the given weighted tokens. */
+const shared = (toT: number, dUtil: number, w: Record<string, number>, owner = 'A'): Interval => ({
+  fromT: toT - MIN, toT, dUtil,
+  tok: Object.fromEntries(Object.entries(w).map(([m, v]) => [m, wtok(v)])),
+  req: {}, reqUsable: false, kind: { model: owner }
+});
+
 const at = (iso: string): number => Date.parse(iso);
+
+const rated_reason = (days: ReturnType<typeof dailyRates>, date: string) => days.find(d => d.date === date)!.thinReason;
 
 export function run(): number {
   console.log('\n=== usage-rate.ts · dailyRates ===\n');
@@ -115,6 +128,8 @@ export function run(): number {
     const thin = days.find(d => d.date === '2026-08-22')!;
     const rated = days.find(d => d.date === '2026-08-23')!;
     assert.strictEqual(thin.state, 'thin');
+    assert.strictEqual(thin.thinReason, 'floor');
+    assert.strictEqual(rated_reason(days, '2026-08-23'), undefined, 'a rated cell carries no reason');
     assert.strictEqual(Math.round(thin.weightedPerPct!), 120_000, 'the figure is carried');
     assert.strictEqual(thin.intervals, 1);
     assert.strictEqual(rated.state, 'rated', 'exactly at the floor is enough');
@@ -160,6 +175,75 @@ export function run(): number {
     assert.strictEqual(cell.intervals, 2);
     // Σtokens / Σutil, not a mean of ratios: (200k + 1.8M) / 8 = 250k.
     assert.strictEqual(Math.round(cell.weightedPerPct!), 250_000);
+  }));
+
+  check(test('a day only another model spent on is `none` for this one', () => {
+    const day = at('2026-08-25T09:00:00Z');
+    const days = dailyRates([shared(day, 10, { B: 5_000_000 }, 'B')], 'A', NOW, null, null, ctxOf({ A: 500_000, B: 500_000 }));
+    assert.strictEqual(days.find(d => d.date === '2026-08-25')!.state, 'none');
+  }));
+
+  check(test('a day with A at 60% of the points beside B is `thin` / mixed, and still carries the separated figure', () => {
+    const day = at('2026-08-25T09:00:00Z');
+    // 30 points: B's 6M at 500k prices out 12, leaving 18 for A's 9M → 500k.
+    const days = dailyRates([shared(day, 30, { A: 9_000_000, B: 6_000_000 })], 'A', NOW, null, null, ctxOf({ A: 500_000, B: 500_000 }));
+    const cell = days.find(d => d.date === '2026-08-25')!;
+    assert.strictEqual(cell.state, 'thin');
+    assert.strictEqual(cell.thinReason, 'mixed');
+    assert.ok(Math.abs(cell.weightedPerPct! / 500_000 - 1) < 0.01, `expected ~500k, got ${cell.weightedPerPct}`);
+  }));
+
+  check(test("B's current rate 30% off: only a current-window day with a material B share is `thin` / repriced", () => {
+    const ctx = ctxOf({ A: 500_000, B: 500_000 }, { A: 500_000, B: 350_000 });
+    const mix = (toT: number, bShare: number): Interval => {
+      const total = 15_000_000; // 30 points at 500k, split by weighted-token share
+      return shared(toT, 30, { A: total * (1 - bShare), B: total * bShare });
+    };
+    const recent = at('2026-08-29T10:00:00Z');
+    const old = at('2026-08-20T10:00:00Z');
+    const days = dailyRates([mix(recent, 0.05), mix(old, 0.05)], 'A', NOW, null, null, ctx);
+    const cur = days.find(d => d.date === '2026-08-29')!;
+    assert.strictEqual(cur.state, 'thin');
+    assert.strictEqual(cur.thinReason, 'repriced');
+    assert.strictEqual(days.find(d => d.date === '2026-08-20')!.state, 'rated', 'baseline-range day is not checked');
+
+    const trivial = dailyRates([mix(recent, 0.005)], 'A', NOW, null, null, ctx);
+    assert.strictEqual(trivial.find(d => d.date === '2026-08-29')!.state, 'rated', 'a 0.5% share cannot trip the guard');
+  }));
+
+  check(test('a day with a model the horizon fit never priced at 5% of the tokens is `thin` / unpriced', () => {
+    const day = at('2026-08-25T09:00:00Z');
+    const days = dailyRates(
+      [shared(day, 30, { A: 14_250_000, C: 750_000 })], 'A', NOW, null, null, ctxOf({ A: 500_000, B: 500_000 })
+    );
+    const cell = days.find(d => d.date === '2026-08-25')!;
+    assert.strictEqual(cell.state, 'thin');
+    assert.strictEqual(cell.thinReason, 'unpriced');
+    assert.ok(cell.weightedPerPct !== null, 'figure carried');
+  }));
+
+  check(test('every rated cell is judged against driftRow\'s own baseline, and a current day equal to the row has the row\'s deviation', () => {
+    const ctx = ctxOf({ A: 400_000 });
+    const intervals: Interval[] = [];
+    // Baseline range: 14 days, 3 ticks of 10 points at 400k. Current: 2 days of 6 ticks of 5 points at 500k.
+    for (let d = 0; d < 14; d++) {
+      for (let h = 0; h < 3; h++) intervals.push(own(SINCE + d * DAY + (h + 1) * 3_600_000, 10, 400_000));
+    }
+    for (const date of ['2026-08-29', '2026-08-30']) {
+      for (let h = 0; h < 6; h++) intervals.push(own(at(`${date}T00:00:00Z`) + (h + 1) * 3_600_000, 5, 500_000));
+    }
+    const row = driftRow(intervals, 'A', NOW, ctx);
+    assert.ok(row.baselineWeightedPerPct !== null && row.weightedPerPct !== null && row.deviationPct !== null, 'row is judged');
+    const days = dailyRates(intervals, 'A', NOW, null, row.baselineWeightedPerPct, ctx);
+    const rated = days.filter(d => d.state === 'rated');
+    assert.ok(rated.length >= 14, `got ${rated.length} rated cells`);
+    for (const cell of rated) {
+      const want = (cell.weightedPerPct! / row.baselineWeightedPerPct! - 1) * 100;
+      assert.ok(Math.abs(cell.deviationPct! - want) < 1e-9, `${cell.date}: ${cell.deviationPct} vs ${want}`);
+    }
+    const today = days.find(d => d.date === '2026-08-29')!;
+    assert.ok(Math.abs(today.weightedPerPct! - row.weightedPerPct!) < 1e-6);
+    assert.ok(Math.abs(today.deviationPct! - row.deviationPct!) < 1e-9);
   }));
 
   console.log(`\n  ${p} passed, ${f} failed`);
