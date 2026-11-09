@@ -64,23 +64,39 @@ joint fit.
 
 A separated figure is only as good as the subtraction. Mark the span `thin` (figures carried, not coloured, not judged), never rated, when any of these hold:
 
+**Amendment, 2026-11-09 (after the live back-test, Task 6; maintainer's pick "V3").** As first written, the sensitivity guard was a flat cap `s ≤ ~0.34`
+from an assumed `SUB_ERR` of 15%, and the repriced guard fired on any non-trivial neighbour whose 3-day fit moved > `DRIFT_PCT`. On the live 17-day horizon
+(2026-11-09) that left **no** model with a rated current row: Haiku's 3-day fit (−53%, resting on ~2.4 of its own points and 1.6% of the window's tokens)
+and Sonnet's (−43%) tripped `repriced` for every model, and with that guard off the flat cap still turned every current row `mixed`; Opus had 7/15 rated
+days and its separated cv (27.0%) broke the floors' inequality (21.7 > 20). Both guards now measure the effect on M's figure instead of a proxy for it.
+Measured with the replacement (2026-11-09, scratch back-test `variants.mts`, day-block bootstrap B = 1000): Opus 14/15 rated days, current row rated
+602k against a 536k baseline (+12%, `stable`), 2026-11-09 rated at 526k, cv 22.3% → √(cv²/7 + cv²/2) = 17.9 < 20. Fable, Haiku and Sonnet stay `thin`
+on almost every day under every variant tried — they are the minor partner nearly everywhere (`s` 0.36–0.89), which is the accepted consequence below.
+
 - **Too sensitive to the subtraction.** The residual is unstable when M's own points are a small part of `U(S)`: on 2026-11-05 Fable's expected points were
-  134 of 190 and the separated Opus figure swung 838k–1040k depending on the subtraction rates. The guard is a **sensitivity bound**: scale *all* `rate_m`
-  together by `(1 + SUB_ERR)`, and separately all together by `(1 − SUB_ERR)` (`SUB_ERR` = the subtraction rates' plausible error, starting value 15%,
-  back-tested), and mark the span `thin` when either moves M's separated figure by more than `DRIFT_PCT / 2`. Note, from review round 1: with every
-  `rate_m` scaled jointly, the move depends only on the priced-out share `s = Σ(W_m / rate_m) / U(S)` — the figure scales by `(1 − s) / (1 − s/(1 ± SUB_ERR))`
-  — so the bound **is** a cap on `s`, derived rather than picked: at 15% / 10% the `(1 − SUB_ERR)` side binds and the cap is `s ≤ ~0.34`. Implement it as
-  the cap with the derivation in its comment, so retuning `SUB_ERR` or `DRIFT_PCT` moves it. Consequence, accepted: a model that is the minor partner in
-  a span (Fable beside an Opus driver, or Opus on a Fable-heavy day such as 2026-11-09, where `s ≈ 0.76`) gets `thin` there — the residual genuinely cannot
-  price it to ±10%. It still carries its figure on the strip, and its row still shows the existing joint-fit `fittedWeightedPerPct`.
-- **Another model repriced.** `rate_m` is fitted over the whole horizon, so if Fable itself gets pricier this week, its extra points are under-subtracted and
-  Opus would read as drift — the exact failure this change exists to remove. So: when any m that contributes to the subtraction in the current window has a
-  current-window (3-day) joint-fit rate more than `DRIFT_PCT` away from its horizon `rate_m`, M's **current-window verdict** is `thin` rather than `drift`,
-  and each affected day cell is `thin` too. The repricing then shows where it belongs: on m's own row. Defined (review round 1): an m with **no** 3-day fit
-  (refused by `fitRates`) does not trigger the guard — there is no evidence it repriced; an **affected day cell** is a day inside the current window on which
-  m's priced-out points are above the trivial share used by the missing-rate guard. Accepted limitation, documented: after m reprices, the horizon `rate_m`
-  is a blend of old and new, so baseline-range days are mis-subtracted slightly the other way; the 14 baseline days outweigh the 3 current ones, and the
-  guard already stops a verdict while the move is fresh.
+  134 of 190 and the separated Opus figure swung 838k–1040k depending on the subtraction rates. The guard is a **sensitivity bound on each model's measured
+  error**. Each other model m gets an error band from a **day-block bootstrap of the horizon fit**: resample the horizon's UTC days with replacement
+  (`SUB_BOOTSTRAP` = 200 resamples, fixed-seed PRNG so the same ledger gives the same band), refit `fitRates` on each, and take m's 5th and 95th
+  percentile against its point rate: `under_m = max(0, 1 − p5/rate_m)`, `over_m = max(0, p95/rate_m − 1)`. With `P_m = W_m(S) / rate_m` and residual
+  `R = U(S) − Σ P_m`, the two one-sided moves of the subtracted points combine root-sum-square across models — `ΔU = √Σ (P_m · (1/(1 − min(under_m, 0.99))
+  − 1))²` (true rates lower, more priced out) and `ΔO = √Σ (P_m · (1 − 1/(1 + over_m)))²` — and the span is `thin` (`mixed`) when `R ≤ 0`, `R − ΔU ≤ 0`,
+  `R / (R − ΔU) − 1 > DRIFT_PCT / 2`, or `1 − R / (R + ΔO) > DRIFT_PCT / 2`. A model fitted in fewer than half the resamples has no measured band: it takes
+  `under` 0.99 and `over` 9, so any non-negligible share of its points makes the span `mixed` (its rate is not identified well enough to subtract). A
+  context built by hand (tests) may omit a model's band; it then falls back to `SUB_ERR` (15%) on both sides, which for a single neighbour reproduces the
+  old cap. The bands are part of `SeparationContext`, built once with the horizon fit, and memoized per UTC hour and horizon interval count: one bootstrap
+  costs ~200 × 6.8 ms ≈ 1.4 s of the event loop (measured 2026-11-09, 12,424 intervals), paid at most once an hour. `SEPARATION_S_CAP` goes; `s` is still
+  published as `pricedOutShare`. Consequence, accepted: a model that is the minor partner in a span (Fable beside an Opus driver) is usually `thin` there —
+  the residual genuinely cannot price it to ±10%. It still carries its figure on the strip, and its row still shows the existing joint-fit
+  `fittedWeightedPerPct`.
+- **Another model repriced — judged by its effect on M.** `rate_m` is fitted over the whole horizon, so if Fable itself gets pricier this week, its extra
+  points are under-subtracted and Opus would read as drift — the exact failure this change exists to remove. So, in the current window and in every day
+  cell inside it: for each m with both a horizon rate and a current-window (3-day) joint-fit rate, recompute M's figure with **that one** m priced at its
+  3-day rate instead (the others at horizon); if any single swap moves M's figure by more than `DRIFT_PCT / 2`, or leaves no positive residual, the span is
+  `thin` (`repriced`). No token-share gate: a neighbour with a trivial share cannot move M's figure 10%, and a noisy 3-day fit on a few points (Haiku,
+  2026-11-09) cannot either unless its spend matters. The repricing then shows where it belongs: on m's own row. An m with **no** 3-day fit (refused by
+  `fitRates`) does not trigger the guard — there is no evidence it repriced. Accepted limitation, documented: after m reprices, the horizon `rate_m` is a
+  blend of old and new, so baseline-range days are mis-subtracted slightly the other way; the 14 baseline days outweigh the 3 current ones, and the guard
+  already stops a verdict while the move is fresh.
 - **A needed rate is missing.** Some other model spent more than a trivial share of S's weighted tokens and has no joint-fit rate (refused `thin`). A model
   whose spend is that small can be ignored rather than refusing the whole span; the builder picks the threshold and states it.
 - **Too little left.** The residual `U(S) − Σ…` is under **the span's own** `minUtil` — `BASELINE_FLOORS` (15) for the baseline range, `CURRENT_FLOORS`
@@ -169,10 +185,17 @@ Tests (node-assert, synthetic intervals, in the existing `test/usage-rate*.test.
 3. **Carry-over.** B's spend in interval *i* with dUtil 0, the tick landing in interval *i+1* that A owns with small A spend: A's pooled rate is visibly low,
    its separated rate is not. This is the 2026-11-09 shape and the reason for the change.
 4. **Mirror of 3.** A's spend carries into a B-owned interval: B's rate is not inflated either.
-5. **Sensitivity guard at its derived cap.** With `SUB_ERR` 15% and `DRIFT_PCT` 20: a span with priced-out share `s` = 0.40 → `thin`, figures carried; the
-   same model in a span with `s` = 0.25 → rated. Run it from both sides of one Fable+Opus pair, so the guard is shown to treat driver and minor alike.
-5b. **Repriced-neighbour guard.** m's 3-day fit is > `DRIFT_PCT` off its horizon rate → M's current verdict is `thin`, not `drift`; m's own row still shows
-   its move.
+5. **Sensitivity guard on measured error.** With one neighbour at a hand-set band of 15% both sides (the fallback) and `DRIFT_PCT` 20: a span with
+   priced-out share `s` = 0.40 → `thin`, figures carried; the same model in a span with `s` = 0.25 → rated. Run it from both sides of one Fable+Opus pair,
+   so the guard is shown to treat driver and minor alike. Then the same `s` = 0.40 span with the neighbour's band at 3% → rated (a well-measured
+   neighbour can be priced out of a bigger share). Two neighbours at 15% each with half the priced-out points each → the root-sum-square move, not the
+   sum. A neighbour fitted in under half the resamples → `mixed` whenever its points move M's figure. `R − ΔU ≤ 0` → `mixed`, never `Infinity`.
+5a. **The bootstrap band.** `separationContext` on a fixture whose days all price m identically → m's band ≈ 0 both sides; on a fixture where m's per-day
+   rate alternates 400k/600k → a non-zero band on both sides; two calls on the same intervals → identical bands (seeded); a second call within the same
+   UTC hour and interval count does not refit (memo).
+5b. **Repriced-neighbour guard by effect.** m's 3-day fit 30% off its horizon rate and m holding a large share of the priced-out points → M's current
+   verdict is `thin` (`repriced`), not `drift`; m's own row still shows its move. The same 30% move with m's points a small share, so the swap moves M's
+   figure < 10% → not `repriced`. A swap that leaves no positive residual → `repriced`.
 6. **Missing-rate guard.** Another model with non-trivial spend and no fit → `thin`; the same model with trivial spend → ignored, span rated.
 7. **Residual floor.** Residual points under the floor or ≤ 0 → `thin`.
 7b. **Thin reason.** Tests 5 (s = 0.40), 5b, 6 and 7 each assert `thinReason` = `mixed`, `repriced`, `unpriced`, `floor` respectively, on both the
@@ -186,12 +209,14 @@ Back-test, recorded in the PR with the command output:
 
 - Re-run the separated rate over the live ledger for the 17-day horizon, per UTC day, for every model with a fit, beside the old pooled figure. Report the
   day-to-day dispersion of both and how many days the guard turned `thin`.
-- Confirm 2026-11-09's Opus day carries a figure in Opus's ordinary interactive band rather than ~268–326k (expected `thin` by the sensitivity cap).
+- Confirm 2026-11-09's Opus day carries a figure in Opus's ordinary interactive band rather than ~268–326k (after the amendment: expected rated, ~526k).
+- After the amendment: Opus's current row rated, its rated-day count and cv against the inequality, and each model's bootstrap band — against the
+  amendment's B = 1000 measurement, so a shortfall from B = 200 shows.
 - Per guard, how many day cells it turned `thin`.
 - State what was not verified (at minimum: the card was or was not looked at in the browser, and against which data).
 
 ## Left to the builder
 
 - Where the separated estimator lives inside `lib/usage-rate.ts` and how it reuses `usableForRate`, `fitRates` and the existing floors.
-- The exact trivial-share threshold in the missing-rate guard, and the final `SUB_ERR` after the back-test.
+- The exact trivial-share threshold in the missing-rate guard. (`SUB_ERR` now survives only as the hand-built-context fallback; see the amendment.)
 - The wording of the one explanatory line on the card.

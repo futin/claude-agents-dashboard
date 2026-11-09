@@ -296,6 +296,68 @@ derived by `dominantModel`: at these prices a genuinely `mixed` interval (A < 90
   breaks the inequality at 20, record that and leave `DRIFT_PCT` and the floors alone (spec §What changes, last bullet).
 - [ ] **Step 4:** commit `docs(usage): document the separated token value`.
 
+### Task 6b: Guards judged by their effect (spec §Guards, amendment 2026-11-09)
+
+Added after Task 6's back-test left every current row unrated live; the maintainer picked "V3". The spec's amendment paragraph and the two rewritten guard
+bullets are the authority; Task 2's `mixed` / `repriced` definitions and constants above are superseded where they differ. Precedence, `thinReason`,
+`pricedOutShare`, `unpriced`, `floor` and every caller's `checkRepriced` choice are unchanged.
+
+**Files:**
+- Modify: `server/lib/usage-rate.ts` (constants ~635–677, `SeparationContext` / `separationContext` ~729, guard block ~785–800), `server/lib/usage-shape.ts`
+  (~221, if the memo needs nothing there, leave it)
+- Modify: `test/usage-rate-fit.test.ts` ([5], [5b] and the `SEPARATION_S_CAP` asserts ~296–473), `test/usage-rate-drift.test.ts` (~464–552),
+  `test/usage-rate-daily.test.ts` (the repriced day cases, Task 4's "B share 5% / 0.5%")
+- Modify: `docs/subsystems/usage-limits.md` (§guards ~962–1004, the cv paragraph ~1038, the row ~1394, the strip ~1607–1611)
+
+**Interfaces:**
+- `export const SUB_BOOTSTRAP = 200`; `SUB_ERR` (0.15) stays, documented as the fallback band for a model with no measured one.
+  `SEPARATION_S_CAP` is removed (and every import of it).
+- `SeparationContext` gains `error: ReadonlyMap<string, { under: number; over: number }>`. It may be empty; a model absent from it uses `SUB_ERR` both
+  sides. Hand-built contexts in tests pass an empty map unless the case is about the band.
+- A pure helper turns a list of bootstrap draws (ratios `draw / point`) and the resample count into a band: fewer draws than half the resamples →
+  `{ under: 0.99, over: 9 }`; otherwise `under = max(0, 1 − p5)`, `over = max(0, p95 − 1)`, percentiles by one stated method (nearest-rank is fine),
+  `under` clamped at 0.99. Export it for the tests.
+- The bootstrap: usable intervals of the horizon `[since, until)` grouped by UTC day; `SUB_BOOTSTRAP` resamples of the day keys with replacement from a
+  fixed-seed PRNG (seeded per call, so two calls agree); `fitRates` on each concatenated resample over the same window; per model, the draws where it was
+  fitted. Only models with a horizon point rate get a band.
+- `separationContext` builds `error` beside `horizon`, memoized in one module-level slot keyed on the UTC hour of `nowMs` plus `intervals.length`
+  (a hit returns the previous context's `error` map, the same object). Export a reset for tests if the memo would leak between cases.
+
+**Behaviour:**
+- `mixed`, with `P_m = W_m / rate_m` over the span's priced neighbours and `R = U − Σ P_m`: `R ≤ 0`, or `R − ΔU ≤ 0`, or `R / (R − ΔU) − 1 > DRIFT_PCT /
+  200`, or `1 − R / (R + ΔO) > DRIFT_PCT / 200`, with `ΔU = √Σ (P_m · (1 / (1 − under_m) − 1))²` and `ΔO = √Σ (P_m · (1 − 1 / (1 + over_m)))²`. No path
+  publishes `Infinity` or `NaN`.
+- `repriced` (when `checkRepriced`): for each neighbour m with both a `horizon` and a `current` rate, the residual with m's `P_m` recomputed at its
+  `current` rate (others at horizon); trips when that residual ≤ 0 or `|R / R_swap − 1| > DRIFT_PCT / 200`. No token-share gate.
+
+**Tests** (replace the superseded cases; keep every other existing case passing unchanged):
+- Sensitivity, one neighbour, empty `error` map (fallback 15%): `s` = 0.40 → `mixed`; `s` = 0.25 → rated; from both sides of one Fable+Opus pair.
+- Same `s` = 0.40 span with the neighbour's band `{ 0.03, 0.03 }` → rated.
+- Two neighbours, fallback band, each half of `s` = 0.40 → rated (root-sum-square move ≈ 9.1%); the same total on one neighbour → `mixed` (≈ 13.3%).
+- Neighbour band `{ 0.99, 9 }` with its `P_m` at 1% of `U` → `mixed`, figures carried finite or null, never `Infinity`.
+- Band helper: 99 draws of 200 → `{ 0.99, 9 }`; 100 identical draws of 1.0 → `{ 0, 0 }`; a draw list spanning 0.8–1.3 → `under` ≈ 0.2-ish and `over` ≈
+  0.3-ish by the stated percentile method (assert the exact values your method gives, and name the method in the test).
+- Bootstrap on a fixture whose every day prices m identically → m's band < 0.5% both sides; on a fixture where m's per-day rate alternates 400k / 600k →
+  both sides > 2%; two calls on the same intervals → deep-equal bands; a second `separationContext` call in the same UTC hour with the same interval count
+  → the same `error` object (identity).
+- Repriced by effect: horizon m 500k, current m 650k, `P_m` 40% of `U` → `repriced` with `checkRepriced`, rated without it (move ≈ 13.3%); same rates with
+  `P_m` 10% of `U` → not `repriced` (≈ 2.5%); current m 200k with `P_m` 50% of `U` → `repriced` (residual ≤ 0 after the swap); m absent from `current` →
+  not `repriced`.
+- Day strip: a current-window day whose neighbour swap moves the figure > 10% → `repriced`; the same day on a baseline-range date → not `repriced`; a
+  current-window day where the neighbour's share is small enough that the swap moves < 10% → not `repriced`.
+- The row: Task 3's "repriced row" case re-expressed so B's swap moves A's current figure > 10%; B's own row still not `repriced`.
+
+- [ ] **Step 1:** constants, band helper and bootstrap, with their tests.
+- [ ] **Step 2:** `SeparationContext.error`, memo, and the two guards, replacing the superseded tests.
+- [ ] **Step 3:** run `usage-rate-fit`, `usage-rate-drift`, `usage-rate-daily`, `api-usage-rates` and `usage-shape` test files (one at a time, foreground),
+  plus `pnpm typecheck`. Commit `fix(usage): judge the separation guards by their effect on the figure`.
+- [ ] **Step 4: Re-run the back-test** (Task 6's script, same live data) and save the new output beside the old. Expect, against the amendment's B = 1000
+  measurement: Opus 5.5 current row rated, ~14 of 15 rated days, 2026-11-09 rated near 526k, cv under the inequality at 20. If the Opus current row is not
+  rated or 2026-11-09 is not rated, stop and report instead of tuning.
+- [ ] **Step 5: Docs.** Rewrite `usage-limits.md`'s guard section for the measured-band `mixed` and effect-based `repriced` (with `SUB_BOOTSTRAP`, the seed,
+  the memo and its ~1.4 s hourly cost dated 2026-11-09), replace the "repriced guard can dominate" paragraph with the new back-test numbers dated, and
+  update the cv paragraph, the row and the strip examples. Commit `docs(usage): document the measured-band separation guards`.
+
 ### Task 7: Look at the card
 
 - [ ] **Step 1:** invoke `/ui-verify` on the Usage card against the live API (worktree dev servers on 4273/5273 per memory "Worktree dev setup"; record
