@@ -533,7 +533,7 @@ export function run(): number {
     const blank = { weightedPerPct: null, rawPerPct: null, intervals: 0, utilSum: 0, deviationPct: null } as const;
     assert.strictEqual(
       dayTip(day({ date: '2026-09-01', state: 'none', ...blank }), '2026-09-10'),
-      'Sep 1 (UTC)\nno windows this model owned'
+      'Sep 1 (UTC)\nno spend from this model that day'
     );
     assert.strictEqual(
       dayTip(day({ date: '2026-08-27', state: 'pre-ledger', ...blank }), '2026-09-10'),
@@ -560,6 +560,60 @@ export function run(): number {
     const entry = RATES_GLOSSARY.find(g => g.key === 'daily');
     assert.ok(entry !== undefined && entry.text.length > 0);
     assert.strictEqual(figureTip('daily'), entry!.text);
+  })) p++; else f++;
+
+  // ── why a span is thin ──
+
+  if (test('verdictText(thin): each reason has its own hint, floor and absent keep the day-floor one', () => {
+    const floor = verdictText('thin').hint;
+    assert.strictEqual(verdictText('thin', 'floor').hint, floor);
+    assert.match(floor, /7 separate days/);
+    assert.strictEqual(verdictText('thin', 'mixed').hint,
+      "most of the current window's points were another model's — this model's rate can't be separated from them");
+    assert.strictEqual(verdictText('thin', 'repriced').hint,
+      "another model's rate moved in the current window — this one is not judged until it settles");
+    assert.strictEqual(verdictText('thin', 'unpriced').hint,
+      "another model spent here without a rate of its own yet — this model's rate can't be separated from it");
+    for (const r of ['mixed', 'repriced', 'unpriced'] as const) assert.strictEqual(verdictText('thin', r).label, 'collecting');
+  })) p++; else f++;
+
+  if (test('dayTip: each thin reason names itself on the last line', () => {
+    const thin = (thinReason?: 'floor' | 'mixed' | 'repriced' | 'unpriced') =>
+      dayTip(day({ date: '2026-09-10', state: 'thin', intervals: 3, utilSum: 3, weightedPerPct: 396_000, deviationPct: 73.3, thinReason }), '2026-09-11');
+    const head = 'Sep 10 (UTC)\n396k weighted tok / 1%\n+73.3% vs baseline\n3 windows · 3.0 pts\n';
+    assert.strictEqual(thin('floor'), `${head}under 5 pts — not coloured`);
+    assert.strictEqual(thin(), `${head}under 5 pts — not coloured`);
+    assert.strictEqual(thin('mixed'), `${head}mostly another model's spend — can't be separated, not coloured`);
+    assert.strictEqual(thin('repriced'), `${head}another model's rate moved — can't be separated, not coloured`);
+    assert.strictEqual(thin('unpriced'), `${head}another model has no rate yet — can't be separated, not coloured`);
+  })) p++; else f++;
+
+  if (test('dayTip: a thin cell with null figures has no rate line and no NaN', () => {
+    const tip = dayTip(day({
+      date: '2026-09-10', state: 'thin', intervals: 2, utilSum: 1.5, weightedPerPct: null, rawPerPct: null, deviationPct: null, thinReason: 'mixed'
+    }), '2026-09-11');
+    assert.strictEqual(tip, "Sep 10 (UTC)\n2 windows · 1.5 pts\nmostly another model's spend — can't be separated, not coloured");
+    assert.ok(!/NaN|undefined|weighted tok/.test(tip), tip);
+  })) p++; else f++;
+
+  if (test('ledgerReading: a non-floor thin reason replaces the gate counters; floor keeps them', () => {
+    const past = { verdict: 'thin', days: 9, baselineDays: 12, intervals: 6 } as const;
+    assert.strictEqual(ledgerReading(rowOf({ ...past, thinReason: 'repriced' })), verdictText('thin', 'repriced').hint);
+    assert.strictEqual(ledgerReading(rowOf({ ...past, thinReason: 'mixed' })), verdictText('thin', 'mixed').hint);
+    assert.strictEqual(ledgerReading(rowOf({ verdict: 'thin', days: 1, baselineDays: 3, thinReason: 'floor' })),
+      'waiting on 3 of 7 baseline days and 1 of 2 current days');
+    assert.strictEqual(ledgerReading(rowOf({ verdict: 'thin', days: 1, baselineDays: 3 })),
+      'waiting on 3 of 7 baseline days and 1 of 2 current days');
+  })) p++; else f++;
+
+  if (test('collecting tile and glossary carry the separation copy', () => {
+    assert.strictEqual(ratesStats(verdicts('thin'), LIVE)[2].sub, 'not enough windows, or not separable');
+    const g = (k: string) => RATES_GLOSSARY.find(e => e.key === k)!.text;
+    assert.ok(g('weighted').endsWith(" Other models' spend in the same windows is priced out at their own fitted rates, so a busier neighbour does not move it."));
+    assert.ok(g('daily').includes("Hatched days moved under 5 pts or could not be separated from other models' spend, and are shown but not coloured"), g('daily'));
+    assert.strictEqual(g('window'),
+      'One window is one 5-hour limit period in which this model spent tokens, alone or beside other models. '
+      + 'pts are the utilization percentage points left to it once the other models\' spend is priced out.');
   })) p++; else f++;
 
   // ── the off-peak boost lines ──
