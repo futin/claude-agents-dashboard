@@ -9,7 +9,6 @@ import {
   CURRENT_MS,
   DRIFT_PCT,
   RAW_SHIFT_PCT,
-  SEPARATION_S_CAP,
   SURFACE_COVERAGE_MIN,
   SPLIT_FLOORS,
   SPLIT_MAX_R2,
@@ -27,12 +26,15 @@ import {
   mixAdjustedDeviation,
   poolRate,
   rateFor,
+  resetSeparationMemo,
   separatedRate,
   totalWeighted
 } from '../server/lib/usage-rate.js';
 import type { Interval, RateFloors, SeparationContext } from '../server/lib/usage-rate.js';
 
 function test(name: string, fn: () => void): boolean {
+  // The bands are memoized per clock hour and model set; every fixture here shares NOW, so each case starts cold.
+  resetSeparationMemo();
   try { fn(); console.log('  ✓ ' + name); return true; }
   catch (e) { console.log('  ✗ ' + name); console.log('    ' + (e as Error).message); return false; }
 }
@@ -462,7 +464,7 @@ export function run(): number {
 
   type Surf = 'interactive' | 'headless';
   const ctxOf = (horizon: Record<string, number>, current: Record<string, number> = horizon): SeparationContext =>
-    ({ horizon: new Map(Object.entries(horizon)), current: new Map(Object.entries(current)) });
+    ({ horizon: new Map(Object.entries(horizon)), current: new Map(Object.entries(current)), error: new Map() });
   const PRICES = ctxOf({ A: 480_000, B: 500_000 });
   /** Weighted tokens exactly `w` per model; `dUtil` and the surfaces are the caller's. */
   const sIv = (toT: number, w: Record<string, number>, dUtil: number, surfaces: Record<string, Surf>): Interval => {
@@ -545,11 +547,12 @@ export function run(): number {
     within(row.surfaces[0].weightedPerPct, 500_000, 0.03, 'interactive stratum');
     within(row.surfaces[1].weightedPerPct, 300_000, 0.15, 'headless stratum');
     assert.ok(!('thinReason' in row), 'a rated row carries no thinReason');
-    // Both current strata sit under the sensitivity cap, so neither drops out of the adjustment.
+    // Both current strata pass the sensitivity bound at the 15% fallback band, so neither drops out of the adjustment;
+    // at the fallback a single neighbour's bound is s ≈ 0.34.
     for (const surface of ['interactive', 'headless'] as const) {
       const r = separatedRate(ivs, 'A', cur.sinceMs, cur.untilMs, PRICES, { floors: CURRENT_FLOORS, surface, checkRepriced: true })!;
       assert.strictEqual(r.thinReason, null, `${surface} current stratum`);
-      assert.ok(r.pricedOutShare! < SEPARATION_S_CAP, `${surface} s=${r.pricedOutShare}`);
+      assert.ok(r.pricedOutShare! < 0.34, `${surface} s=${r.pricedOutShare}`);
     }
   })) p++; else f++;
 
@@ -577,13 +580,27 @@ export function run(): number {
     assert.strictEqual(noCurrent.intervals, 0);
   })) p++; else f++;
 
-  if (test('a neighbour repriced 30% in the current window makes A\'s row repriced, and not its own', () => {
+  if (test('a neighbour whose 3-day rate moves A\'s current figure > 10% makes A\'s row repriced, and not its own', () => {
     const ivs = fixture7c();
     const moved = ctxOf({ A: 480_000, B: 500_000 }, { A: 480_000, B: 350_000 });
+    // The guard is the effect: swapping B to its 3-day rate moves A's current figure by more than DRIFT_PCT / 2.
+    const at = (ctx: SeparationContext) => separatedRate(ivs, 'A', cur.sinceMs, cur.untilMs, ctx, { floors: CURRENT_FLOORS })!.weightedPerPct!;
+    const swapMove = Math.abs(at(PRICES) / at(ctxOf({ A: 480_000, B: 350_000 })) - 1);
+    assert.ok(swapMove > DRIFT_PCT / 200, `the swap moves A by ${swapMove}`);
     const a = driftRow(ivs, 'A', NOW, moved);
     assert.strictEqual(a.verdict, 'thin');
     assert.strictEqual(a.thinReason, 'repriced');
-    assert.deepStrictEqual(a.surfaces.map(s => s.weightedPerPct), [null, null]);
+    // Each stratum is judged by its own swap: B's points land mostly on the interactive one; the headless stratum carries only
+    // A's headless share of them, so its swap moves it under 10% and it stays rated.
+    const stratumMove = (surface: Surf) => {
+      const of = (ctx: SeparationContext) =>
+        separatedRate(ivs, 'A', cur.sinceMs, cur.untilMs, ctx, { floors: CURRENT_FLOORS, surface })!.weightedPerPct!;
+      return Math.abs(of(PRICES) / of(ctxOf({ A: 480_000, B: 350_000 })) - 1);
+    };
+    assert.ok(stratumMove('interactive') > DRIFT_PCT / 200 && stratumMove('headless') <= DRIFT_PCT / 200,
+      `interactive ${stratumMove('interactive')}, headless ${stratumMove('headless')}`);
+    assert.strictEqual(a.surfaces[0].weightedPerPct, null, 'interactive stratum repriced');
+    assert.notStrictEqual(a.surfaces[1].weightedPerPct, null, 'headless stratum rated');
     assert.notStrictEqual(a.baselineWeightedPerPct, null, 'the baseline is not under the repriced check');
     assert.strictEqual(mixAdjustedDeviation(ivs, 'A', NOW, moved), null, 'repriced strata drop out of the adjustment');
     assert.notStrictEqual(driftRow(ivs, 'B', NOW, moved).thinReason, 'repriced');

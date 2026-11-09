@@ -437,6 +437,7 @@ export function joinWeeklyIntervals(
 // ── Rates, baselines and drift ───────────────────────────────────────────────
 
 const DAY_MS = 86_400_000;
+const HOUR_MS = 3_600_000;
 
 /** How far back the baseline reaches. */
 export const BASELINE_MS = 17 * DAY_MS;
@@ -628,36 +629,36 @@ export function rateFor(
 // ── The separated rate ───────────────────────────────────────────────────────
 
 /**
- * The plausible error of the subtraction rates — how far one model's horizon
- * joint-fit rate may sit from the truth when it prices that model's spend out
- * of another's span. The starting value, back-tested in the spec's Task 6.
+ * The fallback error band, both sides, for a neighbour with no measured one — only a context built by hand (tests) lacks a model's band, since
+ * {@link separationContext} measures every model with a horizon rate. For a single neighbour it reproduces the old flat cap: `s` ≈ 0.34 at `DRIFT_PCT` 20.
  */
 export const SUB_ERR = 0.15;
 
 /**
- * The largest priced-out share `s` a separated figure may rest on.
- *
- * Scaling every subtraction rate together by `k` moves M's figure by the
- * factor `(1 − s) / (1 − s/k)` — it depends on `s` alone. The guard wants that
- * move under `DRIFT_PCT / 2` (r = 0.10) for `k = 1 ± SUB_ERR`. Solving each side
- * for `s`: `(1 − SUB_ERR)` gives `r / ((1 + r) / (1 − SUB_ERR) − 1)` ≈ 0.34, and
- * `(1 + SUB_ERR)` gives `r / (1 − (1 − r) / (1 + SUB_ERR))` ≈ 0.46. The cap is the
- * smaller, so retuning either constant moves it.
+ * Resamples in the day-block bootstrap that measures each neighbour's error band. Each one is a full {@link fitRates}, ~6.8 ms on the live
+ * 12,424-interval horizon (2026-11-09), so 200 is ~1.4 s — paid once an hour through the memo, not per request.
  */
-export const SEPARATION_S_CAP: number = (() => {
-  const r = DRIFT_PCT / 200;
-  const under = r / ((1 + r) / (1 - SUB_ERR) - 1);
-  const over = r / (1 - (1 - r) / (1 + SUB_ERR));
-  return Math.min(under, over);
-})();
+export const SUB_BOOTSTRAP = 200;
+
+/** Fixed so the same ledger gives the same bands on every call; any constant would do. */
+export const SUB_BOOTSTRAP_SEED = 0x5eed_2026;
+
+/** A model fitted in fewer than half the resamples: its rate is not identified well enough to subtract, so any real share of its points trips `mixed`. */
+const UNMEASURED_BAND: ErrorBand = { under: 0.99, over: 9 };
 
 /**
  * A model holding at most this share of a span's weighted tokens is ignored by
- * the missing-rate and repriced guards, and not subtracted when it has no rate.
+ * the missing-rate guard, and not subtracted when it has no rate.
  * At the ~5× Fable/Opus price ratio, 1% of tokens is ≈ 5% of points — under
  * `DRIFT_PCT / 2`, so leaving it in the residual cannot move a verdict.
  */
 export const UNPRICED_TRIVIAL_SHARE = 0.01;
+
+/** How far a model's true rate may sit below (`under`) and above (`over`) its horizon point rate, as fractions of it. */
+export interface ErrorBand {
+  under: number;
+  over: number;
+}
 
 /** Each model's weighted tokens per point, from the joint fit, keyed by model id. */
 export interface SeparationContext {
@@ -665,6 +666,77 @@ export interface SeparationContext {
   horizon: ReadonlyMap<string, number>;
   /** The 3-day fit — read only by the repriced guard. */
   current: ReadonlyMap<string, number>;
+  /** Each horizon model's bootstrap band, read by the sensitivity guard. A model absent from it takes {@link SUB_ERR} both sides. */
+  error: ReadonlyMap<string, ErrorBand>;
+}
+
+/**
+ * The band from one model's bootstrap draws (`draw / point`), by nearest rank: the p-th percentile of n sorted draws is the
+ * `⌈p·n⌉`-th. Exactly half the resamples still counts as measured.
+ */
+export function errorBand(draws: readonly number[], resamples: number): ErrorBand {
+  if (draws.length === 0 || draws.length < resamples / 2) return { ...UNMEASURED_BAND };
+  const sorted = [...draws].sort((a, b) => a - b);
+  const rank = (p: number): number => sorted[Math.max(0, Math.ceil(p * sorted.length) - 1)];
+  return {
+    under: Math.min(UNMEASURED_BAND.under, Math.max(0, 1 - rank(0.05))),
+    over: Math.max(0, rank(0.95) - 1)
+  };
+}
+
+/** mulberry32: a 32-bit seeded generator, enough to pick day keys and nothing else. */
+function seededRandom(seed: number): () => number {
+  let a = seed >>> 0;
+  return () => {
+    a = (a + 0x6d2b79f5) >>> 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4_294_967_296;
+  };
+}
+
+/**
+ * Each model's error band from a day-block bootstrap of the fit over `[sinceMs, untilMs)`: whole UTC days resampled with replacement,
+ * because intervals within a day share a workload and a tick boundary, so resampling them one by one would understate the spread.
+ * `point` defaults to that window's own fit; only models in it get a band. Seeded per call, so two calls on the same intervals agree.
+ */
+export function bootstrapBands(
+  intervals: Interval[], sinceMs: number, untilMs: number,
+  point: ReadonlyMap<string, number> = new Map([...fitRates(intervals, sinceMs, untilMs)].map(([m, fit]) => [m, fit.weightedPerPct])),
+  resamples: number = SUB_BOOTSTRAP
+): Map<string, ErrorBand> {
+  const byDay = new Map<string, Interval[]>();
+  for (const iv of intervals) {
+    if (!usableForRate(iv) || iv.toT < sinceMs || iv.toT >= untilMs) continue;
+    const key = utcDate(iv.toT);
+    const day = byDay.get(key);
+    if (day) day.push(iv); else byDay.set(key, [iv]);
+  }
+  const days = [...byDay.keys()].sort().map(key => byDay.get(key)!);
+  const draws = new Map<string, number[]>([...point.keys()].map(model => [model, []]));
+  const random = seededRandom(SUB_BOOTSTRAP_SEED);
+  for (let b = 0; b < resamples && days.length > 0; b++) {
+    const sample: Interval[] = [];
+    for (let d = 0; d < days.length; d++) sample.push(...days[Math.floor(random() * days.length)]);
+    for (const [model, fit] of fitRates(sample, sinceMs, untilMs)) {
+      const rate = point.get(model);
+      if (rate !== undefined && rate > 0) draws.get(model)!.push(fit.weightedPerPct / rate);
+    }
+  }
+  return new Map([...draws].map(([model, list]) => [model, errorBand(list, resamples)]));
+}
+
+/**
+ * The last bootstrap, keyed on the UTC hour and the set of models with a horizon rate. Not on the interval count: the recorder adds an
+ * interval a minute, so a count key would miss on nearly every card open. A hit pairs bands from earlier in the hour with the current
+ * point rates; bands are ratios, so that is second-order.
+ */
+let bandMemo: { key: string; error: ReadonlyMap<string, ErrorBand> } | null = null;
+
+/** Forget the memoized bands — for tests, whose fixtures share a clock hour and a model set but not their data. */
+export function resetSeparationMemo(): void {
+  bandMemo = null;
 }
 
 /**
@@ -678,9 +750,16 @@ export function separationContext(
   const perPct = (fits: Map<string, RateFit>): Map<string, number> =>
     new Map([...fits].map(([model, fit]) => [model, fit.weightedPerPct]));
   const cur = currentRange(nowMs);
+  const sinceMs = nowMs - BASELINE_MS;
+  const horizon = perPct(fitRates(intervals, sinceMs, Number.POSITIVE_INFINITY));
+  const key = `${Math.floor(nowMs / HOUR_MS)}|${[...horizon.keys()].sort().join('\n')}`;
+  if (bandMemo === null || bandMemo.key !== key) {
+    bandMemo = { key, error: bootstrapBands(intervals, sinceMs, Number.POSITIVE_INFINITY, horizon) };
+  }
   return {
-    horizon: perPct(fitRates(intervals, nowMs - BASELINE_MS, Number.POSITIVE_INFINITY)),
-    current: perPct(current ?? fitRates(intervals, cur.sinceMs, cur.untilMs))
+    horizon,
+    current: perPct(current ?? fitRates(intervals, cur.sinceMs, cur.untilMs)),
+    error: bandMemo.error
   };
 }
 
@@ -780,23 +859,44 @@ export function separatedRate(
   const pricedOutShare = util > 0 ? pricedOut / util : null;
   const figures = residual > 0;
 
-  let unpriced = false, repriced = false;
+  // Both guards measure how far M's figure W_M / R could move, against DRIFT_PCT / 2: half the drift band, so a move
+  // the subtraction alone could cause never reads as drift.
+  const limit = DRIFT_PCT / 200;
+  const bandSide = (value: number | undefined): number => (value !== undefined && Number.isFinite(value) ? Math.max(0, value) : SUB_ERR);
+  let unpriced = false, repriced = false, squaresUnder = 0, squaresOver = 0;
   for (const [other, w] of others) {
-    if (total <= 0 || w / total <= UNPRICED_TRIVIAL_SHARE) continue;
     const horizon = ctx.horizon.get(other);
-    if (horizon === undefined) { unpriced = true; continue; }
+    if (horizon === undefined) {
+      if (total > 0 && w / total > UNPRICED_TRIVIAL_SHARE) unpriced = true;
+      continue;
+    }
+    if (!(horizon > 0)) continue;
+    const points = w / horizon;
+    const band = ctx.error.get(other);
+    // A true rate lower than the point prices more out (R shrinks); higher, less. Root-sum-square: the neighbours' errors are independent.
+    squaresUnder += (points * (1 / (1 - Math.min(bandSide(band?.under), 0.99)) - 1)) ** 2;
+    squaresOver += (points * (1 - 1 / (1 + bandSide(band?.over)))) ** 2;
+    // With no positive residual there is no figure for a swap to move; `mixed` already holds the span.
     const current = ctx.current.get(other);
-    if (opts.checkRepriced && current !== undefined && Math.abs(current / horizon - 1) * 100 > DRIFT_PCT) {
-      repriced = true;
+    if (opts.checkRepriced && residual > 0 && current !== undefined && current > 0) {
+      const swapped = residual + points - w / current;
+      if (swapped <= 0 || Math.abs(residual / swapped - 1) > limit) repriced = true;
     }
   }
+  const moveUnder = Math.sqrt(squaresUnder), moveOver = Math.sqrt(squaresOver);
+  // Only a span that subtracts something can be too sensitive to the subtraction; U ≤ 0 alone is a floor.
+  const mixed = pricedOut > 0 && (
+    residual <= 0 || residual - moveUnder <= 0
+    || residual / (residual - moveUnder) - 1 > limit
+    || 1 - residual / (residual + moveOver) > limit
+  );
   const utilSum = Math.max(0, residual);
   const under = util <= 0 || count < opts.floors.minIntervals || utilSum < opts.floors.minUtil
     || dates.size < opts.floors.minDays;
   const thinReason: ModelThinReason | null =
     unpriced ? 'unpriced'
       : repriced ? 'repriced'
-        : pricedOutShare !== null && pricedOutShare > SEPARATION_S_CAP ? 'mixed'
+        : mixed ? 'mixed'
           : under ? 'floor'
             : null;
 

@@ -18,10 +18,12 @@ import { emptyRates, shapeUsageRates } from '../server/lib/usage-shape.js';
 import { getSettings, SETTINGS_FILE } from '../server/lib/settings.js';
 import { readRecentSamples } from '../server/lib/usage-history.js';
 import { LEDGER_FILE, ledgerStartMs, readLedgerSince } from '../server/lib/usage-ledger.js';
-import { BASELINE_MS, fitDeviation } from '../server/lib/usage-rate.js';
+import { BASELINE_MS, fitDeviation, resetSeparationMemo } from '../server/lib/usage-rate.js';
 import { testAsync, withServer } from './api-harness.js';
 
 function test(name: string, fn: () => void): boolean {
+  // The bands are memoized per clock hour and model set, and fixtures here share both; each case starts cold.
+  resetSeparationMemo();
   try { fn(); console.log('  ✓ ' + name); return true; }
   catch (e) { console.log('  ✗ ' + name); console.log('    ' + (e as Error).message); return false; }
 }
@@ -324,7 +326,7 @@ export async function run(): Promise<number> {
   let p = 0, f = 0;
   const check = (r: boolean): void => { if (r) p++; else f++; };
 
-  check(test('a model that owns no window still gets a row, carrying only its fitted rate', () => {
+  check(test('a model that owns no window still gets a row, its separated rate agreeing with its fitted one', () => {
     const dir = fittedOnlyFixtureDir();
     try {
       const body = bodyFor(dir, FITTED_END + MIN);
@@ -333,21 +335,23 @@ export async function run(): Promise<number> {
         + JSON.stringify(body.models.map(m => m.model)));
       // It owns nothing, but the separated rate does not need ownership: its 12
       // spending windows and the points left once opus is priced out are real
-      // evidence. The figure itself is refused — opus's spend, priced out at its
-      // own rate, is over half of every point in the span — so the row reads
-      // `thin` / `mixed` rather than the pooled null of owned-only evidence.
-      assert.strictEqual(sub.weightedPerPct, null);
-      assert.strictEqual(sub.rawPerPct, null);
+      // evidence. Opus's spend is over half of every point in the span, but the
+      // fixture is generated exactly, so opus's bootstrap band is ~0 (fitted in
+      // 109 of 200 resamples, 2026-11-09 — a two-day horizon refuses the draws
+      // that pick one day twice): the subtraction is exact and the figure is
+      // the generated truth rather than the pooled null of owned-only evidence.
+      // The row is still `thin` — two days are no baseline — but by the floors.
+      near(sub.weightedPerPct, 625_000, 'the separated rate');
       assert.strictEqual(sub.verdict, 'thin');
-      assert.strictEqual(sub.thinReason, 'mixed');
+      assert.strictEqual(sub.thinReason, 'floor');
       assert.strictEqual(sub.intervals, 12);
       near(sub.utilSum, 23.04, 'the points left after opus is priced out');
       assert.strictEqual(sub.days, 2);
       assert.strictEqual(sub.deviationPct, null);
-      // And the fitted rate is the only number on the row.
+      // And the joint fit reads the same truth, so the two agree.
       assert.strictEqual(sub.fitVerdict, 'fitted');
       near(sub.fittedWeightedPerPct, 625_000, 'the subagent\'s fitted rate');
-      assert.strictEqual(sub.fitDeviationPct, null, 'no pooled rate to compare against');
+      assert.ok(Math.abs(sub.fitDeviationPct!) < 1e-6, `the two agree: ${sub.fitDeviationPct}`);
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
     }
@@ -399,15 +403,28 @@ export async function run(): Promise<number> {
     try {
       const body = bodyFor(dir, FITTED_END + MIN);
       const driver = body.models.find(m => m.model === 'opus-5')!;
-      // The subagent's spend is over a third of the points here, so the
-      // separated rate is refused (`mixed`) and there is nothing to compare the
-      // fit to: null, not a deviation against a withheld figure.
+      // The subagent's spend is over a third of the points here, but its band
+      // is measured at ~0 on this exact fixture, so the separated figure is
+      // published and the two estimators agree on the generated truth.
+      near(driver.weightedPerPct, 2_500_000, 'the driver\'s separated rate');
+      near(driver.fittedWeightedPerPct, 2_500_000, 'the driver\'s fitted rate');
+      assert.ok(Math.abs(driver.fitDeviationPct!) < 1e-6, `the two agree: ${driver.fitDeviationPct}`);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+
+    // A withheld figure: the rare model has no horizon rate and ~1.8% of the
+    // tokens, so the driver's span is `unpriced` and there is nothing to compare
+    // the fit to — null, not a deviation against a withheld figure.
+    const rare = fittedOnlyFixtureDir({ rare: true });
+    try {
+      const driver = bodyFor(rare, FITTED_END + MIN).models.find(m => m.model === 'opus-5')!;
       assert.strictEqual(driver.weightedPerPct, null);
-      assert.strictEqual(driver.thinReason, 'mixed');
+      assert.strictEqual(driver.thinReason, 'unpriced');
       near(driver.fittedWeightedPerPct, 2_500_000, 'the driver\'s fitted rate');
       assert.strictEqual(driver.fitDeviationPct, null);
     } finally {
-      fs.rmSync(dir, { recursive: true, force: true });
+      fs.rmSync(rare, { recursive: true, force: true });
     }
 
     // A single model has no one to price out, so the separated rate is rated and

@@ -16,11 +16,14 @@ import {
   CURRENT_FLOORS,
   dailyRates,
   driftRow,
-  poolRate
+  poolRate,
+  resetSeparationMemo
 } from '../server/lib/usage-rate.js';
 import type { Interval, SeparationContext } from '../server/lib/usage-rate.js';
 
 function test(name: string, fn: () => void): boolean {
+  // The bands are memoized per clock hour and model set; every fixture here shares NOW, so each case starts cold.
+  resetSeparationMemo();
   try { fn(); console.log('  ✓ ' + name); return true; }
   catch (e) { console.log('  ✗ ' + name); console.log('    ' + (e as Error).message); return false; }
 }
@@ -41,7 +44,7 @@ const own = (toT: number, dUtil: number, weightedPerPct: number, model = 'A'): I
 });
 
 const ctxOf = (horizon: Record<string, number>, current: Record<string, number> = horizon): SeparationContext =>
-  ({ horizon: new Map(Object.entries(horizon)), current: new Map(Object.entries(current)) });
+  ({ horizon: new Map(Object.entries(horizon)), current: new Map(Object.entries(current)), error: new Map() });
 
 /** One interval `dUtil` points wide in which each model spent exactly the given weighted tokens. */
 const shared = (toT: number, dUtil: number, w: Record<string, number>, owner = 'A'): Interval => ({
@@ -193,7 +196,7 @@ export function run(): number {
     assert.ok(Math.abs(cell.weightedPerPct! / 500_000 - 1) < 0.01, `expected ~500k, got ${cell.weightedPerPct}`);
   }));
 
-  check(test("B's current rate 30% off: only a current-window day with a material B share is `thin` / repriced", () => {
+  check(test("B's current rate 30% off: a current-window day is `repriced` only when swapping B to it moves A's figure > 10%", () => {
     const ctx = ctxOf({ A: 500_000, B: 500_000 }, { A: 500_000, B: 350_000 });
     const mix = (toT: number, bShare: number): Interval => {
       const total = 15_000_000; // 30 points at 500k, split by weighted-token share
@@ -201,14 +204,16 @@ export function run(): number {
     };
     const recent = at('2026-08-29T10:00:00Z');
     const old = at('2026-08-20T10:00:00Z');
-    const days = dailyRates([mix(recent, 0.05), mix(old, 0.05)], 'A', NOW, null, null, ctx);
+    // B at 30%: 9 of 30 points priced out at 500k, 12.86 at 350k — A's residual 21 → 17.14, a 22.5% move.
+    const days = dailyRates([mix(recent, 0.3), mix(old, 0.3)], 'A', NOW, null, null, ctx);
     const cur = days.find(d => d.date === '2026-08-29')!;
     assert.strictEqual(cur.state, 'thin');
     assert.strictEqual(cur.thinReason, 'repriced');
     assert.strictEqual(days.find(d => d.date === '2026-08-20')!.state, 'rated', 'baseline-range day is not checked');
 
-    const trivial = dailyRates([mix(recent, 0.005)], 'A', NOW, null, null, ctx);
-    assert.strictEqual(trivial.find(d => d.date === '2026-08-29')!.state, 'rated', 'a 0.5% share cannot trip the guard');
+    // B at 10%: 3 points become 4.29, the residual 27 → 25.71 — a 5% move, inside the guard.
+    const small = dailyRates([mix(recent, 0.1)], 'A', NOW, null, null, ctx);
+    assert.strictEqual(small.find(d => d.date === '2026-08-29')!.state, 'rated', 'a swap moving A under 10% does not trip it');
   }));
 
   check(test('a day with a model the horizon fit never priced at 5% of the tokens is `thin` / unpriced', () => {
