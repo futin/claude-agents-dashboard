@@ -975,17 +975,31 @@ basis: `intervals` = usable intervals in S in which M spent anything, `days` = t
 - **`unpriced` — a needed rate is missing.** Another model holds more than `UNPRICED_TRIVIAL_SHARE` (1%) of the span's weighted tokens and has no horizon
   rate (the joint fit refused it). At ~5× the Fable/Opus price ratio, 1% of tokens is ≈ 5% of points — under `DRIFT_PCT / 2` — so a model at or under that
   share is ignored, not subtracted, rather than refusing the span.
-- **`repriced` — another model's rate moved.** `rate_m` spans the whole horizon, so if a neighbour itself got pricier this week its extra points would be
-  under-subtracted and M would read as drift — the failure this estimator exists to remove. When any m above the 1% share has a 3-day joint-fit rate more than
-  `DRIFT_PCT` away from its horizon rate, M's current-window side is `thin`, and so is every day cell reaching into the current window where that m holds over
-  the 1% share. An m the 3-day fit refuses does not trigger it: there is no evidence it repriced. The guard runs only on the current window (`checkRepriced`),
-  never the baseline.
-- **`mixed` — too sensitive to the subtraction.** With every `rate_m` scaled together by `k`, M's figure moves by `(1 − s) / (1 − s/k)`, which depends only
-  on the priced-out share `s = Σ(W_m / rate_m) / U(S)` (`pricedOutShare`). The guard wants that move under `DRIFT_PCT / 2` (`r` = 0.10) for
-  `k = 1 ± SUB_ERR`, where `SUB_ERR` (15%) is the subtraction rates' plausible error. Solved for `s`, the `(1 − SUB_ERR)` side gives
-  `r / ((1 + r) / (1 − SUB_ERR) − 1)` ≈ 0.34 and the `(1 + SUB_ERR)` side `r / (1 − (1 − r) / (1 + SUB_ERR))` ≈ 0.46; `SEPARATION_S_CAP` is the smaller,
-  computed from the two constants so retuning either moves it. Consequence, accepted: a model that is the minor partner in a span reads `thin` there — the
-  residual cannot price it to ±10% — and its row still shows the joint-fit `fittedWeightedPerPct`.
+- **`repriced` — another model's rate moved, judged by what it does to M.** `rate_m` spans the whole horizon, so if a neighbour itself got pricier this week its
+  extra points would be under-subtracted and M would read as drift — the failure this estimator exists to remove. For each m with both a horizon rate and a
+  3-day joint-fit rate, the guard re-prices **that one** m at its 3-day rate (the others stay at horizon) and recomputes M's figure; if the swap moves it by more
+  than `DRIFT_PCT / 2` (`limit`, 0.10) or leaves no positive residual, M's current-window side is `thin`, and so is every day cell reaching into the current
+  window. There is no token-share gate: a neighbour with a trivial share cannot move M's figure 10%, and a noisy 3-day fit on a few points cannot either unless
+  its spend matters — the repricing then shows on m's own row. An m the 3-day fit refuses does not trigger it: there is no evidence it repriced. It runs only on
+  the current window (`checkRepriced`), never the baseline, and only when the span's own residual `R` is positive: with `R ≤ 0` the swap has no figure to move
+  and `mixed` already holds the span, so such a span reads `mixed`, not `repriced`.
+- **`mixed` — too sensitive to the subtraction, by each neighbour's measured error.** Every other model m carries an error band from a day-block bootstrap of the
+  horizon fit (`bootstrapBands`): the horizon's UTC days are resampled with replacement (`SUB_BOOTSTRAP` = 200 resamples, whole days because intervals within a
+  day share a workload; fixed seed `SUB_BOOTSTRAP_SEED`, so one ledger gives one band), `fitRates` is rerun on each, and `errorBand` takes the 5th and 95th
+  percentile of `draw / point` by nearest rank: `under_m = max(0, 1 − p5)` (capped at 0.99), `over_m = max(0, p95 − 1)`. With `P_m = W_m(S) / rate_m` the
+  points priced out for m and `R = U(S) − Σ P_m`, the one-sided moves combine root-sum-square across models, the errors being independent:
+  `ΔU = √Σ (P_m · (1/(1 − under_m) − 1))²` (true rates lower, more priced out) and `ΔO = √Σ (P_m · (1 − 1/(1 + over_m)))²`. The span is `mixed` when
+  `pricedOut > 0` and `R ≤ 0`, `R − ΔU ≤ 0`, `R / (R − ΔU) − 1 > limit` or `1 − R / (R + ΔO) > limit`; a span that subtracts nothing cannot be too sensitive
+  to the subtraction, so `R ≤ 0` there is a `floor`. A model fitted in fewer than half the resamples has no measured band — its rate is not identified well
+  enough to subtract — and takes `UNMEASURED_BAND` (`under` 0.99, `over` 9), so any real share of its points makes the span `mixed`. A `SeparationContext` built
+  by hand (tests) may omit a model's band; it then falls back to `SUB_ERR` (15%) on both sides. `s` is still published, as `pricedOutShare`, but no longer
+  gates anything. Consequence, accepted: a model that is the minor partner in a span reads `thin` there — the residual cannot price it to ±10% — and its row
+  still shows the joint-fit `fittedWeightedPerPct`.
+  **The bands are memoized, and the bootstrap is the cost.** `separationContext` keys the memo on the UTC hour and the set of models with a horizon rate, not the
+  interval count, because the recorder adds an interval a minute and a count key would miss on nearly every card open. One bootstrap is `SUB_BOOTSTRAP` full
+  `fitRates` runs, ~6.8 ms each on the live 12,424-interval horizon (2026-11-09): `separationContext` measured 773–849 ms cold (bootstrap included) and 4–5 ms on
+  a memo hit (2026-11-09, 12,437 intervals), paid once an hour plus once when a model enters the horizon. A hit pairs bands from earlier in the hour with the
+  current point rates; bands are ratios, so that is second-order. `resetSeparationMemo` exists for tests, whose fixtures share a clock hour but not their data.
 - **`floor` — too little left.** Under the span's own floors (`BASELINE_FLOORS` for the baseline, `CURRENT_FLOORS` for the current window, the current
   `minUtil` alone for a day cell), counted on the residual basis above, or a residual that is not positive.
 
@@ -997,12 +1011,15 @@ evidence counters; its `thinReason` is the failing side's, current before baseli
 new, so baseline-range days are priced out at a rate that is partly the new one. The 14 baseline days outweigh the 3 current ones, and the repriced guard
 already stops a verdict while the move is fresh; nothing corrects the baseline days, and nothing tries to.
 
-**The repriced guard can dominate the current window.** It compares each neighbour's 3-day fit against its horizon fit, and a minor model's 3-day fit rests on
-little. Measured 2026-11-09 13:42 UTC over the live ledger: Haiku 5.5 fitted 391k (3-day) against 838k (horizon), −53%; Sonnet 5.5 697k against 1216k, −43%;
-Opus 5.5 798k against 653k, +22%; Fable 5.1 had no 3-day fit. Every model had at least one of those three moved neighbours above the 1% share in its current
-window, so **every** model's current-window row read `thin` / `repriced` that day — Opus 5.5 included, whose separated current figure was 593k at `s` = 0.40, so
-it would have read `mixed` without the guard. The constants were left alone (spec §What changes); a row reading `repriced` on every model is this guard, not a
-fault.
+**Judging both guards by effect is what lets a current row be rated at all.** The first version capped the priced-out share `s` at a flat ≈ 0.34 (from an assumed
+15% error) and tripped `repriced` on any non-trivial neighbour whose 3-day fit moved more than `DRIFT_PCT`. Measured 2026-11-09 13:42 UTC over the live ledger,
+Haiku 5.5's 3-day fit (−53%, on a few of its own points) and Sonnet 5.5's (−43%) tripped `repriced` on every model, and the flat cap would have turned every
+current row `mixed` anyway; Opus 5.5 had 7 of 15 days rated. Re-measured 2026-11-09 ~14:25 UTC over 12,437 intervals with the measured bands, the bootstrap's
+5th–95th percentile spreads at `SUB_BOOTSTRAP` = 200 are Fable 3.5% under / 4.4% over, Opus 15.5% / 20.1%, Sonnet 16.0% / 23.8% and Haiku 40.3% / 497% — the
+flat 15% was about right for Opus and Sonnet, too generous for Fable and hopeless for Haiku. Opus 5.5's current row then read `stable` at 595k against a 536k
+baseline (+11.0%), 14 of 15 days were rated (one `repriced`), and 2026-11-09 was rated at 546k (priced-out share 0.46). Fable, Haiku and Sonnet had no rated
+day: each is the minor partner nearly everywhere, which is the accepted consequence above, not a fault. The constants `DRIFT_PCT` and the floors were left alone
+(spec §What changes).
 
 **Pooled Σtokens / Σutil, not a mean of per-interval ratios** — on both bases. A mean lets a 0.02% interval with a noisy numerator count as much as an hour
 of steady work; summing weights each interval by the movement it explains, and the floors keep it robust, which is why a median was not needed.
@@ -1030,14 +1047,12 @@ there is no adjusted figure) → `surface-shift` (weighted > ±20%, adjusted not
 deviate by any amount, so calling that drift would make the badge fire hardest
 exactly when it knows least.
 
-**The separated rate's dispersion breaks that inequality, and the knobs were left alone.** The cv ≈ 24% above was the pooled ratio's. Re-measured
-2026-11-09 over the live 17-day horizon, Opus 5.5 — the only model with rated days on both bases — had a pooled cv of **23.8%** over 14 rated days
-(`√(cv²/7 + cv²/2)` = 19.0%, under 20) and a separated cv of **27.0%** over the **7** days the guards left rated (21.7%, over 20; the inequality holds up to
-cv ≈ 24.9%). The rise is the sample, not the subtraction: on the **same** days the separated figure is no noisier — 22.4% against the pooled 23.8% over the
-14 pooled-rated days, 27.0% against 26.6% over the 7 separated-rated ones (from the back-test's k-rounded figures) — and over all 15 days carrying a
-separated figure, thin included, it was 22.1% (17.7%). The rated sample halved because the guards turned 8 days `thin` (5 `mixed`, 3 `repriced`), 7 of them
-days the pooled ratio had rated. `DRIFT_PCT` (20) and the floors (`BASELINE_FLOORS` 30 / 15 / 7, `CURRENT_FLOORS` 10 / 5 / 2) are unchanged by design
-(spec §What changes, last bullet): the threshold is retuned, if at all, in a follow-up the maintainer approves, on more than 7 rated days.
+**The separated rate's dispersion is measured on the rated days only, and the floors' inequality holds.** The cv ≈ 24% above was the pooled ratio's. Re-measured
+2026-11-09 ~14:25 UTC over the live 17-day horizon, Opus 5.5 — the only model with rated days — had a separated cv of **22.1%** over its 14 rated days, giving
+`√(cv²/7 + cv²/2)` = 17.7%, under `DRIFT_PCT` 20 (the inequality holds up to cv ≈ 24.9%). Before the guards were judged by effect (13:42 UTC the same day) only 7
+days were rated and the cv was 27.0% (21.7, over 20): the rise then was the sample the guards left, not the subtraction. `DRIFT_PCT` (20) and the floors
+(`BASELINE_FLOORS` 30 / 15 / 7, `CURRENT_FLOORS` 10 / 5 / 2) are unchanged by design (spec §What changes, last bullet); retuning them is a follow-up the
+maintainer approves.
 
 ### The two-term fit: tokens and requests, separated
 
@@ -1608,8 +1623,8 @@ what was subtracted. The only floor is `CURRENT_FLOORS.minUtil` on the residual 
 reach into the current window. A thin cell's reason is its `thinReason`, and `dayTip` prints it from `THIN_DAY_REASON`: `floor` keeps "under 5 pts — not
 coloured"; `mixed`, `repriced` and `unpriced` say the day can't be separated from another model's spend (mostly another model's spend / another model's rate
 moved / another model has no rate yet). A thin day whose residual was not positive carries no figure, only its evidence line and that reason. On
-2026-11-09 the Opus 5.5 cell read **506k** at 45.4 residual points, `thin` / `repriced` (priced-out share 0.51, so `mixed` too without the guard), where
-the pooled cell had read 378k at 17 points at 13:42 UTC and 268k earlier that day; its rated days ran 357k–722k over the horizon.
+2026-11-09 the Opus 5.5 cell read **546k**, rated, at a priced-out share of 0.46 (the measured bands let a share that high through where the flat 0.34 cap would
+have read `mixed`), where the pooled cell had read 378k at 17 points at 13:42 UTC and 268k earlier that day.
 
 **The dashed amber rule is the current window's true start** (`cutFraction`),
 `CURRENT_DAYS` before `generatedAt`. It cuts *through* a day cell because the
