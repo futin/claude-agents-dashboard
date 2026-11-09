@@ -9,6 +9,7 @@ import {
   FIELDS, UNREADABLE, cronFor, fmValue, formKind, frontmatterReadable, routeErrors, scheduleEdit, schedulePick, setKey, switchPreset, timeoutUnitView, timeoutWithUnit, validMinute, validTime, visibleFields
 } from '../client/src/lib/routineForm.js';
 import { jobTemplate, setRepos } from '../client/src/lib/routines.js';
+import { parseJob } from '../shared/routine-file.js';
 import type { Schedule } from '../client/src/lib/routineForm.js';
 
 function test(name: string, fn: () => void): boolean {
@@ -39,7 +40,7 @@ export function run(): number {
   t('fmValue: quotes and the trailing comment dropped, 1-based line; a commented-out key is absent', () => {
     assert.deepStrictEqual(fmValue(SKILL, 'cron'), { value: '0 22 * * *', line: 2 });
     assert.strictEqual(fmValue(SKILL, 'cwd'), null);
-    assert.deepStrictEqual(fmValue(crlf(SKILL), 'model'), { value: 'opus', line: 8 });
+    assert.deepStrictEqual(fmValue(crlf(SKILL), 'model'), { value: 'opus', line: 7 });
   });
 
   t('fmValue: never reads past the closing fence', () => {
@@ -55,10 +56,10 @@ export function run(): number {
 
   t('setKey in place: only the model line changes, padding and comment kept', () => {
     const out = setKey(SKILL, 'model', 'sonnet');
-    const orig = SKILL.split('\n')[7];
+    const orig = SKILL.split('\n')[6];
     assert.ok(orig.startsWith('model: opus '));
-    assert.strictEqual(out.split('\n')[7], orig.replace('opus', 'sonnet'));
-    onlyLineChanged(SKILL, out, 7);
+    assert.strictEqual(out.split('\n')[6], orig.replace('opus', 'sonnet'));
+    onlyLineChanged(SKILL, out, 6);
   });
 
   t('setKey null drops exactly that line; CRLF result is the LF result with CRLF endings', () => {
@@ -82,8 +83,8 @@ export function run(): number {
     assert.strictEqual(lines[m + 1], 'effort: high');
     assert.strictEqual(out, SKILL.split('\n').map((l, i) => (i === m + 1 ? 'effort: high' : l)).join('\n'));
 
-    const small = '---\ncron: "0 7 * * *"\nmachines: [mac]\nrun: shell\n---\nbody\n';
-    assert.strictEqual(setKey(small, 'timeout', '30m'), '---\ncron: "0 7 * * *"\nmachines: [mac]\nrun: shell\ntimeout: 30m\n---\nbody\n');
+    const small = '---\ncron: "0 7 * * *"\nrun: shell\n---\nbody\n';
+    assert.strictEqual(setKey(small, 'timeout', '30m'), '---\ncron: "0 7 * * *"\nrun: shell\ntimeout: 30m\n---\nbody\n');
   });
 
   t('setKey insert: no preceding key goes before the closing fence; CRLF kept on the new line', () => {
@@ -103,36 +104,24 @@ export function run(): number {
     assert.strictEqual(formKind('---\ncron: x\n---\n'), null);
   });
 
-  // --- machines ---
+  // --- machines are gone ---
 
-  t('machines: read, summary, unreadable', () => {
-    const m = FIELDS.machines;
-    assert.deepStrictEqual(m.read(SKILL), { mac: true, wsl: true });
-    assert.deepStrictEqual(m.summary({ mac: true, wsl: true }, ctx), { text: 'mac + wsl', tone: 'set' });
-    assert.deepStrictEqual(m.summary({ mac: false, wsl: true }, ctx), { text: 'wsl only', tone: 'set' });
-    assert.deepStrictEqual(m.summary({ mac: true, wsl: false }, ctx), { text: 'mac only', tone: 'set' });
-    const none = m.read('---\nmachines: []\n---\n');
-    assert.deepStrictEqual(none, { mac: false, wsl: false });
-    assert.deepStrictEqual(m.summary(none as { mac: boolean; wsl: boolean }, ctx), { text: 'No machine', tone: 'err' });
-    assert.strictEqual(m.read('---\nmachines: [mac, linux]\n---\n'), UNREADABLE);
-    assert.strictEqual(m.read('---\nmachines:\n  - mac\n---\n'), UNREADABLE);
-    assert.strictEqual(m.read('no frontmatter'), UNREADABLE);
+  t('no Machines field', () => {
+    for (const kind of ['shell', 'claude', null] as const) assert.ok(!(visibleFields(kind) as string[]).includes('machines'), String(kind));
+    assert.ok(!('machines' in FIELDS));
   });
 
-  t('machines: write keeps the comment; none writes []; unchanged is a no-op', () => {
-    const m = FIELDS.machines;
-    const at = lineOf(SKILL, 'machines:') - 1;
-    const out = m.write(SKILL, { mac: true, wsl: false });
-    assert.strictEqual(out.split('\n')[at], SKILL.split('\n')[at].replace('[mac, wsl]', '[mac]'));
-    onlyLineChanged(SKILL, out, at);
-    assert.ok(m.write(SKILL, { mac: false, wsl: false }).split('\n')[at].startsWith('machines: []'));
-    assert.strictEqual(m.write(SKILL, { mac: true, wsl: true }), SKILL);
-    assert.strictEqual(m.write(crlf(SKILL), { mac: true, wsl: false }), crlf(out));
+  t('every new-job template parses on mac and wsl', () => {
+    for (const kind of ['shell', 'prompt', 'skill'] as const) {
+      for (const machine of ['mac', 'wsl'] as const) {
+        assert.deepStrictEqual(parseJob('t', jobTemplate(kind), machine).errors, [], `${kind} on ${machine}`);
+      }
+    }
   });
 
-  t('machines: a write over an unreadable line leaves the text unchanged', () => {
-    const odd = '---\nmachines: [mac, linux]\nrun: shell\n---\n';
-    assert.strictEqual(FIELDS.machines.write(odd, { mac: true, wsl: false }), odd);
+  t('cwd lands after run: in a template without it', () => {
+    const out = setKey('---\ncron: "0 7 * * *"\nrun: shell\n---\nbody\n', 'cwd', '~/x');
+    assert.strictEqual(out, '---\ncron: "0 7 * * *"\nrun: shell\ncwd: ~/x\n---\nbody\n');
   });
 
   // --- repos ---
@@ -155,7 +144,7 @@ export function run(): number {
     assert.deepStrictEqual(r.summary({ mode: 'cwd', picks: [], cwd: '~/x' }, ctx), { text: '~/x', tone: 'set' });
     const neither = r.read('---\nrun: shell\n---\n');
     assert.deepStrictEqual(neither, { mode: 'cwd', picks: [], cwd: '' });
-    assert.deepStrictEqual(r.summary({ mode: 'cwd', picks: [], cwd: '' }, ctx), { text: "Routines folder's parent", tone: 'dim' });
+    assert.deepStrictEqual(r.summary({ mode: 'cwd', picks: [], cwd: '' }, ctx), { text: 'Your home folder', tone: 'dim' });
     assert.strictEqual(r.read('---\nforeach: everything\n---\n'), UNREADABLE);
     // A value holding ` #` would read back cut at the comment, so it is written quoted and reads back whole.
     const hashed = r.write('---\nrun: shell\n---\n', { mode: 'cwd', picks: [], cwd: '~/a #b' });
@@ -195,7 +184,7 @@ export function run(): number {
   t('repos: All and Pick writes are setRepos', () => {
     const r = FIELDS.repos;
     assert.strictEqual(r.write(SKILL, { mode: 'pick', picks: ['a', 'b'], cwd: '' }), setRepos(SKILL, 'pick', ['a', 'b']));
-    const single = '---\ncron: x\nmachines: [mac]\nrun: shell\ncwd: ~/z\n---\n```bash\nls\n```\n';
+    const single = '---\ncron: x\nrun: shell\ncwd: ~/z\n---\n```bash\nls\n```\n';
     assert.strictEqual(r.write(single, { mode: 'all', picks: [], cwd: '' }), setRepos(single, 'all', []));
     assert.strictEqual(r.write(SKILL, { mode: 'all', picks: [], cwd: '' }), SKILL);
   });
@@ -215,7 +204,7 @@ export function run(): number {
 
   t('script: no fence reads empty and a write appends one after the body', () => {
     const s = FIELDS.script;
-    const head = '---\ncron: x\nmachines: [mac]\nrun: shell\n---\n';
+    const head = '---\ncron: x\nrun: shell\n---\n';
     assert.strictEqual(s.read(head + 'note\n'), '');
     assert.strictEqual(s.write(head + 'note\n', 'echo hi'), head + 'note\n\n```bash\necho hi\n```\n');
     assert.strictEqual(s.write(head, 'echo hi'), head + '```bash\necho hi\n```\n');
@@ -340,9 +329,9 @@ export function run(): number {
   // --- visibility and routing ---
 
   t('visibleFields: table order per kind', () => {
-    assert.deepStrictEqual(visibleFields('shell'), ['schedule', 'machines', 'repos', 'script', 'limits']);
-    assert.deepStrictEqual(visibleFields('claude'), ['schedule', 'machines', 'repos', 'prompt', 'model', 'permission', 'limits', 'tools']);
-    assert.deepStrictEqual(visibleFields(null), ['schedule', 'machines', 'repos', 'limits']);
+    assert.deepStrictEqual(visibleFields('shell'), ['schedule', 'repos', 'script', 'limits']);
+    assert.deepStrictEqual(visibleFields('claude'), ['schedule', 'repos', 'prompt', 'model', 'permission', 'limits', 'tools']);
+    assert.deepStrictEqual(visibleFields(null), ['schedule', 'repos', 'limits']);
   });
 
   t('routeErrors: owned lines go to their row, hidden rows and unowned lines to rest', () => {
@@ -352,9 +341,8 @@ export function run(): number {
     const cron0 = e(0, 'cron is required');
     const comment = e(lineOf(SKILL, '# cwd:'), 'x');
     const cron = e(2, 'cron: bad');
-    const machines = e(3, 'machines needs mac, wsl or both');
-    const r = routeErrors(SKILL, [model, prompt, cron0, comment, cron, machines], 'claude');
-    assert.deepStrictEqual(r.byField, { model: [model], prompt: [prompt], schedule: [cron0, cron], machines: [machines] });
+    const r = routeErrors(SKILL, [model, prompt, cron0, comment, cron], 'claude');
+    assert.deepStrictEqual(r.byField, { model: [model], prompt: [prompt], schedule: [cron0, cron] });
     assert.deepStrictEqual(r.rest, [comment]);
 
     const bash = e(5, 'shell job needs a ```bash block');

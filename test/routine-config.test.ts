@@ -9,7 +9,7 @@ import path from 'node:path';
 
 import { loadConfig } from '../server/lib/config.js';
 import type { Config } from '../server/lib/config.js';
-import { machineName, migrateLegacyState, routineDirs, routineEnv, routineStateRoot } from '../server/lib/routine-config.js';
+import { OLD_SHARED_DIRS, machineName, migrateLegacyState, routineDirs, routineEnv, routineStateRoot } from '../server/lib/routine-config.js';
 
 function test(name: string, fn: () => void): boolean {
   try { fn(); console.log('  ✓ ' + name); return true; }
@@ -87,7 +87,7 @@ export function run(): number {
   t('routineEnv bakes the resolved machine and an expanded routines dir when nothing is set', () => {
     const env = routineEnv(cfg(''), { ...macHost, ...homed, env: { HOME, PATH: '/bin' } });
     assert.strictEqual(env.ROUTINE_MACHINE, 'mac');
-    assert.strictEqual(env.ROUTINES_DIR, path.join(HOME, 'claude-global', 'routines'));
+    assert.strictEqual(env.ROUTINES_DIR, path.join(HOME, '.claude', 'routines', 'jobs'));
     assert.strictEqual(env.CLAUDE_BIN, '');
     assert.strictEqual(env.SPAWN_MAX_PERMISSION, 'auto');
     assert.strictEqual(env.SYNC_PERMISSION_MODE, 'auto');
@@ -104,7 +104,7 @@ export function run(): number {
   });
 
   t('ROUTINES_DIR default expands ~; an absolute one is kept; ~/x expands', () => {
-    assert.strictEqual(routineDirs(cfg(''), homed).routines, path.join(HOME, 'claude-global', 'routines'));
+    assert.strictEqual(routineDirs(cfg(''), homed).routines, path.join(HOME, '.claude', 'routines', 'jobs'));
     assert.strictEqual(routineDirs(cfg('ROUTINES_DIR=/srv/jobs\n'), homed).routines, '/srv/jobs');
     assert.strictEqual(routineDirs(cfg('ROUTINES_DIR=~/mine\n'), homed).routines, path.join(HOME, 'mine'));
   });
@@ -118,12 +118,12 @@ export function run(): number {
     assert.strictEqual(routineStateRoot(c, homed), '/tmp/seam');
     const d = routineDirs(c, homed);
     assert.deepStrictEqual([d.state, d.runs, d.locks, d.launchd], ['/tmp/seam', '/tmp/seam/runs', '/tmp/seam/locks', '/tmp/seam/launchd']);
-    assert.strictEqual(d.routines, path.join(HOME, 'claude-global', 'routines'));
+    assert.strictEqual(d.routines, '/tmp/seam/jobs');
   });
 
   t('Config defaults: owner off, machine and state seam empty', () => {
     const c = cfg('');
-    assert.deepStrictEqual([c.routinesOwner, c.routineMachine, c.routinesStateRoot, c.routinesDir], [false, '', '', '~/claude-global/routines']);
+    assert.deepStrictEqual([c.routinesOwner, c.routineMachine, c.routinesStateRoot, c.routinesDir], [false, '', '', '']);
     assert.strictEqual(cfg('ROUTINES_OWNER=true\n').routinesOwner, true);
   });
 
@@ -138,19 +138,33 @@ export function run(): number {
   const withPaths = (...present: string[]) => ({ ...homed, exists: (q: string) => present.includes(q) });
   const oldState = path.join(HOME, '.claude', 'schedules');
   const newState = path.join(HOME, '.claude', 'routines');
-  const oldJobs = path.join(HOME, 'claude-global', 'schedules');
-  const newJobs = path.join(HOME, 'claude-global', 'routines');
 
-  t('default folders: the old name while only it exists, the new one otherwise', () => {
-    const only = routineDirs(cfg(''), withPaths(oldState, oldJobs));
-    assert.deepStrictEqual([only.state, only.routines], [oldState, oldJobs]);
-    const both = routineDirs(cfg(''), withPaths(oldState, newState, oldJobs, newJobs));
-    assert.deepStrictEqual([both.state, both.routines], [newState, newJobs]);
+  t('default state folder: the old name while only it exists; the jobs folder rides inside whichever it is', () => {
+    const only = routineDirs(cfg(''), withPaths(oldState));
+    assert.deepStrictEqual([only.state, only.routines], [oldState, path.join(oldState, 'jobs')]);
+    const both = routineDirs(cfg(''), withPaths(oldState, newState));
+    assert.deepStrictEqual([both.state, both.routines], [newState, path.join(newState, 'jobs')]);
     const none = routineDirs(cfg(''), withPaths());
-    assert.deepStrictEqual([none.state, none.routines], [newState, newJobs]);
+    assert.deepStrictEqual([none.state, none.routines], [newState, path.join(newState, 'jobs')]);
   });
-  t('mirror: a set ROUTINES_DIR or seam is never swapped for the old folder', () => {
-    const d = routineDirs(cfg('ROUTINES_DIR=~/claude-global/routines-x\nROUTINES_STATE_ROOT=/tmp/seam\n'), withPaths(oldState, oldJobs));
+  t('a set ROUTINES_DIR is honoured verbatim: no fallback to the old shared folder, even when only that one exists', () => {
+    const d = routineDirs(cfg('ROUTINES_DIR=~/claude-global/routines\n'), withPaths(path.join(HOME, 'claude-global', 'schedules')));
+    assert.strictEqual(d.routines, path.join(HOME, 'claude-global', 'routines'));
+    assert.strictEqual(routineDirs(cfg('SCHEDULES_DIR=/x\n'), homed).routines, '/x');
+  });
+  t('the seam moves the jobs folder with the state root', () => {
+    assert.strictEqual(routineDirs(cfg('ROUTINES_STATE_ROOT=/seam\n'), homed).routines, '/seam/jobs');
+  });
+  t('routineEnv ROUTINES_DIR equals routineDirs().routines, unset and set', () => {
+    for (const body of ['', 'ROUTINES_DIR=/srv/jobs\n']) {
+      assert.strictEqual(routineEnv(cfg(body), { ...macHost, ...homed }).ROUTINES_DIR, routineDirs(cfg(body), { ...macHost, ...homed }).routines);
+    }
+  });
+  t('OLD_SHARED_DIRS lists the old shared folder then its legacy name', () => {
+    assert.deepStrictEqual(OLD_SHARED_DIRS, ['~/claude-global/routines', '~/claude-global/schedules']);
+  });
+  t('mirror: a set seam is never swapped for the old state folder', () => {
+    const d = routineDirs(cfg('ROUTINES_DIR=~/claude-global/routines-x\nROUTINES_STATE_ROOT=/tmp/seam\n'), withPaths(oldState));
     assert.deepStrictEqual([d.state, d.routines], ['/tmp/seam', path.join(HOME, 'claude-global', 'routines-x')]);
   });
 

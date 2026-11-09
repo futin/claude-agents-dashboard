@@ -34,7 +34,7 @@ function assertSafeName(name: string): void {
 export interface StoredJob { name: string; text: string; job: RoutineJob | null; errors: JobError[]; mtimeMs: number }
 
 /** Every `*.md` file in `dir`, sorted by name; a file that does not parse stays in the list with its errors. A missing folder is an empty list. */
-export function readJobs(dir: string): StoredJob[] {
+export function readJobs(dir: string, machine: 'mac' | 'wsl'): StoredJob[] {
   let entries: string[];
   try { entries = fs.readdirSync(dir); } catch { return []; }
   const jobs: StoredJob[] = [];
@@ -50,7 +50,7 @@ export function readJobs(dir: string): StoredJob[] {
       mtimeMs = st.mtimeMs;
     } catch { continue; }
     const name = file.slice(0, -3);
-    const { job, errors } = parseJob(name, text);
+    const { job, errors } = parseJob(name, text, machine);
     jobs.push({ name, text, job, errors, mtimeMs });
   }
   return jobs;

@@ -1758,7 +1758,7 @@ function pinSnapshot(config: Config): PinSnapshot[] {
 
 /** `parseJob` plus the ambiguous-pin check against the pins of this machine now — what PUT, POST and `/validate` all run. */
 function validateRoutineText(config: Config, name: string, text: string): { job: RoutineJob | null; errors: JobError[] } {
-  const parsed = parseJob(name, text);
+  const parsed = parseJob(name, text, machineName(config).name);
   if (!parsed.job) return parsed;
   const pinErrors = checkPins(parsed.job, pinSnapshot(config));
   return pinErrors.length > 0 ? { job: null, errors: pinErrors } : parsed;
@@ -1770,8 +1770,8 @@ function routineSummary(job: RoutineJob): string {
   const when = cron.ok ? describeCron(cron.cron) : job.cron;
   const where = job.foreach === 'pinned' ? 'every pinned repo'
     : Array.isArray(job.foreach) ? `${job.foreach.length} repo${job.foreach.length === 1 ? '' : 's'}`
-      : job.cwd ?? 'the routines folder\'s parent';
-  return [when, job.run, where, job.machines.join(' + '), job.enabled || isManualCron(job.cron) ? null : 'paused'].filter(Boolean).join(' · ');
+      : job.cwd ?? 'your home folder';
+  return [when, job.run, where, job.enabled || isManualCron(job.cron) ? null : 'paused'].filter(Boolean).join(' · ');
 }
 
 /** Whether the OS holds a job for `name`, read off a planned report. A bare report (not owner, no plugin, bad machine) knows nothing: false. */
@@ -1796,7 +1796,7 @@ export async function serveRoutines(config: Config, res: ServerResponse): Promis
   try {
     const machine = machineName(config).name;
     const dir = routineDirs(config).routines;
-    const stored = readJobs(dir);
+    const stored = readJobs(dir, machine);
     const runs = runsReader(config).read();
     foldForPush(config, runs);
     const plan = await planReconcile(config);
@@ -1805,11 +1805,9 @@ export async function serveRoutines(config: Config, res: ServerResponse): Promis
     const reconcile = plan.state === 'drift' && plan.error === null && last?.state === 'failed' ? { ...plan, error: last.error } : plan;
     const now = new Date();
     const jobs: RoutineJobRow[] = stored.map(s => {
-      const onThisMachine = s.job?.machines.includes(machine) ?? false;
-      const desired = s.job !== null && scheduled(s.job) && onThisMachine;
+      const desired = s.job !== null && scheduled(s.job);
       return {
         ...s,
-        onThisMachine,
         installed: installedFrom(reconcile, s.name, desired),
         nextAt: desired && s.job ? nextFire(s.job, now) : null,
         last: runs.find(r => r.job === s.name && r.state !== 'running') ?? null,
@@ -1837,7 +1835,7 @@ export function serveRoutineRuns(config: Config, params: URLSearchParams, res: S
     const runner = params.get('runner') || null;
     const all = runsReader(config).read();
     foldForPush(config, all);
-    const runnerOf = new Map(readJobs(routineDirs(config).routines).map(s => [s.name, s.job?.run ?? null]));
+    const runnerOf = new Map(readJobs(routineDirs(config).routines, machineName(config).name).map(s => [s.name, s.job?.run ?? null]));
     const scoped = all.filter(r => (job === null || r.job === job) && (runner === null || runnerOf.get(r.job) === runner));
     const now = new Date();
     const from = new Date(now.getFullYear(), now.getMonth(), now.getDate() - (days - 1)).getTime();
@@ -1855,7 +1853,7 @@ export function serveRoutineRuns(config: Config, params: URLSearchParams, res: S
 /** `GET /api/routines/:name` — the raw file and its parse, for the editor. */
 export function serveRoutineRead(config: Config, name: string, res: ServerResponse): void {
   if (!JOB_NAME_RE.test(name)) return sendJson(res, 400, { error: 'bad name' });
-  const stored = readJobs(routineDirs(config).routines).find(s => s.name === name);
+  const stored = readJobs(routineDirs(config).routines, machineName(config).name).find(s => s.name === name);
   if (!stored) return sendJson(res, 404, { error: 'no such job' });
   sendJson(res, 200, stored satisfies RoutineFile);
 }
@@ -1867,7 +1865,7 @@ export async function serveRoutineWrite(config: Config, name: string, req: Incom
   const body = await readJsonBody(req) as { text?: unknown } | null;
   if (!body || typeof body !== 'object' || typeof body.text !== 'string') return sendBadBody(res, { error: 'expected {text: string}' });
   const dir = routineDirs(config).routines;
-  if (!readJobs(dir).some(s => s.name === name)) return sendJson(res, 404, { error: 'no such job' });
+  if (!readJobs(dir, machineName(config).name).some(s => s.name === name)) return sendJson(res, 404, { error: 'no such job' });
   const { job, errors } = validateRoutineText(config, name, body.text);
   if (!job) return sendJson(res, 422, { errors } satisfies RoutineErrorsResponse);
   try {
@@ -1889,7 +1887,7 @@ export async function serveRoutineCreate(config: Config, req: IncomingMessage, r
   const { name, text } = body;
   if (refuseRoutineWrite(res, name)) return;
   const dir = routineDirs(config).routines;
-  if (readJobs(dir).some(s => s.name === name)) return sendJson(res, 409, { error: 'exists' });
+  if (readJobs(dir, machineName(config).name).some(s => s.name === name)) return sendJson(res, 409, { error: 'exists' });
   const { job, errors } = validateRoutineText(config, name, text);
   if (!job) return sendJson(res, 422, { errors } satisfies RoutineErrorsResponse);
   try {
@@ -1924,7 +1922,7 @@ export async function serveRoutinePatch(config: Config, name: string, req: Incom
   const body = await readJsonBody(req) as { enabled?: unknown } | null;
   if (!body || typeof body !== 'object' || typeof body.enabled !== 'boolean') return sendBadBody(res, { error: 'expected {enabled: boolean}' });
   const dir = routineDirs(config).routines;
-  const stored = readJobs(dir).find(s => s.name === name);
+  const stored = readJobs(dir, machineName(config).name).find(s => s.name === name);
   if (!stored) return sendJson(res, 404, { error: 'no such job' });
   // An unparseable file has no trustworthy `enabled:` line to rewrite; the drawer fixes it through PUT.
   if (!stored.job) return sendJson(res, 422, { errors: stored.errors } satisfies RoutineErrorsResponse);
@@ -1935,7 +1933,7 @@ export async function serveRoutinePatch(config: Config, name: string, req: Incom
     console.error('[dashboard] routine toggle failed:', (e as Error).message);
     return sendJson(res, 500, { error: 'write failed' });
   }
-  sendJson(res, 200, { job: parseJob(name, text).job, reconcile: await applyReconcile(config) } satisfies RoutineWriteResponse);
+  sendJson(res, 200, { job: parseJob(name, text, machineName(config).name).job, reconcile: await applyReconcile(config) } satisfies RoutineWriteResponse);
 }
 
 /** `POST /api/routines/reconcile` `{apply?}` — the diff, applied when `apply` is true. The plugin sync script posts `{apply: true}`. */

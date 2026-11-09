@@ -14,7 +14,7 @@ export const UNREADABLE: unique symbol = Symbol('unreadable');
 /** A field's value, or the marker for a line that exists but that the form cannot represent ("edit in File"). */
 export type Read<V> = V | typeof UNREADABLE;
 
-export type FieldId = 'schedule' | 'machines' | 'repos' | 'script' | 'prompt' | 'model' | 'permission' | 'limits' | 'tools';
+export type FieldId = 'schedule' | 'repos' | 'script' | 'prompt' | 'model' | 'permission' | 'limits' | 'tools';
 
 export interface Summary { text: string; tone: 'set' | 'dim' | 'err' }
 
@@ -40,7 +40,6 @@ export type Schedule =
   | { preset: 'daily' | 'weekdays'; hour: number; minute: number }
   | { preset: 'weekly'; days: number[]; hour: number; minute: number }
   | { preset: 'custom'; text: string };
-export type Machines = { mac: boolean; wsl: boolean };
 export type Repos = { mode: ForeachMode; picks: string[]; cwd: string };
 export type Script = string;
 export type Prompt = string;
@@ -50,7 +49,7 @@ export type Limits = { maxTurns: string | null; timeout: string | null };
 export type Tools = string[];
 
 /** Where an inserted key lands: after the nearest key before it in this order that the file has. The parser's own key order. */
-const KEY_ORDER = ['cron', 'machines', 'run', 'foreach', 'cwd', 'enabled', 'model', 'effort', 'permission-mode', 'allowed-tools', 'max-turns', 'timeout'];
+const KEY_ORDER = ['cron', 'run', 'foreach', 'cwd', 'enabled', 'model', 'effort', 'permission-mode', 'allowed-tools', 'max-turns', 'timeout'];
 
 const strip = (l: string): string => l.replace(/\r$/, '');
 // The parser's own notion of a block line under a key, so "unreadable" means exactly what the validator would refuse as a nested value.
@@ -187,7 +186,6 @@ export function formKind(text: string): FormKind {
 /** Which kinds show each row (§Rows); `visibleFields` and each field's `kinds` both read it, so the table lives once. */
 const ROWS: readonly [FieldId, readonly FormKind[]][] = [
   ['schedule', ['shell', 'claude', null]],
-  ['machines', ['shell', 'claude', null]],
   ['repos', ['shell', 'claude', null]],
   ['script', ['shell']],
   ['prompt', ['claude']],
@@ -201,27 +199,6 @@ const kindsOf = (id: FieldId): readonly FormKind[] => ROWS.find(([r]) => r === i
 export function visibleFields(kind: FormKind): FieldId[] {
   return ROWS.filter(([, kinds]) => kinds.includes(kind)).map(([id]) => id);
 }
-
-const machines: FieldDef<Machines> = {
-  id: 'machines', label: 'Machines', keys: ['machines'], kinds: kindsOf('machines'),
-  read(text) {
-    const items = inlineList(text, 'machines');
-    if (items === UNREADABLE) return UNREADABLE;
-    if (items !== null && items.some(x => x !== 'mac' && x !== 'wsl')) return UNREADABLE;
-    return { mac: items?.includes('mac') ?? false, wsl: items?.includes('wsl') ?? false };
-  },
-  write(text, v) {
-    const now = machines.read(text);
-    if (now === UNREADABLE || (now.mac === v.mac && now.wsl === v.wsl)) return text;
-    const list = [v.mac ? 'mac' : null, v.wsl ? 'wsl' : null].filter(x => x !== null);
-    return setKey(text, 'machines', `[${list.join(', ')}]`);
-  },
-  summary(v) {
-    if (v.mac && v.wsl) return { text: 'mac + wsl', tone: 'set' };
-    if (v.mac || v.wsl) return { text: `${v.mac ? 'mac' : 'wsl'} only`, tone: 'set' };
-    return { text: 'No machine', tone: 'err' };
-  },
-};
 
 const repos: FieldDef<Repos> = {
   id: 'repos', label: 'Repos', keys: ['foreach', 'cwd'], kinds: kindsOf('repos'),
@@ -252,7 +229,7 @@ const repos: FieldDef<Repos> = {
       if (v.picks.length === 0) return { text: 'No repos picked', tone: 'err' };
       return { text: `${v.picks.length} repo${v.picks.length === 1 ? '' : 's'}: ${v.picks.join(', ')}`, tone: 'set' };
     }
-    return v.cwd ? { text: v.cwd, tone: 'set' } : { text: "Routines folder's parent", tone: 'dim' };
+    return v.cwd ? { text: v.cwd, tone: 'set' } : { text: 'Your home folder', tone: 'dim' };
   },
 };
 
@@ -532,7 +509,6 @@ const schedule: FieldDef<Schedule> = {
 
 export const FIELDS: {
   schedule: FieldDef<Schedule>;
-  machines: FieldDef<Machines>;
   repos: FieldDef<Repos>;
   script: FieldDef<Script>;
   prompt: FieldDef<Prompt>;
@@ -540,11 +516,11 @@ export const FIELDS: {
   permission: FieldDef<Permission>;
   limits: FieldDef<Limits>;
   tools: FieldDef<Tools>;
-} = { schedule, machines, repos, script, prompt, model, permission, limits, tools };
+} = { schedule, repos, script, prompt, model, permission, limits, tools };
 
 /** Which row owns a frontmatter key's line. */
 const OWNER: Record<string, FieldId> = {
-  cron: 'schedule', machines: 'machines', foreach: 'repos', cwd: 'repos', model: 'model', effort: 'model', 'permission-mode': 'permission',
+  cron: 'schedule', foreach: 'repos', cwd: 'repos', model: 'model', effort: 'model', 'permission-mode': 'permission',
   'allowed-tools': 'tools', 'max-turns': 'limits', timeout: 'limits',
 };
 

@@ -101,8 +101,8 @@ function runningPill(run: RoutineRun): Pill {
 
 /**
  * What one ledger row says in its three stacked cells. `lastLine` goes under the pill (it is empty when there is nothing to say), `nextLine` is the Next
- * column. A job that does not name this machine reads `<machines> only` and has no next line; a paused one reads `paused` there; a file that does not parse
- * reads `invalid` so the row still draws. A `manual` job never reads `paused`: it has no clock to pause.
+ * column. A paused one reads `paused` there; a file that does not parse reads
+ * `invalid` so the row still draws. A `manual` job never reads `paused`: it has no clock to pause.
  */
 export function rowText(job: RoutineJobRow, now: Date): { lastLine: string; nextLine: string; pill: Pill } {
   const parsed = job.job;
@@ -119,7 +119,6 @@ export function rowText(job: RoutineJobRow, now: Date): { lastLine: string; next
       : [Number.isFinite(startedMs) ? clock(new Date(startedMs)) : '', so ? `${so} so far` : ''].filter(Boolean).join(' · ');
     return { lastLine, nextLine, pill: runningPill(run) };
   }
-  if (!job.onThisMachine) return { lastLine: '', nextLine: '—', pill: { text: `${parsed.machines.join(' + ')} only`, tone: 'dim' } };
   const last = job.last;
   if (!last) return { lastLine: '', nextLine, pill: { text: 'never run', tone: 'dim' } };
 
@@ -221,7 +220,7 @@ export function readForeach(text: string): { mode: ForeachMode; picks: string[] 
 /**
  * The Repos helper's write side: set the frontmatter to `mode`, touching only the `foreach:` / `cwd:` lines. All and Pick write `foreach:` (in place, its
  * trailing comment kept, or after `run:`) and drop a `cwd:` line, since a file may name only one; Single cwd drops `foreach:` and leaves any `cwd:` as it
- * is, so the default (the routines folder's parent) applies until the file names one. Comment lines are never touched; text with no frontmatter is returned
+ * is, so the default (your home folder) applies until the file names one. Comment lines are never touched; text with no frontmatter is returned
  * unchanged.
  */
 export function setRepos(text: string, mode: ForeachMode, picks: string[]): string {
@@ -236,15 +235,19 @@ export function setRepos(text: string, mode: ForeachMode, picks: string[]): stri
   return writeFrontmatterLine(kept, 'foreach', foreachLine(mode, picks).replace(/^foreach: /, ''), 'run');
 }
 
+/** The Jobs subtitle: a job file lives in one machine's folder and is installed only there, so there is nothing to say about syncing. */
+export function jobsSubtitle(dir: string, machine: 'mac' | 'wsl'): string {
+  return `Jobs defined in ${dir}, run by ${machine === 'mac' ? 'launchd' : 'cron'} on this machine. They belong to this machine only — nothing syncs.`;
+}
+
 /** The drawer's three kinds; each is a whole file, so picking one replaces the text. */
 export type JobKind = 'shell' | 'prompt' | 'skill';
 
 const CLAUDE_HEAD = `---
 cron: "0 22 * * *"            # five fields, local time of the machine that runs it
-machines: [mac, wsl]          # which profiles install it; one or both
 run: claude                   # shell | claude
 foreach: pinned               # absent = run once in \`cwd\`; pinned = every pinned repo; [a, b] = only these pins, by name
-# cwd: ~/Documents/x          # only without foreach; default = the routines folder's parent
+# cwd: ~/Documents/x          # only without foreach; default = your home folder
 enabled: true                 # absent = true
 model: opus                   # claude only; absent = CLI default
 effort: medium                # claude only
@@ -270,8 +273,6 @@ Reply with one line per step: done, skipped (why) or failed (why).
   return `---
 # Every weekday at 07:00; five cron fields.
 cron: "0 7 * * 1-5"
-# Which machines install it: mac, wsl, or both.
-machines: [mac, wsl]
 run: shell
 foreach: pinned   # pinned = every pinned repo; a list = only these, by folder name
 enabled: true
@@ -319,7 +320,6 @@ export function withLate(line: string, late: boolean): string {
 const RUN_CONFLICT_TEXT: Record<RoutineRunConflict, (what: string) => string> = {
   'already-running': what => `${what}: the job is already running.`,
   invalid: what => `${what}: the job file has errors — fix them before running it.`,
-  'not-this-machine': what => `${what}: the job is not set to run on this machine (its machines: line).`,
   'no-plugin': what => `${what} needs the dashboard plugin installed on this machine.`,
 };
 

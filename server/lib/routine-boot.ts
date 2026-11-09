@@ -7,7 +7,8 @@
 import { DEFAULT_TIMEOUT_MS } from '../../shared/routine-file.js';
 import type { RoutineRun } from '../../shared/types.js';
 import type { Config } from './config.js';
-import { migrateLegacyState, routineDirs } from './routine-config.js';
+import { OLD_SHARED_DIRS, migrateLegacyState, machineName, routineDirs } from './routine-config.js';
+import { importSharedJobs } from './routine-import.js';
 import { createLogReader, rotateIfLarge } from './routine-log.js';
 import { sendRoutineEvent } from './notify.js';
 import { notifyRoutineRuns, seedRoutineNotify } from './routine-notify.js';
@@ -19,6 +20,7 @@ import { foldTickCaps } from './tick-caps.js';
 export interface RoutineDeps {
   migrateLegacyState: typeof migrateLegacyState;
   claimOwner: typeof claimOwner;
+  importSharedJobs: typeof importSharedJobs;
   sweepLocks: typeof sweepLocks;
   writePinsSnapshot: typeof writePinsSnapshot;
   rotateIfLarge: typeof rotateIfLarge;
@@ -37,7 +39,7 @@ export const defaultDeps: RoutineDeps = {
   // Only once the installed plugin has `run-routine.mjs`: until then the old wrapper still fires and writes to `~/.claude/schedules`, so moving that
   // folder would split the run log in two. Both sides read the old folder while it is the only one, so waiting costs nothing.
   migrateLegacyState: (config) => installedWrapper() !== null && migrateLegacyState(config),
-  claimOwner, sweepLocks, writePinsSnapshot, rotateIfLarge, applyReconcile, startReconcileWatchers, stopReconcileWatchers, createLogReader,
+  claimOwner, importSharedJobs, sweepLocks, writePinsSnapshot, rotateIfLarge, applyReconcile, startReconcileWatchers, stopReconcileWatchers, createLogReader,
   seedRoutineNotify, notifyRoutineRuns, sendRoutineEvent, foldTickCaps, releaseOwner
 };
 
@@ -69,7 +71,7 @@ function timeoutMsFor(config: Config): (job: string) => number {
     const now = Date.now();
     if (!timeouts || timeouts.dir !== dir || now - timeouts.at > TIMEOUTS_TTL_MS) {
       const byJob = new Map<string, number>();
-      for (const s of readJobs(dir)) if (s.job) byJob.set(s.name, s.job.timeoutMs);
+      for (const s of readJobs(dir, machineName(config).name)) if (s.job) byJob.set(s.name, s.job.timeoutMs);
       timeouts = { dir, at: now, byJob };
     }
     const ms = timeouts.byJob.get(job);
@@ -132,6 +134,15 @@ export function startRoutines(config: Config, deps: RoutineDeps = defaultDeps): 
   const step = (what: string, fn: () => void): void => {
     try { fn(); } catch (e) { console.error(`[dashboard] routines ${what} failed:`, (e as Error).message); }
   };
+  // After the claim so only the owning server copies, before the first reconcile so it installs what was imported (all disabled, so nothing fires).
+  step('job import', () => {
+    const r = deps.importSharedJobs(config);
+    if (r.state === 'imported') console.log(`[dashboard] routines: imported ${r.count} job(s) from ${r.from}, all disabled`);
+    else if (r.why === 'explicit-old') {
+      console.error(`[dashboard] routines: job import skipped — ROUTINES_DIR/SCHEDULES_DIR in .env still names the old shared folder ${config.routinesDir}; `
+        + 'its jobs carry machines: and will not load. Remove that line from .env and restart to import them, disabled, into this machine\'s own folder');
+    } else if (r.why === 'overlap') console.log(`[dashboard] routines: job import skipped — ${routineDirs(config).routines} overlaps ${OLD_SHARED_DIRS.join(' or ')}`);
+  });
   step('lock sweep', () => { deps.sweepLocks(config); });
   step('pins snapshot', () => { deps.writePinsSnapshot(config); });
   step('log rotation', () => { deps.rotateIfLarge(routineDirs(config).runs); });

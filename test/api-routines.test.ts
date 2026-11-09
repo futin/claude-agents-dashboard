@@ -38,8 +38,8 @@ const RUN_PROBE: Probe = {
   command: (pid) => (pid === LIVE_PID ? '/usr/local/bin/node /p/lib/run-routine.mjs x' : null)
 };
 
-const job = (o: { run?: 'claude' | 'shell'; enabled?: boolean; machines?: string; extra?: string[] } = {}): string => [
-  '---', 'cron: "0 9 * * *"', `machines: [${o.machines ?? 'mac'}]`, `run: ${o.run ?? 'claude'}`, `enabled: ${o.enabled ?? true}`, ...(o.extra ?? []), '---',
+const job = (o: { run?: 'claude' | 'shell'; enabled?: boolean; extra?: string[] } = {}): string => [
+  '---', 'cron: "0 9 * * *"', `run: ${o.run ?? 'claude'}`, `enabled: ${o.enabled ?? true}`, ...(o.extra ?? []), '---',
   ...(o.run === 'shell' ? ['```bash', 'echo hi', '```'] : ['/git-sync']), ''
 ].join('\n');
 
@@ -151,12 +151,11 @@ export async function run(): Promise<number> {
   let f = 0;
   const tally = (ok: boolean): void => { if (ok) p++; else f++; };
 
-  tally(await testAsync('GET /api/routines: the ledger shape on the owner, nextAt only for a job due here, last and running off the log', async () => {
+  tally(await testAsync('GET /api/routines: the ledger shape on the owner, nextAt only for a job that is due, last and running off the log', async () => {
     await withRoutines('', true, async c => {
       setRoutineProbe(RUN_PROBE);
       writeJob(c, 'x', job());
       writeJob(c, 'paused', job({ enabled: false }));
-      writeJob(c, 'elsewhere', job({ machines: 'wsl' }));
       writeJob(c, 'broken', '---\ncron: nonsense\n---\nx\n');
       logRun(c, 'r-old', 'x', 2 * DAY);
       logRun(c, 'r-new', 'x', DAY, 1);
@@ -168,10 +167,9 @@ export async function run(): Promise<number> {
       assert.strictEqual(body.dir, c.routines);
       assert.strictEqual(body.owner, 'owner');
       assert.strictEqual(body.reconcile.state, 'no-plugin');
-      assert.deepStrictEqual(body.jobs.map(j => j.name), ['broken', 'elsewhere', 'paused', 'x']);
+      assert.deepStrictEqual(body.jobs.map(j => j.name), ['broken', 'paused', 'x']);
       const by = new Map(body.jobs.map(j => [j.name, j]));
       const x = by.get('x')!;
-      assert.strictEqual(x.onThisMachine, true);
       assert.strictEqual(x.installed, false, 'a no-plugin report knows nothing is installed');
       assert.ok(x.nextAt && Date.parse(x.nextAt) > Date.now(), `nextAt ${x.nextAt}`);
       assert.strictEqual(new Date(x.nextAt).getMinutes(), 0);
@@ -179,12 +177,9 @@ export async function run(): Promise<number> {
       assert.strictEqual(x.last?.state, 'failed');
       assert.strictEqual(x.running?.id, 'r-live');
       assert.strictEqual(by.get('paused')!.nextAt, null);
-      assert.strictEqual(by.get('elsewhere')!.onThisMachine, false);
-      assert.strictEqual(by.get('elsewhere')!.nextAt, null);
       const broken = by.get('broken')!;
       assert.strictEqual(broken.job, null);
       assert.ok(broken.errors.length > 0);
-      assert.strictEqual(broken.onThisMachine, false);
     });
   }));
 
@@ -199,7 +194,7 @@ export async function run(): Promise<number> {
     assert.strictEqual(installedFrom(one('pending', 'no claude'), 'x', true), false);
     assert.strictEqual(installedFrom(report('in-sync', [], 1), 'x', true), true, 'no change for a wanted job: it is installed');
     assert.strictEqual(installedFrom(report('in-sync', [], 1), 'x', false), false);
-    const manual = parseJob('x', ['---', 'cron: manual', 'machines: [mac]', 'run: shell', '---', '```bash', 'true', '```', ''].join('\n')).job;
+    const manual = parseJob('x', ['---', 'cron: manual', 'run: shell', '---', '```bash', 'true', '```', ''].join('\n'), 'mac').job;
     assert.ok(manual);
     assert.strictEqual(installedFrom(report('in-sync', [], 1), 'x', scheduled(manual)), false, 'a manual job is never wanted, so never installed');
     for (const bare of ['not-owner', 'no-plugin', 'bad-machine'] as const) assert.strictEqual(installedFrom(report(bare), 'x', true), false, bare);
@@ -284,7 +279,7 @@ export async function run(): Promise<number> {
     await withRoutines('', true, async c => {
       const text = job();
       const file = writeJob(c, 'x', text);
-      const bad = await send(c.h, 'PUT', '/api/routines/x', { text: '---\ncron: nonsense\nmachines: [mac]\nrun: claude\n---\nhi\n' });
+      const bad = await send(c.h, 'PUT', '/api/routines/x', { text: '---\ncron: nonsense\nrun: claude\n---\nhi\n' });
       assert.strictEqual(bad.status, 422);
       const errors = bad.json?.errors as Array<{ line: number; message: string }>;
       assert.ok(errors.length > 0 && errors.every(e => typeof e.line === 'number' && typeof e.message === 'string'), JSON.stringify(errors));
@@ -323,9 +318,16 @@ export async function run(): Promise<number> {
     });
   }));
 
+  tally(await testAsync('/validate of a job with neither cwd nor foreach says it runs in your home folder', async () => {
+    await withRoutines('', false, async c => {
+      const r = await send(c.h, 'POST', '/api/routines/validate', { text: job({ run: 'shell' }) }, UNTRUSTED);
+      assert.match(String(r.json?.summary), / · your home folder$/);
+    });
+  }));
+
   tally(await testAsync('/validate of a manual job summarises "manual · shell ·" and never says paused, enabled or not', async () => {
     await withRoutines('', false, async c => {
-      const text = (enabled: boolean) => ['---', 'cron: manual', 'machines: [mac]', 'run: shell', `enabled: ${enabled}`, '---', '```bash', 'echo hi', '```', ''].join('\n');
+      const text = (enabled: boolean) => ['---', 'cron: manual', 'run: shell', `enabled: ${enabled}`, '---', '```bash', 'echo hi', '```', ''].join('\n');
       for (const enabled of [true, false]) {
         const r = await send(c.h, 'POST', '/api/routines/validate', { text: text(enabled) }, UNTRUSTED);
         assert.deepStrictEqual(r.json?.errors, [], r.raw);

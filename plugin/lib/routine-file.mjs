@@ -14,9 +14,9 @@ export const RESERVED = new Set(['runs', 'validate', 'reconcile', 'reveal']);
 export const LABEL_PREFIX = 'com.claude-dashboard.routine.';
 const KEY_RE = /^([A-Za-z0-9_-]+):(.*)$/;
 const KNOWN = new Set([
-    'cron', 'machines', 'run', 'foreach', 'cwd', 'enabled', 'model', 'effort', 'permission-mode', 'allowed-tools', 'max-turns', 'timeout',
+    'cron', 'run', 'foreach', 'cwd', 'enabled', 'model', 'effort', 'permission-mode', 'allowed-tools', 'max-turns', 'timeout',
 ]);
-const LIST_KEYS = new Set(['machines', 'allowed-tools']);
+const LIST_KEYS = new Set(['allowed-tools']);
 const PERMISSION_MODES = ['plan', 'acceptEdits', 'auto'];
 /** A job's timeout when its file names none, and the grammar of the `timeout` key. */
 export const DEFAULT_TIMEOUT_MS = 3_600_000;
@@ -39,7 +39,7 @@ function inlineList(v) {
 const isComment = (l) => /^\s*#/.test(l);
 const isBlank = (l) => l.trim() === '';
 const isIndented = (l) => /^\s+\S/.test(l) && !isComment(l);
-export function parseJob(name, text) {
+export function parseJob(name, text, machine) {
     const errors = [];
     const push = (line, message) => { errors.push({ line, message }); };
     const done = (job) => ({ job: errors.length === 0 ? job : null, errors });
@@ -96,6 +96,11 @@ export function parseJob(name, text) {
             continue;
         }
         seen.set(key, { value, line: lineNo });
+        if (key === 'machines') {
+            push(lineNo, 'machines: no longer used — a job runs on the machine whose folder holds it; delete this line');
+            broken.add(key);
+            continue;
+        }
         if (!KNOWN.has(key)) {
             push(lineNo, `unknown key ${key}`);
             continue;
@@ -149,23 +154,6 @@ export function parseJob(name, text) {
     }
     else if (!seen.has('cron'))
         push(0, 'cron is required');
-    // machines
-    let machines = null;
-    const machinesE = get('machines');
-    if (machinesE) {
-        const items = listOf('machines');
-        if (items) {
-            const bad = items.find((x) => x !== 'mac' && x !== 'wsl');
-            if (bad !== undefined)
-                push(machinesE.line, `machines: unknown machine ${bad}`);
-            else if (items.length === 0)
-                push(machinesE.line, 'machines needs mac, wsl or both');
-            else
-                machines = [...new Set(items)];
-        }
-    }
-    else if (!seen.has('machines'))
-        push(0, 'machines is required');
     // run
     let runKind = null;
     const runE = requireValue('run');
@@ -178,7 +166,7 @@ export function parseJob(name, text) {
     else if (!seen.has('run'))
         push(0, 'run is required');
     // mac can only express what launchd's StartCalendarInterval can
-    if (cron !== null && !isManualCron(cron) && cronE && machines?.includes('mac')) {
+    if (cron !== null && !isManualCron(cron) && cronE && machine === 'mac') {
         const parsed = parseCron(cron);
         if (parsed.ok && toCalendarIntervals(parsed.cron) === null)
             push(cronE.line, 'cron: launchd cannot combine day-of-month and weekday; use one');
@@ -258,10 +246,10 @@ export function parseJob(name, text) {
     else if (runKind === 'claude' && body === '')
         push(0, 'claude job needs a prompt');
     errors.sort((a, b) => a.line - b.line);
-    if (errors.length > 0 || cron === null || machines === null || runKind === null)
+    if (errors.length > 0 || cron === null || runKind === null)
         return done(null);
     return done({
-        name, cron, machines, run: runKind, foreach, cwd: cwdE ? cwdE.value : null, enabled, model, effort, permissionMode, allowedTools, maxTurns, timeoutMs, body, script,
+        name, cron, run: runKind, foreach, cwd: cwdE ? cwdE.value : null, enabled, model, effort, permissionMode, allowedTools, maxTurns, timeoutMs, body, script,
     });
 }
 /**

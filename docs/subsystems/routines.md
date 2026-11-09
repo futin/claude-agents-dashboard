@@ -1,6 +1,6 @@
 # Routines (the Routines section)
 
-Jobs are markdown files in a folder that syncs through git (default `~/claude-global/routines/`). The dashboard turns them into launchd jobs (macOS) or
+Jobs are markdown files in a folder on this machine (default `~/.claude/routines/jobs/`, never synced). The dashboard turns them into launchd jobs (macOS) or
 crontab lines (WSL), shows the ledger and the run log, and pushes a phone notification when one fails. **No scheduler runs in the server.** The OS fires
 a plain-Node wrapper, `plugin/lib/run-routine.mjs`; the server installs jobs, launches one on demand and reads what the wrapper wrote. A server that is
 down at 22:00 costs nothing: the job still runs, and the run shows up in the log when the server is back.
@@ -21,7 +21,7 @@ spelling, so a machine set up before the rename keeps working untouched — the 
 | Old | New | How the old one is still honoured |
 |---|---|---|
 | `SCHEDULES_DIR`, `SCHEDULE_MACHINE`, `SCHEDULES_OWNER`, `SCHEDULES_STATE_ROOT` | `ROUTINES_*`, `ROUTINE_MACHINE` | `loadConfig` and the wrapper read the old name when the new one is unset; the new one wins |
-| `~/claude-global/schedules` | `~/claude-global/routines` | the default job folder falls back to the old one while only it exists (`orLegacy`, server and wrapper alike); a set `ROUTINES_DIR` is never swapped |
+| `~/claude-global/schedules`, `~/claude-global/routines` | `~/.claude/routines/jobs` | no longer read as the job folder; the one-time import copies them in, see [Per machine since 2026-11-09](#per-machine-since-2026-11-09) |
 | `~/.claude/schedules` | `~/.claude/routines` | read while only it exists; the owner renames it on start (`migrateLegacyState`) |
 | `com.claude-dashboard.schedule.<name>` | `com.claude-dashboard.routine.<name>` | reconcile boots out and deletes each old-label plist, then installs the new one; a running one waits as `pending · running` |
 | `# >>> claude-dashboard schedules >>>` block | `# >>> claude-dashboard routines >>>` | reconcile reads an old-marker block and replaces it in place |
@@ -31,13 +31,40 @@ spelling, so a machine set up before the rename keeps working untouched — the 
 The run log's `trigger: 'schedule'` value is not a name of the section — it means "fired by its cron" — and did not change.
 
 The state move waits for two things: the new wrapper must be installed (`run-routine.mjs` found), or an old wrapper would go on appending to the old run
-log; and no `.lock` may be held, or a running job would. So the order on each machine is: merge, `pnpm plugin:sync`, restart the owner server. Renaming
-the `.env` keys and `git mv`-ing the job folder are optional and can come any time after.
+log; and no `.lock` may be held, or a running job would. So the order on each machine was: merge, `pnpm plugin:sync`, restart the owner server. Renaming
+the `.env` keys is optional and can come any time after.
+
+### Per machine since 2026-11-09
+
+Job files used to live in a git-synced folder (`~/claude-global/routines/`) shared by every machine, with a `machines:` key saying where each one installed.
+They are now per machine: the job folder is `jobs/` inside the state root (`~/.claude/routines/jobs`; inside legacy `~/.claude/schedules` or
+`ROUTINES_STATE_ROOT` when those apply), resolved by `routineDirs` in `server/lib/routine-config.ts` and the same way by `plugin/lib/run-routine.mjs`. A
+job runs where its file lives, so there is no `machines:` key (a leftover line is a parse error) and no `not-this-machine` refusal. A set `ROUTINES_DIR`
+(or the old `SCHEDULES_DIR`) is honoured verbatim: no fallback and no import.
+
+**The one-time import** (`server/lib/routine-import.ts`, boot step `job import` in `routine-boot.ts`, owner only, after the owner claim and before the
+lock sweep) copies the old shared folder in once. The source is the first of `~/claude-global/routines`, `~/claude-global/schedules` (`OLD_SHARED_DIRS`)
+that is a folder. Every copied file has its `machines:` key removed, `enabled: false` set, and `cwd: ~/claude-global` added when it had neither `cwd:` nor
+`foreach:` (the old default was the folder's parent, the new one is home); everything else, comments included, is kept, and a file that does not parse is
+still copied so it can be fixed in the drawer. The copy goes into `<state root>/.jobs-import.tmp` and is renamed to `jobs/`, so a crash leaves no
+half-filled folder. `<state root>/jobs-imported.json` (`{at, from, count}`) records that it ran, and it never runs again, so a job deleted later stays
+deleted. It is skipped (the result names why: `explicit-dir`, `explicit-old`, `done`, `overlap`, `jobs-exist`, `no-old`) when `ROUTINES_DIR` is set, when
+the marker exists, when `jobs/` would overlap an old folder, when `jobs/` already exists (the marker is written with `count: 0`), or when there is no old
+folder. A set `ROUTINES_DIR` (or `SCHEDULES_DIR`) that names one of the old shared folders is `explicit-old`: still honoured, still no import, but boot
+prints a warning on stderr, since those files carry `machines:` and none of them loads. `overlap` logs a line too; the other skips are silent. The old
+folder is left untouched; deleting `schedules/` from `~/claude-global` is the user's own follow-up.
+
+**Rollout order on each machine:** merge; remove any `ROUTINES_DIR=` / `SCHEDULES_DIR=` line naming `~/claude-global/…` from the owner checkout's `.env`
+(otherwise the import is skipped and every job fails to parse); restart the owner server (it imports, everything is disabled, and its reconcile removes
+every installed OS job); then `pnpm plugin:sync`; then re-enable what should run here. With `plugin:sync` first, the old installed jobs would fire the new
+wrapper against the old folder.
 
 | Path | Holds | Written by |
 |---|---|---|
-| `ROUTINES_DIR` (default `~/claude-global/routines`) | `<name>.md`, one job per file | the user, git, the editor drawer (owner only) |
+| `ROUTINES_DIR` (default `jobs/` in the state root) | `<name>.md`, one job per file; per machine, never synced | the user, the editor drawer (owner only), the one-time import |
 | `~/.claude/routines/` (the *state root*) | everything below, machine-local, never under git | |
+| `jobs/` | the default job folder | see above |
+| `jobs-imported.json` | `{at, from, count}`, the marker that the one-time import ran | the owner (`importSharedJobs`) |
 | `runs/<machine>.jsonl` | the append-only run log; rotated to `<machine>.<yyyymmdd>.jsonl` at 20 MB | the wrapper (appends), the owner (rotates) |
 | `locks/<job>.lock` | the job lock: pid and boot id | the wrapper; the owner sweeps dead ones on start |
 | `launchd/` | the plists' stdout and stderr files (mac) | reconcile creates it, launchd writes the files in it |
@@ -57,7 +84,6 @@ answers `400 {error: 'bad name'}` before touching the disk.
 ```markdown
 ---
 cron: "0 22 * * *"
-machines: [mac, wsl]
 run: claude
 foreach: pinned
 model: opus
@@ -70,17 +96,16 @@ timeout: 30m
 | Key | Meaning |
 |---|---|
 | `cron` | five fields, local time of the machine that runs it, or `manual` (never installed; Run now only) |
-| `machines` | `[mac]`, `[wsl]` or both; the job installs only where it is named |
 | `run` | `shell` (the body's first fenced `bash` block, run as `bash -e <tmpfile>`) or `claude` (the body is the prompt; one line starting with `/` is a skill) |
 | `foreach` | absent: one step in `cwd`; `pinned`: one sequential step per pinned repo; `[a, b]`: only those pins, by name (`dirName` when two pins share a basename) |
-| `cwd` | only without `foreach`; default is the routines folder's parent |
+| `cwd` | only without `foreach`; default is the user's home folder |
 | `enabled` | absent means true; `PATCH` rewrites only this line |
 | `model`, `effort`, `allowed-tools`, `max-turns` | claude only, passed through to the CLI |
 | `permission-mode` | claude only: `plan`, `acceptEdits` or `auto`, never anything else (`bypassPermissions` is refused, not clamped); absent means the baked `SYNC_PERMISSION_MODE` |
 | `timeout` | `30s`, `30m` or `2h`; the wrapper kills the step after it; default 60m |
 
 An unknown key is a validation error naming the key. A cron that launchd cannot express (day-of-month and weekday both restricted: cron ORs them, launchd
-ANDs them) is an error for any file that names `mac`. Step values and ranges are expanded into a list of `StartCalendarInterval` dicts. The parser, the
+ANDs them) is an error when the validating machine is `mac` (`parseJob(name, text, machine)`). Step values and ranges are expanded into a list of `StartCalendarInterval` dicts. The parser, the
 writer and the validator are `shared/routine-file.ts` and `shared/cron.ts`, which the server, the client and the wrapper all run; the wrapper's copies are
 generated (`pnpm plugin:gen` writes `plugin/lib/*.mjs`, and `test/plugin-manifest.test.ts` regenerates and compares, so an edit to the `.ts` without
 regenerating fails CI).
@@ -89,6 +114,9 @@ A `foreach` name that is not pinned on the running machine is skipped there (`sk
 `pin unlisted`. No `pins.json` ends a fan-out run before its first step with `end.error` `no pins snapshot`.
 
 ## Machine identity
+
+The machine name no longer decides where a job installs (a job runs where its file lives); it picks launchd or cron, names the run log and gates the
+launchd day-of-month rule.
 
 `ROUTINE_MACHINE` (`mac` or `wsl`) if set; any other value is shown as `bad ROUTINE_MACHINE` on the chip and installs nothing. Otherwise the detection
 `~/claude-global/bootstrap.sh` uses: Darwin is `mac`, everything else is `wsl`. The wrapper resolves it from the same variable, baked into its
@@ -110,13 +138,12 @@ dead or from another boot. A second opted-in server that finds a live owner runs
 
 A non-owner serves jobs, runs and stats, the client hides every write control, and it never writes under the state root. The owner releases `owner.json`
 on clean exit and on SIGINT or SIGTERM (`stopRoutines`); a crash leaves a dead pid the next start takes over. `startRoutines` (`routine-boot.ts`) does,
-in order and each step failing on its own without taking `listen` down: lock sweep, pins snapshot, log rotation, first reconcile, reconcile watchers, then
+in order and each step failing on its own without taking `listen` down: job import, lock sweep, pins snapshot, log rotation, first reconcile, reconcile watchers, then
 the runs watcher that seeds and folds the log for pushes.
 
 ## Reconcile: files in, OS jobs out
 
-`routine-reconcile.ts` plans a pure diff and applies it idempotently. **Desired** is every valid file with `enabled: true` and a `cron` other than `manual` whose `machines` names
-this machine (the plan's removal reason for a manual file is `manual`, checked before `disabled`). **Installed** is, on mac, every plist under `~/Library/LaunchAgents/` labelled `com.claude-dashboard.routine.*`, with `launchctl print
+`routine-reconcile.ts` plans a pure diff and applies it idempotently. **Desired** is every valid file with `enabled: true` and a `cron` other than `manual` (the plan's removal reason for a manual file is `manual`, checked before `disabled`). **Installed** is, on mac, every plist under `~/Library/LaunchAgents/` labelled `com.claude-dashboard.routine.*`, with `launchctl print
 gui/<uid>/<label>` saying whether it is loaded (exit 0 loaded, any other exit not); on WSL, every line between the two marker comments of the user's crontab:
 
 ```
@@ -178,9 +205,9 @@ puts every plugin's `bin/` on the Bash PATH of every session.
 `plugin/lib/run-routine.mjs <job> [--trigger schedule|manual] [--only <pin>...]`: plain Node, built-ins only, nothing imported from `server/`. It is the
 only process that runs a job. In order:
 
-1. Read `<dir>/<job>.md` and validate it with the same module the server uses. On a `--trigger schedule` fire with a missing, invalid, disabled or
-   other-machine file it appends a `refused` record and exits 0, because the dashboard may have been down when the file changed. A manual run of a disabled
-   file is allowed (that is Run now on a paused job); the other three refuse manually too.
+1. Read `<dir>/<job>.md` and validate it with the same module the server uses. On a `--trigger schedule` fire with a missing, invalid or disabled
+   file it appends a `refused` record and exits 0, because the dashboard may have been down when the file changed. A manual run of a disabled
+   file is allowed (that is Run now on a paused job); the other two refuse manually too.
 2. Take `locks/<job>.lock` by linking a complete temp file into place (it fails on an existing lock, and no reader sees it empty), pid and boot id inside.
    A live pid from this boot whose command line is `run-routine <job>` makes it append
    `refused` (`running`) and exit **75**; any other lock is stale and taken over, and the reader shows that run as lost. The boot id is the seconds of
@@ -215,7 +242,7 @@ prompt that needs an answer must say what to do instead. The marker is covered i
 | `step-start` | `run`, `step`, `repo`, `cwd`, `at`, `session` (claude only) |
 | `step-end` | `run`, `step`, `at`, `ms`, `exit`, `outcome` (`ok`, `failed`, `skipped`, `timeout`, `stopped`), `why`, `tail` (shell: last 20 lines), `cost`, `tokensIn`, `tokensOut`, `turns`, `model` |
 | `end` | `run`, `at`, `ms`, `ok`, `failed`, `skipped`, `stopped`, `error` (only when the run failed before its first step) |
-| `refused` | `job`, `at`, `trigger`, `why` (`running`, `file gone`, `invalid: <line>: <message>`, `disabled`, `not this machine`), `pid`, `heldBy` |
+| `refused` | `job`, `at`, `trigger`, `why` (`running`, `file gone`, `invalid: <line>: <message>`, `disabled`; old records may also say `not this machine`), `pid`, `heldBy` |
 
 `server/lib/routine-log.ts` folds the file into `RoutineRun` (`running`, `ok`, `failed`, `lost`, `refused`). **Lost is derived at read time, never
 written**: a `start` with no `end` whose pid is dead, or alive but not running `run-routine <job>`, is lost. The age rule (older than the job's timeout
@@ -277,7 +304,7 @@ Write routes are gate-only writes ([who may write](remote-access.md#who-may-writ
 | `POST /api/routines/validate` | `{text, name?}` → `{errors, summary}`; read-only, outside the write gate | |
 | `POST /api/routines/reconcile` | `{apply?}` → the plan; applies when `apply` | |
 | `POST /api/routines/reveal` | `{name?}`: open the folder, or reveal that job's file, with `open` / `open -R`; macOS only | `501 reveal needs macOS`, `404 no routines folder` or `no such job`, `500 open failed` |
-| `POST /api/routines/:name/run` | see above | `400 bad body`, `bad-only`; `404`; `409 already-running`, `no-plugin`, `invalid`, `not-this-machine`, `not-owner`; `500 spawn-failed` |
+| `POST /api/routines/:name/run` | see above | `400 bad body`, `bad-only`; `404`; `409 already-running`, `no-plugin`, `invalid`, `not-owner`; `500 spawn-failed` |
 | `POST /api/routines/:name/stop` | `204` | `409 not-running` |
 | `GET /api/sessions/:id/row` | one `Session` row for any id a transcript resolves, no lookback, so a run older than the Sessions window opens in the ChatDrawer | `400 bad id`, `404 no such session`, `500 transcript unreadable` |
 
@@ -299,7 +326,7 @@ Cancel leave. A New job drawer counts as dirty from the start. Back re-arms afte
 - **Runs:** `RunsList`, grouped by day, filtered by outcome, runner and job; a fan-out run is one row with its steps folded, failed steps open. `SessionLink`
   fetches the row and opens the ChatDrawer, and its failure shows beside the link that was clicked.
 - **Drawer:** `JobDrawer` shows one text two ways, switched by a `Form | File` seg in its header (Form by default). Form is `JobRows`: one summary row per
-  setting the job's `run:` kind shows (Schedule, Machines, Repos, Script or Prompt, Model, Permission, Limits, Tools), one opened at a time, each control
+  setting the job's `run:` kind shows (Schedule, Repos, Script or Prompt, Model, Permission, Limits, Tools), one opened at a time, each control
   writing only the lines its field owns through the registry in `client/src/lib/routineForm.ts` (Schedule's six presets live in `ScheduleControl`; what a preset click or an edit shows and writes is `routineForm.ts`'s `schedulePick` / `scheduleEdit`). A
   `/validate` error shows inside the row that owns its line and turns that row's summary red; the rest show under the rows. A value the form cannot show
   reads `edit in File`. File is the raw textarea. The text is validated on each keystroke (debounced) in both views; a New job's **Save and install**
@@ -316,7 +343,7 @@ All class names are `.rtn-` prefixed and colours are theme tokens.
 
 ## Security
 
-- Job files are code. The folder is the user's private git repo, the wrapper runs as the user, and nothing in the dashboard elevates. The write routes are
+- Job files are code. The folder is the user's own, the wrapper runs as the user, and nothing in the dashboard elevates. The write routes are
   behind the write gate, so a tailnet viewer without trust can read jobs and runs but not create, edit, toggle, run, stop, reveal or reconcile.
 - `bypassPermissions` is rejected by the validator and again by the wrapper.
 - A plist's `ProgramArguments` are absolute paths and the job name, and a crontab line quotes every value; nothing from a file body reaches a shell line.
@@ -343,6 +370,7 @@ All class names are `.rtn-` prefixed and colours are theme tokens.
     - server/lib/routine-log.ts
     - server/lib/routine-notify.ts
     - server/lib/routine-boot.ts
+    - server/lib/routine-import.ts
     - server/lib/open-folder.ts
     - server/lib/notify.ts
     - server/api.ts
@@ -360,5 +388,5 @@ All class names are `.rtn-` prefixed and colours are theme tokens.
     - client/src/lib/routines.ts
     - client/src/lib/deepLink.ts
   kind: subsystem
-  verified: 24f8d773dd459e02b1e4ef4a093aed285939555c
+  verified: 5bceec2050b282bc8b2562ded093d8ce6ea00e7f
 -->

@@ -9,7 +9,7 @@ import type { RoutineCtl } from './ctl';
  */
 export default function JobMenu({ row, ctl, onClose, onRunOne }: { row: RoutineJobRow; ctl: RoutineCtl; onClose(): void; onRunOne(): void }) {
   const job = row.job;
-  const runnable = ctl.owner && row.onThisMachine && job !== null;
+  const runnable = ctl.owner && job !== null;
   const fanOut = job !== null && (job.foreach !== null || (row.last !== null && isFanOut(row.last)));
   const busy = ctl.busy === `run:${row.name}`;
   const pick = (fn: () => void) => () => { onClose(); fn(); };

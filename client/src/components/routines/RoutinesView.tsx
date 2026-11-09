@@ -10,7 +10,7 @@ import { useRoutineWrite } from '../../hooks/useRoutineWrite';
 import { useRoutines } from '../../hooks/useRoutines';
 import { useSettings } from '../../hooks/useSettings';
 import { deepLinkRun } from '../../lib/deepLink';
-import { chipClass, launchdLabel, reconcileChip, reconcilePreview, type ReconcilePreview, type RoutineRunsQuery } from '../../lib/routines';
+import { chipClass, jobsSubtitle, launchdLabel, reconcileChip, reconcilePreview, type ReconcilePreview, type RoutineRunsQuery } from '../../lib/routines';
 import { READ_ONLY_TEXT } from '../../lib/writeRefusal';
 import type { RoutineCtl } from './ctl';
 import JobDrawer from './JobDrawer';
@@ -123,8 +123,7 @@ export default function RoutinesView() {
         </div>
         {!phone && data && (
           <div className="mgmt-sub">
-            Jobs defined in <code>{data.dir}</code>, run by {data.machine === 'mac' ? 'launchd' : 'cron'} on this machine. Files sync through git; each
-            machine installs only the jobs that name it.
+            {jobsSubtitle(data.dir, data.machine)}
           </div>
         )}
       </div>

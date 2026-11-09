@@ -59,7 +59,7 @@ via `tsx`, dev and prod alike).
   `CODEGRAPH_NO_DOWNLOAD=1`, so the shim neither checks for nor downloads a newer bundle.
   The Sync menu's [Pull and Push](subsystems/git-stats.md#quick-pull-and-push--the-writer) go further than the fetch: one pinned repo at a time, Pull
   fast-forwards the checked-out branch with `merge --ff-only` and Push runs `git push`, never forced.
-  The [Routines](subsystems/routines.md) section writes job files into `ROUTINES_DIR` (default `~/claude-global/routines`, owner only), keeps its state
+  The [Routines](subsystems/routines.md) section writes job files into `ROUTINES_DIR` (default `~/.claude/routines/jobs`, per machine, owner only), keeps its state
   under `~/.claude/routines/`, and installs the jobs as launchd jobs or crontab lines; the 5-hour
   [usage alerts](subsystems/push-notify.md#the-usage-events-usage-limit-and-usage-reset) keep their claim in `~/.claude/dashboard/usage-alerts.json`; the
   [`tick-capped` push](subsystems/push-notify.md#the-backlog-tick-event-tick-capped) reads `~/.backlog-manager/tick/*/last-decide.json` and never writes there.
@@ -252,12 +252,13 @@ server/
   lib/git-locks.ts    one lock per git common dir, shared by git-quick and the fetch-all wait
   lib/worktree-repo.ts  `Session.repo`: the main checkout's name for a session launched in a linked git worktree (see subsystems/sessions.md)
   lib/open-folder.ts  `open <path>` through `execFile`, behind POST /api/open-folder (the pin-membership gate is in api.ts); `revealFile` is `open -R <file>` for the Routines menu's Reveal in Finder
-  lib/routine-config.ts  machine name (`mac`/`wsl`), the routines and state-root folders, and `routineEnv` — the environment baked into every installed job and `/run` spawn
+  lib/routine-config.ts  machine name (`mac`/`wsl`), the jobs and state-root folders, and `routineEnv` — the environment baked into every installed job and `/run` spawn
   lib/routine-store.ts   job files (read, atomic write, delete), the owner claim, `pins.json`, lock sweep and the pid-liveness `Probe`
   lib/routine-reconcile.ts  the pure plan of installs, updates and removes against launchd / crontab, its apply, the serialised trigger and the watchers
   lib/routine-run.ts     `POST /run` and `/stop`: spawn the wrapper through `spawn.ts`'s `spawnProcess`, read the run id back from the log
   lib/routine-log.ts     the incremental run-log reader, the lost rule, 20 MB rotation and the window stats
   lib/routine-notify.ts  the `routine-failed` fold over runs: one push per run, `notified.json`, the first-start seed
+  lib/routine-import.ts  the one-time import of the old shared job folder into `jobs/`, every file disabled, behind a marker
   lib/routine-boot.ts    what the owning server does on listen and on exit, and the shared log reader
   lib/tick-caps.ts       the `tick-capped` push: reads each backlog tick's `last-decide.json`, one push per capped episode, `tick-capped.json`
   lib/hub-widgets.ts  the Lookout hub tiles (usage gauge, sessions list, Git pending list), declared through lookout-widgets
@@ -471,7 +472,7 @@ that area:
 - [push-notify](subsystems/push-notify.md) — server-sent ntfy pushes: the layered policy, and the one narrow browser layer that came back for headless sessions
 - [breakpoints](subsystems/breakpoints.md) — the seven-tier mobile-first ladder in `styles.css`, the rail+measure lock, and the capped/full content-width matrix
 - [codegraph](subsystems/codegraph.md) — `GET /api/codegraph`, `POST /api/codegraph/run`: the `codegraph` CLI's index state per pinned project — a status cache, Sync and Reindex runs, the lock-loss rule, and the levels the Management › CodeGraph layouts draw
-- [routines](subsystems/routines.md) — the Routines section: job files in a git-synced folder, installed as launchd / cron jobs by reconcile, run by `plugin/lib/run-routine.mjs`, the run log, the owning server and `routine-failed` pushes
+- [routines](subsystems/routines.md) — the Routines section: per-machine job files, installed as launchd / cron jobs by reconcile, run by `plugin/lib/run-routine.mjs`, the run log, the owning server and `routine-failed` pushes
 - [visual-tests](subsystems/visual-tests.md) — `pnpm test:visual`: Playwright screenshots of every view against fixture data, overflow and daylight contrast, macOS only
 - [configuration](workflows/configuration.md) — the `.env` / hook-side variable reference
 - [ci](workflows/ci.md) — the PR gate: `ci / checks`, `ci / pr-title`, `ci / skills` from release-kit's reusable workflow, and the `main-pr-only` ruleset

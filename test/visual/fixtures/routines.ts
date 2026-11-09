@@ -5,7 +5,6 @@
  * - pr-triage: a single-cwd `claude` job, installed, last run failed.
  * - prune-branches: a `shell` job, paused.
  * - weekly-report: a `claude` job running now.
- * - wsl-backup: a `shell` job for the other machine only.
  * The runs list carries one of each run state (running, ok, failed, lost, refused), newest first.
  */
 import type { RoutineJob, RoutineJobRow, RoutineRun, RoutineRunsResponse, RoutineStats, RoutineStep, RoutinesResponse } from '../../../shared/types.js';
@@ -13,11 +12,10 @@ import type { RoutineJob, RoutineJobRow, RoutineRun, RoutineRunsResponse, Routin
 import { DAY, EPOCH, HOUR, MIN, SEC, agoIso, ago } from './epoch.js';
 import { HOME, PROJECTS, SESSION_IDS } from './sessions.js';
 
-const DIR = `${HOME}/claude-global/routines`;
+const DIR = `${HOME}/.claude/routines/jobs`;
 
 function job(over: Partial<RoutineJob> & Pick<RoutineJob, 'name' | 'cron' | 'run'>): RoutineJob {
   return {
-    machines: ['mac'],
     foreach: null,
     cwd: null,
     enabled: true,
@@ -140,9 +138,6 @@ const WEEKLY = job({
   name: 'weekly-report', cron: '0 14 * * 3', run: 'claude', cwd: PROJECTS.aurora.path, model: 'claude-sonnet-5-5', effort: 'high',
   body: 'Write the weekly report from the merged pull requests.'
 });
-const WSL_BACKUP = job({
-  name: 'wsl-backup', cron: '30 2 * * *', run: 'shell', machines: ['wsl'], cwd: '~/backups', body: '```bash\n./backup.sh\n```', script: './backup.sh'
-});
 
 const MTIME = ago(3 * DAY);
 
@@ -154,8 +149,7 @@ function row(j: RoutineJob, over: Partial<RoutineJobRow> = {}): RoutineJobRow {
     job: j,
     errors: [],
     mtimeMs: MTIME,
-    onThisMachine: j.machines.includes('mac'),
-    installed: j.enabled && j.machines.includes('mac'),
+    installed: j.enabled,
     nextAt: null,
     last: null,
     running: null,
@@ -175,14 +169,12 @@ export const routines: RoutinesResponse = {
       text: '---\ncron: every morning\nrun: shell\n---\n',
       job: null,
       errors: [{ line: 2, message: 'cron: expected five fields, got "every morning"' }],
-      onThisMachine: false,
       installed: false
     }),
     row(NIGHTLY, { nextAt: iso(EPOCH + 13 * HOUR), last: nightlyOk }),
     row(PR_TRIAGE, { nextAt: iso(EPOCH + 3 * MIN), last: prTriageFailed }),
     row(PRUNE, { last: pruneRefused }),
-    row(WEEKLY, { nextAt: iso(EPOCH + 7 * DAY), last: null, running: weeklyRunning }),
-    row(WSL_BACKUP)
+    row(WEEKLY, { nextAt: iso(EPOCH + 7 * DAY), last: null, running: weeklyRunning })
   ]
 };
 

@@ -6,7 +6,7 @@ import assert from 'node:assert';
 import fs from 'node:fs';
 
 import {
-  chipClass, costDelta, createPollSeq, editsWithoutAsking, foreachLine, formatStat, groupRunsByDay, isFanOut, jobTemplate, launchdLabel, medianMs, nameProblem,
+  chipClass, costDelta, createPollSeq, editsWithoutAsking, foreachLine, formatStat, groupRunsByDay, isFanOut, jobTemplate, jobsSubtitle, launchdLabel, medianMs, nameProblem,
   readForeach, reconcileChip, reconcilePreview, rowText, runClock, dotTone, topFailure, jobPins, pinOutcome, stepErrLine, runKicker, runPill, runsQueryString, setRepos,
   pausedLook, splitNext, splitSteps, stepPill, successRate, topTokenShare, withLate, writeFailureText
 } from '../client/src/lib/routines.js';
@@ -39,14 +39,14 @@ function mkRun(over: Partial<RoutineRun> = {}): RoutineRun {
 
 function mkJob(over: Partial<RoutineJob> = {}): RoutineJob {
   return {
-    name: 'j', cron: '0 7 * * 1-5', machines: ['mac', 'wsl'], run: 'shell', foreach: 'pinned', cwd: null, enabled: true, model: null, effort: null, permissionMode: null,
+    name: 'j', cron: '0 7 * * 1-5', run: 'shell', foreach: 'pinned', cwd: null, enabled: true, model: null, effort: null, permissionMode: null,
     allowedTools: null, maxTurns: null, timeoutMs: 600_000, body: 'x', script: 'x', ...over
   };
 }
 
 function mkRow(over: Partial<RoutineJobRow> = {}): RoutineJobRow {
   return {
-    name: 'j', text: '', job: mkJob(), errors: [], mtimeMs: 0, onThisMachine: true, installed: true, nextAt: at(4, 20, 7), last: null, running: null, ...over
+    name: 'j', text: '', job: mkJob(), errors: [], mtimeMs: 0, installed: true, nextAt: at(4, 20, 7), last: null, running: null, ...over
   };
 }
 
@@ -73,13 +73,6 @@ export function run(): number {
     assert.strictEqual(rowText(mkRow({ running: plain }), NOW).pill.text, 'running');
   });
 
-  t('rowText: a job that does not name this machine reads "wsl only" with no last or next line', () => {
-    const r = mkRow({ job: mkJob({ machines: ['wsl'] }), onThisMachine: false, nextAt: null, last: mkRun() });
-    assert.deepStrictEqual(rowText(r, NOW), { lastLine: '', nextLine: '—', pill: { text: 'wsl only', tone: 'dim' } });
-    const both = mkRow({ job: mkJob({ machines: ['mac', 'wsl'] }), onThisMachine: false });
-    assert.strictEqual(rowText(both, NOW).pill.text, 'mac + wsl only', 'several machines are all named');
-  });
-
   t('rowText: a paused job keeps its last run and reads "paused" for next; a claude run adds its cost', () => {
     const r = mkRow({
       job: mkJob({ enabled: false, run: 'claude' }), nextAt: null,
@@ -94,8 +87,6 @@ export function run(): number {
       assert.deepStrictEqual(rowText(r, NOW), { lastLine: '', nextLine: 'manual', pill: { text: 'never run', tone: 'dim' } }, `enabled ${enabled}`);
     }
     assert.strictEqual(rowText(mkRow({ job: mkJob({ enabled: false }), nextAt: null }), NOW).nextLine, 'paused');
-    const away = mkRow({ job: mkJob({ cron: 'manual', machines: ['wsl'] }), onThisMachine: false, nextAt: null });
-    assert.deepStrictEqual(rowText(away, NOW), { lastLine: '', nextLine: '—', pill: { text: 'wsl only', tone: 'dim' } });
   });
 
   t('pausedLook: only an existing, disabled, non-manual job', () => {
@@ -134,7 +125,7 @@ export function run(): number {
     assert.deepStrictEqual(rowText(mkRow({ last: mkRun({ state: 'lost', ms: null, endedAt: null }) }), NOW).pill, { text: 'lost', tone: 'mustard' });
     assert.deepStrictEqual(rowText(mkRow({ last: mkRun({ state: 'refused', ms: null, total: 0 }) }), NOW).pill, { text: 'not run', tone: 'mustard' });
     assert.deepStrictEqual(rowText(mkRow({ last: null }), NOW), { lastLine: '', nextLine: 'tomorrow 07:00', pill: { text: 'never run', tone: 'dim' } });
-    assert.deepStrictEqual(rowText(mkRow({ job: null, errors: [{ line: 1, message: 'bad' }], onThisMachine: false, nextAt: null }), NOW), { lastLine: '', nextLine: '—', pill: { text: 'invalid', tone: 'red' } });
+    assert.deepStrictEqual(rowText(mkRow({ job: null, errors: [{ line: 1, message: 'bad' }], nextAt: null }), NOW), { lastLine: '', nextLine: '—', pill: { text: 'invalid', tone: 'red' } });
   });
 
   t('rowText: an unreadable start time drops that part of the line instead of printing NaN', () => {
@@ -287,13 +278,13 @@ export function run(): number {
 
   t('jobTemplate: every kind parses with no errors, and each is the runner its kind says', () => {
     for (const kind of ['shell', 'prompt', 'skill'] as const) {
-      const parsed = parseJob('a-job', jobTemplate(kind));
+      const parsed = parseJob('a-job', jobTemplate(kind), 'mac');
       assert.deepStrictEqual(parsed.errors, [], `${kind}: ${JSON.stringify(parsed.errors)}`);
       assert.strictEqual(parsed.job?.run, kind === 'shell' ? 'shell' : 'claude');
       assert.strictEqual(parsed.job?.foreach, 'pinned');
     }
-    assert.strictEqual(parseJob('a-job', jobTemplate('skill')).job?.body, '/git-sync');
-    assert.strictEqual(parseJob('a-job', jobTemplate('shell')).job?.script, 'git pull --ff-only --quiet');
+    assert.strictEqual(parseJob('a-job', jobTemplate('skill'), 'mac').job?.body, '/git-sync');
+    assert.strictEqual(parseJob('a-job', jobTemplate('shell'), 'mac').job?.script, 'git pull --ff-only --quiet');
   });
 
   t('nameProblem: empty, bad pattern, reserved, taken, then fine', () => {
@@ -337,7 +328,6 @@ export function run(): number {
     assert.strictEqual(writeFailureText('Reconcile', 500, { error: 'x' }), 'Reconcile failed (HTTP 500).');
     // Run now's other 409s (server/lib/routine-run.ts RunResult), its 400 and its 500.
     assert.strictEqual(writeFailureText('Run now', 409, { error: 'invalid' }), 'Run now: the job file has errors — fix them before running it.');
-    assert.strictEqual(writeFailureText('Run now', 409, { error: 'not-this-machine' }), 'Run now: the job is not set to run on this machine (its machines: line).');
     assert.strictEqual(writeFailureText('Run now', 409, { error: 'no-plugin' }), 'Run now needs the dashboard plugin installed on this machine.');
     assert.strictEqual(writeFailureText('Run now', 400, { error: 'bad-only' }), 'Run now: the steps picked to run were not valid.');
     assert.strictEqual(writeFailureText('Run now', 500, { error: 'spawn-failed' }), 'Run now failed: the job could not be launched.');
@@ -513,6 +503,13 @@ export function run(): number {
     assert.ok(!form.includes("'1h timeout"), 'the default is built from DEFAULT_TIMEOUT_MS');
     const boot = fs.readFileSync(new URL('../server/lib/routine-boot.ts', import.meta.url), 'utf8');
     assert.ok(!/const DEFAULT_TIMEOUT_MS\b/.test(boot), 'the default is imported');
+  });
+
+  t('jobsSubtitle: per-machine copy, no git sync claim', () => {
+    const base = 'Jobs defined in /h/.claude/routines/jobs, run by launchd on this machine. They belong to this machine only — nothing syncs.';
+    assert.strictEqual(jobsSubtitle('/h/.claude/routines/jobs', 'mac'), base);
+    assert.strictEqual(jobsSubtitle('/h/.claude/routines/jobs', 'wsl'), base.replace('launchd', 'cron'));
+    assert.ok(!jobsSubtitle('/d', 'mac').includes('sync through git'));
   });
 
   console.log(`\n  ${p} passed, ${f} failed`);

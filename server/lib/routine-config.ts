@@ -37,11 +37,10 @@ function username(): string {
   }
 }
 
-const realHost = (): RoutineHost => ({ platform: process.platform, readProcVersion, env: process.env, homedir: os.homedir, username, exists: fs.existsSync });
+export const realHost = (): RoutineHost => ({ platform: process.platform, readProcVersion, env: process.env, homedir: os.homedir, username, exists: fs.existsSync });
 
-/** The default job folder, and both default folders' names from before Schedules became Routines (2026-10-23). */
-export const DEFAULT_ROUTINES_DIR = '~/claude-global/routines';
-const LEGACY_ROUTINES_DIR = '~/claude-global/schedules';
+/** Where job files lived while they were git-synced (`~/claude-global`), then under their pre-2026-10-23 name: the one-time import's sources, in preference order. */
+export const OLD_SHARED_DIRS = ['~/claude-global/routines', '~/claude-global/schedules'];
 const LEGACY_STATE = path.join('.claude', 'schedules');
 
 /** A default folder under its old name while only that one exists. `orLegacy` in `plugin/lib/run-routine.mjs` picks the same, so both sides agree. */
@@ -50,7 +49,7 @@ function orLegacy(next: string, old: string, host: RoutineHost): string {
 }
 
 /** `$HOME` as the wrapper sees it (`process.env.HOME || os.homedir()` in `plugin/lib/run-routine.mjs`), so both sides pick the same folders. */
-function homeOf(host: RoutineHost): string {
+export function homeOf(host: RoutineHost): string {
   return host.env.HOME || host.homedir();
 }
 
@@ -59,7 +58,7 @@ function userOf(host: RoutineHost): string {
   return host.env.USER || host.env.LOGNAME || host.username();
 }
 
-function expandHome(p: string, home: string): string {
+export function expandHome(p: string, home: string): string {
   return p === '~' ? home : p.startsWith('~/') ? path.join(home, p.slice(2)) : p;
 }
 
@@ -104,9 +103,7 @@ export function routineDirs(config: Config, host: Partial<RoutineHost> = {}): { 
   const h = { ...realHost(), ...host };
   const state = routineStateRoot(config, h);
   return {
-    routines: config.routinesDir === DEFAULT_ROUTINES_DIR
-      ? orLegacy(expandHome(DEFAULT_ROUTINES_DIR, homeOf(h)), expandHome(LEGACY_ROUTINES_DIR, homeOf(h)), h)
-      : expandHome(config.routinesDir, homeOf(h)),
+    routines: config.routinesDir ? expandHome(config.routinesDir, homeOf(h)) : path.join(state, 'jobs'),
     state,
     runs: path.join(state, 'runs'),
     locks: path.join(state, 'locks'),
