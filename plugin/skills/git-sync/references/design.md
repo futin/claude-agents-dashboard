@@ -333,6 +333,11 @@ Rulings made while the tasks were implemented that change behaviour this spec de
 - R39 — relaxed M4 (2026-11-04): a merged PR into the trunk proves the tip when its head is the tip, or an ancestor of it with no merge commit in
   between and every later commit either patch-equivalent on `origin/<trunk>` (`git cherry`) or leaving every path it touches identical there; the net
   head→tip change then passes R11's containment gate. `prLookup` reports that case as `merged-below-tip`, and the reason names the later commits.
+- R40 — opt-in auto answers (2026-11-10, the user's call): `survey --auto-merged --auto-clean` answers the merged question, the clean worktrees of
+  superseded/abandoned/gone-unproven branches, and superseded branches whose worktrees are all clean, so none of them is asked. The answers ride in
+  `survey.auto` (not `answers.json`) and `plan` folds them in (`foldAuto`: lists unite, maps fill the unanswered, the user's scalar wins), so the model
+  never maps them. Unlike `unattended` they never lose uncommitted work, never touch a detached or active/protected tree, and never delete an
+  abandoned or gone-unproven branch, since nothing proves its content is elsewhere. Dirty trees stay a question. `apply` re-proves as for any answer.
 - Phase B (2026-10-15): PR-only trunks — `main` of the dashboard repo accepts changes only through a pull request, so git-sync reads the trunk's rules
   (§6), never pushes a PR-only trunk, and offers to carry its local commits to a PR branch (`carry-trunk`, invariant 11). The design and the rest of the
   release pipeline are in `docs/superpowers/specs/2026-10-15-release-pipeline-design.md`.

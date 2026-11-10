@@ -31,6 +31,19 @@ Exit code 0 is `ok: true` and 2 is a stop. Exit code 1 prints nothing on stdout 
 build it yourself: it sits under the git common dir, which is not always `<root>/.git`. Preflight clears it at the start of every run, keeping only
 `deleted.log` and `last-report.md`.
 
+## Options
+
+`/git-sync` takes two opt-in flags. Pass each one, as typed, to `survey` (phase 3) and nowhere else. Neither lowers any safety check: `apply` re-proves
+every deletion they name, exactly as it does for one the user ticked.
+
+- `--auto-merged`: delete every branch proven merged, with its clean worktrees, without asking the `merged` question.
+- `--auto-clean`: remove every clean worktree on a superseded, abandoned or gone-unproven branch (the branch is kept), and delete a superseded branch
+  when all its worktrees are clean. Without asking those questions. Never touches a dirty worktree, a detached one, an active or protected branch,
+  or an abandoned or gone-unproven branch itself.
+
+The answered items are missing from `survey.rounds`; `survey.auto` holds their answers and `plan` folds them in by itself, so `answers.json` holds
+only what the user chose in the round. `survey.autoModes` says which flags were on. Name them in one line before the decision round.
+
 ## Procedure
 
 0. **Preflight.** `node "${CLAUDE_PLUGIN_ROOT}/skills/git-sync/tools/git-sync.mjs" preflight`. It refuses a linked worktree, an operation in progress
@@ -49,7 +62,8 @@ build it yourself: it sits under the git common dir, which is not always `<root>
    it onto the fetched `origin/<trunk>`; `pulled` counts the commits that arrived and `switchedFrom` names the branch it left. A conflict is aborted in
    full and stops with `rebase-conflict`, `detail.files` listing the paths.
 
-3. **Survey.** `node "${CLAUDE_PLUGIN_ROOT}/skills/git-sync/tools/git-sync.mjs" survey`. Read-only. It classifies every branch into `protected`, `merged`,
+3. **Survey.** `node "${CLAUDE_PLUGIN_ROOT}/skills/git-sync/tools/git-sync.mjs" survey`, plus `--auto-merged` and/or `--auto-clean` when the user invoked
+   `/git-sync` with them (see Options below). Read-only. It classifies every branch into `protected`, `merged`,
    `superseded` (every changed file already identical on `origin/<trunk>`, but no merge proof), `gone-unproven`, `abandoned` or `active`, lists
    stashes and worktrees, and hands back the decision round ready to ask: `rounds` (a list of calls,
    each a list of at most 4 questions), `followups.merged`, and `unattended`, the answers to use when there is no AskUserQuestion. When

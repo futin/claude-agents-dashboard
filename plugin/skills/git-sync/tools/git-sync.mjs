@@ -41,7 +41,7 @@ export const SUBCOMMANDS = [
   'report',
 ]
 
-export const USAGE = `Usage: git-sync <command> [--cwd <dir>] [--answers <file>] [--plan <file>]\n\nCommands:\n  ${SUBCOMMANDS.join('\n  ')}\n`
+export const USAGE = `Usage: git-sync <command> [--cwd <dir>] [--answers <file>] [--plan <file>] [--auto-merged] [--auto-clean]\n\nCommands:\n  ${SUBCOMMANDS.join('\n  ')}\n`
 
 // Every git invocation goes through here so the whole engine shares one hardening pass:
 // `-C <root>` instead of relying on process.cwd, colour and quoting forced off so stdout stays
@@ -1250,7 +1250,7 @@ function carryOf(r, trunkAhead) {
 // never had a PR lookup to run, so it reports `unavailable` without spawning `gh` just to learn that. A merged branch joins `mergedSet` only when
 // every worktree holding it is clean, since removing that worktree is part of the one-confirmation deletion. The decision round's questions are
 // built from this same payload, so what SKILL.md asks and what `plan` later accepts can never disagree.
-function survey(ctx) {
+function survey(ctx, modes = {}) {
   const r = repo(ctx.root, { env: ctx.env })
   const worktrees = listWorktrees(r)
   const rules = trunkRules(r)
@@ -1281,7 +1281,7 @@ function survey(ctx) {
     stashes,
     mergedSet,
   }
-  return { ...payload, ...rounds(payload) }
+  return { ...payload, ...rounds(payload, modes) }
 }
 
 // AskUserQuestion's limits: 4 questions per call, 4 options per question, a header of at most 12 characters.
@@ -1403,8 +1403,10 @@ function worktreeQuestion(survey, wt) {
 // §7's decision round, in the fixed order carry → merged → superseded → asked → push → stashes → worktrees, packed into calls of at most 4 questions without reordering
 // (SKILL.md asks them back to back). "Let me pick" on the merged question opens `followups.merged`, which is packed the same way. The merged counts
 // are exactly what `buildPlan` would emit for "Delete all": remote copies only where a remote delete is allowed, worktrees bar prunable ones.
-export function rounds(survey) {
-  const o = offered(survey)
+export function rounds(survey, modes = {}) {
+  const full = offered(survey)
+  const auto = autoAnswers(survey, full, modes)
+  const o = withoutAuto(full, auto)
   const questions = []
   // First: it is about the trunk itself, the most consequential thing the run does, so it is not left to scroll past after the housekeeping.
   if (survey.carry) {
@@ -1443,7 +1445,52 @@ export function rounds(survey) {
   questions.push(...o.stashes.map((s) => stashQuestion(survey, s)))
   questions.push(...o.worktrees.map((wt) => worktreeQuestion(survey, wt)))
   const picks = branchChunks(survey, o.merged, 'merged-pick', 'Merged', 'Delete which merged branches? Ticked ones are deleted, with their clean worktrees.')
-  return { rounds: chunks(questions, PER_CALL), followups: { merged: chunks(picks, PER_CALL) }, unattended: unattended(survey, o) }
+  return { rounds: chunks(questions, PER_CALL), followups: { merged: chunks(picks, PER_CALL) }, unattended: unattended(survey, full), auto, autoModes: { merged: modes.merged === true, clean: modes.clean === true } }
+}
+
+// The opt-in standing answers (`survey --auto-merged --auto-clean`), for a user who wants the safe cleanup done without being asked even when a question
+// tool exists. Unlike `unattended` they never lose uncommitted work: a dirty worktree is always left as a question.
+//   merged: every branch proven merged goes (its clean worktrees with it, as in "Delete all").
+//   clean: a clean worktree on a branch that is superseded, abandoned or gone-unproven is removed, branch kept — never an active or protected branch's
+//   (a live run may be using it), never a detached one (its HEAD may be the only ref to its commits). A superseded branch whose worktrees are ALL
+//   clean is deleted too, since its changes are already on origin/<trunk> (apply re-proves that, `supersededOnOrigin`); abandoned and gone-unproven
+//   branches are never auto-deleted, because nothing proves their content is elsewhere.
+// Built from `offered` like the questions, so `buildPlan` accepts them by construction. `plan` folds them into the user's answers.
+function autoAnswers(survey, o, modes) {
+  const auto = {}
+  if (modes.merged === true && o.merged.length > 0) auto.merged = 'all'
+  if (modes.clean === true) {
+    const eligible = new Set(['superseded', 'abandoned', 'gone-unproven'])
+    const wts = o.worktrees.filter((wt) => wt.dirty === 0 && wt.branch && eligible.has(o.byName.get(wt.branch)?.bucket))
+    if (wts.length > 0) auto.worktrees = Object.fromEntries(wts.map((wt) => [wt.path, 'remove']))
+    const gone = new Set(wts.map((wt) => wt.path))
+    const sup = o.superseded.filter((b) => holdersOf(survey, b.name).every((wt) => gone.has(wt.path)))
+    if (sup.length > 0) auto.superseded = sup.map((b) => b.name)
+  }
+  return auto
+}
+
+// What is left to ask once the auto answers are taken: the questions for those items are not asked at all.
+function withoutAuto(o, auto) {
+  const sup = new Set(auto.superseded ?? [])
+  return {
+    ...o,
+    merged: auto.merged === 'all' ? [] : o.merged,
+    superseded: o.superseded.filter((b) => !sup.has(b.name)),
+    worktrees: o.worktrees.filter((wt) => auto.worktrees?.[wt.path] === undefined),
+  }
+}
+
+// The user's answers with the survey's auto answers folded in: lists unite, maps fill what the user left unanswered, a scalar the user gave wins.
+export function foldAuto(answers, auto) {
+  if (!isPlainObject(answers) || !isPlainObject(auto)) return answers
+  const out = { ...answers }
+  for (const [key, value] of Object.entries(auto)) {
+    if (out[key] === undefined) out[key] = value
+    else if (Array.isArray(value) && Array.isArray(out[key])) out[key] = [...new Set([...out[key], ...value])]
+    else if (isPlainObject(value) && isPlainObject(out[key])) out[key] = { ...value, ...out[key] }
+  }
+  return out
 }
 
 // R37: the standing answers for a session with no AskUserQuestion. The user approved cleaning up merged work in advance, so the merged set goes, and
@@ -1575,7 +1622,7 @@ function plan(ctx, answersFile) {
   }
   const surveyed = readState(ctx, 'survey')
   if (!surveyed?.ok) throw new Stop('no-survey', { stateDir: ctx.stateDir })
-  return { actions: buildPlan(surveyed, answers) }
+  return { actions: buildPlan(surveyed, foldAuto(answers, surveyed.auto)) }
 }
 
 // §9 check discovery: package manager per lockfile, in priority order — only one is ever present
@@ -2658,6 +2705,7 @@ function parseArgv(argv) {
   let cwd = process.cwd()
   let cmd = null
   const files = { answers: null, plan: null }
+  const modes = {}
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === '--cwd') {
       // Final review Minor 8: a missing directory is a bad argument (`undefined`), as for `--answers`/`--plan`, never a crash in `context()`.
@@ -2670,21 +2718,29 @@ function parseArgv(argv) {
       const key = argv[i].slice(2)
       if (file && !file.startsWith('--')) i++
       files[key] = file && !file.startsWith('--') ? path.resolve(file) : undefined
+    } else if (argv[i] === '--auto-merged') {
+      modes.merged = true
+    } else if (argv[i] === '--auto-clean') {
+      modes.clean = true
     } else if (cmd === null) {
       cmd = argv[i]
     }
   }
-  return { cmd, cwd, ...files }
+  return { cmd, cwd, modes, ...files }
 }
 
 export function main(argv) {
-  const { cmd, cwd, answers, plan: planFile } = parseArgv(argv)
+  const { cmd, cwd, modes, answers, plan: planFile } = parseArgv(argv)
   if (!SUBCOMMANDS.includes(cmd)) {
     process.stderr.write(`${USAGE}unknown command: ${cmd}\n`)
     return 1
   }
   if (cwd === undefined) {
     process.stderr.write(`${USAGE}--cwd <dir> needs a directory\n`)
+    return 1
+  }
+  if ((modes.merged || modes.clean) && cmd !== 'survey') {
+    process.stderr.write(`${USAGE}--auto-merged and --auto-clean belong to survey\n`)
     return 1
   }
   if (answers !== null && (cmd !== 'plan' || answers === undefined)) {
@@ -2713,7 +2769,7 @@ export function main(argv) {
     if (cmd === 'preflight') return emit(ctx, { ok: true, cmd, ...preflight(ctx) })
     if (cmd === 'stage-scan') return emit(ctx, { ok: true, cmd, ...stageScan(ctx) })
     if (cmd === 'sync') return emit(ctx, { ok: true, cmd, ...sync(ctx) })
-    if (cmd === 'survey') return emit(ctx, { ok: true, cmd, ...survey(ctx) })
+    if (cmd === 'survey') return emit(ctx, { ok: true, cmd, ...survey(ctx, modes) })
     if (cmd === 'plan') return emit(ctx, { ok: true, cmd, ...plan(ctx, answers) })
     if (cmd === 'verify') return emit(ctx, { ok: true, cmd, ...verify(ctx) })
     if (cmd === 'push-trunk') return emit(ctx, { ok: true, cmd, ...pushTrunk(ctx) })
