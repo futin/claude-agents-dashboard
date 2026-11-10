@@ -60,7 +60,7 @@ import { openFolder, openFolderPlatform, revealFile } from './lib/open-folder.js
 import { runQuickOp } from './lib/git-quick.js';
 import { ANY_PR_RE, readSessionPr } from './lib/pr-detect.js';
 import { readPrStatus } from './lib/pr-status.js';
-import { readGitStats } from './lib/git-stats.js';
+import { readGitStats, readGitStatsOrLast } from './lib/git-stats.js';
 import { readCodegraph, startCodegraphRun } from './lib/codegraph-store.js';
 import { classifyOrigin, resolvePeer } from './lib/origin.js';
 import { releasesPayload } from './lib/releases.js';
@@ -1535,14 +1535,14 @@ export function servePinsRead(config: Config, res: ServerResponse): void {
 }
 
 /**
- * `GET /api/git-stats` — the local git state of every pinned project (git-stats spec §3). No parameters and no method check, like the read routes beside it:
+ * `GET /api/git-stats` — the local git state of every pinned project (git-stats spec §3). One parameter, `stale=ok` ({@link readGitStatsOrLast}), and no method check, like the read routes beside it:
  * the repo paths come from the stored pins, never from the request. A repo that fails reports its own `error` state; only an unreadable pin list is a 500.
  * Every answer marks the Git view watched, which is what lets the fetch timer run (git-fetch spec D2).
  */
-export async function serveGitStats(config: Config, res: ServerResponse): Promise<void> {
+export async function serveGitStats(config: Config, params: URLSearchParams, res: ServerResponse): Promise<void> {
   try {
     markGitWatched();
-    sendJson(res, 200, await readGitStats(config));
+    sendJson(res, 200, await (params.get('stale') === 'ok' ? readGitStatsOrLast(config) : readGitStats(config)));
   } catch (e) {
     console.error('[dashboard] git stats read failed:', (e as Error).message);
     sendJson(res, 500, { error: 'git stats read failed' });

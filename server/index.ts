@@ -322,7 +322,7 @@ export function createRequestListener(config: Config): http.RequestListener {
     }
     // Read-only git state of the pinned repos; the pins are the only input.
     if (u.pathname === '/api/git-stats') {
-      return void serveGitStats(config, res);
+      return void serveGitStats(config, u.searchParams, res);
     }
     // The one route that makes git reach the network, so POST-only and behind the write gate inside the handler.
     if (u.pathname === '/api/git-fetch') {

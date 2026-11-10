@@ -181,6 +181,40 @@ export async function run(): Promise<number> {
     });
   }));
 
+  check(await testAsync('?stale=ok answers the last read at once, marked stale, and the next plain GET joins the read it started', async () => {
+    await withGitStats(async (h, fx) => {
+      const dir = repoWithBranch(fx, 'repo-a');
+      setPinned(plantProject(h, 'a', dir), true);
+      const calls: string[][] = [];
+      overrideGitRunner((cwd, args) => { calls.push(args); return defaultGitRunner(cwd, args); });
+      const reads = () => calls.filter(c => c.includes('--show-toplevel')).length;
+
+      // No read has finished yet, so there is nothing old to answer with: the first one is fresh.
+      const first = (await h.req('/api/git-stats?stale=ok')).json as unknown as GitStatsResponse;
+      assert.equal(first.stale, undefined);
+      assert.equal(reads(), 1);
+      assert.equal(first.repos[0].state === 'ok' && first.repos[0].uncommitted, 0);
+
+      fs.writeFileSync(path.join(dir, 'new.txt'), 'x');
+      const old = (await h.req('/api/git-stats?stale=ok')).json as unknown as GitStatsResponse;
+      assert.equal(old.stale, true);
+      assert.equal(old.generatedAt, first.generatedAt);
+      assert.deepStrictEqual(old.repos, first.repos, 'the old read, not the new file');
+      // The stale answer started a read of its own, before any plain GET asked for one.
+      for (const until = Date.now() + 2000; reads() < 2 && Date.now() < until;) await new Promise(r => setTimeout(r, 10));
+      assert.equal(reads(), 2, '?stale=ok started a read');
+
+      const fresh = await get(h);
+      assert.equal(fresh.stale, undefined);
+      assert.equal(fresh.repos[0].state === 'ok' && fresh.repos[0].uncommitted, 1);
+      assert.equal(reads(), 2, 'the plain GET joined the read ?stale=ok started');
+
+      // A new runner is a new source, so its first ?stale=ok is fresh again.
+      overrideGitRunner(defaultGitRunner);
+      assert.equal(((await h.req('/api/git-stats?stale=ok')).json as unknown as GitStatsResponse).stale, undefined);
+    });
+  }));
+
   console.log(`\ngit stats endpoint: ${ok}/${total} passed`);
   return total - ok;
 }

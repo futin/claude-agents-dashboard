@@ -22,6 +22,10 @@ already-exited child's exit is read, destroys stdout, and still reports success 
 The runner's timer only kills the child; the child's real exit decides the result, so a finished call keeps its output and only a child that died by the kill
 rejects `GitTimeoutError`.
 
+The default runner launches the binary `git --exec-path` names (`resolveGitBin`, asked once per process), falling back to plain `git`. On macOS
+`/usr/bin/git` is an xcrun shim that looks the real binary up on every call, roughly tripling what starting one costs; one read of 11 pins is ~90 calls, and
+the shim took it from ~0.5s to ~1.2s (2026-11-10). Elsewhere `<exec-path>/git` is the binary `git` already resolves to.
+
 ## The fetch
 
 `server/lib/git-fetch.ts` is the one place the server runs `git fetch` (design record: `docs/superpowers/specs/2026-10-02-git-fetch-design.md`, D1–D13). It
@@ -170,6 +174,9 @@ branch unmemoised). The memo is module-level and outlives a request:
   `fetch --all --prune`, which then stops with `fetch-failed` and is pressed again. The window is one fetch (~0.5s) per repo per interval, accepted rather
   than detected.
 - A request that arrives while a read is in flight gets the **same promise**, so a second tab or the ↻ button never starts a second round.
+- `?stale=ok` (`readGitStatsOrLast`) answers the last finished read at once, marked `stale: true` with the fetch clock as it is now, and starts a fresh
+  read behind it. Only the view's first poll sends it: a reopened page paints without waiting for ~90 git calls, then polls again at once and joins the read
+  that answer started. With no finished read yet it is the fresh read itself; `overrideGitRunner` clears the kept read.
 
 ## Tests
 
@@ -193,7 +200,8 @@ the 30s, and going hidden drops the timer, so a backgrounded tab makes no reques
 against injected timer and visibility functions so `test/git-stats-client.test.ts` drives it with fakes; the hook only hands it `document` and `window`.
 `startGitPoll` also reports when it next fires, which the hook exposes as `nextPollAtMs` beside `polling` and `skewMs` (client receipt minus the payload's
 `generatedAt`; every server clock is read shifted by it). A `refresh()` asked while a poll is out queues one more poll after it, so a poll that predates a
-fetch is never the last word. A failed poll keeps the last payload and sets `error`. Before the first payload the body reads a muted "Loading…", as
+fetch is never the last word. The mount's poll asks for `?stale=ok`, and on a `stale` answer the hook shows it, leaves `updatedAt` and `skewMs` alone (an
+old `generatedAt` says nothing about the clocks) and polls again at once. A failed poll keeps the last payload and sets `error`. Before the first payload the body reads a muted "Loading…", as
 Management › Projects does; a first poll that fails turns it into "Couldn't load git stats. Retrying every 30s."
 
 **The clock chip** (`GitClockChip.tsx`). The band has no right slot any more; at the right end of `.git-toolbar`, across from the layout switcher (under it on a

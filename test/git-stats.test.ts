@@ -15,6 +15,7 @@ import {
   makeGitRunner,
   memoKeys,
   readRepo,
+  resolveGitBin,
   stripUserinfo,
   trunkOf,
 } from '../server/lib/git-stats.js';
@@ -1000,6 +1001,16 @@ export async function run(): Promise<number> {
       ['https://u:p@github.com/o/r.git', 'https://github.com/o/r.git'],
     ];
     for (const [input, want] of table) assert.strictEqual(stripUserinfo(input), want, JSON.stringify(input));
+  }));
+
+  check(await test('resolveGitBin: the binary in --exec-path when it is executable, else plain git', async () => {
+    const asked: string[] = [];
+    const isExec = (file: string) => { asked.push(file); return file === path.join('/x/libexec/git-core', 'git'); };
+    assert.equal(await resolveGitBin(async () => '/x/libexec/git-core\n', isExec), path.join('/x/libexec/git-core', 'git'));
+    assert.equal(await resolveGitBin(async () => '/y/libexec/git-core\n', isExec), 'git', 'not executable');
+    assert.equal(await resolveGitBin(async () => '  \n', isExec), 'git', 'empty answer');
+    assert.equal(await resolveGitBin(() => Promise.reject(new Error('ENOENT')), isExec), 'git', 'git not found');
+    assert.deepStrictEqual(asked, [path.join('/x/libexec/git-core', 'git'), path.join('/y/libexec/git-core', 'git')]);
   }));
 
   console.log(`\ngit-stats: ${ok_}/${total} passed`);

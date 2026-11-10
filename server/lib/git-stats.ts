@@ -61,9 +61,10 @@ export class GitTimeoutError extends Error {
  */
 export function makeGitRunner(opts: { timeoutMs?: number; bin?: string } = {}): GitRunner {
   const timeoutMs = opts.timeoutMs ?? GIT_TIMEOUT_MS;
-  const bin = opts.bin ?? 'git';
-  return (cwd, args) =>
-    new Promise((resolve, reject) => {
+  const binOf = opts.bin !== undefined ? () => Promise.resolve(opts.bin as string) : realGitBin;
+  return async (cwd, args) => {
+    const bin = await binOf();
+    return new Promise((resolve, reject) => {
       let timedOut = false;
       const child = execFile(
         bin,
@@ -83,6 +84,37 @@ export function makeGitRunner(opts: { timeoutMs?: number; bin?: string } = {}): 
         child.kill();
       }, timeoutMs);
     });
+  };
+}
+
+/**
+ * The git binary `--exec-path` names, or `git` when there is none. On macOS `/usr/bin/git` is an xcrun shim that looks the real binary up on every call:
+ * ~46ms per `git remote` against ~15ms for the binary itself, and 1050ms against 345ms for 88 at once (2026-11-10), which is one `GET /api/git-stats` of
+ * 11 pins. Elsewhere `<exec-path>/git` is the same binary `git` already is, so nothing changes. `probe` answers `git --exec-path`'s stdout.
+ */
+export async function resolveGitBin(probe: () => Promise<string>, isExecutable: (file: string) => boolean): Promise<string> {
+  try {
+    const dir = (await probe()).trim();
+    if (!dir) return 'git';
+    const candidate = path.join(dir, 'git');
+    return isExecutable(candidate) ? candidate : 'git';
+  } catch {
+    return 'git';
+  }
+}
+
+let gitBin: Promise<string> | null = null;
+
+/** {@link resolveGitBin} against the real `git`, asked once per process. */
+function realGitBin(): Promise<string> {
+  gitBin ??= resolveGitBin(
+    () => new Promise((resolve, reject) => {
+      execFile('git', ['--exec-path'], { env: { ...process.env, ...GIT_ENV }, encoding: 'utf8', timeout: GIT_TIMEOUT_MS }, (err, stdout) =>
+        (err ? reject(err) : resolve(stdout)));
+    }),
+    file => { try { fs.accessSync(file, fs.constants.X_OK); return true; } catch { return false; } },
+  );
+  return gitBin;
 }
 
 export const defaultGitRunner: GitRunner = makeGitRunner();
@@ -429,6 +461,7 @@ let runner: GitRunner = defaultGitRunner;
 /** Test seam: replace the runner behind `GET /api/git-stats` process-wide; null restores {@link defaultGitRunner}. */
 export function overrideGitRunner(run: GitRunner | null): void {
   runner = run ?? defaultGitRunner;
+  last = null;
 }
 
 /** The memo that outlives one API read, so a poll with no sha moved makes only the cheap calls. */
@@ -447,9 +480,27 @@ let inFlight: Promise<GitStatsResponse> | null = null;
  */
 export function readGitStats(config: Partial<Config>): Promise<GitStatsResponse> {
   if (inFlight) return inFlight;
-  const read = readAll(config).finally(() => { inFlight = null; });
+  const read = readAll(config)
+    .then(body => { last = body; return body; })
+    .finally(() => { inFlight = null; });
   inFlight = read;
   return read;
+}
+
+/** The last read that finished, kept so a page that mounts can paint before its own read lands. Cleared with the runner. */
+let last: GitStatsResponse | null = null;
+
+/**
+ * The last finished read marked `stale: true`, with a fresh read started behind it; with none yet, the fresh read itself. Only the Git view's first poll
+ * asks for this, and on `stale` it polls again at once, joining the read this started. Every later poll waits for its own read, as before. `fetch` is the
+ * clock as it is now, not as the old read left it, since the chip counts down from it.
+ */
+export async function readGitStatsOrLast(config: Partial<Config>): Promise<GitStatsResponse> {
+  if (!last) return readGitStats(config);
+  const body: GitStatsResponse = { ...last, fetch: getFetchClock(), stale: true };
+  // After this answer is written: a read spawns ~90 git processes, and each spawn holds the event loop, so starting it first delayed the reply ~450ms.
+  setImmediate(() => { readGitStats(config).catch(() => {}); });
+  return body;
 }
 
 async function readAll(config: Partial<Config>): Promise<GitStatsResponse> {
