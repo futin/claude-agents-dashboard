@@ -219,7 +219,7 @@ Unpin / Open folder controls), so none fetches for itself, and they share `GitPa
 | Layout    | Shape |
 | --------- | ----- |
 | Inbox     | the default. Four level tiles that filter on click, then the loud repos (Needs you, Worth a look) as ranked panels with a verdict, the rest of the problems as steps and keys, and a closed-by-default branch list; All good and Can't read are one dashed box of lines |
-| Matrix    | wide-only, and drawn in Sessions › List's table (a dot column, name over branch, hairline rules, `.cbtn`-shaped keys). One ranked row per repo against six check columns, each cell `ok`, `bad`, `meh`, `live` or `na`, only `bad` and `meh` as pills; a click, Enter or Space on the row opens that repo's branches as one expanded row; a dead repo is one `na` cell and Unpin |
+| Matrix    | wide-only, and drawn in Sessions › List's table (a dot column, name over branch, hairline rules, `.cbtn`-shaped keys). One ranked row per repo against six columns from `client/src/lib/gitMatrixCells.ts` — Working tree · Push · Pull · Prune · Open branches · Fetched. Push and Pull name each branch with commits to move (trunk first, then the checked-out one), Prune counts `mergedCount`, Open branches is a `plain` count of unmerged ones with stale as a note; only `bad` and `meh` are pills, and any in the first four columns turns the row's Sync key primary (`matrixRowHasWork`). A header's second line counts repos with work in that column (`matrixHeaderCount`); a click, Enter or Space on the row opens that repo's branches as one expanded row; a dead repo is one `na` cell and Unpin |
 | Inspector | the ranked repo list beside a pane for the picked one: four check tiles, Active and Stale branches, a footer of merged and stale counts, Open folder and the keys. The pick defaults to the top repo; on a phone the pane stacks under the list and scrolls into view |
 | Branches  | a board of every listed branch of every `ok` repo in four columns, first fit wins: Agent on it, Stale, Ready (0 behind), Drifting; non-`ok` pins fall into one note line with an Open Inbox link |
 
@@ -238,7 +238,7 @@ branch pick working over waiting over idle, then the most recent.
 
 **The keys** (`GitKeys`). **Sync** is labelled with its verbs (`Sync · commit + pull + push`, from `gitSyncVerbs`, calm problems excluded).
 In `GitKeys` and on a Branches card it is the left half of a split key (`.git-split`) whose caret (`.git-split-caret`) opens Pull · Push · Sync with Claude
-(`GitQuickMenu`, each item's state from `quickMenu` in `client/src/lib/gitQuick.ts`). The split draws even where the host cannot spawn, with the Sync half
+(`GitQuickMenu`, each item's state from `quickMenu` in `client/src/lib/gitQuick.ts`; the Sync with Claude item's sub is `syncPlanText`, what Sync would do — "Pushes main, prunes 2 merged branches" — or a generic line when it has nothing to do). The split draws even where the host cannot spawn, with the Sync half
 disabled, since Pull and Push need no session; while a quick op runs on the repo both halves are disabled. The Inspector pane's "Clean up via Sync" stays a
 plain key. The last quick op's result is one line under the toolbar (`.git-quick-note`, or `.git-sync-note` for a warning), cleared when a sync starts or by
 the first poll after it has stood 30s (`quickNoteExpired`). **Retry fetch**

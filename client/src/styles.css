@@ -3165,7 +3165,8 @@ button.chip[aria-pressed="true"]{color:var(--ink);background:var(--strip-hi)}
 /* 9px of dot + 20px + 12px of padding: the ledger's 41px column */
 .git-mx .git-mx-dot{width:9px}
 .git-mx .git-dot{width:9px;height:9px;display:block}
-.git-mx-cnt{color:var(--ink3)}
+/* A header's second line: how many repos have work in that column. */
+.git-mx-cnt{display:block;margin-top:2px;font-size:11px;color:var(--ink3)}
 .git-mx-r{cursor:pointer}
 .git-mx-r:not([aria-expanded="true"]):hover td{background:color-mix(in srgb,var(--strip-hi) 50%,transparent)}
 .git-mx-r[aria-expanded="true"] td{background:var(--strip-hi);border-top-color:transparent;padding-bottom:12px}
@@ -3204,6 +3205,9 @@ button.chip[aria-pressed="true"]{color:var(--ink);background:var(--strip-hi)}
 .git-mx .git-cell,.git-mx-legend .git-cell{font-size:12px;white-space:nowrap}
 .git-mx .git-cell.ok,.git-mx .git-cell.na,.git-mx-legend .git-cell.ok,.git-mx-legend .git-cell.na{color:var(--ink3)}
 .git-mx .git-cell.live,.git-mx-legend .git-cell.live{color:var(--cyan)}
+/* Open branches: a count, not a check, so ink and no pill; its stale note reads quieter. */
+.git-mx .git-cell.plain{font-size:13px;color:var(--ink)}
+.git-mx .git-cell-note{font-size:12px;color:var(--ink3);white-space:nowrap}
 .git-mx .git-cell.bad,.git-mx .git-cell.meh,.git-mx-legend .git-cell.bad,.git-mx-legend .git-cell.meh{display:inline-block;font-size:11px;font-weight:500;padding:2px 8px;border-radius:12px}
 .git-mx .git-cell.bad,.git-mx-legend .git-cell.bad{color:var(--amber-ink);background:var(--amber-tint)}
 .git-mx .git-cell.meh,.git-mx-legend .git-cell.meh{color:var(--mustard-ink);background:var(--mustard-tint)}

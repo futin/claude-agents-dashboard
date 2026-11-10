@@ -209,9 +209,12 @@ export function GitBranchLabel({ repo, b, sessions }: { repo: RepoGitStats; b: G
 
 /**
  * The action keys of a repo, shared by every layout. `bare` drops the primary styling and the verb list (a row that already carries its own call to action),
- * `compact` shortens Retry and lets Sync take the primary only for a repo that needs you. A dead repo gets Unpin and nothing else.
+ * `compact` (Matrix) shortens Retry and lets Sync take the primary whenever the row has `work`: any Working tree / Push / Pull / Prune cell set, so a repo
+ * whose only chore is pruning merged branches still lights the key. A dead repo gets Unpin and nothing else.
  */
-export function GitKeys({ a, ctx, bare = false, compact = false }: { a: GitAssessed; ctx: GitLayoutProps; bare?: boolean; compact?: boolean }) {
+export function GitKeys({ a, ctx, bare = false, compact = false, work = false }: {
+  a: GitAssessed; ctx: GitLayoutProps; bare?: boolean; compact?: boolean; work?: boolean;
+}) {
   if (a.level === 'dead') {
     return (
       <button
@@ -229,7 +232,7 @@ export function GitKeys({ a, ctx, bare = false, compact = false }: { a: GitAsses
   }
   const retry = a.problems.some(p => p.k === 'fetch');
   const retryPrimary = compact ? a.level === 'needs' : !bare;
-  const syncPrimary = compact ? !retry && a.level === 'needs' : !bare && !retry && a.level !== 'quiet' && a.verbs.length > 0;
+  const syncPrimary = compact ? !retry && work : !bare && !retry && a.level !== 'quiet' && a.verbs.length > 0;
   return (
     <>
       {retry && (
@@ -250,17 +253,9 @@ export function GitKeys({ a, ctx, bare = false, compact = false }: { a: GitAsses
   );
 }
 
-/**
- * The branch's upstream, unless it is absent or is `origin/<trunk>` itself, whose numbers the Trunk column already carries. Unlike `gitUpstreamShown`, a
- * level (0 / 0) upstream stays: Matrix's Pushed and Up to date cells and Inspector's list figure read it.
- */
-export function gitTracked(r: OkRepo): NonNullable<OkRepo['currentVsUpstream']> | null {
-  const u = r.currentVsUpstream ?? null;
-  if (u === null || (r.trunk !== null && u.upstream === `origin/${r.trunk}`)) return null;
-  return u;
-}
+// Moved to the pure lib so Matrix's cells and the Sync plan can read it under node; re-exported for Inspector.
+export { gitTracked } from '../../lib/gitMatrixCells';
 
-/** One branch as a `.git-in-br` row, shared by Matrix's expanded row and Inspector's two sections; a stale one reads quieter. */
 export function GitInBranchRow({ repo, b, max, nowMs, sessions }: { repo: OkRepo; b: GitBranch; max: number; nowMs: number; sessions: readonly Session[] }) {
   return (
     <div className={`git-in-br${isStaleBranch(b, nowMs) ? ' stale' : ''}`}>
