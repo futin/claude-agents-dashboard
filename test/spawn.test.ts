@@ -6,7 +6,7 @@ import path from 'node:path';
 
 import {
   FAIL_TTL_MS, LAUNCH_TTL_MS, NAME_CAP, PERMISSION_MODES, PROMPT_CAP, PROMPT_PREVIEW_CAP,
-  STDERR_TAIL_CAP, STOP_GRACE_MS, adoptLaunched, buildSpawnArgs, clampPermission, escalateStop,
+  DESKTOP_KICKOFF_PROMPT, STDERR_TAIL_CAP, STOP_GRACE_MS, adoptLaunched, buildSpawnArgs, clampPermission, escalateStop,
   forceStopSession, launch, listLaunching, parseSpawnRequest, probeSpawn, resetLaunches,
   resetSpawnProbe, setGroupKiller, setSpawner, stopSession, stopStates
 } from '../server/lib/spawn.js';
@@ -408,6 +408,26 @@ export function run(): number {
   if (test('remoteControl: false emits no flag — argv identical to the minimal build', () => {
     const args = buildSpawnArgs({ sessionId: UUID, prompt: 'hi', permissionMode: 'auto', remoteControl: false });
     assert.deepStrictEqual(args, ['-p', '--session-id', UUID, '--permission-mode', 'auto']);
+  })) p++; else f++;
+
+  if (test('kickoff appends the desktop system prompt and switches the snapshot off, last', () => {
+    const base = { sessionId: UUID, prompt: 'hi', permissionMode: 'auto' as const, model: 'opus' };
+    const args = buildSpawnArgs({ ...base, kickoff: true });
+    assert.deepStrictEqual(args, [...buildSpawnArgs(base), '--append-system-prompt', DESKTOP_KICKOFF_PROMPT, '--system-prompt-snapshot', 'off']);
+  })) p++; else f++;
+
+  if (test('no kickoff emits neither flag', () => {
+    const args = buildSpawnArgs({ sessionId: UUID, prompt: 'hi', permissionMode: 'auto', kickoff: false });
+    assert.ok(!args.includes('--append-system-prompt') && !args.includes('--system-prompt-snapshot'));
+  })) p++; else f++;
+
+  if (test('the kickoff text cannot be read as a session id by the ps scan', () => {
+    assert.ok(!/--(?:session-id|resume)/.test(DESKTOP_KICKOFF_PROMPT));
+  })) p++; else f++;
+
+  if (test('parseSpawnRequest drops a client-sent kickoff: only the desktop route sets it', () => {
+    const r = parseSpawnRequest({ project: 'p', prompt: 'hi', kickoff: true }, 'auto');
+    assert.ok(r.ok && !('kickoff' in r.input));
   })) p++; else f++;
 
   if (test('oneShot adds nothing to argv — it travels as an env var, not a CLI flag', () => {

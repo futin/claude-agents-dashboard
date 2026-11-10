@@ -302,7 +302,7 @@ server/
                   (execFile, no shell); the memoised macOS-and-app probe, the 4-per-5s
                   link rail and the per-session hand-over mark
                   (see docs/subsystems/spawn.md §Launching in the desktop app)
-  lib/handover.ts  a fresh desktop launch's watch: its first turn runs headless, then
+  lib/handover.ts  a fresh desktop launch's watch: its short first turn (`DESKTOP_KICKOFF_PROMPT`) runs headless, then
                   the resume link fires once the transcript has settled on an `end_turn`
 client/src/
   App.tsx         shell: side rail (Sessions | Routines | Management | Usage | Claude Configs |

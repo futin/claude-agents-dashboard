@@ -484,6 +484,7 @@ export async function run(): Promise<number> {
       assert.deepEqual(calls[0].args.slice(0, 3), ['-p', '--resume', RES_ID]);
       assert.equal(calls[0].options.cwd, process.cwd(), "child cwd is the session transcript's cwd");
       assert.ok(!calls[0].args.includes('--effort'), 'a transcript with no recorded effort adds no flag');
+      assert.ok(!calls[0].args.includes('--append-system-prompt'), 'a headless resume never carries the desktop kickoff');
     });
   }));
 
@@ -608,6 +609,9 @@ export async function run(): Promise<number> {
       assert.ok(!calls[0].args.includes('--remote-control'), 'remote control forced off');
       assert.equal(calls[0].args[calls[0].args.indexOf('--model') + 1], 'opus', 'the model applies');
       assert.equal(calls[0].args[calls[0].args.indexOf('--effort') + 1], 'high', 'the effort applies');
+      const sp = calls[0].args.indexOf('--append-system-prompt');
+      assert.ok(sp > 0 && calls[0].args[sp + 1].includes('desktop app'), 'the kickoff prompt keeps the first turn short');
+      assert.equal(calls[0].args[calls[0].args.indexOf('--system-prompt-snapshot') + 1], 'off', 'so the resumed desktop session does not inherit it');
       assert.equal(d.calls.length, 0, 'the resume link waits for the first turn to end');
       assert.deepEqual(watchedHandOvers(), [json?.sessionId]);
       assert.equal(listLaunching().length, 1, 'the launch store holds it like any headless launch');
