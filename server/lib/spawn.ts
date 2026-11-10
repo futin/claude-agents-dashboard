@@ -70,6 +70,15 @@ export const PROMPT_CAP = 4000;
 export const NAME_CAP = 60;
 
 /**
+ * Appended to a fresh desktop launch's system prompt (`SpawnInput.kickoff`), so its headless first turn ends quickly and the hand-over fires within
+ * seconds instead of after the whole task (docs/subsystems/spawn.md §Launching in the desktop app). Fixed text: it lands in argv, which `ps` shows.
+ */
+export const DESKTOP_KICKOFF_PROMPT =
+  'This session moves to the Claude desktop app as soon as this turn ends, and the user continues it there. Keep this first turn short. ' +
+  'If the request is a quick question you can answer in a few steps, answer it. Otherwise do not start the work: reply with a brief plan of how ' +
+  'you will approach it and any question you need answered first, then end your turn. The user will tell you to go ahead in the desktop app.';
+
+/**
  * Allowed charset for a session's display name: letters, digits, spaces, dots,
  * hyphens, underscores — and the **first** character must be a letter or digit.
  * Nothing here is a shell metacharacter or a path separator; the name ends up
@@ -128,6 +137,12 @@ export interface SpawnInput {
    * same transcript, which is what makes the dashboard row wake up).
    */
   resume?: boolean;
+  /**
+   * A fresh desktop launch: append {@link DESKTOP_KICKOFF_PROMPT} to the system prompt with `--system-prompt-snapshot off`. The CLI otherwise
+   * records the rendered system prompt and replays it on every resume (measured 2.1.319, 2026-11-10), so the desktop app's turns would keep the
+   * instruction to stop early.
+   */
+  kickoff?: boolean;
 }
 
 /**
@@ -255,6 +270,7 @@ export function buildSpawnArgs(input: SpawnInput): string[] {
     args.push('--remote-control');
     if (input.name) args.push(input.name);
   }
+  if (input.kickoff) args.push('--append-system-prompt', DESKTOP_KICKOFF_PROMPT, '--system-prompt-snapshot', 'off');
   return args;
 }
 

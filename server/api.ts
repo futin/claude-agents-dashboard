@@ -1265,7 +1265,7 @@ function launchForDesktop(
   try {
     const ref = resolveSpawnProject(config, body);
     if ('refuse' in ref) return sendJson(res, 400, { error: ref.refuse });
-    sessionId = launch(config, ref, { ...parsed.input, oneShot: true, remoteControl: false });
+    sessionId = launch(config, ref, { ...parsed.input, oneShot: true, remoteControl: false, kickoff: true });
   } catch (e) {
     console.error('[dashboard] spawn failed:', (e as Error).message);
     return sendJson(res, 500, { error: 'spawn failed' });
