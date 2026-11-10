@@ -53,10 +53,10 @@ export function run(): number {
   }));
 
   check(test('the desktop copy is the spec string, byte for byte', () => {
-    assert.equal(DESKTOP_LAUNCHED_TEXT, 'Running here first — it moves to the desktop app when its first turn ends.');
+    assert.equal(DESKTOP_LAUNCHED_TEXT, 'Planning here first — it moves to the desktop app in a moment.');
     assert.equal(DESKTOP_OPENED_TEXT, 'Opened in the desktop app.');
     assert.equal(DESKTOP_FAILED_TEXT, "Couldn't open the desktop app.");
-    assert.equal(DESKTOP_HANDOVER_NOTE, 'The first turn runs here, then the session moves to the desktop app.');
+    assert.equal(DESKTOP_HANDOVER_NOTE, 'A short first turn plans here, then the session moves to the desktop app.');
   }));
 
   console.log(`\nlaunch surface: ${ok}/${total} passed`);
