@@ -582,7 +582,7 @@ export const OLDER_PROJECTS_DAYS = 30;
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-type Newest = Map<string, { file: string; mtimeMs: number }>;
+type Newest = Map<string, { file: string; mtimeMs: number; size: number }>;
 
 function lookbackMsOf(config: Partial<Config>): number {
   const lookbackHours = (config.lookbackHours ?? 0) > 0 ? (config.lookbackHours as number) : 48;
@@ -608,9 +608,31 @@ function newestPerDir(transcripts: readonly TranscriptRef[], keep: (t: { id: str
   for (const t of transcripts) {
     if (!keep(t)) continue;
     const cur = out.get(t.dirName);
-    if (!cur || t.mtimeMs > cur.mtimeMs) out.set(t.dirName, { file: t.file, mtimeMs: t.mtimeMs });
+    if (!cur || t.mtimeMs > cur.mtimeMs) out.set(t.dirName, { file: t.file, mtimeMs: t.mtimeMs, size: t.size });
   }
   return out;
+}
+
+/** The two cwds {@link refsByCwd} reads off a transcript, or null when it could not be parsed. */
+type TranscriptCwds = { originCwd: string | null; cwd: string | null } | null;
+
+/** Above this many files the cache is dropped whole: one entry per project dir is the steady state, so this is only reached by churn. */
+const CWD_CACHE_MAX = 4096;
+const cwdCache = new Map<string, { mtimeMs: number; size: number; cwds: TranscriptCwds }>();
+
+/**
+ * The cwds of one transcript, parsed once per (mtime, size). `refsByCwd` runs over every project dir's newest transcript, about 300 of them on this
+ * machine (2026-11-10), synchronously and several times per `GET /api/pins` and `GET /api/git-stats`. Parsing them all took 1.5-2.4s and stalled every
+ * other request behind it. An appended transcript changes both keys, so only the sessions that wrote since the last read are parsed again.
+ */
+function transcriptCwds(t: { file: string; mtimeMs: number; size: number }): TranscriptCwds {
+  const hit = cwdCache.get(t.file);
+  if (hit && hit.mtimeMs === t.mtimeMs && hit.size === t.size) return hit.cwds;
+  const parsed = readTranscript(t.file);
+  const cwds = parsed ? { originCwd: parsed.originCwd, cwd: parsed.cwd } : null;
+  if (cwdCache.size >= CWD_CACHE_MAX) cwdCache.clear();
+  cwdCache.set(t.file, { mtimeMs: t.mtimeMs, size: t.size, cwds });
+  return cwds;
 }
 
 /**
@@ -620,7 +642,7 @@ function newestPerDir(transcripts: readonly TranscriptRef[], keep: (t: { id: str
 function refsByCwd(newest: Newest): Map<string, ProjectRef> {
   const byCwd = new Map<string, ProjectRef>();
   for (const [dirName, t] of newest) {
-    const parsed = readTranscript(t.file);
+    const parsed = transcriptCwds(t);
     if (!parsed) continue;
     // A session that chdir's into a worktree drifts away from the dir it is
     // filed under, and writes into the worktree's dir as well — so both dirs

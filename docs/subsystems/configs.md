@@ -69,6 +69,8 @@ control (the type is a column now, not a collapsible header) and the
   in that project entry's `disabledMcpServers`/`disabledMcpjsonServers`. No dedupe across scopes. The group sits right after
   Plugins (first in a project), and its detail card renders from the payload — no FileBlock, see Invariants. Recent projects
   come from transcript cwds (same lookback as sessions, except pinned ones — below), deduped by cwd, newest-first.
+  The two cwds are read once per transcript and kept in memory against its mtime and size (`transcriptCwds` in `management.ts`), so a list rebuild parses
+  only the transcripts written since the last one; parsing all ~300 newest transcripts (2026-11-10) took 1.5–2.4s and stalled the server for every request.
   Each dir publishes the cwd **it is named for**: of the newest transcript's launch and
   newest cwds, the one whose `encodeProjectDir` spelling equals the dirName. A session that
   chdir'd into a worktree drifts away from the dir it is filed under *and* writes into the
