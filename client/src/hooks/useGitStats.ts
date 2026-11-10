@@ -23,7 +23,7 @@ export interface GitStatsState {
 
 /**
  * `GET /api/git-stats` for the Management › Git sub-view. Mounted only while that sub-view is, so switching to Projects or leaving the section stops it. The
- * schedule — on mount, every 30s while the page is visible, at once on becoming visible — is `startGitPoll`'s, tested apart from the DOM; the in-flight
+ * schedule — on mount (the server's last read first, then a fresh one), every 30s while the page is visible, at once on becoming visible — is `startGitPoll`'s, tested apart from the DOM; the in-flight
  * bookkeeping is `createPollGate`'s: a poll asked for during another runs once after it, because the one in flight may predate what the caller just did.
  */
 export function useGitStats(): GitStatsState {
@@ -38,9 +38,14 @@ export function useGitStats(): GitStatsState {
   useEffect(() => {
     let alive = true;
     const gate = createPollGate();
+    // The first poll takes the server's last read (`stale`) so the page paints at once, then polls again straight away for a fresh one.
+    let first = true;
     const run = () => {
       setPolling(true);
-      fetch('/api/git-stats')
+      let followUp = false;
+      const url = first ? '/api/git-stats?stale=ok' : '/api/git-stats';
+      first = false;
+      fetch(url)
         .then(res => {
           if (!res.ok) throw new Error(`HTTP ${res.status}`);
           return res.json() as Promise<GitStatsResponse>;
@@ -51,6 +56,8 @@ export function useGitStats(): GitStatsState {
           const receipt = Date.now();
           setData(body);
           setError(false);
+          // An old read's `generatedAt` says nothing about the clocks, and it is not an answer to anything the user just did.
+          if (body.stale) { followUp = true; return; }
           setUpdatedAt(receipt);
           setSkewMs(skewOf(body.generatedAt, receipt));
         })
@@ -59,6 +66,7 @@ export function useGitStats(): GitStatsState {
           const again = gate.end();
           if (!alive) return;
           if (again) run();
+          else if (followUp) request();
           else setPolling(false);
         });
     };

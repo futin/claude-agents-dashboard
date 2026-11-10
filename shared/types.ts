@@ -2004,6 +2004,8 @@ export interface GitStatsResponse {
   repos: RepoGitStats[];
   fetch: FetchClock;
   generatedAt: number;
+  /** Set only on an answer to `?stale=ok`: this is the server's previous read, `generatedAt` is when it ran, and a fresh read is under way. */
+  stale?: true;
 }
 
 /** A quick git op from the Sync key's menu: a fast-forward pull or push, run on the server with no Claude session. */
