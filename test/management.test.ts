@@ -248,6 +248,39 @@ export async function run(): Promise<number> {
     assert.strictEqual(refs[0].name, path.basename(projA));
   }));
 
+  tally(await test('a transcript\'s cwd is parsed once per mtime and size, and again when either changes', async () => {
+    const NOW = Date.parse('2026-07-12T12:00:00Z');
+    const T = NOW - 3600_000;
+    const projA = makeProject();
+    const projB = makeProject();
+    const projC = fs.mkdtempSync(path.join(projB, 'longer-'));
+    const root = makeProjectsRoot([{ dirName: '-p', id: 'p1', cwd: projA, mtimeMs: T }]);
+    const file = path.join(root, '-p', 'p1.jsonl');
+    const cfg = { lookbackHours: 24 };
+    const paths = () => mgmt.listRecentProjects(cfg, { root, now: NOW }).map(r => r.path);
+    // Rewrite the transcript to name `cwd`, keeping or moving its mtime.
+    const rewrite = (cwd: string, mtimeMs: number) => {
+      const recs = [{ cwd, gitBranch: 'main', version: '2.1.0', timestamp: new Date(T).toISOString(), type: 'user' }];
+      fs.writeFileSync(file, recs.map(r => JSON.stringify(r)).join('\n'));
+      fs.utimesSync(file, mtimeMs / 1000, mtimeMs / 1000);
+    };
+
+    assert.deepStrictEqual(paths(), [projA]);
+    // Same mtime and same byte count (mkdtemp names are one length): the cached cwd stands, so the file was not parsed again.
+    const before = fs.statSync(file).size;
+    rewrite(projB, T);
+    fs.writeFileSync(file, fs.readFileSync(file, 'utf8').padEnd(before, ' '));
+    fs.utimesSync(file, T / 1000, T / 1000);
+    assert.strictEqual(fs.statSync(file).size, before, 'precondition: same size');
+    assert.deepStrictEqual(paths(), [projA]);
+    // A new mtime is a new read.
+    rewrite(projB, T + 1000);
+    assert.deepStrictEqual(paths(), [projB]);
+    // So is a new size at the same mtime.
+    rewrite(projC, T + 1000);
+    assert.deepStrictEqual(paths(), [projC]);
+  }));
+
   tally(await test('project lists read a given transcripts listing instead of the root (#312)', async () => {
     const NOW = Date.parse('2026-07-12T12:00:00Z');
     const proj = makeProject();
