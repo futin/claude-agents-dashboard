@@ -1,80 +1,15 @@
 import { Fragment, useState } from 'react';
 
-import type { FetchClock } from '../../../../shared/types';
-import { formatAgo } from '../../lib/format';
 import { gitBarMax } from '../../lib/gitBar';
-import { isStaleBranch, rankGitRepos, type GitAssessed } from '../../lib/gitLevels';
-import { fetchTroubleWord, gitBranchChipText, gitMergedText, gitShownFetchError, gitStateSentence } from '../../lib/gitStatsText';
-import type { OkRepo } from '../../lib/gitSync';
-import { GitInBranchRow, GitKeys, GitLevelDot, gitTracked } from './GitParts';
+import { rankGitRepos } from '../../lib/gitLevels';
+import { MATRIX_COLUMNS, matrixCells, matrixHeaderCount, matrixRowHasWork, type MatrixCell } from '../../lib/gitMatrixCells';
+import { gitBranchChipText, gitMergedText, gitStateSentence } from '../../lib/gitStatsText';
+import { GitInBranchRow, GitKeys, GitLevelDot } from './GitParts';
 import type { GitLayoutProps } from './gitLayoutProps';
 import { keyActivate } from '../sessions/atoms';
 
-type Tone = 'ok' | 'bad' | 'meh' | 'live' | 'na';
-interface Cell { c: Tone; t: string }
-interface CellInput { a: GitAssessed; repo: OkRepo; nowMs: number; clock: FetchClock | undefined }
-
-const NA: Cell = { c: 'na', t: '—' };
-
-const CHECKS: { label: string; cell: (i: CellInput) => Cell }[] = [
-  {
-    label: 'Working tree',
-    // An agent already working on the dirty branch is calm, so the cell is a note, not a failure.
-    cell: ({ a, repo }) => {
-      if (repo.uncommitted === 0) return { c: 'ok', t: 'clean' };
-      return { c: a.problems.find(p => p.k === 'dirty')?.calm ? 'meh' : 'bad', t: `${repo.uncommitted} uncommitted` };
-    },
-  },
-  {
-    label: 'Pushed',
-    cell: ({ repo }) => {
-      if (!repo.hasOrigin) return { c: 'meh', t: 'no remote' };
-      const u = gitTracked(repo);
-      if (u === null) return NA;
-      if (u.counts === null) return { c: 'meh', t: `${u.upstream} gone` };
-      if (u.counts.ahead > 0) return { c: 'meh', t: `${u.counts.ahead} unpushed` };
-      return { c: 'ok', t: 'yes' };
-    },
-  },
-  {
-    label: 'Up to date',
-    cell: ({ repo }) => {
-      const u = gitTracked(repo);
-      if (u === null || u.counts === null) return NA;
-      return u.counts.behind > 0 ? { c: 'bad', t: `${u.counts.behind} to pull` } : { c: 'ok', t: 'yes' };
-    },
-  },
-  {
-    label: 'Trunk',
-    cell: ({ repo }) => {
-      const d = repo.trunkVsOrigin;
-      if (d === null) return NA;
-      if (d.ahead > 0 || d.behind > 0) return { c: 'meh', t: `${repo.trunk}${d.behind ? ` ↓${d.behind}` : ''}${d.ahead ? ` ↑${d.ahead}` : ''}` };
-      return { c: 'ok', t: `${repo.trunk} = origin` };
-    },
-  },
-  {
-    label: 'Origin data',
-    cell: ({ repo, clock }) => {
-      if (clock?.runningSinceMs != null && repo.hasOrigin) return { c: 'live', t: 'fetching…' };
-      const e = gitShownFetchError(repo);
-      if (e !== null) return { c: 'bad', t: `${fetchTroubleWord(e)} · ${repo.fetchedAtMs === null ? 'never' : formatAgo(repo.fetchedAtMs)}` };
-      if (repo.fetchedAtMs !== null) return { c: 'ok', t: formatAgo(repo.fetchedAtMs) };
-      return { c: 'na', t: 'never' };
-    },
-  },
-  {
-    label: 'Branches',
-    cell: ({ repo, nowMs }) => {
-      const s = repo.branches.filter(b => isStaleBranch(b, nowMs)).length;
-      if (s > 0) return { c: 'meh', t: `${repo.unmergedTotal} · ${s} stale` };
-      return repo.unmergedTotal > 0 ? { c: 'ok', t: String(repo.unmergedTotal) } : { c: 'na', t: '0' };
-    },
-  },
-];
-
 /**
- * Matrix (management-redesign spec §4.4): a row per repo, a column per check, colour only where a check fails; open one row to read its branches. It is drawn
+ * Matrix (management-redesign spec §4.4): a row per repo, a column per check, colour only where Sync has work; open one row to read its branches. It is drawn
  * in Sessions › List's table language (the `.ledger` values, ported into `.git-mx`'s own rules): a dot column, name over branch, the whole row the toggle.
  */
 export default function GitMatrix(props: GitLayoutProps) {
@@ -83,12 +18,12 @@ export default function GitMatrix(props: GitLayoutProps) {
   const [row, setRow] = useState<string | null>(null);
 
   // One pass over the readable repos, so a header count and the cells under it come from the same values.
-  const cells = new Map<string, Cell[]>();
+  const cells = new Map<string, MatrixCell[]>();
   for (const a of ranked) {
     const r = a.repo;
-    if (r.state === 'ok') cells.set(r.dirName, CHECKS.map(ch => ch.cell({ a, repo: r, nowMs, clock })));
+    if (r.state === 'ok') cells.set(r.dirName, matrixCells({ a, repo: r, nowMs, clock }));
   }
-  const counts = CHECKS.map((_, i) => [...cells.values()].filter(cs => cs[i].c === 'bad' || cs[i].c === 'meh').length);
+  const counts = MATRIX_COLUMNS.map((_, i) => matrixHeaderCount([...cells.values()].filter(cs => cs[i].c === 'bad' || cs[i].c === 'meh').length));
 
   return (
     <>
@@ -98,8 +33,8 @@ export default function GitMatrix(props: GitLayoutProps) {
             <tr>
               <th className="git-mx-dot" />
               <th>Repo</th>
-              {CHECKS.map((ch, i) => (
-                <th key={ch.label}>{ch.label}{counts[i] > 0 && <>{' '}<span className="git-mx-cnt">{counts[i]}</span></>}</th>
+              {MATRIX_COLUMNS.map((label, i) => (
+                <th key={label}>{label}{counts[i] !== '' && <span className="git-mx-cnt">{counts[i]}</span>}</th>
               ))}
               <th />
             </tr>
@@ -112,7 +47,7 @@ export default function GitMatrix(props: GitLayoutProps) {
                   <tr key={repo.dirName} className="off">
                     <td className="git-mx-dot"><GitLevelDot level="dead" /></td>
                     <td className="git-mx-rn"><div className="git-name">{repo.name}</div></td>
-                    <td colSpan={CHECKS.length}><span className="git-cell na">{gitStateSentence(repo)}</span></td>
+                    <td colSpan={MATRIX_COLUMNS.length}><span className="git-cell na">{gitStateSentence(repo)}</span></td>
                     <td className="git-mx-act"><GitKeys a={a} ctx={props} bare /></td>
                   </tr>
                 );
@@ -121,6 +56,7 @@ export default function GitMatrix(props: GitLayoutProps) {
               const toggle = () => setRow(open ? null : repo.dirName);
               const max = gitBarMax(repo.branches);
               const sub = gitBranchChipText(repo);
+              const rowCells = cells.get(repo.dirName)!;
               return (
                 <Fragment key={repo.dirName}>
                   {/* The row is the toggle, as in Sessions › List: a key's click stops at the key, and `keyActivate` ignores Enter / Space aimed at one. */}
@@ -130,12 +66,17 @@ export default function GitMatrix(props: GitLayoutProps) {
                       <div className="git-name">{repo.name}</div>
                       <div className="git-mx-sub" title={sub}>{sub}</div>
                     </td>
-                    {cells.get(repo.dirName)!.map((v, i) => <td key={CHECKS[i].label}><span className={`git-cell ${v.c}`}>{v.t}</span></td>)}
-                    <td className="git-mx-act"><GitKeys a={a} ctx={props} compact /></td>
+                    {rowCells.map((v, i) => (
+                      <td key={MATRIX_COLUMNS[i]}>
+                        <span className={`git-cell ${v.c}`}>{v.t}</span>
+                        {v.note !== undefined && <span className="git-cell-note"> · {v.note}</span>}
+                      </td>
+                    ))}
+                    <td className="git-mx-act"><GitKeys a={a} ctx={props} compact work={matrixRowHasWork(rowCells)} /></td>
                   </tr>
                   {open && (
                     <tr className="git-mx-x">
-                      <td colSpan={CHECKS.length + 3}>
+                      <td colSpan={MATRIX_COLUMNS.length + 3}>
                         <div className="git-mx-xin">
                           {repo.branches.length === 0
                             ? <span className="git-age">No open branches.</span>
@@ -152,11 +93,11 @@ export default function GitMatrix(props: GitLayoutProps) {
         </table>
       </div>
       <div className="git-mx-legend">
-        <span className="git-cell ok">healthy</span>
         <span className="git-cell bad">needs you</span>
-        <span className="git-cell meh">worth a look</span>
-        <span>— not applicable</span>
-        <span>↓ behind · ↑ ahead</span>
+        <span className="git-cell meh">Sync will handle it</span>
+        <span className="git-cell ok">nothing to do</span>
+        <span>Sync key turns amber whenever any cell in the row has work</span>
+        <span>Header line counts repos, not branches</span>
       </div>
     </>
   );

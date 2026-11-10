@@ -5,6 +5,8 @@
  */
 
 import type { GitQuickPart, GitQuickResponse, WriteAccess } from '../../../shared/types';
+import { gitPlural } from './gitLevels';
+import { pullParts, pushParts } from './gitMatrixCells';
 import type { OkRepo } from './gitSync';
 import { READ_ONLY_TEXT, refusalKind } from './writeRefusal';
 
@@ -86,11 +88,31 @@ function pushItem(repo: OkRepo, branch: string): QuickItem {
   return on(`${commits(u.counts.ahead)} to ${u.upstream}`);
 }
 
+const branches = (ps: { branch: string }[]): string => ps.map(p => p.branch).join(' and ');
+
+/**
+ * What Sync would do for this repo, in the order it does it: commit, pull, push, prune ("Pushes main, prunes 2 merged branches"). Null when it has nothing
+ * to do, so the Sync item falls back to its generic sub. Built from the same parts as Matrix's Push and Pull cells, so the two never disagree.
+ */
+export function syncPlanText(repo: OkRepo): string | null {
+  const steps: string[] = [];
+  if (repo.uncommitted > 0) steps.push(`commits ${gitPlural(repo.uncommitted, 'file')}`);
+  const pull = pullParts(repo);
+  if (pull.length > 0) steps.push(`pulls ${branches(pull)}`);
+  const push = pushParts(repo);
+  if (push.length > 0) steps.push(`pushes ${branches(push)}`);
+  if (repo.mergedCount > 0) steps.push(`prunes ${gitPlural(repo.mergedCount, 'merged branch')}`);
+  if (steps.length === 0) return null;
+  const text = steps.join(', ');
+  return text[0].toUpperCase() + text.slice(1);
+}
+
 /** The menu's three items for one repo. A disabled item always says why: the first reason in the spec's precedence order. */
 export function quickMenu(repo: OkRepo, ctx: QuickCtx): { pull: QuickItem; push: QuickItem; sync: QuickItem } {
+  const plan = syncPlanText(repo) ?? SYNC_SUB;
   const sync = !ctx.syncAvailable
     ? off("This host can't start sessions")
-    : ctx.syncState === 'busy' || ctx.quickRunning || ctx.syncPending ? off(SYNC_SUB) : on(SYNC_SUB);
+    : ctx.syncState === 'busy' || ctx.quickRunning || ctx.syncPending ? off(plan) : on(plan);
   const blocked = ctx.writeAccess === 'none' ? READ_ONLY_TEXT
     : ctx.tokenRequired && !ctx.tokenStored ? 'Needs the Answer token'
       : ctx.syncState !== 'idle' ? 'Sync is running'

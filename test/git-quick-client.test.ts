@@ -5,7 +5,7 @@
 import assert from 'node:assert';
 
 import {
-  QUICK_NOTE_TTL_MS, quickFailureKind, quickFailureLine, quickMenu, quickNoteExpired, quickResultLine,
+  QUICK_NOTE_TTL_MS, quickFailureKind, quickFailureLine, quickMenu, quickNoteExpired, quickResultLine, syncPlanText,
   type QuickCtx,
 } from '../client/src/lib/gitQuick.js';
 import type { OkRepo } from '../client/src/lib/gitSync.js';
@@ -138,12 +138,37 @@ export async function run(): Promise<number> {
   }));
   check(test('sync item: running → enabled (it opens the chat), pull and push Sync is running; busy, quick running or pending → disabled', () => {
     const m = quickMenu(ok(tvo(0, 1)), ctx({ syncState: 'running' }));
-    assert.deepStrictEqual(m.sync, on(SYNC_SUB));
+    assert.deepStrictEqual(m.sync, on('Pulls main'));
     assert.deepStrictEqual(m.pull, off('Sync is running'));
     assert.deepStrictEqual(m.push, off('Sync is running'));
     assert.deepStrictEqual(quickMenu(ok(), ctx({ syncState: 'busy' })).sync, off(SYNC_SUB));
     assert.deepStrictEqual(quickMenu(ok(), ctx({ quickRunning: true })).sync, off(SYNC_SUB));
     assert.deepStrictEqual(quickMenu(ok(), ctx({ syncPending: true })).sync, off(SYNC_SUB));
+  }));
+
+  // Sync plan: what Sync would do for this repo, said in the Sync item's sub
+  check(test('sync plan: clean and level → null, and the item keeps its generic sub', () => {
+    assert.strictEqual(syncPlanText(ok()), null);
+    assert.deepStrictEqual(quickMenu(ok(), ctx()).sync, on(SYNC_SUB));
+  }));
+  check(test('sync plan: main 1 ahead, 2 merged → "Pushes main, prunes 2 merged branches"', () => {
+    assert.strictEqual(syncPlanText(ok({ ...tvo(1, 0), mergedCount: 2 })), 'Pushes main, prunes 2 merged branches');
+  }));
+  check(test('sync plan: 3 uncommitted, main 4 behind, feat/x 2 ahead → "Commits 3 files, pulls main, pushes feat/x"', () => {
+    assert.strictEqual(syncPlanText(ok({ branch: 'feat/x', uncommitted: 3, ...tvo(0, 4), ...up('origin/feat/x', { ahead: 2, behind: 0 }) })),
+      'Commits 3 files, pulls main, pushes feat/x');
+  }));
+  check(test('sync plan: main 4 behind and feat/x 5 behind → "Pulls main and feat/x"', () => {
+    assert.strictEqual(syncPlanText(ok({ branch: 'feat/x', ...tvo(0, 4), ...up('origin/feat/x', { ahead: 0, behind: 5 }) })), 'Pulls main and feat/x');
+  }));
+  check(test('sync plan: singulars → "Commits 1 file, prunes 1 merged branch"', () => {
+    assert.strictEqual(syncPlanText(ok({ uncommitted: 1, mergedCount: 1 })), 'Commits 1 file, prunes 1 merged branch');
+  }));
+  check(test('sync item: carries the plan when there is one, enabled or not; no host still wins', () => {
+    const r = ok({ ...tvo(1, 0), mergedCount: 2 });
+    assert.deepStrictEqual(quickMenu(r, ctx()).sync, on('Pushes main, prunes 2 merged branches'));
+    assert.deepStrictEqual(quickMenu(r, ctx({ syncPending: true })).sync, off('Pushes main, prunes 2 merged branches'));
+    assert.deepStrictEqual(quickMenu(r, ctx({ syncAvailable: false })).sync, off("This host can't start sessions"));
   }));
 
   // Result lines
