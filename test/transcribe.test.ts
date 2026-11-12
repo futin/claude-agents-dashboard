@@ -7,7 +7,7 @@ import path from 'node:path';
 import { loadConfig } from '../server/lib/config.js';
 import {
   buildFfmpegArgs, buildWhisperArgs, extForMime, isTranscribing, parseOutput, probeTranscribe, resetProbe,
-  transcribe
+  setSpawnTimeoutMs, transcribe
 } from '../server/lib/transcribe.js';
 import { resetState } from '../server/lib/remoteState.js';
 import { readBinaryBody, serveTranscribe } from '../server/api.js';
@@ -437,6 +437,61 @@ export async function run(): Promise<number> {
       });
       if (err) throw err;
     } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+  }));
+
+  /**
+   * POST `body` through the route with a stubbed engine pair and return the reply. `whisper` is the whisper stub's script; ffmpeg always succeeds,
+   * writing the WAV it was asked for.
+   */
+  async function postWithEngine(whisper: string, body: Buffer): Promise<{ status: number; json: any }> {
+    resetProbe();
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cad-ep-eng-'));
+    try {
+      const model = path.join(dir, 'ggml.bin');
+      fs.writeFileSync(model, 'x');
+      const ff = stubBin(dir, 'ff-stub', '#!/bin/bash\nout="${@: -1}"\n: > "$out"\nexit 0\n');
+      const wh = stubBin(dir, 'wh-stub', whisper);
+      let reply: { status: number; json: any } | undefined;
+      let err: unknown;
+      await inTmpCwd(async () => {
+        await new Promise<void>(done => {
+          withEnvFile(`WHISPER_MODEL=${model}\nWHISPER_BIN=${wh}\nFFMPEG_BIN=${ff}\n`, cfg => {
+            void post(cfg, 'audio/mp4', body).then(r => { reply = r; }).catch(e => { err = e; }).finally(done);
+          });
+        });
+      });
+      if (err) throw err;
+      return reply!;
+    } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+  }
+
+  // Answers the availability probe's `-h` at once — a stub that hung there too would make the route 404 before it ever transcribed. Otherwise `exec`, so
+  // the process the timer SIGKILLs is the sleep itself: a bash parent killed over a running child would leave the child holding stdout open, and
+  // `close` — which the timeout path waits on — would not fire until the sleep ended anyway.
+  const HANGING_WHISPER = '#!/bin/bash\n[ "$1" = "-h" ] && exit 0\nexec sleep 30\n';
+
+  check(await testAsync('an engine that hangs past the spawn timeout answers 504 timeout', async () => {
+    setSpawnTimeoutMs(200);
+    try {
+      const started = Date.now();
+      const r = await postWithEngine(HANGING_WHISPER, Buffer.from('fake-audio'));
+      assert.equal(r.status, 504);
+      assert.deepEqual(r.json, { error: 'timeout' });
+      assert.ok(Date.now() - started < 10_000, 'the short ceiling, not the 30s default');
+    } finally { setSpawnTimeoutMs(null); }
+  }));
+
+  check(await testAsync('whisper exiting non-zero answers 500 engine', async () => {
+    const r = await postWithEngine('#!/bin/bash\necho partial\nexit 3\n', Buffer.from('fake-audio'));
+    assert.equal(r.status, 500);
+    assert.deepEqual(r.json, { error: 'engine' });
+  }));
+
+  check(await testAsync('an empty body answers 400 before any engine runs', async () => {
+    // A whisper stub that would hang proves nothing ran: had it, this would be a 504 thirty seconds from now.
+    const r = await postWithEngine(HANGING_WHISPER, Buffer.alloc(0));
+    assert.equal(r.status, 400);
+    assert.deepEqual(r.json, { error: 'empty body' });
   }));
 
   // Two things can now answer 429 (see the single-flight fix in serveTranscribe):

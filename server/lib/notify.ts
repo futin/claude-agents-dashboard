@@ -32,6 +32,7 @@
 
 import { execFileSync } from 'node:child_process';
 import https from 'node:https';
+import type { ClientRequest, IncomingMessage } from 'node:http';
 
 import { getState } from './remoteState.js';
 import { findTranscript, projectsRoot, sessionFromRef } from './scan.js';
@@ -153,7 +154,11 @@ const TAGS: Record<NotifyEvent, string> = {
   'usage-reset': 'arrows_counterclockwise'
 };
 
+/** The request call `httpsSend` makes — `https.request`'s shape, narrowed to the one overload it uses. */
+type RequestFn = (url: URL, options: https.RequestOptions, callback: (res: IncomingMessage) => void) => ClientRequest;
+
 let sender: Sender | null = null;
+let request: RequestFn = https.request;
 let labelResolver: ((config: Config, sessionId: string) => string) | null = null;
 let idleSource: (() => number | null) | null = null;
 
@@ -167,6 +172,14 @@ export function setSender(fn: Sender | null): void {
  * the real `~/.claude/projects` — dependent on whatever sessions the developer
  * happens to have on disk.
  */
+/**
+ * Test seam: swap the request call under the real transport. Unlike {@link setSender}, `httpsSend` itself still runs — its status mapping, body cap and
+ * timeout — so a test can point it at a plain-HTTP loopback server, which needs no certificate. `null` restores `https.request`.
+ */
+export function setRequest(fn: RequestFn | null): void {
+  request = fn ?? https.request;
+}
+
 export function setLabelResolver(fn: ((config: Config, sessionId: string) => string) | null): void {
   labelResolver = fn;
 }
@@ -186,6 +199,7 @@ export function setIdleSource(fn: (() => number | null) | null): void {
 
 export function resetNotify(): void {
   sender = null;
+  request = https.request;
   labelResolver = null;
   idleSource = null;
 }
@@ -367,7 +381,7 @@ function httpsSend(payload: NotifyPayload, config: Config): Promise<SendResult> 
       const url = new URL(`${config.ntfyServer}/${payload.topic || config.ntfyTopic}`);
       const headers = ntfyHeaders(payload);
 
-      const req = https.request(url, { method: 'POST', timeout: 2000, headers }, res => {
+      const req = request(url, { method: 'POST', timeout: 2000, headers }, res => {
         const status = res.statusCode ?? 0;
         const ok = status >= 200 && status < 300;
         // The body is read only to explain a refusal — ntfy puts the reason
