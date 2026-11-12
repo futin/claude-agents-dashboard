@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react';
 
 import type { CodegraphRunKind, CodegraphStats } from '../../../../shared/types';
 import { codegraphRunKey, type CodegraphRunControl } from '../../hooks/useCodegraphRun';
-import { CODEGRAPH_LEVEL_DOT, kindGroups, type CodegraphAssessed, type CodegraphLevel } from '../../lib/codegraphLevels';
+import { CODEGRAPH_LEVEL_DOT, codegraphKeyKinds, kindGroups, type CodegraphAssessed, type CodegraphLevel } from '../../lib/codegraphLevels';
 import {
   CODEGRAPH_CHIP_INDEXING, CODEGRAPH_CHIP_NO_WATCHER, CODEGRAPH_CHIP_WATCHING, CODEGRAPH_CONFIRM_CANCEL, CODEGRAPH_CONFIRM_LABEL, CODEGRAPH_KEY_REINDEX,
   CODEGRAPH_KEY_REINDEXING, CODEGRAPH_KEY_SYNC, CODEGRAPH_KEY_SYNCING, CODEGRAPH_KIND_LABELS, CODEGRAPH_UP_TO_DATE, codegraphChip, codegraphKeyAria,
@@ -58,20 +58,6 @@ export function CodegraphChips({ a, upToDate = false }: { a: CodegraphAssessed; 
       {repo.watching && <span className="git-chip">{CODEGRAPH_CHIP_WATCHING}</span>}
     </>
   );
-}
-
-/**
- * Which keys a repo's row offers, Sync before Reindex. A quiet repo gets Sync; a loud one gets Sync for pending changes or a failed sync, and Reindex for
- * any other problem (every other row of the copy table says "Reindex"). The kind of a run in flight always shows, so its cyan key is never missing.
- */
-export function codegraphKeyKinds(a: CodegraphAssessed): CodegraphRunKind[] {
-  if (a.level === 'none') return [];
-  const keys = a.problems.map(p => p.key);
-  let sync = a.level === 'quiet' || keys.includes('pending') || (keys.includes('lastRun') && a.repo.lastRun?.kind === 'sync');
-  let reindex = keys.some(k => k !== 'pending');
-  if (a.repo.run?.kind === 'sync') sync = true;
-  if (a.repo.run?.kind === 'reindex') reindex = true;
-  return [...(sync ? ['sync' as const] : []), ...(reindex ? ['reindex' as const] : [])];
 }
 
 /** Both keys are off while any POST of this tab is out, while the repo runs anything, or when no write can succeed; the cyan one stays cyan. */

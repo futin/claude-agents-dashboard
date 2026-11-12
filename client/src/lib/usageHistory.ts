@@ -144,3 +144,34 @@ export function weekRows(resp: UsageHistoryResponse, offsetMinutes: number): Wee
   });
   return rows.reverse();
 }
+
+const HOUR_MS = 3_600_000;
+
+/** A percentage to one decimal, without the sign. */
+export function fmtPct(pct: number): string {
+  return `${Math.round(pct * 10) / 10}`;
+}
+
+/** `2h`, or `1.5d` from a day up; never under `1h`. */
+function fmtDur(ms: number): string {
+  return ms >= DAY_MS ? `${Math.round((ms / DAY_MS) * 10) / 10}d` : `${Math.max(1, Math.round(ms / HOUR_MS))}h`;
+}
+
+/**
+ * A day segment's date or weekday, read in the same held offset `weekRows` placed its midnights with — the browser's own zone would label a midnight
+ * from before a DST change a day early.
+ */
+export const fmtHeld = (ms: number, offsetMs: number, opts: Intl.DateTimeFormatOptions): string =>
+  new Date(ms + offsetMs).toLocaleDateString(undefined, { ...opts, timeZone: 'UTC' });
+
+/** A reading's wall-clock time, in the browser's zone. */
+export const fmtClock = (ms: number): string => new Date(ms).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+
+/** A week-fill day segment's tooltip: its held-offset date, `from HH:MM` on a mid-day start, the gain, and the not-recorded note for a day with a gap. */
+export function dayTip(row: WeekRow, day: WeekDay, offsetMs: number): string {
+  const gain = day.toPct - day.fromPct;
+  // Only a row's first reading starts a day mid-day; a first day that was dropped for gaining too little leaves the next one at midnight, with no `from`.
+  const from = row.prePct > 0 && day.fromT === row.firstT ? ` from ${fmtClock(day.fromT)}` : '';
+  const off = day.offMs > 0 ? `\nincludes ${fmtDur(day.offMs)} not recorded — use from those hours lands here` : '';
+  return `${fmtHeld(day.fromT, offsetMs, { weekday: 'short', day: 'numeric', month: 'short' })}${from}\n+${fmtPct(gain)}% of the week · ${fmtPct(day.toPct)}% by the end of the day${off}`;
+}

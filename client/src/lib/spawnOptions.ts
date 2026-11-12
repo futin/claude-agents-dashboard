@@ -14,7 +14,7 @@
  * byte-for-byte equal to the server's arrays, so a change on one side that
  * forgets the other fails a test instead of silently degrading the picker.
  */
-import type { PermissionMode } from '../../../shared/types';
+import type { PermissionMode, SpawnRequest } from '../../../shared/types';
 
 /** Mirrors server/lib/spawn.ts's MODELS. */
 export const MODELS = ['opus', 'sonnet', 'haiku', 'fable'] as const;
@@ -65,4 +65,40 @@ export function allowedPermissionModes(ceiling: PermissionMode | undefined): Per
   const requestedIdx = ceiling ? PERMISSION_MODES.indexOf(ceiling) : -1;
   const idx = requestedIdx === -1 ? PERMISSION_MODES.indexOf('auto') : requestedIdx;
   return PERMISSION_MODES.slice(0, idx + 1);
+}
+
+/**
+ * The mode the form preselects: `'auto'` when the host allows it, else the ceiling itself (the last allowed mode), so a `'plan'` ceiling clamps toward the
+ * ceiling rather than toward the top of the ladder.
+ */
+export function defaultPermissionMode(allowed: readonly PermissionMode[]): PermissionMode {
+  return allowed.includes('auto') ? 'auto' : allowed[allowed.length - 1];
+}
+
+/** What the launch sheet holds when Launch is pressed. `desktop` is the picked surface; empty `model` / `effort` mean the CLI's own default. */
+export interface SpawnForm {
+  project: string;
+  prompt: string;
+  name: string;
+  model: string;
+  effort: string;
+  permissionMode: PermissionMode;
+  desktop: boolean;
+  remoteControl: boolean;
+  oneShot: boolean;
+}
+
+/**
+ * The fresh-launch request the form sends. A desktop launch forces `remoteControl: false` and `oneShot: true` (`spawnDesktop`): remote control is moot once
+ * the app holds the session, and the first turn must end for it to move. Name and prompt are trimmed; an empty name, model or effort is left out.
+ */
+export function buildSpawnRequest(f: SpawnForm): SpawnRequest {
+  const req: SpawnRequest = { project: f.project, prompt: f.prompt.trim(), permissionMode: f.permissionMode, remoteControl: f.desktop ? false : f.remoteControl };
+  if (f.desktop) req.surface = 'desktop';
+  const name = f.name.trim();
+  if (name) req.name = name;
+  if (f.model) req.model = f.model;
+  if (f.effort) req.effort = f.effort;
+  if (f.desktop || f.oneShot) req.oneShot = true;
+  return req;
 }
