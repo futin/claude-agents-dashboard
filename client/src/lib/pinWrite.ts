@@ -45,3 +45,29 @@ export function pinWriteOutcome(result: WriteResult): PinWriteOutcome {
   if ((result.body as Partial<PinsSavedError> | undefined)?.saved === true) return { kind: 'saved', text: failureText(result) };
   return { kind: 'failed', text: failureText(result) };
 }
+
+export const RELOADED_TEXT = 'Pins changed in another tab — reloaded.';
+
+/** `GET /api/pins` as `fetch` answers it; `usePins` passes `() => fetch('/api/pins')`. */
+export type PinsReader = () => Promise<{ ok: boolean; json(): Promise<unknown> }>;
+
+/**
+ * What a reorder's reply leaves on screen. `pins` present is what the rows become; absent, the optimistic rows already hold the stored order and stay.
+ * `text` is the note to show, null on success. A 409 means the stored set changed under this tab, so the pre-drag rows are stale too: it re-reads the list,
+ * and only when that fails rolls back to `before` with the network note.
+ */
+export async function settleReorder(
+  outcome: PinWriteOutcome,
+  before: PinsResponse | null,
+  read: PinsReader
+): Promise<{ pins?: PinsResponse | null; text: string | null }> {
+  if (outcome.kind === 'fresh') return { pins: outcome.pins, text: null };
+  if (outcome.kind === 'saved') return { text: outcome.text };
+  if (outcome.kind === 'failed') return { pins: before, text: outcome.text };
+  try {
+    const fresh = await read();
+    const body = fresh.ok ? await fresh.json() as PinsResponse | null : null;
+    if (Array.isArray(body?.pinned)) return { pins: body, text: RELOADED_TEXT };
+  } catch { /* fall through to the rollback */ }
+  return { pins: before, text: NETWORK_TEXT };
+}

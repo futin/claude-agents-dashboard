@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { useAnswerToken } from './useAnswerToken';
 import { postWrite } from '../lib/postWrite';
-import { NETWORK_TEXT, pinWriteOutcome } from '../lib/pinWrite';
+import { pinWriteOutcome, settleReorder } from '../lib/pinWrite';
 import { applyPinOrder } from '../lib/pins';
 import type { PinsResponse } from '../../../shared/types';
 
@@ -70,27 +70,9 @@ export function usePins(): PinsControl {
     if (before) setPins({ ...before, pinned: applyPinOrder(before.pinned, order) });
     try {
       const outcome = pinWriteOutcome(await postWrite('/api/pins/order', { token, body: { order } }));
-      if (outcome.kind === 'fresh') {
-        setPins(outcome.pins);
-        return null;
-      }
-      // The optimistic rows already hold the order that was stored.
-      if (outcome.kind === 'saved') return outcome.text;
-      if (outcome.kind === 'conflict') {
-        // The stored set changed under this tab, so the pre-drag rows are stale too: show the server's list instead.
-        try {
-          const fresh = await fetch('/api/pins');
-          const body = fresh.ok ? await fresh.json() as PinsResponse : null;
-          if (Array.isArray(body?.pinned)) {
-            setPins(body);
-            return 'Pins changed in another tab — reloaded.';
-          }
-        } catch { /* fall through to the rollback */ }
-        setPins(before);
-        return NETWORK_TEXT;
-      }
-      setPins(before);
-      return outcome.text;
+      const settled = await settleReorder(outcome, before, () => fetch('/api/pins'));
+      if ('pins' in settled) setPins(settled.pins ?? null);
+      return settled.text;
     } finally {
       setBusy(null);
     }

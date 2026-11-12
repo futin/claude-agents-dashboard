@@ -380,8 +380,8 @@ client/src/
                   stickyStrip, agentLabel (a subagent's type only when informative),
                   tasks (taskProgress — the one count the row pill and the Tasks card share),
                   gitLayouts / gitLevels / gitLinks / gitStatsText (the Git sub-view's switcher rules,
-                  the problems → levels rule and session join, the compare link, the copy table), gitBar (the divergence bar's scale),
-                  codegraphLayouts / codegraphLevels / codegraphText / codegraphPoll (the CodeGraph sub-view's switcher rules, the problems → levels rule,
+                  the problems → levels rule and session join, the compare link, the copy table), gitChecks (the Git Inspector's check tiles), gitBar (the divergence bar's scale),
+                  codegraphLayouts / codegraphLevels / codegraphText / codegraphPoll (the CodeGraph sub-view's switcher rules, the problems → levels rule and which Sync / Reindex keys a row offers,
                   the copy table, its poll schedule and run notes),
                   gitPoll (its poll schedule, apart from the DOM), gitClock (the fetch clock's meters,
                   re-poll timing and Fetch all key state), gitQuick (the Sync menu's rules and result copy), gitSync / gitSyncRuns

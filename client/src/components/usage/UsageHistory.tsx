@@ -5,7 +5,7 @@ import type { UsageHistoryResponse } from '../../../../shared/types';
 import type { TipHandlers } from '../../hooks/useFloatingTip';
 import { useFloatingTip } from '../../hooks/useFloatingTip';
 import { useUsageHistory } from '../../hooks/useUsageHistory';
-import { historyFigures, weekRows } from '../../lib/usageHistory';
+import { dayTip, fmtHeld, fmtPct, historyFigures, weekRows } from '../../lib/usageHistory';
 import type { WeekDay, WeekRow } from '../../lib/usageHistory';
 import type { StatTile } from '../../lib/usageProfile';
 import { RowHead, Sheet, StatStrip } from './Sheet';
@@ -34,12 +34,6 @@ const NARROW_BELOW = 560;
 /** A day label needs this much segment; the pre segment's `earlier` needs more. */
 const DAY_LABEL_MIN_PX = 30;
 const PRE_LABEL_MIN_PX = 44;
-const HOUR_MS = 3_600_000;
-const DAY_MS = 86_400_000;
-
-function fmtPct(pct: number): string {
-  return `${Math.round(pct * 10) / 10}`;
-}
 
 function fmtWhen(ms: number): string {
   return new Date(ms).toLocaleString(undefined, { weekday: 'short', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
@@ -76,29 +70,9 @@ function useWidth<T extends HTMLElement>(): [RefObject<T>, number] {
   return [ref, width];
 }
 
-/** `2h`, or `1.5d` from a day up; never under `1h`. */
-function fmtDur(ms: number): string {
-  return ms >= DAY_MS ? `${Math.round((ms / DAY_MS) * 10) / 10}d` : `${Math.max(1, Math.round(ms / HOUR_MS))}h`;
-}
-
 /** A reset stamp's weekday and day, in real local time. */
 const fmtResets = (ms: number) => new Date(ms).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric' });
-/**
- * A day segment's date or weekday, read in the same held offset `weekRows` placed its midnights with — the browser's own zone would label a midnight
- * from before a DST change a day early.
- */
-const fmtHeld = (ms: number, offsetMs: number, opts: Intl.DateTimeFormatOptions) =>
-  new Date(ms + offsetMs).toLocaleDateString(undefined, { ...opts, timeZone: 'UTC' });
 const fmtDate = (ms: number) => new Date(ms).toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
-const fmtClock = (ms: number) => new Date(ms).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
-
-function dayTip(row: WeekRow, day: WeekDay, offsetMs: number): string {
-  const gain = day.toPct - day.fromPct;
-  // Only a row's first reading starts a day mid-day; a first day that was dropped for gaining too little leaves the next one at midnight, with no `from`.
-  const from = row.prePct > 0 && day.fromT === row.firstT ? ` from ${fmtClock(day.fromT)}` : '';
-  const off = day.offMs > 0 ? `\nincludes ${fmtDur(day.offMs)} not recorded — use from those hours lands here` : '';
-  return `${fmtHeld(day.fromT, offsetMs, { weekday: 'short', day: 'numeric', month: 'short' })}${from}\n+${fmtPct(gain)}% of the week · ${fmtPct(day.toPct)}% by the end of the day${off}`;
-}
 
 function preTip(row: WeekRow, rangeText: string): string {
   const when = row.preCause === 'range' ? `the ${rangeText} range opens` : 'recording picked this week up';
