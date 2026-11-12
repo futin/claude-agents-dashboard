@@ -232,7 +232,7 @@ passes while tailnet trust is on, and anyone else needs `Authorization: Bearer <
 (read-only when no token is set — see [remote-access](remote-access.md)); the `GET question` route stays open
 since it reveals no more than the transcript already does. The hook reads the token from
 `~/.claude/hooks/dashboard-token` (user-created — a server-generated file would fight the
-read-only Docker mount; `chmod 600`); the browser persists it as `dashboard.answerToken`
+read-only Docker mount; `chmod 600`); it sends the Bearer header only when that file exists (`test/hooks-token.test.ts`); the browser persists it as `dashboard.answerToken`
 and asks for it when a 403 says a token would help. Every client caller reads it through `useAnswerToken`, one module-level store in `client/src/lib/answerToken.ts` with a `storage`
 listener, and builds the header with that file's `authHeaders` — so a token entered in one panel reaches every hook mounted beside it, where twelve
 private `usePersistedState` copies once each needed a remount to see it (#200). A refused write logs one stderr line — `rejected write: <METHOD>

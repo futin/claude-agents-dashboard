@@ -1117,8 +1117,16 @@ export function run(): number {
       }
     })) p++; else f++;
 
-    if (test('desktopOwned: a claude-desktop row needs no flag even when its id is in the set', () => {
+    // A `local` row the app lists carries the flag too: the dashboard's own readers gate on `surface === 'dashboard'` first and ignore it, but a consumer
+    // of `/api/sessions` (backlog-manager's Jira cards) needs it to tell a desktop-app session from a terminal one, which `local` alone cannot say.
+    if (test('desktopOwned: a claude-desktop row whose id is in the set carries true and stays local', () => {
       const row = doRow(doScan({ desktopOwnedIds: new Set(['app', 's1']) }), 'app');
+      assert.strictEqual(row.surface, 'local');
+      assert.strictEqual(row.desktopOwned, true);
+    })) p++; else f++;
+
+    if (test('desktopOwned: a local row the app does not list carries no flag', () => {
+      const row = doRow(doScan({ desktopOwnedIds: new Set(['s1']) }), 'app');
       assert.strictEqual(row.surface, 'local');
       assert.strictEqual('desktopOwned' in row, false);
     })) p++; else f++;

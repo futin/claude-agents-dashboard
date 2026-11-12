@@ -15,6 +15,7 @@ export function run(): number {
 
   if (test('surfacePill: local is silent, the other two speak', () => {
     assert.strictEqual(surfacePill({ surface: 'local' }), null);
+    assert.strictEqual(surfacePill({ surface: 'local', desktopOwned: true }), null);
     assert.strictEqual(surfacePill({ surface: 'dashboard' })!.label, 'dashboard');
     assert.strictEqual(surfacePill({ surface: 'cloud' })!.label, 'cloud');
   })) p++; else f++;
