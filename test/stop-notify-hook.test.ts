@@ -1,10 +1,15 @@
 /**
- * `scripts/stop-notify-hook.sh` — the `CLAUDE_DASHBOARD_ONESHOT` exemption, and the `CLAUDE_DASHBOARD_REFRESH` exit (#178).
+ * `scripts/stop-notify-hook.sh` — the `CLAUDE_DASHBOARD_ONESHOT` exemption, the `CLAUDE_DASHBOARD_REFRESH` exit (#178), and the HEADLESS classification
+ * with the idle gate it feeds (#417).
  *
  * A session the dashboard launched as one-shot (the Git Sync button, or the spawn form's "Close when done") must end when its last turn does, instead of
  * sitting in the reply hold for `answerSecs`. The hook is driven the way the CLI drives it — one Stop payload on stdin, `CLAUDECODE=1` — against an
  * in-process fake dashboard that records every POST. The complement cases (flag unset, flag empty) are what make the first case mean anything: without them a
  * hook that never holds would pass too.
+ *
+ * The HEADLESS cases put a fake `ps` and a fake `ioreg` first on PATH, so the TTY the hook reads and the keyboard idle it measures are the case's, not the
+ * machine's: under `claude -p` the real `ps` prints `??` and in a terminal it prints a tty name, so without the fake these cases would pass in one place only.
+ * Every other case here pins `CLAUDE_DASHBOARD_IDLE_SECS=0`, which skips the idle gate outright; these set a real threshold.
  *
  * Async `spawn`, never `spawnSync`: the fake dashboard answers from this process's own event loop, which a sync child would block.
  */
@@ -49,10 +54,9 @@ async function runHook(
   url: string, home: string, oneShot: string | undefined, stopHookActive = false, extra: NodeJS.ProcessEnv = {}
 ): Promise<{ code: number | null; stdout: string }> {
   const env: NodeJS.ProcessEnv = { ...process.env, CLAUDECODE: '1', CLAUDE_DASHBOARD_URL: url, CLAUDE_DASHBOARD_IDLE_SECS: '0', HOME: home };
-  delete env.BM_ORCH_RUN;
-  delete env.CLAUDE_DASHBOARD_ONESHOT;
-  delete env.CLAUDE_DASHBOARD_ANSWER_TIMEOUT;
-  delete env.CLAUDE_DASHBOARD_REFRESH;
+  // Every marker the hook reads is cleared, so a suite run from inside a routine or a desktop session sees the case's env, not its own.
+  for (const k of ['BM_ORCH_RUN', 'CLAUDE_DASHBOARD_ONESHOT', 'CLAUDE_DASHBOARD_ANSWER_TIMEOUT', 'CLAUDE_DASHBOARD_REFRESH', 'CLAUDE_DASHBOARD_ROUTINE',
+    'CLAUDE_DASHBOARD_SCHEDULE', 'CLAUDE_CODE_ENTRYPOINT']) delete env[k];
   if (oneShot !== undefined) env.CLAUDE_DASHBOARD_ONESHOT = oneShot;
   Object.assign(env, extra);
   const child = spawn('bash', [HOOK], { env, stdio: ['pipe', 'pipe', 'ignore'] });
@@ -63,6 +67,22 @@ async function runHook(
   return { code, stdout };
 }
 
+/** A directory holding a `ps` that prints `tty` and an `ioreg` that reports `idleSecs` of keyboard idle, in `ioreg`'s nanoseconds. */
+function fakeBin(root: string, name: string, tty: string, idleSecs: number): string {
+  const dir = path.join(root, name);
+  fs.mkdirSync(dir);
+  fs.writeFileSync(path.join(dir, 'ps'), `#!/bin/sh\nprintf '%s\\n' '${tty}'\n`, { mode: 0o755 });
+  fs.writeFileSync(path.join(dir, 'ioreg'), `#!/bin/sh\nprintf '%s\\n' '    |   |   "HIDIdleTime" = ${idleSecs}000000000'\n`, { mode: 0o755 });
+  return dir;
+}
+
+/** The env for one HEADLESS case: the fake bin first on PATH, a 60 s idle threshold, and `CLAUDE_CODE_ENTRYPOINT` only when `entrypoint` is given. */
+function classified(bin: string, entrypoint?: string): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = { PATH: `${bin}:${process.env.PATH ?? ''}`, CLAUDE_DASHBOARD_IDLE_SECS: '60' };
+  if (entrypoint !== undefined) env.CLAUDE_CODE_ENTRYPOINT = entrypoint;
+  return env;
+}
+
 const count = (posts: Recorded[], p: string): number => posts.filter(r => r.path === p).length;
 
 async function ok(name: string, fn: () => Promise<void>): Promise<boolean> {
@@ -71,7 +91,7 @@ async function ok(name: string, fn: () => Promise<void>): Promise<boolean> {
 }
 
 export async function run(): Promise<number> {
-  console.log('\n=== stop-notify-hook.sh: CLAUDE_DASHBOARD_ONESHOT / CLAUDE_DASHBOARD_REFRESH ===\n');
+  console.log('\n=== stop-notify-hook.sh: CLAUDE_DASHBOARD_ONESHOT / CLAUDE_DASHBOARD_REFRESH / HEADLESS ===\n');
   let p = 0, f = 0;
 
   for (const tool of ['jq', 'curl']) {
@@ -149,6 +169,69 @@ export async function run(): Promise<number> {
         assert.strictEqual(count(dash.posts, '/api/messages/wait'), 1);
       } finally { await dash.close(); }
     })) p++; else f++;
+
+    // #417 — HEADLESS (:97-113) and the idle gate it feeds (:184). The desktop app runs the CLI with no pty, so on the TTY test alone every desktop turn
+    // parked on the dashboard whatever the idle time; the `claude-desktop` entrypoint is what sends it back through the gate.
+    const bins = fs.mkdtempSync(path.join(os.tmpdir(), 'stop-hook-bin-'));
+    try {
+      if (await ok('no TTY (?? or ?), entrypoint absent or unfamiliar: headless — holds at the desk, wait body says headless: true', async () => {
+        for (const tty of ['??', '?']) {
+          for (const entrypoint of [undefined, 'sdk-cli']) {
+            const label = `tty=${tty} entrypoint=${entrypoint ?? '(unset)'}`;
+            const bin = fakeBin(bins, `headless-${tty === '?' ? 'q' : 'qq'}-${entrypoint ?? 'none'}`, tty, 0);
+            const dash = await fakeDashboard(true);
+            try {
+              const r = await runHook(dash.url, home, undefined, false, classified(bin, entrypoint));
+              assert.strictEqual(r.code, 0);
+              const waits = dash.posts.filter(x => x.path === '/api/messages/wait');
+              assert.strictEqual(waits.length, 1, `${label}: a headless session skips the idle gate and must hold`);
+              assert.strictEqual(waits[0].body.headless, true, `${label}: wait body headless`);
+              assert.strictEqual(count(dash.posts, '/api/notify/event'), 0, `${label}: no fallback push`);
+            } finally { await dash.close(); }
+          }
+        }
+      })) p++; else f++;
+
+      if (await ok('no TTY + CLAUDE_CODE_ENTRYPOINT=claude-desktop, idle below the threshold: at the desk — one push, no hold', async () => {
+        const dash = await fakeDashboard(true);
+        try {
+          const r = await runHook(dash.url, home, undefined, false, classified(fakeBin(bins, 'desktop-desk', '??', 5), 'claude-desktop'));
+          assert.strictEqual(r.code, 0);
+          assert.strictEqual(r.stdout, '');
+          assert.strictEqual(count(dash.posts, '/api/messages/wait'), 0, 'a desktop turn with you at the keyboard must not park on the dashboard');
+          assert.strictEqual(count(dash.posts, '/api/notify/event'), 1);
+        } finally { await dash.close(); }
+      })) p++; else f++;
+
+      if (await ok('no TTY + CLAUDE_CODE_ENTRYPOINT=claude-desktop, idle above the threshold: away — holds, wait body says headless: false', async () => {
+        const dash = await fakeDashboard(true);
+        try {
+          const r = await runHook(dash.url, home, undefined, false, classified(fakeBin(bins, 'desktop-away', '??', 120), 'claude-desktop'));
+          assert.strictEqual(r.code, 0);
+          const waits = dash.posts.filter(x => x.path === '/api/messages/wait');
+          assert.strictEqual(waits.length, 1, 'away from the keyboard the desktop turn must reach the dashboard');
+          assert.strictEqual(waits[0].body.headless, false);
+          assert.strictEqual(count(dash.posts, '/api/notify/event'), 0);
+        } finally { await dash.close(); }
+      })) p++; else f++;
+
+      // Control: the fake `ps` is the one the hook ran. A real tty name, no entrypoint, goes through the same gate both ways.
+      if (await ok('terminal TTY: idle below → one push, no hold; idle above → holds with headless: false', async () => {
+        for (const [idle, holds] of [[5, false], [120, true]] as const) {
+          const dash = await fakeDashboard(true);
+          try {
+            const r = await runHook(dash.url, home, undefined, false, classified(fakeBin(bins, `tty-${idle}`, 'ttys003', idle)));
+            assert.strictEqual(r.code, 0);
+            const waits = dash.posts.filter(x => x.path === '/api/messages/wait');
+            assert.strictEqual(waits.length, holds ? 1 : 0, `idle ${idle}s: hold`);
+            assert.strictEqual(count(dash.posts, '/api/notify/event'), holds ? 0 : 1, `idle ${idle}s: fallback push`);
+            if (holds) assert.strictEqual(waits[0].body.headless, false);
+          } finally { await dash.close(); }
+        }
+      })) p++; else f++;
+    } finally {
+      fs.rmSync(bins, { recursive: true, force: true });
+    }
   } finally {
     fs.rmSync(home, { recursive: true, force: true });
   }
