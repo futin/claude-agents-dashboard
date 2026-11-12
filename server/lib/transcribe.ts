@@ -101,6 +101,13 @@ export function probeTranscribe(config: Config): boolean {
 /** Per-spawn wall-clock ceiling. A 120s clip transcribes in seconds. */
 const SPAWN_TIMEOUT_MS = 30_000;
 
+let spawnTimeoutMs = SPAWN_TIMEOUT_MS;
+
+/** Test seam: a shorter ceiling, so the timeout path runs in milliseconds rather than 30s. `null` restores {@link SPAWN_TIMEOUT_MS}. */
+export function setSpawnTimeoutMs(ms: number | null): void {
+  spawnTimeoutMs = ms ?? SPAWN_TIMEOUT_MS;
+}
+
 export type TranscribeFail = 'transcode' | 'engine' | 'timeout' | 'busy';
 export type TranscribeOutcome =
   | { ok: true; text: string }
@@ -119,7 +126,7 @@ function run(bin: string, args: string[]): Promise<SpawnOutcome> {
     } catch {
       return resolve({ code: null, stdout: '', timedOut: false });
     }
-    const timer = setTimeout(() => { timedOut = true; child.kill('SIGKILL'); }, SPAWN_TIMEOUT_MS);
+    const timer = setTimeout(() => { timedOut = true; child.kill('SIGKILL'); }, spawnTimeoutMs);
     child.stdout.on('data', (c: Buffer) => { stdout += c.toString('utf8'); });
     child.on('error', () => { clearTimeout(timer); resolve({ code: null, stdout: '', timedOut }); });
     child.on('close', code => { clearTimeout(timer); resolve({ code, stdout, timedOut }); });

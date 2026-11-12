@@ -112,13 +112,16 @@ function resetStores(): void {
 }
 
 /**
- * Run `fn` against a live server built from `envBody`.
+ * Run `fn` against a live server built from `envBody`. `wrap`, when given, wraps the route table's listener — how a test turns a synchronous throw,
+ * which would otherwise kill this whole process, into a failed case.
  *
  * The server is closed with `closeAllConnections()` first: a held wait keeps a
  * socket open by design, so a plain `close()` would block until its deadline
  * and hang the whole suite.
  */
-export async function withServer(envBody: string, fn: (h: Harness) => Promise<void>): Promise<void> {
+export async function withServer(
+  envBody: string, fn: (h: Harness) => Promise<void>, wrap: (listener: http.RequestListener) => http.RequestListener = l => l
+): Promise<void> {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), 'cad-api-'));
   const envPath = path.join(home, '.env');
   fs.writeFileSync(envPath, envBody);
@@ -131,7 +134,7 @@ export async function withServer(envBody: string, fn: (h: Harness) => Promise<vo
   resetStores();
 
   const cfg = loadConfig({ envPath });
-  const server = http.createServer(createRequestListener(cfg));
+  const server = http.createServer(wrap(createRequestListener(cfg)));
   await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
   const port = (server.address() as { port: number }).port;
   const base = `http://127.0.0.1:${port}`;
