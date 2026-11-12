@@ -77,8 +77,8 @@ interface ScanOptions {
    */
   archivedIds?: ReadonlySet<string> | null;
   /**
-   * Transcript ids the desktop app holds in a non-archived record (`archived.ts` `desktopLiveSessionIds()`), injected like `archivedIds`. A `dashboard`
-   * row in the set carries `desktopOwned`; omitted/null ⇒ none does.
+   * Transcript ids the desktop app holds in a non-archived record (`archived.ts` `desktopLiveSessionIds()`), injected like `archivedIds`. A row in the
+   * set carries `desktopOwned`, whatever its surface; omitted/null ⇒ none does.
    */
   desktopOwnedIds?: ReadonlySet<string> | null;
   /**
@@ -676,8 +676,11 @@ export function sessionFromRef(ref: TranscriptRef, opts: RowOptions): Session | 
   const surface = sessionSurface(parsed.entrypoint);
   // A process this server cannot signal but the process table shows (see `processLive`): the same absent-not-false encoding.
   const processLive = surface === 'dashboard' && !stopState && !!opts.liveSessionIds?.has(ref.id);
-  // Imported into the desktop app but not yet continued there, so the transcript still reads `dashboard`; a `local` row needs no flag.
-  const desktopOwned = surface === 'dashboard' && !!opts.desktopOwnedIds?.has(ref.id);
+  // Any row the desktop app lists. A `dashboard` one was imported but not yet continued there, so its transcript still reads `dashboard`. A `local` one
+  // was started or continued in the app: this dashboard's own readers gate on `surface === 'dashboard'` and ignore it, but `local` alone cannot tell a
+  // terminal from the app, and a consumer of `/api/sessions` (backlog-manager's Jira cards) needs that to say where the session runs and whether opening
+  // it in the app is safe mid-turn.
+  const desktopOwned = !!opts.desktopOwnedIds?.has(ref.id);
   // A mark outlives the failure until the user acts, and the app may have imported the session by then: it holds it, so nothing is left to report.
   const handOverFailed = surface === 'dashboard' && !desktopOwned && !!opts.handOverFailedIds?.has(ref.id);
   const taskState = readSessionTasks(ref.file, projectPath);
