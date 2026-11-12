@@ -47,11 +47,26 @@ call resets every file). Read ranges came from the line numbers in its output, B
 `nl`/`cat -n | sed -n`. Result: **0.3 %** of all replay is lines already in context. Reads are mostly 51–300 lines (64 % of read replay); over 300 lines is
 24.5 %. Only 23.8 % of Bash read output parsed (compound commands were skipped), so the figure is from a large but not random sample.
 
+**5. How long output lives** (one-off scratch cut over the replay lib's `turnsAfter`, 2026-11-12, not in the repo):
+
+| Turns a result stayed in context | Share of all replay | of which in main sessions |
+|---|---:|---:|
+| ≤ 50 | 44.2 % | 23.0 % |
+| 51–100 | 21.0 % | 18.7 % |
+| 101–200 | 19.8 % | 19.8 % |
+| > 200 | 15.0 % | 15.0 % |
+
+Everything past 100 turns is in main sessions. Of the 2,167 main transcripts, 192 whose longest-lived result passed 100 turns carry 57.8 % of main replay.
+Two upper bounds, both ignoring answer quality: if no result had lived past 100 turns (a reset or compaction every 100 turns), 15.4 % of replay goes;
+if every main-session file read that lived past 50 turns had been a subagent's job returning a 1 KB summary, 27.3 % goes — before the subagent's own
+cost (its preamble alone is tens of thousands of tokens) is paid back.
+
 ## Conclusion
 
 The cost is new, mid-sized file content that lives for many turns, not waste. A trim, a dedupe or a whole-file deny would mostly remove content the model
-used, at an answer-quality cost nobody has measured. Levers that act on *how long* content lives — handing exploration to subagents that return
-conclusions, compacting or clearing between tasks — are where any further saving is, and are unmeasured.
+used, at an answer-quality cost nobody has measured. The cost sits in long main sessions: levers that act on *how long* content lives — handing
+exploration to subagents that return conclusions, compacting or clearing between tasks — are where any further saving is. Next step on that side is
+kaizen naming the long-lived big reads per session (futin/claude-agents-dashboard#404).
 
 Worth keeping from context-mode if a hook is ever built here: the deny reason names the exact next call; a ranged read always passes; a hook exits 0 and
 logs on any internal error; a replacement output keeps the tool's own JSON shape or Claude Code silently keeps the original.
