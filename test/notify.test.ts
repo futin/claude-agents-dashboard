@@ -1,11 +1,12 @@
 import assert from 'node:assert';
 import fs from 'node:fs';
+import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 
 import {
   atDesk, AUTO_MODES, maybeSend, ntfyHeaders, resetNotify, resolveLabel, routineClickUrl, sendRoutineEvent, sendTest, sendTickCappedEvent, sendUsageEvent,
-  setIdleSource, setLabelResolver, setSender, shouldNotify, tickCanSend, tickCappedClickUrl, usageCanSend, usageClickUrl
+  setIdleSource, setLabelResolver, setRequest, setSender, shouldNotify, tickCanSend, tickCappedClickUrl, usageCanSend, usageClickUrl
 } from '../server/lib/notify.js';
 import { DEFAULT_NOTIFY, NOTIFY_EVENTS, resetSettings, setSettings } from '../server/lib/settings.js';
 import { resetState } from '../server/lib/remoteState.js';
@@ -86,6 +87,43 @@ async function inTmpCwd(fn: (sent: NotifyPayload[]) => void | Promise<void>): Pr
     resetSettings();
     resetState();
   }
+}
+
+/** What the loopback ntfy stand-in received for one publish. */
+interface Received { method: string; url: string; headers: http.IncomingHttpHeaders; body: string }
+
+/**
+ * Run `fn` against a plain-HTTP loopback server standing in for ntfy, with the real transport (`httpsSend`) left in place and only its request call
+ * swapped to `http.request` — a loopback HTTPS server would need a certificate. `respond` answers each publish; one that never ends the response is the
+ * no-answer case. `closeAllConnections` first, so a held request cannot keep `close` waiting.
+ */
+async function withNtfy(
+  respond: (req: http.IncomingMessage, res: http.ServerResponse) => void,
+  fn: (server: string, got: Received[]) => Promise<void>
+): Promise<void> {
+  const got: Received[] = [];
+  const srv = http.createServer((req, res) => {
+    let body = '';
+    req.setEncoding('utf8');
+    req.on('data', c => { body += c; });
+    req.on('end', () => { got.push({ method: req.method ?? '', url: req.url ?? '', headers: req.headers, body }); respond(req, res); });
+  });
+  await new Promise<void>(resolve => srv.listen(0, '127.0.0.1', resolve));
+  try {
+    await fn(`http://127.0.0.1:${(srv.address() as { port: number }).port}`, got);
+  } finally {
+    srv.closeAllConnections();
+    await new Promise<void>(resolve => srv.close(() => resolve()));
+  }
+}
+
+/** `inTmpCwd`, but with the default transport live instead of the recorder. */
+function withRealTransport(fn: () => Promise<void>): Promise<void> {
+  return inTmpCwd(async () => {
+    setSender(null);
+    setRequest(http.request);
+    await fn();
+  });
 }
 
 function schedRun(over: Partial<RoutineRun> = {}): RoutineRun {
@@ -317,6 +355,57 @@ export async function run(): Promise<number> {
       assert.match(outcome, /^sent to/);
       assert.match(outcome, /DASHBOARD_PUBLIC_URL/);
     }))) p++; else f++;
+
+  // The cases above swap the whole transport out, so none of them checks what the real one hands the Settings test button. These keep `httpsSend`
+  // itself — status mapping, body cap, timeout, URL parse — and swap only its request call.
+  if (await testAsync('the real transport: a 2xx from ntfy is reported as sent, with the publish it made', () => withRealTransport(() =>
+    withNtfy((_req, res) => { res.writeHead(200); res.end('{"id":"x"}'); }, async (server, got) => {
+      const outcome = await sendTest(conf({ ntfyServer: server }));
+      assert.strictEqual(outcome, `sent to ${server} (phone topic) · taps open https://dash.example`);
+      assert.strictEqual(got.length, 1);
+      assert.strictEqual(got[0].method, 'POST');
+      assert.strictEqual(got[0].url, '/test-topic');
+      assert.strictEqual(got[0].headers.title, 'Claude Code');
+      assert.strictEqual(got[0].headers.tags, 'robot');
+      assert.strictEqual(got[0].body, 'Test push — notifications are working');
+    })))) p++; else f++;
+
+  if (await testAsync('the real transport: a refusal reports the first line of ntfy\'s body', () => withRealTransport(() =>
+    withNtfy((_req, res) => { res.writeHead(429); res.end('limit reached, retry later\n{"code":42901}\n'); }, async server => {
+      const outcome = await sendTest(conf({ ntfyServer: server }));
+      assert.strictEqual(outcome, `${server} refused it (HTTP 429): limit reached, retry later — check NTFY_TOPIC`);
+    })))) p++; else f++;
+
+  if (await testAsync('the real transport: a refusal with an empty body falls back to the status', () => withRealTransport(() =>
+    withNtfy((_req, res) => { res.writeHead(403); res.end(); }, async server => {
+      const outcome = await sendTest(conf({ ntfyServer: server }));
+      assert.strictEqual(outcome, `${server} refused it (HTTP 403): HTTP 403 — check NTFY_TOPIC`);
+    })))) p++; else f++;
+
+  // The body read stops at 500 chars, because a broken server could answer with anything and the detail ends up in the UI. The pause between the two
+  // writes keeps them two chunks on the client side; the cap is per chunk, so the second one is the one it drops.
+  if (await testAsync('the real transport: a refusal body past 500 chars is not read further', () => withRealTransport(() =>
+    withNtfy((_req, res) => {
+      res.writeHead(500);
+      res.write('a'.repeat(600));
+      setTimeout(() => res.end('TAIL'), 100);
+    }, async server => {
+      const outcome = await sendTest(conf({ ntfyServer: server }));
+      assert.strictEqual(outcome, `${server} refused it (HTTP 500): ${'a'.repeat(600)} — check NTFY_TOPIC`);
+    })))) p++; else f++;
+
+  if (await testAsync('the real transport: a server that never answers times out after 2s', () => withRealTransport(() =>
+    withNtfy(() => { /* never answers */ }, async server => {
+      const started = Date.now();
+      const outcome = await sendTest(conf({ ntfyServer: server }));
+      assert.strictEqual(outcome, `couldn't reach ${server}: timed out after 2s`);
+      assert.ok(Date.now() - started >= 1900, 'the 2s timeout, not an early give-up');
+    })))) p++; else f++;
+
+  if (await testAsync('the real transport: a malformed NTFY_SERVER is reported, not thrown', () => withRealTransport(async () => {
+    const outcome = await sendTest(conf({ ntfyServer: 'not a url' }));
+    assert.strictEqual(outcome, "couldn't reach not a url: Invalid URL");
+  }))) p++; else f++;
 
   if (await testAsync('a rejecting sender never escapes maybeSend', () => inTmpCwd(async () => {
     let calls = 0;
