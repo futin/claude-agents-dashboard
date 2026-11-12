@@ -27,7 +27,7 @@ import { deriveProfile, profileSnapshot, recordTick } from './usage-history.js';
 import { recordLedgerTick } from './usage-ledger.js';
 import { onUsageReading } from './usage-alerts.js';
 import { getSettings } from './settings.js';
-import { autoRenew } from './token-refresh.js';
+import { autoRenew, type AutoRenewOptions } from './token-refresh.js';
 
 /**
  * Outcome of looking for a stored OAuth token. `signed-out` is separate from
@@ -202,8 +202,11 @@ export function requestHeaders(token: string): Record<string, string> {
   };
 }
 
-/** GET the usage endpoint with the OAuth headers the CLI uses. Fails open to null. */
-export function fetchUsage(token: string): Promise<UsageLimits | null> {
+/**
+ * GET the usage endpoint with the OAuth headers the CLI uses. Fails open to null. `timeoutMs` is injectable so a test of the
+ * never-answering endpoint does not wait out the real 5s.
+ */
+export function fetchUsage(token: string, timeoutMs = REQUEST_TIMEOUT_MS): Promise<UsageLimits | null> {
   return new Promise((resolve) => {
     let settled = false;
     const done = (v: UsageLimits | null) => {
@@ -221,7 +224,7 @@ export function fetchUsage(token: string): Promise<UsageLimits | null> {
       {
         method: 'GET',
         headers: requestHeaders(token),
-        timeout: REQUEST_TIMEOUT_MS
+        timeout: timeoutMs
       },
       (res) => {
         if (!res.statusCode || res.statusCode < 200 || res.statusCode >= 300) {
@@ -265,6 +268,31 @@ let autoRefreshEnabled = true;
 let refreshStartedAt = 0;
 let cycleSeq = 0;
 
+/**
+ * Where a fetch cycle reads its token and renews an expired one. Production never changes it; a test swaps both through {@link setUsageCycleDeps}, so no
+ * cycle under test reaches the real keychain (`security`) or spawns a `claude` renewal turn.
+ */
+export interface UsageCycleDeps {
+  readToken: () => TokenState;
+  autoRenew: (opts: AutoRenewOptions) => Promise<void>;
+}
+const DEFAULT_CYCLE_DEPS: UsageCycleDeps = { readToken, autoRenew };
+let cycleDeps: UsageCycleDeps = DEFAULT_CYCLE_DEPS;
+
+/** Test seam: override the cycle's token source and renewer; `null` restores the real ones. */
+export function setUsageCycleDeps(over: Partial<UsageCycleDeps> | null): void {
+  cycleDeps = over ? { ...DEFAULT_CYCLE_DEPS, ...over } : DEFAULT_CYCLE_DEPS;
+}
+
+/** Test seam: forget the cached reading and any in-flight cycle, as at boot. */
+export function resetUsageCache(): void {
+  cached = null;
+  cachedStatus = 'unavailable';
+  cachedAt = 0;
+  refreshing = null;
+  refreshStartedAt = 0;
+}
+
 export interface UsageState {
   usage: UsageLimits | null;
   status: UsageStatus;
@@ -296,9 +324,11 @@ function gateState(): RefreshGate {
 
 /**
  * One fetch cycle: token → endpoint → cache. Single-flight via `refreshing`,
- * but the flight is *abandonable* — see {@link shouldRefresh}.
+ * but the flight is *abandonable* — see {@link shouldRefresh}. Exported for
+ * tests, which need its promise; callers use `refreshUsageNow` /
+ * `getCachedUsageState`.
  */
-function refreshNow(force = false): Promise<void> {
+export function refreshNow(force = false): Promise<void> {
   const now = Date.now();
   if (!shouldRefresh(gateState(), now, force)) return refreshing ?? Promise.resolve();
   const mine = ++cycleSeq;
@@ -306,7 +336,7 @@ function refreshNow(force = false): Promise<void> {
   const cycle = (async () => {
     let next: UsageState = { usage: null, status: 'unavailable' };
     try {
-      const t = readToken();
+      const t = cycleDeps.readToken();
       if (t.state !== 'ok') {
         next = { usage: null, status: statusForToken(t.state) };
         // A stored token only ever expires — and nothing renews it in a
@@ -318,8 +348,8 @@ function refreshNow(force = false): Promise<void> {
         // blanked-out one has no refresh token left to renew — both need a
         // login. Widening this gate spends a `claude -p` turn to learn that.
         if (t.state === 'expired' && autoRefreshEnabled) {
-          void autoRenew({
-            probe: () => readToken().state === 'ok',
+          void cycleDeps.autoRenew({
+            probe: () => cycleDeps.readToken().state === 'ok',
             // Drop the TTL so the very next poll refetches, instead of serving
             // a known-stale `token-expired` for up to another CACHE_TTL_MS.
             onRenewed: () => { cachedAt = 0; }
