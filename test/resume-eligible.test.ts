@@ -32,6 +32,7 @@ export function run(): number {
 
   if (test('terminal and cloud sessions are never eligible — dashboard-only by design', () => {
     assert.strictEqual(resumeEligible({ surface: 'local', status: 'idle' }, NO_HOLDS, true), false);
+    assert.strictEqual(resumeEligible({ surface: 'local', status: 'idle', desktopOwned: true }, NO_HOLDS, true), false);
     assert.strictEqual(resumeEligible({ surface: 'cloud', status: 'idle' }, NO_HOLDS, true), false);
   })) p++; else f++;
 
@@ -91,6 +92,8 @@ export function run(): number {
   if (test('handOverState: hidden unless the desktop is available (strict true) and the session is dashboard-surface', () => {
     const d = { surface: 'dashboard', status: 'idle' } as const;
     assert.strictEqual(handOverState({ surface: 'local', status: 'idle' }, NO_HOLDS, true), 'hidden');
+    // A `local` row the app lists carries `desktopOwned` (scan.ts) for /api/sessions consumers; the drawer still treats it as local.
+    assert.strictEqual(handOverState({ surface: 'local', status: 'idle', desktopOwned: true }, NO_HOLDS, true), 'hidden');
     assert.strictEqual(handOverState({ surface: 'cloud', status: 'idle' }, NO_HOLDS, true), 'hidden');
     assert.strictEqual(handOverState(d, NO_HOLDS, undefined), 'hidden');
     assert.strictEqual(handOverState(d, NO_HOLDS, false), 'hidden');
