@@ -37,7 +37,7 @@ take one away. If the dashboard isn't running, the probe gives up in under a sec
      ~40ms. Below the threshold the hook exits 0 immediately, so at-the-desk behaviour is
      byte-for-byte the pre-hook behaviour. **Unreadable idle counts as at-desk** — never
      hide the dialog on a guess, which also means non-macOS effectively opts out unless the
-     threshold is `0` (skip the check, always wait).
+     threshold is `0` (skip the check, always wait). Unreadable and non-numeric idle are both pinned by `test/hook-decisions.test.ts`.
 
      The threshold resolves as `${CLAUDE_DASHBOARD_IDLE_SECS:-<idleSecs from /api/health>}`,
      falling back to 60 — so Settings → Away after drives it, an explicitly exported env var
@@ -75,7 +75,7 @@ take one away. If the dashboard isn't running, the probe gives up in under a sec
   permissionDecisionReason:"<prose>"}}`: the tool call is cancelled and the reason is fed
   to the model, which then continues with the stated choice. `composeReason` therefore
   always ends with "do not ask again" — a denied question is otherwise an invitation to
-  re-ask.
+  re-ask. `test/hook-decisions.test.ts` pins that shape and the `answered` status it is printed for.
 - **The mechanism is isolated on purpose.** The server returns structured `answers`
   *plus* a ready-made `reason`; the hook only echoes `reason`. Swapping in a native
   answer path later means editing step 3 of `scripts/ask-remote-hook.sh` and nothing

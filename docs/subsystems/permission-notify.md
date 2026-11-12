@@ -158,7 +158,8 @@ silencing an unrelated prompt.
 - **`Notification` fires for more than permissions** (`idle_prompt`, auth, elicitation). Newer
   CLIs name the reason in `notification_type`; older payloads carry only `message`, so the hook
   takes `notification_type == "permission_prompt"`, **or** — when that field is absent
-  entirely — a `message` containing `permission`. A *known* other type is never sniffed.
+  entirely — a `message` containing `permission`. A *known* other type is never sniffed. Both directions are pinned
+  by `test/hook-decisions.test.ts`.
 - **The hook targets the API port (4173), not Vite's 5174.** In dev the page is on 5174 but
   `/api` lives on the Node server; the hook talks to it directly. Override with
   `CLAUDE_DASHBOARD_URL`.
