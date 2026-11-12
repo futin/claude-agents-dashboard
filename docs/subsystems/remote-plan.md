@@ -141,7 +141,7 @@ prints a one-line notice naming the file and pointing at `pnpm hooks:install`, i
 the banner. `tokenRequired` means *this caller* would need the token (`writeAccess ===
 'token'`), so a hook on loopback, which is always trusted, never trips it. An older server
 sends no `tokenRequired`, which reads as `false` and keeps the old behaviour rather than
-warning wrongly.
+warning wrongly. `test/hooks-token.test.ts` pins all three readings against the real script.
 
 When all hold it injects an instruction for that turn: put each decision that is the user's through
 `AskUserQuestion` (including skill-driven asks like the brainstorming skill's mode pick),
