@@ -6,7 +6,7 @@ import { useAnswerToken } from '../../hooks/useAnswerToken';
 import { authHeaders } from '../../lib/answerToken';
 import { useRemoteAnswer } from '../../hooks/useRemoteAnswer';
 import { useServerSettings } from '../../hooks/useServerSettings';
-import { NOTIFY_EVENT_ROWS, notifyRowState } from '../../lib/notifyRows';
+import { NOTIFY_EVENT_ROWS, afkStillGatesRemote, notifyRowState } from '../../lib/notifyRows';
 import { useSettings } from '../../hooks/useSettings';
 import {
   fireTestNotification, requestWebNotifyPermission, unlockAudio,
@@ -102,26 +102,8 @@ export default function SettingsView() {
    */
   const staleEnv = server.state?.staleEnvKeys ?? [];
 
-  /**
-   * Turning "Only when I'm away" off does **not** make `question` and `plan`
-   * unconditional, and nothing else on this page would tell you that.
-   *
-   * Both are published from the endpoint the remote-answer hook POSTs to, and the
-   * hook applies its own idle check *before* that POST (`ask-remote.sh`,
-   * `plan-remote.sh`). At the desk it exits and lets the terminal dialog take the
-   * question, so the server never learns there is anything to push about and the
-   * policy below is never consulted. `permission` and `stop` have no such gate in
-   * their hooks, so those two really do become unconditional.
-   *
-   * Shown only in the state where that surprises you: pushes on, the switch off,
-   * the threshold live, and at least one of the two affected events on.
-   */
-  const afkStillGatesRemote =
-    !pushUnconfigured &&
-    !!notify?.enabled &&
-    !notify.requireAfk &&
-    (notify.events.question || notify.events.plan) &&
-    (server.state?.idleSecs ?? 0) > 0;
+  // Pushes on, "Only when I'm away" off, yet question/plan still wait for AFK — the hooks gate them before the server sees them (`afkStillGatesRemote`).
+  const afkWarning = afkStillGatesRemote({ pushUnconfigured, notify, idleSecs: server.state?.idleSecs });
 
   /**
    * Both the permission prompt and resuming the AudioContext are gesture-gated,
@@ -252,7 +234,7 @@ export default function SettingsView() {
                 />
               </SettingsRow>
 
-              {afkStillGatesRemote && (
+              {afkWarning && (
                 <div className="set-warn">
                   <span>⚠</span>
                   <span>

@@ -18,7 +18,7 @@
  *
  * `?view=usage` is a usage-limit push (`server/lib/notify.ts` `usageClickUrl`): it lands on the Usage section, with no sub-view to set.
  */
-import type { Section } from './sections';
+import { isSection, type Section } from './sections';
 
 /** A session id is a UUID; anything else is junk and is ignored. Pure — tested. */
 export function readSessionParam(search: string): string | null {
@@ -48,6 +48,19 @@ export function readViewParam(search: string): DeepLinkView | null {
 /** The section a linked view lands on. Pure — tested. */
 export function sectionForView(view: DeepLinkView): Section {
   return view === 'git' ? 'management' : view;
+}
+
+/**
+ * The section the page opens on, resolved once before the first paint. A `?session=` deep link — a tapped push — beats everything: it exists only to put
+ * you on that session's chat. Then `?view=`. Then the `landing` setting, where `'last'` means the stored section, with the pre-Routines id `'schedules'`
+ * read as `'routines'`. `isSection` filters a value left over from a release that had a section this one doesn't (the removed Guides tab). Pure — tested.
+ */
+export function startSection(s: { session: boolean; view: DeepLinkView | null; stored: string; landing: string }): Section {
+  if (s.session) return 'sessions';
+  if (s.view) return sectionForView(s.view);
+  const last = s.stored === 'schedules' ? 'routines' : s.stored;
+  const want = s.landing === 'last' ? last : s.landing;
+  return isSection(want) ? want : 'sessions';
 }
 
 /** A run id is the wrapper's uuid or a refusal's `refused-<machine>-<job>-<epoch>`; it only ever reaches a lookup in the polled list, so the shape check keeps junk out of the key. Pure — tested. */

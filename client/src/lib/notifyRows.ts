@@ -1,7 +1,7 @@
 /**
  * notifyRows.ts — the Settings page's push-event rows and when each one is usable. Pure — tested (`test/notify-rows.test.ts`).
  */
-import type { NotifyEvent } from '../../../shared/types';
+import type { NotifyEvent, NotifyPolicy } from '../../../shared/types';
 
 export interface NotifyEventRow {
   key: NotifyEvent;
@@ -50,4 +50,24 @@ export function notifyRowState(
   if (pushOff) return { disabled: true, note: null };
   if (!s.recordUsageHistory) return { disabled: true, note: 'Turn on Record usage history under Usage forecast to use this.' };
   return { disabled: false, note: null };
+}
+
+/**
+ * Whether Settings warns that turning "Only when I'm away" off does **not** make `question` and `plan` unconditional.
+ *
+ * Both are published from the endpoint the remote-answer hook POSTs to, and the hook applies its own idle check *before* that POST (`ask-remote.sh`,
+ * `plan-remote.sh`). At the desk it exits and lets the terminal dialog take the question, so the server never learns there is anything to push about and the
+ * policy is never consulted. `permission` and `stop` have no such gate in their hooks, so those two really do become unconditional.
+ *
+ * True only in the state where that surprises you: pushes configured and on, the switch off, the idle threshold live, and at least one of the two affected
+ * events on. `notify` is absent while the settings are still loading.
+ */
+export function afkStillGatesRemote(s: {
+  pushUnconfigured: boolean;
+  notify: Pick<NotifyPolicy, 'enabled' | 'requireAfk' | 'events'> | undefined;
+  idleSecs: number | undefined;
+}): boolean {
+  const n = s.notify;
+  if (s.pushUnconfigured || !n?.enabled || n.requireAfk) return false;
+  return (n.events.question || n.events.plan) && (s.idleSecs ?? 0) > 0;
 }

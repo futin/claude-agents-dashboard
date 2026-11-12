@@ -1,4 +1,4 @@
-import type { CodegraphRepo } from '../../../shared/types';
+import type { CodegraphRepo, CodegraphRunKind } from '../../../shared/types';
 
 /**
  * The CodeGraph view's one rule, the design spec's Levels table: every repo is read into problems, each with a severity, and the worst severity is its level.
@@ -95,4 +95,18 @@ export function kindGroups(nodesByKind: Record<string, number>): { key: Codegrap
   const groups = KIND_GROUPS.map(([key, kinds]) => ({ key, count: kinds.reduce((s, k) => s + (nodesByKind[k] ?? 0), 0) }));
   const other = Object.entries(nodesByKind).reduce((s, [k, n]) => (named.has(k) ? s : s + n), 0);
   return [...groups, { key: 'other', count: other }];
+}
+
+/**
+ * Which keys a repo's row offers, Sync before Reindex. A quiet repo gets Sync; a loud one gets Sync for pending changes or a failed sync, and Reindex for
+ * any other problem (every other row of the copy table says "Reindex"). The kind of a run in flight always shows, so its cyan key is never missing.
+ */
+export function codegraphKeyKinds(a: CodegraphAssessed): CodegraphRunKind[] {
+  if (a.level === 'none') return [];
+  const keys = a.problems.map(p => p.key);
+  let sync = a.level === 'quiet' || keys.includes('pending') || (keys.includes('lastRun') && a.repo.lastRun?.kind === 'sync');
+  let reindex = keys.some(k => k !== 'pending');
+  if (a.repo.run?.kind === 'sync') sync = true;
+  if (a.repo.run?.kind === 'reindex') reindex = true;
+  return [...(sync ? ['sync' as const] : []), ...(reindex ? ['reindex' as const] : [])];
 }

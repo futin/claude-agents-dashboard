@@ -11,9 +11,9 @@ import { appendTranscript } from '../lib/dictation';
 import { DESKTOP_HANDOVER_NOTE, initialSurface, offeredSurfaces } from '../lib/launchSurface';
 import {
   EFFORTS, MODELS, NAME_CAP, PERMISSION_MODE_LABEL, PERMISSION_MODES, PROMPT_CAP,
-  allowedPermissionModes
+  allowedPermissionModes, buildSpawnRequest, defaultPermissionMode
 } from '../lib/spawnOptions';
-import type { LaunchSurface, PermissionMode, SpawnRequest, SpawnResponse } from '../../../shared/types';
+import type { LaunchSurface, PermissionMode, SpawnResponse } from '../../../shared/types';
 
 interface Props {
   onClose: () => void;
@@ -118,12 +118,9 @@ export default function SpawnPanel({ onClose, onLaunched, spawnMaxPermission, sp
 
   // Only offer modes the server will actually honor — it clamps anything
   // above its ceiling silently, so showing them here would let a user pick
-  // one thing and get another with no feedback. `allowedModes` always ends on
-  // the (validated) ceiling itself, so falling back to its last element when
-  // 'auto' isn't in range (a 'plan' ceiling) still clamps toward the ceiling
-  // rather than toward the top of the ladder.
+  // one thing and get another with no feedback.
   const allowedModes = allowedPermissionModes(spawnMaxPermission);
-  const defaultMode = allowedModes.includes('auto') ? 'auto' : allowedModes[allowedModes.length - 1];
+  const defaultMode = defaultPermissionMode(allowedModes);
   const selectedMode = permissionMode && allowedModes.includes(permissionMode) ? permissionMode : defaultMode;
   const ceilingLimited = allowedModes.length < PERMISSION_MODES.length;
   const ceilingLabel = PERMISSION_MODE_LABEL[allowedModes[allowedModes.length - 1]];
@@ -162,14 +159,9 @@ export default function SpawnPanel({ onClose, onLaunched, spawnMaxPermission, sp
 
   async function doLaunch(): Promise<void> {
     if (!canLaunch) return;
-    const req: SpawnRequest = {
-      project: selectedProject, prompt: prompt.trim(), permissionMode: selectedMode, remoteControl: remoteShown
-    };
-    if (desktop) req.surface = 'desktop';
-    if (name.trim()) req.name = name.trim();
-    if (model) req.model = model;
-    if (effort) req.effort = effort;
-    if (oneShotShown) req.oneShot = true;
+    const req = buildSpawnRequest({
+      project: selectedProject, prompt, name, model, effort, permissionMode: selectedMode, desktop, remoteControl, oneShot
+    });
     const result = await launch(req);
     if (result) onLaunched(result);
   }
