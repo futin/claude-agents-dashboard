@@ -19,6 +19,7 @@
     "plugin:sync": "tsx scripts/sync-plugin.ts",
     "typecheck": "tsc --noEmit",
     "session-analytics": "tsx scripts/session-analytics.ts",
+    "replay:tool-output": "tsx scripts/tool-output-replay.ts",
     "probe:usage-split": "tsx scripts/probe-usage-split.ts",
     "check:weights": "tsx scripts/check-token-weights.ts",
     "check:ledger": "tsx scripts/rates-audit.ts ledger",
