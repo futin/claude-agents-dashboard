@@ -18,11 +18,12 @@ pace, do I run dry before the window resets?*
   `ANTHROPIC_BASE_URL`/`CLAUDE_CODE_API_BASE_URL` (those aim model inference at a
   proxy/gateway — Bedrock/Vertex/Ollama/LiteLLM — with no such route; that misroute
   returned `null` bars in practice). `CLAUDE_USAGE_BASE_URL` overrides for tests only;
-  the request is protocol-aware (http vs https).
+  the request is protocol-aware (http vs https). `test/usage-cycle.test.ts` uses it to run the whole cycle (`refreshNow` / `fetchUsage`) against a
+  local server, with `setUsageCycleDeps()` standing in for the keychain read and the renewal spawn so no test touches either.
 - **Response shape:** windows are **top-level**
   (`{ five_hour:{utilization,resets_at}, seven_day:{…}, … }`), *not* wrapped in
-  `rate_limits`. `mapUsage()` accepts both shapes defensively and is the one pure/
-  unit-tested piece (`test/usage.test.ts`).
+  `rate_limits`. `mapUsage()` accepts both shapes defensively and is pure, unit-tested on
+  its own (`test/usage.test.ts`).
 - **Token:** read from the macOS keychain
   (`security find-generic-password -s "Claude Code-credentials"`), falling back to
   `~/.claude/.credentials.json` → `claudeAiOauth.accessToken`. Expired tokens are
