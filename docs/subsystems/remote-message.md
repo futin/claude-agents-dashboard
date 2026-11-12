@@ -22,7 +22,7 @@ does not:
 ```
 
 exit 0. The CLI reads `decision === "block"` at the top level and feeds `reason` into the
-model's next messages. The `hookSpecificOutput` shape for `Stop` exists too, but it only
+model's next messages. `test/hook-decisions.test.ts` pins that output for an `answered` wait. The `hookSpecificOutput` shape for `Stop` exists too, but it only
 carries `additionalContext` — background the model may or may not act on, not an
 instruction it continues with. This was confirmed by grepping the installed CLI binary
 (2.1.233) rather than trusting its docs, after two documentation lookups gave contradictory

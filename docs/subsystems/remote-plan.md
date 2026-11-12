@@ -42,7 +42,8 @@ shape differs too:
 ```
 
 Note `decision: {behavior}` — **not** `PreToolUse`'s flat `permissionDecision` string.
-Getting this wrong fails silently: the hook's output is ignored and the card just appears.
+Getting this wrong fails silently: the hook's output is ignored and the card just appears. `test/hook-decisions.test.ts` pins this shape, the `rejected` status it is printed
+for, and the hook's unreadable-idle-is-at-desk rule.
 
 ## The pieces
 
