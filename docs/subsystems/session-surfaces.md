@@ -178,6 +178,11 @@ row, so `classify` fails open to "not archived"; a wrong "not owned" admits a se
 unless `isArchived` is exactly `true` and only ever adds an id. What it cannot read (no root, an unreadable or malformed record, no string `cliSessionId`)
 it cannot attribute, and contributes nothing. The flag is `true` or absent, never `false`, like `processLive`.
 
+**A `local` row the app lists carries `desktopOwned` too.** Every reader here gates on `surface === 'dashboard'` before it looks at the flag, so it
+changes nothing on this dashboard; it exists for `/api/sessions` consumers. `local` alone cannot tell a terminal from the app, and backlog-manager's Jira
+cards need that to say where a session runs and whether opening it in the app mid-turn is safe (a terminal mid-turn would get a second writer; the app
+opening a session it already holds would not).
+
 **A `desktopOwned` row shows no `dashboard` pill.** Until the app writes a turn the transcript still reads `claude-agents-dashboard`, so the row keeps
 `surface: 'dashboard'`, which the drawer's hand-over reads to say `owned` ([chat](chat.md)). The pill's claim, that no other list has the session, stopped
 being true at the import, so `surfacePill` (`client/src/lib/surface.ts`) takes the whole session and stays silent for the flag.

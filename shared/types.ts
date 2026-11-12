@@ -152,6 +152,10 @@ export interface Session {
    * `true` when the desktop app owns this session's live process: it was launched there, or resumed there, and the server holds no handle for it. **Absent,
    * never `false`**, the encoding `processLive` uses. The drawer shows it in place of a resume the server would refuse. The row keeps `surface:
    * 'dashboard'` until the app writes a turn, but renders no surface pill: the app's sidebar lists it.
+   *
+   * A `local` row carries it too when the app lists it — a session started in the app, or continued there. Nothing in this dashboard reads it on a
+   * `local` row (every reader gates on `surface === 'dashboard'` first); it is there for `/api/sessions` consumers such as backlog-manager, which cannot
+   * otherwise tell a desktop-app session from a terminal one.
    */
   desktopOwned?: true;
   /**
