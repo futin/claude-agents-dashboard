@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { GitStatsResponse } from '../../../shared/types';
 import { createPollGate, skewOf } from '../lib/gitClock';
 import { startGitPoll } from '../lib/gitPoll';
+import { pollFetch } from '../lib/pollSeq';
 
 export interface GitStatsState {
   /** The last good payload; kept through a later failure (spec §6 copy table, last row). */
@@ -45,7 +46,7 @@ export function useGitStats(): GitStatsState {
       let followUp = false;
       const url = first ? '/api/git-stats?stale=ok' : '/api/git-stats';
       first = false;
-      fetch(url)
+      pollFetch(url)
         .then(res => {
           if (!res.ok) throw new Error(`HTTP ${res.status}`);
           return res.json() as Promise<GitStatsResponse>;

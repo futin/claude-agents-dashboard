@@ -4,6 +4,7 @@ import { useAnswerToken } from './useAnswerToken';
 import { useSettings } from './useSettings';
 import { postWrite } from '../lib/postWrite';
 import { afterDismiss, afterPoll, afterSend, canSend, replyOutcome } from '../lib/pendingReply';
+import { createPollSeq, pollFetch } from '../lib/pollSeq';
 import type { ReplyOutcome, ReplyPatch, ReplyPhase } from '../lib/pendingReply';
 import type { SessionMessage, SessionPlan, SessionQuestion } from '../../../shared/types';
 
@@ -87,16 +88,21 @@ export function usePendingReply<P extends PendingPollPath, S extends string>(
 
   useEffect(() => {
     let live = true;
+    // A tick is skipped while a request is out, and an answer a newer one superseded is dropped, so a slow poll can never put a resolved panel back.
+    const seq = createPollSeq();
 
     async function poll(): Promise<void> {
+      const mine = seq.next(false);
+      if (mine === null) return;
       let body: PendingReplyPolls[P] | null = null;
       try {
-        const res = await fetch(`/api/sessions/${encodeURIComponent(id)}/${pollPath}`);
+        const res = await pollFetch(`/api/sessions/${encodeURIComponent(id)}/${pollPath}`);
         body = (await res.json()) as PendingReplyPolls[P];
       } catch {
+        seq.settle(mine);
         return; // keep the last snapshot; the next tick retries
       }
-      if (!live || !body || body.error) return;
+      if (!seq.settle(mine) || !live || !body || body.error) return;
 
       const next = body.pending;
       setPending(next);

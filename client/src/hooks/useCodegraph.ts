@@ -4,6 +4,7 @@ import type { CodegraphResponse } from '../../../shared/types';
 import { CODEGRAPH_FAST_POLL_MS, hasLiveRun } from '../lib/codegraphPoll';
 import { createPollGate } from '../lib/gitClock';
 import { startGitPoll } from '../lib/gitPoll';
+import { pollFetch } from '../lib/pollSeq';
 
 export interface CodegraphState {
   /** The last good payload; kept through a later failure. */
@@ -51,7 +52,7 @@ export function useCodegraph(): CodegraphState {
       setPolling(true);
       const url = freshNext ? '/api/codegraph?fresh=1' : '/api/codegraph';
       freshNext = false;
-      fetch(url)
+      pollFetch(url)
         .then(res => {
           if (!res.ok) throw new Error(`HTTP ${res.status}`);
           return res.json() as Promise<CodegraphResponse>;

@@ -203,6 +203,7 @@ against injected timer and visibility functions so `test/git-stats-client.test.t
 fetch is never the last word. The mount's poll asks for `?stale=ok`, and on a `stale` answer the hook shows it, leaves `updatedAt` and `skewMs` alone (an
 old `generatedAt` says nothing about the clocks) and polls again at once. A failed poll keeps the last payload and sets `error`. Before the first payload the body reads a muted "Loading…", as
 Management › Projects does; a first poll that fails turns it into "Couldn't load git stats. Retrying every 30s."
+Each request carries `pollFetch`'s 30s bound (`client/src/lib/pollSeq.ts`), so a hung one fails as any failed poll does and frees `createPollGate` for the next.
 
 **The clock chip** (`GitClockChip.tsx`). The band has no right slot any more; at the right end of `.git-toolbar`, across from the layout switcher (under it on a
 phone), sits one button holding two meters, SYNC (the 30s re-read) and FETCH (the server's timer), and a caret. Its readings are pure functions in
