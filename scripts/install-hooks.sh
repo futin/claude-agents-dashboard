@@ -2,7 +2,7 @@
 # install-hooks.sh — wire this repo's six Claude Code hooks into the user's
 # own ~/.claude, so a teammate gets remote answers, remote plans, remote
 # replies, permission notices, the away-mode injection and the broad-kill guard
-# with one command instead of six symlinks and seven settings entries copied out
+# with one command instead of six symlinks and eight settings entries copied out
 # of five docs.
 #
 # Registration is USER-GLOBAL on purpose, and that is the whole reason this is
@@ -68,10 +68,17 @@ kill-guard-hook.sh|kill-guard.sh
 "
 
 # One row per settings entry: <event>|<matcher>|<installed name>|<timeout>.
+# The matcher may itself contain `|` (it is a regex alternation), so a row is
+# split from both ends: event is the first field, name and timeout the last two,
+# and the matcher is everything in between.
 # The 630s timeouts are not arbitrary: they must exceed the dashboard's answer
 # window (≤600s), or the CLI kills the hook mid-hold. permission-notify appears
 # twice because PermissionRequest is the live signal and Notification is the
 # legacy fallback — both are wanted, and they are separate registrations.
+#
+# remote-decision appears twice too: UserPromptSubmit prints its banner once per
+# session, and SessionStart re-prints it after compaction, resume or /clear, when
+# the earlier copy may have left the context.
 #
 # kill-guard is the odd one out: every other hook here exists to get a question
 # to the user's phone, while that one exists to keep this repo's own dev server
@@ -86,6 +93,7 @@ PermissionRequest||permission-notify.sh|5
 Notification||permission-notify.sh|5
 Stop||stop-notify.sh|630
 UserPromptSubmit||remote-decision.sh|5
+SessionStart|compact|resume|clear|remote-decision.sh|5
 "
 
 # ------------------------------------------------------------------- symlinks
@@ -230,8 +238,11 @@ say ""
 say "settings.json"
 current="$(settings_json)"
 changed=false
-while IFS='|' read -r ev matcher name timeout; do
-  [ -n "${ev:-}" ] || continue
+while IFS= read -r row; do
+  [ -n "${row:-}" ] || continue
+  timeout="${row##*|}"; row="${row%|*}"
+  name="${row##*|}";    row="${row%|*}"
+  ev="${row%%|*}";      matcher="${row#*|}"
   cmd="$(entry_cmd "$name")"
   if [ "$UNINSTALL" = "true" ]; then
     if has_entry "$cmd"; then

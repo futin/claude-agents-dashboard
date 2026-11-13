@@ -14,7 +14,19 @@
 #
 # Both conditions are re-checked on every user prompt, so flipping the dashboard
 # toggle (or changing permission mode) takes effect on the next message. When
-# either is false this prints nothing: zero tokens, zero behavior change.
+# either is false this prints nothing — zero tokens, zero behavior change — unless
+# an earlier banner has to be retracted (the OFF line below).
+#
+# Once per session, not once per prompt. The banner is ~2 KB and every copy stays in the transcript, so printing it on each prompt cost a 15-prompt session
+# ~10k tokens of identical text (context-floor audit, 2026-11-13). A per-session marker under $HOME/.claude/hooks/.remote-decision/ records what the model
+# was last told (ARMED, NOTARMED or OFF, plus the permission mode), and the hook prints only when that changes:
+#   - first armed prompt → the full banner; later prompts in the same state → nothing. No one-line "still active" reminder: the full copy is already in
+#     context, the one place it can leave is compaction (handled below), and a reminder per prompt would rebuild the very cost this removes.
+#   - armed → off (toggle off, health probe failing, or a non-auto mode) → one OFF line, because the earlier banner is still in context and would
+#     otherwise keep steering the session after the phone can no longer answer. Off → armed again → the full banner.
+#   - SessionStart with source compact, resume or clear → re-print whatever the current state calls for, since compaction drops old messages and a
+#     resumed or cleared session may not carry the earlier copy. That needs a second registration (installer row `SessionStart|compact|resume|clear`).
+# Fail safe: a marker that cannot be read, parsed or written reads as "never told", so the full banner prints — the old behaviour — never nothing.
 #
 # This is an INSTRUCTION, not a gate — the model follows it like any other
 # context. Nothing here blocks a tool call; the hard gates (permission dialogs,
@@ -47,7 +59,9 @@
 #
 # Install:
 #   ln -s "$PWD/scripts/remote-decision-hook.sh" ~/.claude/hooks/remote-decision.sh
-# then APPEND to the UserPromptSubmit hooks array in ~/.claude/settings.json:
+# then APPEND to the UserPromptSubmit hooks array in ~/.claude/settings.json, and
+# add a SessionStart entry with matcher "compact|resume|clear" running the same command
+# (`pnpm hooks:install` writes both):
 #   { "type": "command", "command": "bash \"$HOME/.claude/hooks/remote-decision.sh\"",
 #     "timeout": 5 }
 #
@@ -70,36 +84,84 @@ MODES="${CLAUDE_DASHBOARD_DECISION_MODES:-auto bypassPermissions dontAsk}"
 
 command -v jq > /dev/null 2>&1 || exit 0
 
-# Condition 1: an auto-ish permission mode. Every hook payload carries
-# permission_mode; absent/unknown → stay silent (fail toward default behavior).
+EVENT=$(printf '%s' "$INPUT" | jq -r '.hook_event_name // empty' 2>/dev/null)
+SID=$(printf '%s' "$INPUT" | jq -r '.session_id // empty' 2>/dev/null)
 MODE=$(printf '%s' "$INPUT" | jq -r '.permission_mode // empty' 2>/dev/null)
-[ -n "$MODE" ] || exit 0
+
+# The marker. A session id that is not a plain token is never used as a path; with no marker file every armed prompt prints the full banner.
+STATE_DIR="$HOME/.claude/hooks/.remote-decision"
+STATE_FILE=""
+case "$SID" in
+  ''|*[!A-Za-z0-9_-]*) ;;
+  *) STATE_FILE="$STATE_DIR/$SID" ;;
+esac
+LAST=""
+LAST_MODE=""
+[ -n "$STATE_FILE" ] && [ -r "$STATE_FILE" ] && read -r LAST LAST_MODE < "$STATE_FILE" 2>/dev/null
+
+# Write the marker atomically (tmp + mv, so a half-written file never reads as a state), and prune markers untouched for 7 days: a session idle that long
+# that comes back does so through a resume, which re-prints anyway. Any failure here is ignored on purpose — LAST stays unset next time, so the banner prints.
+record() {
+  [ -n "$STATE_FILE" ] || return 0
+  mkdir -p "$STATE_DIR" 2>/dev/null || return 0
+  printf '%s %s\n' "$1" "$MODE" > "$STATE_FILE.$$" 2>/dev/null && mv -f "$STATE_FILE.$$" "$STATE_FILE" 2>/dev/null
+  rm -f "$STATE_FILE.$$" 2>/dev/null
+  find "$STATE_DIR" -type f -mtime +7 -delete 2>/dev/null
+  return 0
+}
+
+FORCE=""
+if [ "$EVENT" = "SessionStart" ]; then
+  case "$(printf '%s' "$INPUT" | jq -r '.source // empty' 2>/dev/null)" in
+    compact|resume|clear) FORCE=1 ;;
+    *) exit 0 ;;  # startup: the first prompt does the printing, with a permission_mode in hand
+  esac
+  # SessionStart may not carry permission_mode; the mode the last prompt saw is the best reading of it until the next prompt re-checks.
+  [ -n "$MODE" ] || MODE="$LAST_MODE"
+fi
+
+# Decide the current state. Condition 1: an auto-ish permission mode; absent or unknown reads as off (fail toward default behavior).
+STATE=OFF
 case " $MODES " in
-  *" $MODE "*) ;;
-  *) exit 0 ;;
+  *" ${MODE:-none} "*)
+    # Condition 2: the dashboard is up and accepting remote answers (the same `remoteAnswer` field the ask-remote hook gates on — env switch AND toggle).
+    HEALTH=$(curl -sf -m 1 "$DASH/api/health" 2>/dev/null)
+    if [ -n "$HEALTH" ] && [ "$(printf '%s' "$HEALTH" | jq -r '.remoteAnswer // false' 2>/dev/null)" = "true" ]; then
+      STATE=ARMED
+      # Condition 3: if the server wants ANSWER_TOKEN from this caller (tokenRequired
+      # means "this caller would need it": never on loopback, the usual hook path), the
+      # sibling hooks can only reach its write endpoints when the token file exists —
+      # and the banner below is a promise about exactly those write endpoints.
+      #
+      # This condition exists because the banner was once the *only* visible signal
+      # and it was wrong: /api/health is untokened, so it answered cheerfully while
+      # every ask/plan/stop POST came back 403 and got swallowed by `curl -sf`. The
+      # session was told remote answering was armed for twelve hours in which not one
+      # question ever reached a phone (backlog bug-6). A banner that cannot be checked
+      # against the path it describes is worse than no banner.
+      #
+      # `// false` matters: an older server has no tokenRequired field, and warning on
+      # a server that never said it needs a token would be the same mistake inverted.
+      TOKEN_FILE="$HOME/.claude/hooks/dashboard-token"
+      if [ "$(printf '%s' "$HEALTH" | jq -r '.tokenRequired // false' 2>/dev/null)" = "true" ] && [ ! -f "$TOKEN_FILE" ]; then
+        STATE=NOTARMED
+      fi
+    fi
+    ;;
 esac
 
-# Condition 2: the dashboard is up and accepting remote answers (the same
-# `remoteAnswer` field the ask-remote hook gates on — env switch AND toggle).
-HEALTH=$(curl -sf -m 1 "$DASH/api/health" 2>/dev/null) || exit 0
-[ "$(printf '%s' "$HEALTH" | jq -r '.remoteAnswer // false')" = "true" ] || exit 0
+if [ "$STATE" = OFF ]; then
+  # Only an ARMED banner needs retracting: NOTARMED already said "ask at the terminal", and a session never told anything gets nothing and no marker.
+  [ "$LAST" = ARMED ] || exit 0
+  echo "REMOTE DECISION MODE is OFF now — remote answers are off, the dashboard is unreachable, or this session left an auto permission mode. The earlier REMOTE DECISION MODE rules no longer apply: ask at the terminal as usual."
+  record OFF
+  exit 0
+fi
 
-# Condition 3: if the server wants ANSWER_TOKEN from this caller (tokenRequired
-# means "this caller would need it": never on loopback, the usual hook path), the
-# sibling hooks can only reach its write endpoints when the token file exists —
-# and the banner below is a promise about exactly those write endpoints.
-#
-# This condition exists because the banner was once the *only* visible signal
-# and it was wrong: /api/health is untokened, so it answered cheerfully while
-# every ask/plan/stop POST came back 403 and got swallowed by `curl -sf`. The
-# session was told remote answering was armed for twelve hours in which not one
-# question ever reached a phone (backlog bug-6). A banner that cannot be checked
-# against the path it describes is worse than no banner.
-#
-# `// false` matters: an older server has no tokenRequired field, and warning on
-# a server that never said it needs a token would be the same mistake inverted.
-TOKEN_FILE="$HOME/.claude/hooks/dashboard-token"
-if [ "$(printf '%s' "$HEALTH" | jq -r '.tokenRequired // false')" = "true" ] && [ ! -f "$TOKEN_FILE" ]; then
+[ -z "$FORCE" ] && [ "$LAST" = "$STATE" ] && exit 0
+record "$STATE"
+
+if [ "$STATE" = NOTARMED ]; then
   cat <<EOF
 REMOTE DECISION MODE is NOT armed: the dashboard requires an auth token and
 $TOKEN_FILE is missing, so every question, plan and turn-end
@@ -109,7 +171,7 @@ EOF
   exit 0
 fi
 
-# Injected as context for this turn (UserPromptSubmit stdout on exit 0).
+# Injected as context (UserPromptSubmit and SessionStart stdout on exit 0 both are).
 cat <<'EOF'
 REMOTE DECISION MODE — the dashboard is accepting remote answers and this session
 runs without permission prompts. The user may be away from the terminal: they can
