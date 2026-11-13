@@ -2,7 +2,7 @@
 
 Decisions settled with the user on 2026-10-13. Source of truth for the look: [`docs/guides/mockups/redesign-mock.html`](../../guides/mockups/redesign-mock.html)
 (header comment, the MANAGEMENT CSS block and the MANAGEMENT `<script>` block). Supporting analysis of the five Git variants:
-[`2026-10-12-management-git-ux-mockups.html`](2026-10-12-management-git-ux-mockups.html). Plan: [`../plans/2026-10-13-management-redesign.md`](../plans/2026-10-13-management-redesign.md).
+[`2026-10-12-management-git-ux-mockups.html`](2026-10-12-management-git-ux-mockups.html). Plan: [`../plans/2026-10-13-management-redesign.md`](https://github.com/futin/claude-agents-dashboard/blob/85b39e0/docs/superpowers/plans/2026-10-13-management-redesign.md).
 
 ## 1. Why
 

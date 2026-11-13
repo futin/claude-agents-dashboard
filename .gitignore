@@ -15,3 +15,6 @@ client/dist/
 test-results/
 playwright-report/
 .playwright-mcp/
+
+# reviewer reports (doc-review, ui-verify, plan reviews) — spent once their findings are applied; 88 were pruned on 2026-11-13, see docs/superpowers/README.md
+docs/superpowers/reviews/

@@ -327,7 +327,7 @@ Not testable here, and so to be verified by hand: the rendered layouts against t
 
 ## §9 Phase 2: the Sync button
 
-Recorded with Phase 1, amended 2026-10-01 when Phase 2 was planned ([plan](../plans/2026-10-01-git-sync-button.md)). Phase 2 adds one **Sync** button
+Recorded with Phase 1, amended 2026-10-01 when Phase 2 was planned ([plan](https://github.com/futin/claude-agents-dashboard/blob/85b39e0/docs/superpowers/plans/2026-10-01-git-sync-button.md)). Phase 2 adds one **Sync** button
 per repo:
 
 - **Cards:** the right end of the card header.

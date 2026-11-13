@@ -269,7 +269,7 @@ server/
   lib/analyze.ts  whole-session post-mortem → SessionAnalysis
   lib/tool-output-replay.ts  replays transcripts → bytes each tool put into context × later turns, and what a read-guard / bash-trim
                   hook would have saved per threshold, with Bash split by command kind (no server route; scripts/tool-output-replay.ts is
-                  the one reader; findings: docs/superpowers/reviews/2026-11-12-context-mode-evaluation.md)
+                  the one reader; findings: docs/superpowers/decisions/2026-11-12-context-mode-evaluation.md)
   lib/subagent-usage.ts  sums one session's subagent transcripts → per-subagent token classes
   lib/session-spend.ts  GET /api/sessions/:id/spend: main + claimed subagent transcripts, followed incrementally
   lib/jsonl-tail.ts  byte-offset JSONL follower shared by agents-cache.ts and session-spend.ts

@@ -100,7 +100,7 @@ out-of-scope:
   - path: backlog/
     reason: the bugs/ideas/tasks store — item lifecycle, not reference prose
   - path: docs/superpowers/
-    reason: plans and specs — records of a moment
+    reason: design specs, decision logs and in-flight plans — records of a moment
   - path: docs/guides/
     reason: study guides and lesson decks; regenerate rather than maintain
   - path: docs/learning-notes/
