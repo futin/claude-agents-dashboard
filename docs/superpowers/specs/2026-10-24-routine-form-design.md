@@ -71,7 +71,7 @@ exist yet; `setRepos` has a local `drop()` that shows the shape. The existing `r
 the Repos field's read/write rather than being reimplemented.
 
 Field definitions and their read/write/summary functions are plain functions in a client lib module (testable under node-assert in `test/`, like
-`test/routines-view.test.ts` does for `client/src/lib/routines.ts`). The React rows only render them.
+`test/routines/routines-view.test.ts` does for `client/src/lib/routines.ts`). The React rows only render them.
 
 **Unreadable values.** If a field's line is present but `read` cannot represent it (a cron no preset matches is not unreadable — it is Custom; an
 `allowed-tools` written as a nested block is), the row's summary reads "edit in File" and its control is replaced by that one line with a link that switches
@@ -215,7 +215,7 @@ Because the wrapper and its generated libs are under `plugin/`, the change reach
   write removes the line; an unreadable value reads as unreadable; each preset row of the table above, both directions, and a Custom fallback for each
   near-miss (`25 9 * * 1-3` is Custom, not Weekly; `25 */5 * * *` is Custom, not Hourly).
 - Manual: parser accepts `manual` and still rejects an absent `cron`; reconcile does not desire and does uninstall a manual job (in the existing
-  `test/routine-reconcile.test.ts` style); the wrapper computes no slot; the regenerated `plugin/lib/*.mjs` matches (`test/plugin-manifest.test.ts`).
+  `test/routines/routine-reconcile.test.ts` style); the wrapper computes no slot; the regenerated `plugin/lib/*.mjs` matches (`test/guards/plugin-manifest.test.ts`).
 - `describeCron`: the simple shapes keep today's exact text; steps, ranges and lists in each field get words; an unphraseable cron falls back to its source.
 - `pnpm test:visual`: no baseline shows the drawer, but the Jobs shots change — the fixture's `*/30 9-18 * * 1-5` reaches the ledger through
   `describeCron` — and need re-baselining (macOS only, on demand).

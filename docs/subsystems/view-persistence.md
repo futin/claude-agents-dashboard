@@ -124,7 +124,7 @@ override it (see `dashboard.section` below).
     `<select>` holding a value none of its options carry renders blank — so a `list`/`split`
     default becomes `board` on that device. The setting is per-device already, which is what
     makes the rewrite affordable.
-  Both are pure and unit-tested (`test/filter-sort.test.ts`, `test/client-settings.test.ts`);
+  Both are pure and unit-tested (`test/sessions/filter-sort.test.ts`, `test/settings/client-settings.test.ts`);
   `clampSettings` stays width-agnostic and keeps accepting all six picker values, so a blob
   written on a laptop still validates on a phone.
 - **Analytics keeps the same split, one key over.** Its shape is `dashboard.analyticsLayout`,
@@ -152,7 +152,7 @@ override it (see `dashboard.section` below).
   after a reload. The token is kept on purpose: it is a credential
   rather than view state, and Reset is not a sign-out, so clearing it would silently disarm every route behind the write gate for a browser that needs the token (see [remote-access](remote-access.md#who-may-write)). It
   touches nothing on the server and nothing in `~/.claude`. Add a view-state key here and it belongs in that list too; the test in
-  `test/client-settings.test.ts` fails if it is missing. It finds keys by scanning for `usePersistedState('<key>'` calls, and also the first argument of every
+  `test/settings/client-settings.test.ts` fails if it is missing. It finds keys by scanning for `usePersistedState('<key>'` calls, and also the first argument of every
   `localStorage.setItem(` and every `storageKey:` handed to a ui-kit hook, a literal or a `const` it resolves — which is how it sees `dashboard.releases.lastSeen`.
 
 <!-- docs-sync:

@@ -3,7 +3,7 @@
  *
  * Lives in `lib/` rather than in `SideRail.tsx` because `lib/settings.ts`
  * needs the list at runtime (the landing picker and its validator are both
- * derived from it) and `test/client-settings.test.ts` imports that module in
+ * derived from it) and `test/settings/client-settings.test.ts` imports that module in
  * plain Node — a `.tsx` component would drag `react/jsx-runtime` into a
  * node-assert test's import graph. No JSX, no imports.
  */

@@ -184,7 +184,7 @@ All spec'd strings live in one `codegraphText.ts`, as Git's do.
 - `shared/types.ts` first, then server, then client (CLAUDE.md).
 - Server: Node built-ins only; `execFile`/`spawn` with argv. Running `codegraph` is a local process launch, like `git` and `claude`. The CLI keeps its own
   update check (`~/.codegraph/update-check.json`; telemetry is disabled on this machine), so it may make its own network call — the same standing as `git fetch`
-  in CLAUDE.md §Code rules: not a third kind for the server, but the sentence in CLAUDE.md and `docs/overview.md` must name it, and `test/outbound.test.ts`'s
+  in CLAUDE.md §Code rules: not a third kind for the server, but the sentence in CLAUDE.md and `docs/overview.md` must name it, and `test/guards/outbound.test.ts`'s
   doc half must still pass. Every launch sets `CODEGRAPH_NO_UPDATE_CHECK=1` and `CODEGRAPH_NO_DOWNLOAD=1` (the npm shim otherwise downloads its bundle from
   GitHub when missing); the outbound sentence names both. The shim is `#!/usr/bin/env node`, so the server's `PATH` must reach `node` as well as `codegraph`.
 - No hardcoded colors in `styles.css`; reuse Git's classes where the shape is identical, add `cg-*` only for what is new (the kinds strip, Inspector tiles).

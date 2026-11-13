@@ -46,7 +46,7 @@ export function useGitSync(onEnded: () => void): GitSyncControl {
   const { settings } = useSettings();
   const remote = useRemoteAnswer();
   const { launch, pending, error, needsToken, readOnly } = useSpawn();
-  // The literal key, not SYNC_RUNS_KEY: the Reset sweep in test/client-settings.test.ts reads keys off the source.
+  // The literal key, not SYNC_RUNS_KEY: the Reset sweep in test/settings/client-settings.test.ts reads keys off the source.
   const [stored, setStored] = usePersistedState<unknown>('management.syncRuns', {});
   const runs = parseSyncRuns(stored);
   const [chatId, setChatId] = useState<string | null>(null);

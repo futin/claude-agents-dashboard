@@ -53,7 +53,7 @@
   --green-tint:color-mix(in srgb,var(--green) 18%,transparent);
   /* amber and mustard as a soft pill: the fill behind the text (11% amber, 13% mustard — the redesign mock's Git tints) and the text on it. On the dark
      boards both are the accent itself, which clears 4.5:1 on its own tint in every dark theme; daylight overrides them with the mock's own hues, the
-     fill as the mock mixes it and the text the lightest shade of that hue that clears 4.5:1 on the fill (`test/daylight-contrast.test.ts`). */
+     fill as the mock mixes it and the text the lightest shade of that hue that clears 4.5:1 on the fill (`test/guards/daylight-contrast.test.ts`). */
   --amber-tint:color-mix(in srgb,var(--amber) 11%,transparent);--amber-ink:var(--amber);
   /* amber as a solid mark (context bars, status dots, meters, borders, tinted notices) and as text on the bare card. On the dark boards both are the accent
      itself; daylight splits them — the mark takes the mock's bright #C4761F, which clears 3:1 as a non-text object, and the text takes the ink, because no
@@ -119,7 +119,7 @@
      surface they sit on, and each accent on its own `color-mix` pill tint, which
      darkens with it — composited over `--strip-hi`, not white, since pills sit
      on hover rows and section heads too. The accents are fills too, so those darken with the text —
-     one token per role, no text-only twins. `test/daylight-contrast.test.ts`
+     one token per role, no text-only twins. `test/guards/daylight-contrast.test.ts`
      recomputes every pair from this block.
 
    Shadows drop right down: a lift that reads as depth on black reads as dirt
@@ -3277,7 +3277,7 @@ button.chip[aria-pressed="true"]{color:var(--ink);background:var(--strip-hi)}
    own tint; the 14% mixes carry each theme's hue through. Full screen below `md` is ui-kit's `narrow`, passed in from `useNarrow`. `--uk-ink-muted` is
    `--ink2`, as in the other two apps: the chip draws its 12px label in it on `--steel`, where `--ink3` measured 3.5-3.9:1 on the four dark themes and
    `--ink2` 6.7-8.0:1 on all five. Mapping only:
-   `test/ui-kit-guard.test.ts` fails on any other rule on a `.uk-*` class. */
+   `test/guards/ui-kit-guard.test.ts` fails on any other rule on a `.uk-*` class. */
 .uk-chip,.uk-drawer-scrim{
   --uk-panel-bg:var(--strip);--uk-ink:var(--ink);--uk-ink-muted:var(--ink2);--uk-hairline:var(--hairline);--uk-scrim:var(--scrim);--uk-shadow:var(--shadow2);
   --uk-accent:var(--cyan);--uk-hover-bg:var(--steel);--uk-code-bg:var(--steel);--uk-font:var(--font);--uk-font-mono:var(--font);
@@ -3330,7 +3330,7 @@ button.chip[aria-pressed="true"]{color:var(--ink);background:var(--strip-hi)}
 /* ── Routines (spec §UI, the Ledger mock). Phone first: `.rtn-hide` is what only the wide grid has room for and `.rtn-phone` is the stacked
    stand-in for it; the two swap at lg (1024), where the 7-column ledger first fits beside the 240 rail. At 1024 each kind of `.rtn-hide` element gets its author
    display back by name: `revert` would drop `.rtn-cell`'s flex to the UA block, and a `max-width` hide would break the min-width-only ladder
-   (test/breakpoints.test.ts). A new `.rtn-hide` on an element whose own rule sets a display needs its pair added to that list. Both are scoped under
+   (test/guards/breakpoints.test.ts). A new `.rtn-hide` on an element whose own rule sets a display needs its pair added to that list. Both are scoped under
    `.rtn-view` so they outrank the component rules below (`.git-chip`, `.seg`) without a `!important`. Red and cyan have no tint token, so their fills are mixed here as the
    codegraph chip does. ── */
 .mgmt-title.rtn-title{flex-direction:row;align-items:center;flex-wrap:wrap}

@@ -42,7 +42,7 @@ shape differs too:
 ```
 
 Note `decision: {behavior}` — **not** `PreToolUse`'s flat `permissionDecision` string.
-Getting this wrong fails silently: the hook's output is ignored and the card just appears. `test/hook-decisions.test.ts` pins this shape, the `rejected` status it is printed
+Getting this wrong fails silently: the hook's output is ignored and the card just appears. `test/hooks/hook-decisions.test.ts` pins this shape, the `rejected` status it is printed
 for, and the hook's unreadable-idle-is-at-desk rule.
 
 ## The pieces
@@ -113,7 +113,7 @@ remote as a held question.
   together with the autopilot CLI (`sync.sh pull`), or a `running` run still idles on every denied question.
 - **A routine step steps both hooks aside.** `plan-remote-hook.sh` and `remote-decision-hook.sh` exit 0 right after their `CLAUDECODE` check when
   `CLAUDE_DASHBOARD_ROUTINE` (or the pre-rename `CLAUDE_DASHBOARD_SCHEDULE`) is set: the [routine wrapper](routines.md#the-wrapper) stamps it on an
-  unattended child, so no plan is held and no away-mode instruction is injected (`test/hooks-routine-marker.test.ts`).
+  unattended child, so no plan is held and no away-mode instruction is injected (`test/hooks/hooks-routine-marker.test.ts`).
 
 ## The away-mode alternative: skip plan mode entirely
 
@@ -142,7 +142,7 @@ prints a one-line notice naming the file and pointing at `pnpm hooks:install`, i
 the banner. `tokenRequired` means *this caller* would need the token (`writeAccess ===
 'token'`), so a hook on loopback, which is always trusted, never trips it. An older server
 sends no `tokenRequired`, which reads as `false` and keeps the old behaviour rather than
-warning wrongly. `test/hooks-token.test.ts` pins all three readings against the real script.
+warning wrongly. `test/hooks/hooks-token.test.ts` pins all three readings against the real script.
 
 When all hold it injects an instruction for that turn: put each decision that is the user's through
 `AskUserQuestion` (including skill-driven asks like the brainstorming skill's mode pick),

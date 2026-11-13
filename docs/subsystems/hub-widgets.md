@@ -70,16 +70,16 @@ shows "No data yet" with "Claude Agents Dashboard answered 500". The reason stay
 
 `server/` is otherwise Node built-ins only. `lookout-widgets` is one of two named exceptions (`.claude/CLAUDE.md`, "Keep new deps out of `server/`"; the
 other is `release-kit`, see [releases](releases.md)): it has no runtime dependencies of its own and is pinned to a git tag,
-`github:futin/lookout-widgets#v0.1.0`, with `dist/` committed so nothing builds at install. `test/server-deps.test.ts` holds both ends: every bare import
+`github:futin/lookout-widgets#v0.1.0`, with `dist/` committed so nothing builds at install. `test/guards/server-deps.test.ts` holds both ends: every bare import
 under `server/` must be one of the named packages, and `package.json` must pin `lookout-widgets` to that literal tag and `release-kit` to any exact
 `vX.Y.Z` tag (`isExactKitPin`). The package makes no network calls, so
-`test/outbound.test.ts` is unchanged.
+`test/guards/outbound.test.ts` is unchanged.
 
 ## Adding a widget
 
 1. Declare it in `createDashboardHub` (`server/lib/hub-widgets.ts`): an id, a title, a `render`, `refreshSeconds`, and a `load` that returns the render's
    shape — the package's README lists them. Feed it through an injectable getter, as `usage`, `sessions` and `git` are.
-2. Add a mapping test to `test/hub-widgets.test.ts` with fixture getters.
+2. Add a mapping test to `test/infra/hub-widgets.test.ts` with fixture getters.
 3. The `checkWidgets` case at the top of that file already fetches the catalog and every widget through the handler and validates them against the contract.
    A widget with a required param needs a case there.
 
@@ -93,8 +93,8 @@ data the dashboard already exposes, and a write path through Lookout would need 
     - server/api.ts
     - server/index.ts
     - shared/gitUpstream.ts
-    - test/hub-widgets.test.ts
-    - test/server-deps.test.ts
+    - test/infra/hub-widgets.test.ts
+    - test/guards/server-deps.test.ts
   kind: subsystem
   verified: 24f8d773dd459e02b1e4ef4a093aed285939555c
 -->

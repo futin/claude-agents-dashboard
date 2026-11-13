@@ -1,6 +1,6 @@
 /**
  * gitQuick.ts — the rules behind the Sync key's menu (quick pull/push spec §Copy table, §Precedence): whether Pull, Push and Sync are enabled and the one
- * line each shows, and the result line a finished quick op leaves. Pure, so `test/git-quick-client.test.ts` drives it without React. The server re-reads
+ * line each shows, and the result line a finished quick op leaves. Pure, so `test/git/git-quick-client.test.ts` drives it without React. The server re-reads
  * the repo before it moves anything, so these rules only decide what the menu offers, never what git is allowed to do.
  */
 

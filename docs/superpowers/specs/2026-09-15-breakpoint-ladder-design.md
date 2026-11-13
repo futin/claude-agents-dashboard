@@ -257,7 +257,7 @@ rendered before and needs a look on every surface.
 ## Verification
 
 - `pnpm typecheck` and `pnpm test` green, with output.
-- New guard test, modelled on `test/tailnet.test.ts`: assert the seven
+- New guard test, modelled on `test/infra/tailnet.test.ts`: assert the seven
   breakpoint literals appear in `styles.css` only inside `@media` queries and the
   documented token block — no stray width literals elsewhere.
 - Manual pass on every surface at each of the seven tiers × both content-width

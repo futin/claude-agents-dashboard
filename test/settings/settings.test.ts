@@ -1,0 +1,690 @@
+import assert from 'node:assert';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+
+import {
+  DEFAULT_ANSWER_SECS, DEFAULT_GIT_FETCH_SECS, DEFAULT_IDLE_SECS, DEFAULT_LAUNCH_SURFACE, DEFAULT_NOTIFY, DEFAULT_TRUST_TAILNET, GIT_FETCH_SECS, MAX_ANSWER_SECS, MAX_IDLE_SECS,
+  MAX_PINNED_PROJECTS, MIN_ANSWER_SECS, NOTIFY_EVENTS, SETTINGS_FILE,
+  clampAnswerSecs, clampIdleSecs, clampPinned, detectAnswerOverride, detectIdleOverride,
+  getGitFetchSecs, getPinnedProjects, getSettings, parseGitFetchSecs, resetSettings, setPinned, setPinOrder, setSettings
+} from '../../server/lib/settings.js';
+import { projectParams, scanOverrides } from '../../server/api.js';
+import type { Config } from '../../server/lib/config.js';
+
+function test(name: string, fn: () => void): boolean {
+  try { fn(); console.log('  ✓ ' + name); return true; }
+  catch (e) { console.log('  ✗ ' + name); console.log('    ' + (e as Error).message); return false; }
+}
+
+/** The settings file is resolved from cwd, so tests run inside a tmpdir. */
+function inTmpCwd(fn: (dir: string) => void): void {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cad-set-'));
+  const prev = process.cwd();
+  const prevEnv = process.env.CLAUDE_DASHBOARD_IDLE_SECS;
+  const prevAnswerEnv = process.env.CLAUDE_DASHBOARD_ANSWER_TIMEOUT;
+  try {
+    process.chdir(dir);
+    // The override probe reads these; a developer with one exported would
+    // otherwise see every override assertion flip.
+    delete process.env.CLAUDE_DASHBOARD_IDLE_SECS;
+    delete process.env.CLAUDE_DASHBOARD_ANSWER_TIMEOUT;
+    resetSettings();
+    fn(dir);
+  } finally {
+    process.chdir(prev);
+    if (prevEnv === undefined) delete process.env.CLAUDE_DASHBOARD_IDLE_SECS;
+    else process.env.CLAUDE_DASHBOARD_IDLE_SECS = prevEnv;
+    if (prevAnswerEnv === undefined) delete process.env.CLAUDE_DASHBOARD_ANSWER_TIMEOUT;
+    else process.env.CLAUDE_DASHBOARD_ANSWER_TIMEOUT = prevAnswerEnv;
+    resetSettings();
+  }
+}
+
+/** Run `fn` with `DASHBOARD_STATE_DIR` set to `value` (deleted when undefined), restoring the caller's value after (#407). */
+function withStateDir(value: string | undefined, fn: () => void): void {
+  const prev = process.env.DASHBOARD_STATE_DIR;
+  try {
+    if (value === undefined) delete process.env.DASHBOARD_STATE_DIR;
+    else process.env.DASHBOARD_STATE_DIR = value;
+    fn();
+  } finally {
+    if (prev === undefined) delete process.env.DASHBOARD_STATE_DIR;
+    else process.env.DASHBOARD_STATE_DIR = prev;
+  }
+}
+
+/** Only the fields scanOverrides reads. */
+function cfg(): Config {
+  return { maxSessions: 10, lookbackHours: 24, activeWindowMin: 5 } as Config;
+}
+
+export function run(): number {
+  console.log('\n=== settings.ts ===\n');
+  let p = 0, f = 0;
+
+  if (test('defaults to 60s when nothing is stored', () => {
+    inTmpCwd(() => {
+      const s = getSettings();
+      assert.strictEqual(s.idleSecs, DEFAULT_IDLE_SECS);
+      assert.strictEqual(s.answerSecs, DEFAULT_ANSWER_SECS);
+      assert.strictEqual(s.persisted, true);
+    });
+  })) p++; else f++;
+
+  if (test('a stored value survives a restart', () => {
+    inTmpCwd(dir => {
+      setSettings({ idleSecs: 15 });
+      assert.strictEqual(JSON.parse(fs.readFileSync(path.join(dir, SETTINGS_FILE), 'utf8')).idleSecs, 15);
+      resetSettings(); // simulate the server restarting
+      assert.strictEqual(getSettings().idleSecs, 15);
+    });
+  })) p++; else f++;
+
+  if (test('0 is a real value, not "unset" — it means skip the idle check', () => {
+    inTmpCwd(() => {
+      assert.strictEqual(setSettings({ idleSecs: 0 })!.idleSecs, 0);
+      resetSettings();
+      assert.strictEqual(getSettings().idleSecs, 0, 'a falsy stored value must not fall back to 60');
+    });
+  })) p++; else f++;
+
+  if (test('values are clamped, not rejected', () => {
+    assert.strictEqual(clampIdleSecs(-5), 0);
+    assert.strictEqual(clampIdleSecs(99_999), MAX_IDLE_SECS);
+    assert.strictEqual(clampIdleSecs(12.6), 13, 'seconds are whole');
+    assert.strictEqual(clampIdleSecs('45'), 45, 'a JSON string still parses');
+  })) p++; else f++;
+
+  if (test('the answer window clamps to the same range pending.ts enforces', () => {
+    assert.strictEqual(clampAnswerSecs(0), MIN_ANSWER_SECS, 'there is no zero-length wait');
+    assert.strictEqual(clampAnswerSecs(-5), MIN_ANSWER_SECS);
+    assert.strictEqual(clampAnswerSecs(99_999), MAX_ANSWER_SECS);
+    assert.strictEqual(clampAnswerSecs(120.4), 120, 'seconds are whole');
+    assert.strictEqual(clampAnswerSecs('300'), 300, 'a JSON string still parses');
+    assert.strictEqual(clampAnswerSecs('soon'), null);
+    assert.strictEqual(clampAnswerSecs(undefined), null);
+  })) p++; else f++;
+
+  if (test('either key can be saved on its own, leaving the other alone', () => {
+    inTmpCwd(() => {
+      const a = setSettings({ answerSecs: 120 })!;
+      assert.strictEqual(a.answerSecs, 120);
+      assert.strictEqual(a.idleSecs, DEFAULT_IDLE_SECS, 'an absent key keeps its stored value');
+
+      const b = setSettings({ idleSecs: 30 })!;
+      assert.strictEqual(b.idleSecs, 30);
+      assert.strictEqual(b.answerSecs, 120, 'and the earlier save is not clobbered');
+
+      resetSettings(); // simulate the server restarting
+      const after = getSettings();
+      assert.strictEqual(after.idleSecs, 30);
+      assert.strictEqual(after.answerSecs, 120);
+    });
+  })) p++; else f++;
+
+  if (test('a present-but-unusable key rejects the whole patch', () => {
+    inTmpCwd(() => {
+      setSettings({ idleSecs: 30, answerSecs: 120 });
+      assert.strictEqual(setSettings({ idleSecs: 10, answerSecs: 'soon' }), null);
+      resetSettings();
+      assert.strictEqual(getSettings().idleSecs, 30, 'no half-applied save');
+    });
+  })) p++; else f++;
+
+  if (test('an unusable body is refused rather than silently ignored', () => {
+    inTmpCwd(dir => {
+      for (const body of [null, undefined, 'nope', {}, { idleSecs: 'soon' }, { other: 1 }]) {
+        assert.strictEqual(setSettings(body), null, JSON.stringify(body ?? String(body)));
+      }
+      assert.strictEqual(fs.existsSync(path.join(dir, SETTINGS_FILE)), false, 'a refused write must not touch disk');
+    });
+  })) p++; else f++;
+
+  if (test('a malformed file falls back to the default', () => {
+    for (const body of ['', 'not json', '{}', '{"idleSecs":"yes"}', '[]']) {
+      inTmpCwd(dir => {
+        fs.writeFileSync(path.join(dir, SETTINGS_FILE), body);
+        resetSettings();
+        const s = getSettings();
+        assert.strictEqual(s.idleSecs, DEFAULT_IDLE_SECS, JSON.stringify(body));
+        assert.strictEqual(s.answerSecs, DEFAULT_ANSWER_SECS, JSON.stringify(body));
+      });
+    }
+  })) p++; else f++;
+
+  if (test('each key falls back independently, so an older file still loads', () => {
+    inTmpCwd(dir => {
+      // Written by a build that only knew about idleSecs.
+      fs.writeFileSync(path.join(dir, SETTINGS_FILE), JSON.stringify({ idleSecs: 45 }));
+      resetSettings();
+      const s = getSettings();
+      assert.strictEqual(s.idleSecs, 45);
+      assert.strictEqual(s.answerSecs, DEFAULT_ANSWER_SECS);
+    });
+  })) p++; else f++;
+
+  if (test('an unwritable path keeps working and reports persisted:false', () => {
+    inTmpCwd(dir => {
+      fs.mkdirSync(path.join(dir, SETTINGS_FILE)); // writeFileSync now throws EISDIR
+      const s = setSettings({ idleSecs: 20 })!;
+      assert.strictEqual(s.idleSecs, 20, 'the value still applies this run');
+      assert.strictEqual(s.persisted, false, 'and the UI is told it will not survive a restart');
+    });
+  })) p++; else f++;
+
+  if (test('an env override in ~/.claude/settings.json is detected', () => {
+    inTmpCwd(dir => {
+      const home = path.join(dir, 'home');
+      fs.mkdirSync(path.join(home, '.claude'), { recursive: true });
+      const write = (body: string): void =>
+        fs.writeFileSync(path.join(home, '.claude', 'settings.json'), body);
+
+      assert.strictEqual(detectIdleOverride(home), null, 'no file, nothing to warn about');
+
+      write(JSON.stringify({ env: { CLAUDE_DASHBOARD_IDLE_SECS: '90' } }));
+      assert.deepStrictEqual(detectIdleOverride(home), { value: '90', source: 'settings.json' });
+
+      // The hook resolves `${VAR:-…}`, so an empty string is NOT an override.
+      write(JSON.stringify({ env: { CLAUDE_DASHBOARD_IDLE_SECS: '' } }));
+      assert.strictEqual(detectIdleOverride(home), null);
+
+      write(JSON.stringify({ env: { SOMETHING_ELSE: '1' } }));
+      assert.strictEqual(detectIdleOverride(home), null);
+
+      write('{ not json');
+      assert.strictEqual(detectIdleOverride(home), null, 'unreadable config must not crash the health probe');
+    });
+  })) p++; else f++;
+
+  if (test('the answer window has its own override probe, on its own var', () => {
+    inTmpCwd(dir => {
+      const home = path.join(dir, 'home');
+      fs.mkdirSync(path.join(home, '.claude'), { recursive: true });
+      fs.writeFileSync(
+        path.join(home, '.claude', 'settings.json'),
+        JSON.stringify({ env: { CLAUDE_DASHBOARD_ANSWER_TIMEOUT: '300' } })
+      );
+      assert.deepStrictEqual(detectAnswerOverride(home), { value: '300', source: 'settings.json' });
+      assert.strictEqual(detectIdleOverride(home), null, 'the two vars must not cross-warn');
+    });
+  })) p++; else f++;
+
+  if (test('the server’s own environment counts as an override too', () => {
+    inTmpCwd(dir => {
+      const home = path.join(dir, 'empty-home');
+      process.env.CLAUDE_DASHBOARD_IDLE_SECS = '5';
+      assert.deepStrictEqual(detectIdleOverride(home), { value: '5', source: 'environment' });
+      delete process.env.CLAUDE_DASHBOARD_IDLE_SECS;
+      assert.strictEqual(detectIdleOverride(home), null);
+    });
+  })) p++; else f++;
+
+  console.log('\n=== scanOverrides (api.ts) ===\n');
+
+  if (test('projectParams: repeated project params become one set; none, or only empty ones, is no filter', () => {
+    assert.deepStrictEqual(projectParams(new URLSearchParams('limit=5&project=a&project=b%20c&project=a')), new Set(['a', 'b c']));
+    assert.strictEqual(projectParams(new URLSearchParams('limit=5')), null);
+    assert.strictEqual(projectParams(new URLSearchParams('project=')), null);
+    assert.strictEqual(projectParams(undefined), null);
+  })) p++; else f++;
+
+  if (test('no params leaves the configured values alone', () => {
+    assert.deepStrictEqual(scanOverrides(cfg(), undefined), cfg());
+    const same = scanOverrides(cfg(), new URLSearchParams(''));
+    assert.strictEqual(same.maxSessions, 10);
+    assert.strictEqual(same.lookbackHours, 24);
+    assert.strictEqual(same.activeWindowMin, 5);
+  })) p++; else f++;
+
+  if (test('params override each knob independently', () => {
+    const c = scanOverrides(cfg(), new URLSearchParams('limit=3&lookback=48&active=15'));
+    assert.strictEqual(c.maxSessions, 3);
+    assert.strictEqual(c.lookbackHours, 48);
+    assert.strictEqual(c.activeWindowMin, 15);
+    const one = scanOverrides(cfg(), new URLSearchParams('limit=3'));
+    assert.strictEqual(one.lookbackHours, 24, 'an absent param keeps the config value');
+  })) p++; else f++;
+
+  if (test('a hostile limit is capped, not honoured', () => {
+    assert.strictEqual(scanOverrides(cfg(), new URLSearchParams('limit=100000')).maxSessions, 50);
+    assert.strictEqual(scanOverrides(cfg(), new URLSearchParams('lookback=99999')).lookbackHours, 168);
+    assert.strictEqual(scanOverrides(cfg(), new URLSearchParams('active=99999')).activeWindowMin, 120);
+  })) p++; else f++;
+
+  if (test('junk and non-positive values fall back to the config', () => {
+    for (const q of ['limit=abc', 'limit=0', 'limit=-4', 'limit=', 'limit=NaN']) {
+      assert.strictEqual(scanOverrides(cfg(), new URLSearchParams(q)).maxSessions, 10, q);
+    }
+  })) p++; else f++;
+
+  if (test('the config object is copied, never mutated', () => {
+    const base = cfg();
+    scanOverrides(base, new URLSearchParams('limit=3'));
+    assert.strictEqual(base.maxSessions, 10, 'the shared config must survive a request');
+  })) p++; else f++;
+
+  if (test('notify defaults to every switch off', () => {
+    inTmpCwd(() => {
+      const s = getSettings();
+      assert.deepStrictEqual(s.notify, DEFAULT_NOTIFY);
+      assert.strictEqual(s.notify.enabled, false);
+      assert.strictEqual(s.notify.events.question, false);
+    });
+  })) p++; else f++;
+
+  if (test('a notify patch merges instead of replacing', () => {
+    inTmpCwd(() => {
+      setSettings({ notify: { enabled: true } });
+      setSettings({ notify: { events: { question: true } } });
+      const s = getSettings();
+      assert.strictEqual(s.notify.enabled, true, 'enabled survived the second patch');
+      assert.strictEqual(s.notify.events.question, true);
+      assert.strictEqual(s.notify.events.stop, false, 'untouched events stay off');
+    });
+  })) p++; else f++;
+
+  if (test('a stored notify policy survives a restart', () => {
+    inTmpCwd(() => {
+      setSettings({ notify: { enabled: true, requireAfk: true } });
+      resetSettings(); // simulate the server restarting
+      const s = getSettings();
+      assert.strictEqual(s.notify.enabled, true);
+      assert.strictEqual(s.notify.requireAfk, true);
+    });
+  })) p++; else f++;
+
+  if (test('a bad notify value rejects the whole patch', () => {
+    inTmpCwd(() => {
+      setSettings({ notify: { enabled: true } });
+      assert.strictEqual(setSettings({ notify: { enabled: 'yes' } }), null);
+      assert.strictEqual(getSettings().notify.enabled, true, 'previous value untouched');
+    });
+  })) p++; else f++;
+
+  if (test('a bad or unknown event key rejects the whole patch', () => {
+    inTmpCwd(() => {
+      assert.strictEqual(setSettings({ notify: { events: { question: 1 } } }), null);
+      assert.strictEqual(setSettings({ notify: { events: { nope: true } } }), null);
+    });
+  })) p++; else f++;
+
+  if (test('a file saved before the rename keeps its policy: schedule-failed reads as routine-failed, every other switch intact', () => {
+    inTmpCwd(dir => {
+      const events = { question: true, stop: true, permission: false, plan: true, 'schedule-failed': true, 'usage-limit': false, 'usage-reset': false };
+      fs.writeFileSync(path.join(dir, SETTINGS_FILE), JSON.stringify({ notify: { enabled: true, events, requireAfk: true } }));
+      resetSettings();
+      const n = getSettings().notify;
+      assert.strictEqual(n.enabled, true, 'one old key must not drop the whole policy to the defaults');
+      assert.strictEqual(n.requireAfk, true);
+      assert.deepStrictEqual([n.events['routine-failed'], n.events.question, n.events.permission], [true, true, false]);
+      assert.strictEqual('schedule-failed' in n.events, false);
+    });
+  })) p++; else f++;
+
+  if (test('mirror: a stored routine-failed is read as it is, and an unrelated unknown event still voids the policy', () => {
+    inTmpCwd(dir => {
+      fs.writeFileSync(path.join(dir, SETTINGS_FILE), JSON.stringify({ notify: { enabled: true, events: { 'routine-failed': true } } }));
+      resetSettings();
+      assert.strictEqual(getSettings().notify.events['routine-failed'], true);
+      fs.writeFileSync(path.join(dir, SETTINGS_FILE), JSON.stringify({ notify: { enabled: true, events: { 'bogus-event': true } } }));
+      resetSettings();
+      assert.strictEqual(getSettings().notify.enabled, false);
+    });
+  })) p++; else f++;
+
+  if (test('routine-failed is the fifth notify event: listed, off by default, and settable on its own', () => {
+    assert.deepStrictEqual(NOTIFY_EVENTS.slice(0, 5), ['question', 'stop', 'permission', 'plan', 'routine-failed']);
+    assert.deepStrictEqual(Object.keys(DEFAULT_NOTIFY.events).sort(), [...NOTIFY_EVENTS].sort());
+    inTmpCwd(() => {
+      assert.strictEqual(getSettings().notify.events['routine-failed'], false);
+      assert.notStrictEqual(setSettings({ notify: { events: { 'routine-failed': true } } }), null);
+      resetSettings();
+      const events = getSettings().notify.events;
+      assert.strictEqual(events['routine-failed'], true, 'survives a restart');
+      assert.strictEqual(events.question, false, 'the other four stay off');
+    });
+  })) p++; else f++;
+
+  if (test('NOTIFY_EVENTS includes both usage events, off by default', () => {
+    assert.ok(NOTIFY_EVENTS.includes('usage-limit'));
+    assert.ok(NOTIFY_EVENTS.includes('usage-reset'));
+    assert.strictEqual(DEFAULT_NOTIFY.events['usage-limit'], false);
+    assert.strictEqual(DEFAULT_NOTIFY.events['usage-reset'], false);
+  })) p++; else f++;
+
+  if (test('a stored policy without the usage keys loads them as false', () => {
+    inTmpCwd(dir => {
+      const events = { question: true, stop: false, permission: false, plan: false, 'routine-failed': true };
+      fs.writeFileSync(path.join(dir, SETTINGS_FILE), JSON.stringify({ notify: { enabled: true, events } }), 'utf8');
+      resetSettings();
+      const loaded = getSettings().notify.events;
+      assert.strictEqual(loaded.question, true);
+      assert.strictEqual(loaded['usage-limit'], false);
+      assert.strictEqual(loaded['usage-reset'], false);
+    });
+  })) p++; else f++;
+
+  if (test('a notify patch accepts usage-limit and usage-reset', () => {
+    inTmpCwd(() => {
+      assert.notStrictEqual(setSettings({ notify: { events: { 'usage-limit': true, 'usage-reset': true } } }), null);
+      resetSettings();
+      const events = getSettings().notify.events;
+      assert.strictEqual(events['usage-limit'], true);
+      assert.strictEqual(events['usage-reset'], true);
+    });
+  })) p++; else f++;
+
+  if (test('tick-capped is a notify event, off by default; a stored policy without it keeps every other switch', () => {
+    assert.ok(NOTIFY_EVENTS.includes('tick-capped'));
+    assert.strictEqual(DEFAULT_NOTIFY.events['tick-capped'], false);
+    inTmpCwd(dir => {
+      const events = { question: true, stop: false, permission: true, plan: false, 'routine-failed': true, 'usage-limit': true, 'usage-reset': false };
+      fs.writeFileSync(path.join(dir, SETTINGS_FILE), JSON.stringify({ notify: { enabled: true, events } }), 'utf8');
+      resetSettings();
+      const loaded = getSettings().notify;
+      assert.strictEqual(loaded.enabled, true);
+      assert.deepStrictEqual(loaded.events, { ...events, 'tick-capped': false });
+    });
+  })) p++; else f++;
+
+  if (test('a notify patch accepts tick-capped', () => {
+    inTmpCwd(() => {
+      assert.notStrictEqual(setSettings({ notify: { events: { 'tick-capped': true } } }), null);
+      resetSettings();
+      assert.strictEqual(getSettings().notify.events['tick-capped'], true);
+    });
+  })) p++; else f++;
+
+  if (test('an unreadable settings file yields notify defaults', () => {
+    inTmpCwd(dir => {
+      fs.writeFileSync(path.join(dir, SETTINGS_FILE), '{not json', 'utf8');
+      resetSettings();
+      assert.deepStrictEqual(getSettings().notify, DEFAULT_NOTIFY);
+    });
+  })) p++; else f++;
+
+  if (test('recordUsageHistory: defaults off', () => {
+    inTmpCwd(() => {
+      assert.strictEqual(getSettings().recordUsageHistory, false);
+    });
+  })) p++; else f++;
+
+  if (test('recordUsageHistory: accepts a boolean patch', () => {
+    inTmpCwd(() => {
+      const s = setSettings({ recordUsageHistory: true });
+      assert.strictEqual(s?.recordUsageHistory, true);
+    });
+  })) p++; else f++;
+
+  if (test('recordUsageHistory: a non-boolean rejects the whole patch', () => {
+    inTmpCwd(() => {
+      assert.strictEqual(setSettings({ recordUsageHistory: 'yes' }), null);
+    });
+  })) p++; else f++;
+
+  if (test('recordUsageHistory: rejecting leaves the stored value untouched', () => {
+    inTmpCwd(() => {
+      setSettings({ recordUsageHistory: true });
+      setSettings({ recordUsageHistory: 3 });
+      assert.strictEqual(getSettings().recordUsageHistory, true);
+    });
+  })) p++; else f++;
+
+  if (test('trustTailnet: on in a fresh home', () => {
+    inTmpCwd(() => {
+      assert.strictEqual(DEFAULT_TRUST_TAILNET, true);
+      assert.strictEqual(getSettings().trustTailnet, true);
+    });
+  })) p++; else f++;
+
+  if (test('trustTailnet: a settings file from before the switch existed reads as on', () => {
+    inTmpCwd(dir => {
+      fs.writeFileSync(path.join(dir, SETTINGS_FILE), JSON.stringify({ idleSecs: 30, answerSecs: 600, recordUsageHistory: true, gitFetchSecs: 60 }), 'utf8');
+      resetSettings();
+      assert.strictEqual(getSettings().trustTailnet, true);
+    });
+  })) p++; else f++;
+
+  if (test('trustTailnet: a false patch is returned and survives a re-read from disk', () => {
+    inTmpCwd(dir => {
+      assert.strictEqual(setSettings({ trustTailnet: false })?.trustTailnet, false);
+      assert.strictEqual(JSON.parse(fs.readFileSync(path.join(dir, SETTINGS_FILE), 'utf8')).trustTailnet, false);
+      resetSettings();
+      assert.strictEqual(getSettings().trustTailnet, false);
+    });
+  })) p++; else f++;
+
+  if (test('trustTailnet: a non-boolean rejects the patch and leaves it on', () => {
+    inTmpCwd(() => {
+      assert.strictEqual(setSettings({ trustTailnet: 'no' }), null);
+      assert.strictEqual(getSettings().trustTailnet, true);
+    });
+  })) p++; else f++;
+
+  if (test('trustTailnet: a stored non-boolean reads as on', () => {
+    inTmpCwd(dir => {
+      fs.writeFileSync(path.join(dir, SETTINGS_FILE), JSON.stringify({ trustTailnet: 1 }), 'utf8');
+      resetSettings();
+      assert.strictEqual(getSettings().trustTailnet, true);
+    });
+  })) p++; else f++;
+
+  if (test('gitFetchSecs: the six values, in order, with 0 as the default', () => {
+    assert.deepStrictEqual(GIT_FETCH_SECS, [0, 30, 60, 120, 300, 600]);
+    assert.strictEqual(DEFAULT_GIT_FETCH_SECS, 0);
+  })) p++; else f++;
+
+  if (test('parseGitFetchSecs: returns each of the six, null for everything else', () => {
+    for (const v of [0, 30, 60, 120, 300, 600]) assert.strictEqual(parseGitFetchSecs(v), v);
+    for (const v of [45, -1, '300', null, undefined, true, 30.5]) assert.strictEqual(parseGitFetchSecs(v), null, String(v));
+  })) p++; else f++;
+
+  if (test('gitFetchSecs: a fresh store reads 0 through both the settings object and the getter', () => {
+    inTmpCwd(() => {
+      assert.strictEqual(getSettings().gitFetchSecs, 0);
+      assert.strictEqual(getGitFetchSecs(), 0);
+    });
+  })) p++; else f++;
+
+  if (test('gitFetchSecs: a patch is returned, read back at once and written to disk', () => {
+    inTmpCwd(dir => {
+      assert.strictEqual(setSettings({ gitFetchSecs: 300 })?.gitFetchSecs, 300);
+      assert.strictEqual(getGitFetchSecs(), 300);
+      assert.ok(fs.readFileSync(path.join(dir, SETTINGS_FILE), 'utf8').includes('"gitFetchSecs":300'));
+    });
+  })) p++; else f++;
+
+  if (test('gitFetchSecs: patching 0 over a stored 300 persists 0 (0 is falsy, not absent)', () => {
+    inTmpCwd(() => {
+      setSettings({ gitFetchSecs: 300 });
+      assert.notStrictEqual(setSettings({ gitFetchSecs: 0 }), null);
+      assert.strictEqual(getGitFetchSecs(), 0);
+      resetSettings();
+      assert.strictEqual(getGitFetchSecs(), 0);
+    });
+  })) p++; else f++;
+
+  if (test('gitFetchSecs: an off-list value rejects the whole patch, including its siblings', () => {
+    inTmpCwd(() => {
+      assert.strictEqual(setSettings({ gitFetchSecs: 45 }), null);
+      assert.strictEqual(setSettings({ idleSecs: 30, gitFetchSecs: 45 }), null);
+      assert.strictEqual(getSettings().idleSecs, DEFAULT_IDLE_SECS);
+      assert.strictEqual(getGitFetchSecs(), 0);
+    });
+  })) p++; else f++;
+
+  if (test('gitFetchSecs: a hand-edited off-list or non-number value reads back as 0 and the other keys keep their defaults', () => {
+    inTmpCwd(dir => {
+      for (const bad of ['{"gitFetchSecs":45}', '{"gitFetchSecs":"300"}']) {
+        fs.writeFileSync(path.join(dir, SETTINGS_FILE), bad, 'utf8');
+        resetSettings();
+        const s = getSettings();
+        assert.strictEqual(s.gitFetchSecs, 0, bad);
+        assert.strictEqual(s.idleSecs, DEFAULT_IDLE_SECS);
+        assert.strictEqual(s.answerSecs, DEFAULT_ANSWER_SECS);
+        assert.deepStrictEqual(s.notify, DEFAULT_NOTIFY);
+        assert.strictEqual(getGitFetchSecs(), 0);
+      }
+    });
+  })) p++; else f++;
+
+  if (test('launchSurfaceDefault: a fresh store reads dashboard', () => {
+    inTmpCwd(() => {
+      assert.strictEqual(getSettings().launchSurfaceDefault, 'dashboard');
+      assert.strictEqual(DEFAULT_LAUNCH_SURFACE, 'dashboard');
+    });
+  })) p++; else f++;
+
+  if (test('launchSurfaceDefault: a patch is returned and survives a restart', () => {
+    inTmpCwd(() => {
+      assert.strictEqual(setSettings({ launchSurfaceDefault: 'desktop' })?.launchSurfaceDefault, 'desktop');
+      resetSettings(); // simulate the server restarting
+      assert.strictEqual(getSettings().launchSurfaceDefault, 'desktop');
+    });
+  })) p++; else f++;
+
+  if (test('launchSurfaceDefault: an unknown value rejects the whole patch, including its siblings', () => {
+    inTmpCwd(() => {
+      assert.strictEqual(setSettings({ launchSurfaceDefault: 'terminal' } as never), null);
+      assert.strictEqual(setSettings({ idleSecs: 30, launchSurfaceDefault: 'terminal' } as never), null);
+      assert.strictEqual(getSettings().idleSecs, DEFAULT_IDLE_SECS);
+      assert.strictEqual(getSettings().launchSurfaceDefault, 'dashboard');
+    });
+  })) p++; else f++;
+
+  if (test('launchSurfaceDefault: a hand-edited non-literal value reads back as dashboard and the other keys keep theirs', () => {
+    inTmpCwd(dir => {
+      for (const bad of [42, 'terminal', null]) {
+        fs.writeFileSync(path.join(dir, SETTINGS_FILE), JSON.stringify({ idleSecs: 15, launchSurfaceDefault: bad }), 'utf8');
+        resetSettings();
+        assert.strictEqual(getSettings().launchSurfaceDefault, 'dashboard', String(bad));
+        assert.strictEqual(getSettings().idleSecs, 15);
+      }
+    });
+  })) p++; else f++;
+
+  /* #161: pinned projects — the third key of the same store. */
+
+  if (test('pinnedProjects: no key, or a non-array, reads as [] and the other keys still load', () => {
+    inTmpCwd(dir => {
+      assert.deepStrictEqual(getPinnedProjects(), []);
+      for (const bad of ['x', {}]) {
+        fs.writeFileSync(path.join(dir, SETTINGS_FILE), JSON.stringify({ idleSecs: 15, pinnedProjects: bad }));
+        resetSettings();
+        assert.deepStrictEqual(getPinnedProjects(), [], JSON.stringify(bad));
+        assert.strictEqual(getSettings().idleSecs, 15, 'a bad pin list must not take the other keys down with it');
+      }
+    });
+  })) p++; else f++;
+
+  if (test('pinnedProjects: clamp dedupes in first-seen order and drops non-strings, empty and non-alphabet', () => {
+    assert.deepStrictEqual(clampPinned(['-a', '-a', 'b/c', '', 7, '-Users-x']), ['-a', '-Users-x']);
+    assert.deepStrictEqual(clampPinned('x'), []);
+  })) p++; else f++;
+
+  if (test('pinnedProjects: a 51st distinct pin is refused and the list stays at 50', () => {
+    inTmpCwd(() => {
+      for (let i = 0; i < MAX_PINNED_PROJECTS; i++) assert.ok(setPinned(`-p${i}`, true), `pin ${i}`);
+      assert.strictEqual(MAX_PINNED_PROJECTS, 50);
+      assert.strictEqual(setPinned('-one-too-many', true), null, 'the refusal is reported as null');
+      assert.strictEqual(getPinnedProjects().length, 50);
+      assert.ok(!getPinnedProjects().includes('-one-too-many'));
+      assert.ok(setPinned('-p0', true), 're-pinning an existing pin at the cap is not a refusal');
+    });
+  })) p++; else f++;
+
+  if (test('pinnedProjects: pin is idempotent, unpin removes, unpinning an absent dir changes nothing', () => {
+    inTmpCwd(() => {
+      setPinned('-a', true);
+      assert.deepStrictEqual(setPinned('-a', true), ['-a']);
+      setPinned('-b', true);
+      assert.deepStrictEqual(setPinned('-a', false), ['-b']);
+      assert.deepStrictEqual(setPinned('-never', false), ['-b']);
+    });
+  })) p++; else f++;
+
+  if (test('pinnedProjects: a pin survives a restart, and stays out of the GET /api/settings payload', () => {
+    inTmpCwd(dir => {
+      setPinned('-Users-x', true);
+      assert.deepStrictEqual(JSON.parse(fs.readFileSync(path.join(dir, SETTINGS_FILE), 'utf8')).pinnedProjects, ['-Users-x']);
+      resetSettings();
+      assert.deepStrictEqual(getPinnedProjects(), ['-Users-x']);
+      assert.ok(!('pinnedProjects' in getSettings()), 'the pins have their own route');
+      setSettings({ idleSecs: 20 });
+      resetSettings();
+      assert.deepStrictEqual(getPinnedProjects(), ['-Users-x'], 'a settings save must not drop the pins');
+    });
+  })) p++; else f++;
+
+  /* setPinOrder: the user-set order, accepted only as an exact permutation of the stored pins. */
+  const seed = (...dirs: string[]): void => { for (const d of dirs) assert.ok(setPinned(d, true), d); };
+
+  if (test('setPinOrder: a permutation is stored, returned and survives a restart', () => {
+    inTmpCwd(() => {
+      seed('-a', '-b', '-c');
+      assert.deepStrictEqual(setPinOrder(['-c', '-a', '-b']), ['-c', '-a', '-b']);
+      assert.deepStrictEqual(getPinnedProjects(), ['-c', '-a', '-b']);
+      resetSettings(); // simulate the server restarting
+      assert.deepStrictEqual(getPinnedProjects(), ['-c', '-a', '-b']);
+    });
+  })) p++; else f++;
+
+  if (test('setPinOrder: the identical order and an empty order over no pins both succeed', () => {
+    inTmpCwd(() => {
+      assert.deepStrictEqual(setPinOrder([]), []);
+      seed('-a', '-b', '-c');
+      assert.deepStrictEqual(setPinOrder(['-a', '-b', '-c']), ['-a', '-b', '-c']);
+    });
+  })) p++; else f++;
+
+  if (test('setPinOrder: a missing, extra or duplicated pin, or a non-string-array, is null and changes nothing', () => {
+    inTmpCwd(() => {
+      seed('-a', '-b', '-c');
+      for (const bad of [['-a', '-b'], ['-a', '-b', '-c', '-d'], ['-a', '-b', '-b'], ['-a', '-b', 3], '-a,-b,-c', null]) {
+        assert.strictEqual(setPinOrder(bad), null, JSON.stringify(bad));
+        assert.deepStrictEqual(getPinnedProjects(), ['-a', '-b', '-c'], JSON.stringify(bad));
+      }
+    });
+  })) p++; else f++;
+
+  if (test('setPinOrder: a new pin still appends after a reorder, and the returned list is a copy', () => {
+    inTmpCwd(() => {
+      seed('-a', '-b');
+      const got = setPinOrder(['-b', '-a']);
+      got!.push('-mutated');
+      assert.deepStrictEqual(getPinnedProjects(), ['-b', '-a']);
+      setPinned('-c', true);
+      assert.deepStrictEqual(getPinnedProjects(), ['-b', '-a', '-c']);
+    });
+  })) p++; else f++;
+
+  if (test('DASHBOARD_STATE_DIR set: the settings file goes there, not to the cwd (#407)', () => {
+    const stateA = fs.mkdtempSync(path.join(os.tmpdir(), 'cad-set-state-'));
+    try {
+      withStateDir(stateA, () => {
+        inTmpCwd(cwdB => {
+          setSettings({ idleSecs: 42 });
+          assert.ok(fs.existsSync(path.join(stateA, SETTINGS_FILE)), 'the write must land in DASHBOARD_STATE_DIR');
+          assert.ok(!fs.existsSync(path.join(cwdB, SETTINGS_FILE)), 'nothing may appear in the cwd');
+          resetSettings(); // simulate the server restarting
+          assert.strictEqual(getSettings().idleSecs, 42, 'and it is read back from there');
+        });
+      });
+    } finally { fs.rmSync(stateA, { recursive: true, force: true }); }
+  })) p++; else f++;
+
+  if (test('DASHBOARD_STATE_DIR unset: the settings file stays in the cwd', () => {
+    withStateDir(undefined, () => {
+      inTmpCwd(cwdB => {
+        setSettings({ idleSecs: 42 });
+        assert.ok(fs.existsSync(path.join(cwdB, SETTINGS_FILE)));
+      });
+    });
+  })) p++; else f++;
+
+  console.log(`\n  ${p} passed, ${f} failed`);
+  return f;
+}
+
+if (import.meta.url === `file://${process.argv[1]}`) process.exit(run() > 0 ? 1 : 0);

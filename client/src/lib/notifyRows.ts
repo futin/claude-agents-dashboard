@@ -1,5 +1,5 @@
 /**
- * notifyRows.ts — the Settings page's push-event rows and when each one is usable. Pure — tested (`test/notify-rows.test.ts`).
+ * notifyRows.ts — the Settings page's push-event rows and when each one is usable. Pure — tested (`test/notify/notify-rows.test.ts`).
  */
 import type { NotifyEvent, NotifyPolicy } from '../../../shared/types';
 

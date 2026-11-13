@@ -107,7 +107,7 @@ timeout: 30m
 An unknown key is a validation error naming the key. A cron that launchd cannot express (day-of-month and weekday both restricted: cron ORs them, launchd
 ANDs them) is an error when the validating machine is `mac` (`parseJob(name, text, machine)`). Step values and ranges are expanded into a list of `StartCalendarInterval` dicts. The parser, the
 writer and the validator are `shared/routine-file.ts` and `shared/cron.ts`, which the server, the client and the wrapper all run; the wrapper's copies are
-generated (`pnpm plugin:gen` writes `plugin/lib/*.mjs`, and `test/plugin-manifest.test.ts` regenerates and compares, so an edit to the `.ts` without
+generated (`pnpm plugin:gen` writes `plugin/lib/*.mjs`, and `test/guards/plugin-manifest.test.ts` regenerates and compares, so an edit to the `.ts` without
 regenerating fails CI).
 
 A `foreach` name that is not pinned on the running machine is skipped there (`skipped: not pinned`). A pin that is unlisted or has no path is skipped with
@@ -351,7 +351,7 @@ All class names are `.rtn-` prefixed and colours are theme tokens.
 - Names are checked against `[a-z0-9-]+` before they touch a path, and the routines folder and the wrapper's path come from config and the installed
   plugin, never from a request.
 - Launching `launchctl`, `crontab`, `pgrep`, `ps`, `sysctl`, `open` and the wrapper are local launches, not a new outbound kind;
-  `test/outbound.test.ts` is unchanged.
+  `test/guards/outbound.test.ts` is unchanged.
 
 ## Test seams
 

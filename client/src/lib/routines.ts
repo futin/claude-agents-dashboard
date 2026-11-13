@@ -1,5 +1,5 @@
 /**
- * routines.ts — the Routines section's view logic, apart from React so `test/routines-view.test.ts` can drive it: what a ledger row says, how
+ * routines.ts — the Routines section's view logic, apart from React so `test/routines/routines-view.test.ts` can drive it: what a ledger row says, how
  * the Runs list groups by day, how the stats band formats, and the Repos helper's two directions over a job file's `foreach:` / `cwd:` lines.
  *
  * Everything takes `now` and formats in local time with fixed English names, so the output is the same in every TZ and locale a test runs under (the

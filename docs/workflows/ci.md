@@ -11,7 +11,7 @@ Design: `docs/superpowers/specs/2026-10-15-release-pipeline-design.md` §Phase A
 | `ci / pr-title` | the PR title must match the Conventional Commits rule in release-kit's `scripts/pr-title.mjs`; a `feat`/`fix`/`perf` PR also needs its What's new notes (§Releases) | on `push` (no title) |
 | `ci / skills` | `pnpm test:skills` (~4 min, 2026-10-01) when the PR touches `plugin/skills/git-sync/**` | any PR that does not touch it, and every `push` |
 
-`pnpm test` does not need a built client: `test/api-usage-rates.test.ts` accepts either the SPA shell or the static handler's `pnpm build` 404 hint for an
+`pnpm test` does not need a built client: `test/api/api-usage-rates.test.ts` accepts either the SPA shell or the static handler's `pnpm build` 404 hint for an
 unmatched path (#214), so the order of `pnpm build` and `pnpm test` here is incidental. `pnpm test:visual` is never run here (macOS-only, on demand).
 
 Allowed title types: `feat`, `fix`, `perf` (these may carry `!`), and `docs`, `chore`, `test`, `refactor`, `ci`, `build` (these may not). The scope, if

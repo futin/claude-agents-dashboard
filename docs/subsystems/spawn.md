@@ -439,7 +439,7 @@ branch kills the handle alone — see [The two routes](#the-two-routes).)
 | `signalCode === null` | …nor already been killed; each code covers a different kind of death, so either alone misreads the other as still-alive |
 
 The pid is negated in exactly one line, so `process.kill(-pid, …)` reaches the CLI *and*
-everything it started. `test/spawn.test.ts` mutation-proves both the `pid > 1` clause and the
+everything it started. `test/spawn/spawn.test.ts` mutation-proves both the `pid > 1` clause and the
 liveness clause: with `pid > 1` removed, the suite goes red showing the killer called with
 `pid: -0`.
 
@@ -670,7 +670,7 @@ one seam for it, and nothing about `launch`'s own contract changes. Three differ
 | `client/src/lib/launchSurface.ts` | `offeredSurfaces` (a surface is offered only on a literal `true` from `/api/health`; desktop needs `spawnAvailable` too, since its first turn runs headless), `initialSurface`, `canOpenLaunchForm` (the two `New session` entry points hide when nothing is offered), and the fixed copy for the desktop success/failure/hand-over lines and the Settings hint |
 | `.spawn-done` line (`client/src/components/SessionsView.tsx`) | the line over the session list after a launch-form desktop launch, `Planning here first — it moves to the desktop app in a moment.`, shown beside the chat drawer the launch opens |
 | `client/src/hooks/useSpawn.ts` | POSTs the request through `postWrite` (`client/src/lib/postWrite.ts`), the same bearer-token pattern as `useRemoteAnswer`'s toggle, and applies `spawnOutcome`; a 403 `read-only from this network` (`refusalKind`, `client/src/lib/writeRefusal.ts`) sets `readOnly` and `READ_ONLY_TEXT` as the error instead of `needsToken`, and `spawnOutcome`'s 200-unreadable text (`UNREADABLE_LAUNCH_REPLY`) is one more `error`: the launch form, the resume composer and the hand-over show it as is, and Git Sync (`syncLaunchErrorText`) drops its `couldn't start` wording for it, since the sync may be running |
-| `client/src/lib/spawnOptions.ts` | the client's copy of `MODELS`/`EFFORTS`/`PERMISSION_MODES` (duplicated, not imported — the FE/BE boundary is `shared/types.ts` alone — kept honest by `test/spawn-options.test.ts` asserting byte-for-byte equality against the server's arrays), `allowedPermissionModes`, `defaultPermissionMode` (the form's preselect) and `buildSpawnRequest` (the fresh-launch body, desktop's forced toggles included; `test/spawn-request.test.ts`) |
+| `client/src/lib/spawnOptions.ts` | the client's copy of `MODELS`/`EFFORTS`/`PERMISSION_MODES` (duplicated, not imported — the FE/BE boundary is `shared/types.ts` alone — kept honest by `test/spawn/spawn-options.test.ts` asserting byte-for-byte equality against the server's arrays), `allowedPermissionModes`, `defaultPermissionMode` (the form's preselect) and `buildSpawnRequest` (the fresh-launch body, desktop's forced toggles included; `test/spawn/spawn-request.test.ts`) |
 | The Board card's `+ New session` | rendered only when `spawnAvailable` is true on the one `/api/health` poll `SessionsView` already owns |
 | each view's phantom row | renders each `launching` entry at the head of its list — project, truncated prompt, `starting…` or (for `failed`) the error — and disappears on its own once the real row adopts the id; never interactive |
 | `sessionSurface` (`server/lib/scan.ts`) | maps the transcript's `entrypoint` → `Session.surface`; `sdk-cli` or `claude-agents-dashboard` ⇒ `dashboard`, everything else ⇒ `local` |

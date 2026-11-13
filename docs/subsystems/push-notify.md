@@ -57,7 +57,7 @@ Three events, not four:
 | `remoteReply` | `<label> — finished — reply window open` | the window is open here |
 | `permissionWait` | **never** | a headless run has no TTY, so there is no dialog to answer — a banner would be asking for something impossible (see [spawn](spawn.md)) |
 
-The three bodies are asserted against literals in `test/web-notify.test.ts` precisely because
+The three bodies are asserted against literals in `test/notify/web-notify.test.ts` precisely because
 they mirror `PHRASE` above: the desk channel and the away channel should read alike, and a
 drift apart should fail a test rather than be discovered by someone holding a phone in one
 hand and a laptop in the other.
@@ -138,7 +138,7 @@ push(event) =
 
 All AND, each layer independently optional. **Clause order is load-bearing**: `requireAfk`
 is evaluated last and behind a thunk, so a policy that does not use it never pays the ~40ms
-`ioreg` spawn. `test/notify.test.ts` asserts that directly.
+`ioreg` spawn. `test/notify/notify.test.ts` asserts that directly.
 
 ### The predicate is not the only AFK gate
 
@@ -390,7 +390,7 @@ the settings file moved, and there is no migration.
 **One `ioreg` per push.** `PredicateContext.readIdle` is a thunk precisely so a policy without
 `requireAfk` never pays ~40ms for a reading it will not use. Routing wants the same reading, so
 `maybeSend` memoises it: two consumers, at most one spawn — and still zero when neither wants
-it, because `ntfyTopicDesk` is checked before the thunk is touched. `test/notify.test.ts`
+it, because `ntfyTopicDesk` is checked before the thunk is touched. `test/notify/notify.test.ts`
 counts the calls; deleting the memoisation takes that count to 2.
 
 ## Tapping a desk push does nothing, on purpose

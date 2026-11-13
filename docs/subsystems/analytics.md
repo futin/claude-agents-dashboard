@@ -87,7 +87,7 @@ one of them at random — the same two-state rule the Sessions board follows.
   subagent's *final context size*, not its spend — 5–130x low on many-turn subagents (bug-27) — so it is only the fallback
   for a finished subagent whose transcript is missing or sums below it, counted in `subagentTotals.fallbackCount`. The
   metric's tooltip carries `subagentTotals.usage`'s billable / cache-read split. `/kaizen`'s `kaizen.mjs` does the
-  same, and `test/analyze.test.ts` runs it against `analyzeSession` to keep the two in step.
+  same, and `test/analytics/analyze.test.ts` runs it against `analyzeSession` to keep the two in step.
   A `resumed` row (a SendMessage resume, which `lib/agents.ts` lists as its own row) is left out of the sum: its runs write into the transcript the
   original launch already claims. `kaizen.mjs` lists only `Task`/`Agent` launches, so it has no such row to skip.
   A compaction replays earlier records verbatim; both sides count each `tool_use` id, `tool_result`, Agent launch and SendMessage once and add each
@@ -159,7 +159,7 @@ the three facets while keeping the sort, returning the view by reference when no
 active. Both are pure and unit-tested beside `applyAnalyticsView`.
 
 `applyAnalyticsView` in `lib/analyticsFilterSort.ts` is pure — filter, then sort, no
-mutation — and unit-tested in `test/analytics-filter-sort.test.ts`. Two deliberate
+mutation — and unit-tested in `test/analytics/analytics-filter-sort.test.ts`. Two deliberate
 tolerances: a report whose transcript is gone (`analysis: null`) sorts as **0 tokens**
 rather than dropping out of a token sort, and an unparseable `loggedAt` **fails open**
 (kept) rather than being silently filtered away.
@@ -231,7 +231,7 @@ returned — no backend change, so the read-only invariant above still holds.
   ctx threshold was the rejected alternative — it fires on exactly that single big session. The read keeps the newest line per `[project] id` in memory
   (newest-wins, as `lessonForSession` reads it) and never writes the log. Lines without both figures — status, review, prose, mid-session captures —
   are skipped; a line with `billable` but no `(N ctx)` counts in `withoutCtx` and nowhere else. `--trend` is kaizen-only: no server module or
-  Analytics view reads it, so `test/kaizen-trend.test.ts` spawns the plugin's script itself.
+  Analytics view reads it, so `test/analytics/kaizen-trend.test.ts` spawns the plugin's script itself.
 - **`kaizen.mjs --compare <project> <since> <field.path>` is what a verdict is measured with.** It re-runs the analyzer over the project's main-session
   transcripts (cwd basename = the log's project tag; subagent transcripts never count) — up to 10 starting after the end of `<since>` (UTC), oldest
   first, and as many, at least 3, immediately before it; a session starting on `<since>` is before. Each side prints `n`, `median`, `values` and

@@ -107,7 +107,7 @@ A status outside the three known values is ignored, not passed through.
 
 `scanSessions` calls `readSessionTasks(c.file)` for each session it actually pushes (after the `maxSessions` cap, not for the over-fetched pool) and sets
 `Session.tasks`. No other `readTranscript` caller needs it. The field is required, so every other `Session` literal sets `tasks: null` — today that is
-`test/web-notify.test.ts`, `test/triage.test.ts`, `test/filter-sort.test.ts` (its `sess()` factory) and `test/visual/fixtures/sessions.ts` (2026-10-07; `pnpm typecheck` lists any others). The visual
+`test/notify/web-notify.test.ts`, `test/sessions/triage.test.ts`, `test/sessions/filter-sort.test.ts` (its `sess()` factory) and `test/visual/fixtures/sessions.ts` (2026-10-07; `pnpm typecheck` lists any others). The visual
 fixtures stay `null` on purpose: a populated list would move every Sessions baseline, and the visual suite is macOS-only and on demand.
 
 ## 3. Client helper — `client/src/lib/tasks.ts`
@@ -142,7 +142,7 @@ In `ChatDrawer`'s `.chat-side`, a `.kv.tasks-kv` card between the Context card a
 The sidecar is a band there (`docs/subsystems/chat.md`'s intro, "Two columns inside it", and DESIGN.md §8.6), and the card follows the Context card's
 band shape. **One DOM serves both widths** — `ChatDrawer` has no `matchMedia`, and the stylesheet is mobile-first: the band is the **base tier**
 (`styles.css:1848-1870`) and the desktop column is rebuilt inside `@media (min-width:768px)` (`:1902`). A `max-width` query is not an option —
-`test/breakpoints.test.ts:209-215` fails the suite on one. So the `<ol>` is always rendered; folding is a class on the card, with
+`test/guards/breakpoints.test.ts:209-215` fails the suite on one. So the `<ol>` is always rendered; folding is a class on the card, with
 `.chat-side .tasks-kv.folded .task-list{display:none}` in the base tier and, inside the existing `min-width:768px` block, a rule that shows the list
 regardless of `.folded`. On desktop the class therefore has no effect and the list always shows.
 
@@ -175,7 +175,7 @@ rendered at **two** sites, last at both: inside `Tags` after the kaizen pill (`a
 
 ## 5. Testing
 
-`test/tasks.test.ts` (node-assert, tmpdir JSONL fixtures, registered in `test/run-all.ts`), each fixture built from the shapes in §2.1:
+`test/sessions/tasks.test.ts` (node-assert, tmpdir JSONL fixtures, registered in `test/run-all.ts`), each fixture built from the shapes in §2.1:
 
 1. create ×3 → update 1 `in_progress` → update 1 `completed`: three tasks in order, statuses `completed`, `pending`, `pending`.
 2. A create whose result line is missing: no task.
@@ -195,7 +195,7 @@ rendered at **two** sites, last at both: inside `Tags` after the kaizen pill (`a
     root, which ignores the mode. Errors swallowed this way: everything `fs.statSync` / `openSync` / `readSync` throws except `ENOENT`, which drops the
     entry and returns null.
 
-`taskProgress` cases, in `test/client-tasks.test.ts` (also registered in `run-all.ts`): null and `[]` → null; 7 of 13 → `pct` 54; two `in_progress` → both in `live`;
+`taskProgress` cases, in `test/sessions/client-tasks.test.ts` (also registered in `run-all.ts`): null and `[]` → null; 7 of 13 → `pct` 54; two `in_progress` → both in `live`;
 all completed → `allDone`; no live and some pending → `next` is the first pending.
 
 Mutation-check case 3 and case 7b: delete the `success` check, then the shape check, and confirm each test goes red. Case 7b (a hook attachment record carrying

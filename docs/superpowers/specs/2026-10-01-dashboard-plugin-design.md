@@ -66,7 +66,7 @@ plugin/
 
 The merged `kaizen` is a superset of both copies; neither copy's features may be lost.
 
-- **Base:** the repo copy (`.claude/skills/kaizen/`) — it is the one under test here (`test/analyze.test.ts`, `test/kaizen-trend.test.ts`) and it carries the
+- **Base:** the repo copy (`.claude/skills/kaizen/`) — it is the one under test here (`test/analytics/analyze.test.ts`, `test/analytics/kaizen-trend.test.ts`) and it carries the
   log-format features the Analytics tab reads (`--trend`, the `(<ctx> ctx)` figure).
 - **Port from the global copy:** the `compactions` block (one row per main-chain `compact_boundary`, a replayed boundary counted once, the unbounded-window
   counterfactual), skipping `isCompactSummary` records in the correction heuristic, and `test/compactions.test.mjs`. Port whatever else the global-only diff
@@ -90,7 +90,7 @@ The merged `kaizen` is a superset of both copies; neither copy's features may be
 
 ## §4 Tests
 
-- The three `kaizen.mjs` path resolutions in `test/analyze.test.ts` and the one in `test/kaizen-trend.test.ts` point at `plugin/skills/kaizen/kaizen.mjs`.
+- The three `kaizen.mjs` path resolutions in `test/analytics/analyze.test.ts` and the one in `test/analytics/kaizen-trend.test.ts` point at `plugin/skills/kaizen/kaizen.mjs`.
 - `pnpm test` also runs **kaizen's** own `node --test` suite (`plugin/skills/kaizen/test/*.test.mjs`, 5 tests, ~0.1 s) — the one coupled to Analytics. The
   case counts of both runners appear in the output.
 - **git-sync's** suite gets its own script, `pnpm test:skills`, and is not part of `pnpm test`: it is 193 tests that took 3 min 45 s on 2026-10-01 (real git

@@ -26,7 +26,7 @@ Pin. Tiles stacks the two groups full width, a pin a paper tile and an offer a d
 so Pin carries a project straight across; Lists is the same two columns as `.set-group` cards of `.set-row`s. Columns and Lists go two-up from `lg`
 (1024px) and stack below it, all three shapes are offered at every width, and the Pin / Unpin key is 44px high on the phone and 32px from `md`. The pick is
 per device, `management.projectsLayout` ([view-persistence](view-persistence.md)). Grouping, the filter match, the `~`-shortened dir line and every string
-are pure functions in `client/src/lib/projectsView.ts` (`test/projects-view.test.ts`); the launch sheet's own `PinPicker` is a separate component and stays
+are pure functions in `client/src/lib/projectsView.ts` (`test/sessions/projects-view.test.ts`); the launch sheet's own `PinPicker` is a separate component and stays
 what the sheet uses. Every Pinned project, in all three layouts, leads with a `⠿` drag grip (`hooks/usePinReorder.ts`, #193): drag it, or press ↑/← (one
 place earlier) or ↓/→ (one place later) on it focused, and the whole order saves at once through `usePins.reorder`, flashing `Saved` beside the Pinned count —
 beside the card's title in Lists. The drag is a drop line: nothing moves until release, the source dims, a ghost follows the pointer, a bar from `dropMark`
@@ -261,7 +261,7 @@ token block** — that is the invariant the whole theme system rests on.
 Midnight, so without the stamp every load renders in Midnight until React mounts. The script therefore sets
 `data-theme="daylight"` *before* it reads storage, so a fresh browser, a corrupt blob or no storage paints the
 default; a stored theme then overrides it. That literal must equal `DEFAULT_SETTINGS.theme` —
-`test/client-settings.test.ts` pins the two. It duplicates a few lines of `useSettings.tsx` on purpose — it has
+`test/settings/client-settings.test.ts` pins the two. It duplicates a few lines of `useSettings.tsx` on purpose — it has
 to run before the module graph loads, so it cannot be one.
 
 ## Density and text scale

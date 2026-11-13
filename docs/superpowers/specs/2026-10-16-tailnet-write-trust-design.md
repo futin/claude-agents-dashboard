@@ -88,7 +88,7 @@ Chains, as the API sees them:
 | LAN device → `192.168.x:5174` (any forged XFF) | 127.0.0.1 | `…,192.168.1.5` | lan |
 | LAN device → `192.168.x:4173` | 192.168.1.5 | ignored | lan |
 
-`classifyOrigin` (the toolbar badge) switches to `resolvePeer`, which reverses some existing `test/origin.test.ts` assertions: those are rewritten, not kept
+`classifyOrigin` (the toolbar badge) switches to `resolvePeer`, which reverses some existing `test/sessions/origin.test.ts` assertions: those are rewritten, not kept
 (`'100.90.1.2, 10.0.0.1'` was tailnet by first-hop and is now `lan`; `'not-an-ip'` and `''` were `local` and are now `unknown`). That way the badge and the gate can never disagree. Its "honour only from loopback" comment and the
 module header's ⚠️ are rewritten to say the gate now uses this function and why the right-to-left walk is the safe one. The header's
 "nothing in the app makes an access decision from it" sentence goes.
@@ -130,7 +130,7 @@ module header's ⚠️ are rewritten to say the gate now uses this function and 
 - `serveHealth`'s `req` parameter becomes required (its one caller, `server/index.ts`, passes it).
 - `HealthResponse` in `shared/types.ts` gains `writeAccess?: WriteAccess` (`'open' | 'token' | 'none'`) first, per the repo's API-field order. Optional,
   because the client must treat an older server (or health not yet answered) as today: `undefined` means "behave as before this change", e.g.
-  `test/git-stats-client.test.ts`'s `tokenRequired: undefined → enabled` case keeps its result.
+  `test/git/git-stats-client.test.ts`'s `tokenRequired: undefined → enabled` case keeps its result.
 - New field `writeAccess`, computed for the calling request: `open` when rule 1 passes, `token` when it does not but a token is set,
   `none` otherwise. It reads `trustTailnet` through `getSettings()` on each request (the in-process cache is updated by `setSettings`), which is what makes
   the switch live without a restart. It does not inspect the caller's `Authorization` header, so it never confirms a guessed token.
@@ -148,7 +148,7 @@ module header's ⚠️ are rewritten to say the gate now uses this function and 
   existing error or failure path. The plan enumerates every hook and panel that sets or renders `needsToken`. *(Author's call: this adds one helper call per
   hook and is not the refactor the non-goal rules out.)*
 - The git "Fetch all" key branches on `tokenRequired` (`client/src/lib/gitClock.ts`, `hooks/useGitFetch.ts`, `management/GitParts.tsx`, `GitClockChip.tsx`, `GitView.tsx`, `hooks/useGitSync.ts` (carries it off health),
-  `test/git-stats-client.test.ts`). It moves to `writeAccess`, and renders disabled with the read-only reason when that is `none`, instead of failing with a 403.
+  `test/git/git-stats-client.test.ts`). It moves to `writeAccess`, and renders disabled with the read-only reason when that is `none`, instead of failing with a 403.
   *(Author's call.)*
 - `OriginBadge`'s `public` tooltip text ("set ANSWER_TOKEN …") is revisited so it stays true.
 
@@ -161,7 +161,7 @@ Two 403 bodies, matching the two refused `writeAccess` states, so existing clien
 
 `logRejectedWrite` keeps its one-line, rate-limited shape and gains the peer class and the refusal kind:
 `[dashboard] rejected write: POST /api/remote-answer from lan (bad or missing token)` or `… from lan (read-only, no token set)`. The `^…$` assertion in
-`test/api-reject-log.test.ts` changes to the new format, and the test that the line carries no part of the token stays.
+`test/api/api-reject-log.test.ts` changes to the new format, and the test that the line carries no part of the token stays.
 
 ## Hooks and installer
 
@@ -172,7 +172,7 @@ claims the token is required.
 
 `scripts/install-hooks.sh` prints `TODO no ANSWER_TOKEN in .env — set one, then: …` when `.env` has no token and no token file exists. Under the new rule a
 loopback hook needs no token, so that line is rewritten as an informational `ok`-style line saying no token file is needed unless the dashboard runs in a
-container or behind a non-loopback `CLAUDE_DASHBOARD_URL`. `test/install-hooks-token.test.ts`'s assertions on the old TODO text change with it.
+container or behind a non-loopback `CLAUDE_DASHBOARD_URL`. `test/hooks/install-hooks-token.test.ts`'s assertions on the old TODO text change with it.
 
 ## Lookout
 

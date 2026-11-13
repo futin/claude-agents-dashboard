@@ -19,7 +19,7 @@ import { fmtWalkHour } from './walkChart';
  *      different ISO week than the bucket's stamp.
  *
  * So an hour can be past the trust floor and still have no weight, for up to a
- * week. Pure and unit-tested (test/usage-profile-view.test.ts) — the weekday
+ * week. Pure and unit-tested (test/usage/usage-profile-view.test.ts) — the weekday
  * arithmetic in particular is the kind that looks obvious and is off by one.
  *
  * The glossary lives here for the same reason the tooltips do: it is copy, and

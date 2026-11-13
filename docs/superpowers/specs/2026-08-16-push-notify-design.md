@@ -330,7 +330,7 @@ against stops existing.
 
 ## 10. Testing
 
-`test/notify.test.ts`, registered in `test/run-all.ts`:
+`test/notify/notify.test.ts`, registered in `test/run-all.ts`:
 
 - **Predicate table** — each event × each layer on/off × satisfying and violating context.
   The one exhaustive part.
@@ -341,7 +341,7 @@ against stops existing.
   patch; unreadable file yields all-off defaults.
 
 Transport is injected via `setSender`, so no test opens a socket. Existing
-`test/settings.test.ts` gains cases for the widened patch.
+`test/settings/settings.test.ts` gains cases for the widened patch.
 
 ## 11. Docs
 

@@ -15,10 +15,12 @@ the typed JSON in `shared/types.ts`, plus four zero-dep modules both sides run: 
   Claude Configs | Analytics | Settings, all lazy but Sessions.
 - `shared/` — `types.ts` is the API contract and the single source of truth for it;
   `frontmatter.ts`, `gitUpstream.ts`, `cron.ts` and `routine-file.ts` are the only modules both sides run.
-- `test/` — node-assert tests over backend + client domain logic, tmpdir JSONL fixtures.
+- `test/` — node-assert tests over backend + client domain logic, tmpdir JSONL fixtures. One level of feature folders (`test/usage/`, `test/routines/`, …)
+  plus `test/guards/` for the source guards that read across the repo; helpers and the runners stay at `test/`. A new suite goes in its feature
+  folder and needs its import line in `test/run-all.ts`, which lists every suite by hand.
 - `plugin/` — the installable Claude Code plugin (the repo root's `.claude-plugin/marketplace.json` points at it): the skills the dashboard depends on, plain
   JS, never imported by server or client at runtime; `plugin/lib/` holds the Routines wrapper and its generated `.mjs` copies of the shared modules.
-  `test/plugin-manifest.test.ts` pins what may live in it.
+  `test/guards/plugin-manifest.test.ts` pins what may live in it.
 
 **The file-by-file map is `docs/overview.md`, not this file.** It is not auto-loaded —
 read it (plus the relevant `docs/subsystems/*.md`) *before* changing an area. `docs/overview.md`
@@ -37,7 +39,7 @@ read it (plus the relevant `docs/subsystems/*.md`) *before* changing an area. `d
 - `pnpm plugin:sync` — reinstall the plugin once a `plugin/` change is pushed to `main`; the installed copy is a snapshot, not a link, so until this
   runs the edit reaches no session. Refuses an unpushed tree (`scripts/sync-plugin.ts`).
 - `pnpm plugin:gen` — regenerates `plugin/lib/{cron,frontmatter,routine-file}.mjs` from `shared/`; run it after editing those three, or
-  `test/plugin-manifest.test.ts` fails (`scripts/gen-plugin-lib.ts`).
+  `test/guards/plugin-manifest.test.ts` fails (`scripts/gen-plugin-lib.ts`).
 - `pnpm typecheck` — `tsc --noEmit`.
 - CI (`.github/workflows/ci.yml`) runs `pnpm typecheck`, `pnpm build`, `pnpm test` on every PR into `main`, plus `pnpm test:skills` when the PR touches
   `plugin/skills/git-sync/**` (`docs/workflows/ci.md`). A docs-only PR runs only the suites that read the changed docs (`scripts/ci-scope.ts`,
@@ -54,7 +56,7 @@ read it (plus the relevant `docs/subsystems/*.md`) *before* changing an area. `d
   the `--`, and subcommands compose (`pnpm tailnet:local down`). Always fronts
   `WEB_PORT`, read from `.env`
   through `loadConfig`: there is nothing to keep in sync, no second target, and **no port
-  literal belongs in `scripts/tailnet.ts`** — `test/tailnet.test.ts` asserts that against
+  literal belongs in `scripts/tailnet.ts`** — `test/infra/tailnet.test.ts` asserts that against
   the source text.
 
 Both servers bind all interfaces, so localhost / LAN / Tailscale work with zero
@@ -76,7 +78,7 @@ config; a public tunnel's hostname needs `ALLOWED_HOSTS` (the DNS-rebinding guar
 - **Never hardcode a color or shadow in `styles.css`** below the theme-token block. The 5
   themes are pure `[data-theme]` token overrides; one literal breaks the light one.
 - **`styles.css` only maps ui-kit's `--uk-*` tokens; it never restyles a `.uk-*` class.** The chip and drawer look the same in every app that ships them,
-  and `test/ui-kit-guard.test.ts` (ui-kit's `checkHostCss`) fails on any other rule. The chip's place is the `.rel-chip` wrapper, nothing more.
+  and `test/guards/ui-kit-guard.test.ts` (ui-kit's `checkHostCss`) fails on any other rule. The chip's place is the `.rel-chip` wrapper, nothing more.
 - **Keep new deps out of `server/`.** It reads disk and makes exactly two kinds of outbound call itself — the ntfy push in `lib/notify.ts` and the usage
   read in `lib/usage.ts`. A third needs a reason. Launching a local program is not a third kind, even when that program makes network calls of its own:
   `lib/token-refresh.ts` and `lib/spawn.ts` launch `claude`; `lib/git-fetch.ts` launches `git fetch`; `lib/pr-status.ts` launches `gh pr view` with `GH_NO_UPDATE_NOTIFIER=1` and
@@ -84,11 +86,11 @@ config; a public tunnel's hostname needs `ALLOWED_HOSTS` (the DNS-rebinding guar
   `git merge --ff-only` and `git push` for the Sync menu; `lib/codegraph.ts` launches `codegraph` with `CODEGRAPH_NO_UPDATE_CHECK=1` and
   `CODEGRAPH_NO_DOWNLOAD=1` set, which switch off its update check and bundle download; `lib/routine-reconcile.ts` launches `launchctl`, `crontab` and
   `pgrep`; `lib/routine-store.ts` launches `ps` and `sysctl`; `lib/open-folder.ts` launches `open` and `open -R`; `lib/desktop.ts` launches `open` with a `claude://` URL; `lib/routine-run.ts` spawns the
-  plugin's `run-routine.mjs` through `spawn.ts`'s `spawnProcess`. `test/outbound.test.ts` pins the list.
+  plugin's `run-routine.mjs` through `spawn.ts`'s `spawnProcess`. `test/guards/outbound.test.ts` pins the list.
   Two npm packages are allowed, by name, each with zero runtime deps of its own and pinned to a git tag: `lookout-widgets`, the Lookout contract producer
   behind `/api/hub/widgets`, and `release-kit`, whose reader is the one reader of the tag-message contract its release workflow writes (spec
   `docs/superpowers/specs/2026-10-15-release-pipeline-design.md` D7) and, as `createReleasesReader`, backs `/api/releases`; it uses Node built-ins only and launches `git`, so it is no
-  new outbound kind. `test/server-deps.test.ts` pins both names, `lookout-widgets` to its literal tag and `release-kit` to any exact `vX.Y.Z` tag; any other bare import under `server/` fails it.
+  new outbound kind. `test/guards/server-deps.test.ts` pins both names, `lookout-widgets` to its literal tag and `release-kit` to any exact `vX.Y.Z` tag; any other bare import under `server/` fails it.
 - `client/dist/` and `.env` are gitignored.
 - `plugin/skills/kaizen/` is the only copy of `/kaizen`; its log path and line grammar are a
   contract with Analytics (`docs/subsystems/analytics.md`) — never change one side only.

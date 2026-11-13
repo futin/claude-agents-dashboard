@@ -21,7 +21,7 @@ Brainstormed in-session 2026-10-01. Decisions taken there:
 
 - A refactor that changes no rendered pixel runs fully green; one that moves anything by one pixel fails with an expected / actual / diff image.
 - Two back-to-back runs on an unchanged tree are both green. This is the acceptance test for the suite itself (§9).
-- No change to `server/`, its zero-runtime-dep rule, or `test/outbound.test.ts`.
+- No change to `server/`, its zero-runtime-dep rule, or `test/guards/outbound.test.ts`.
 - New horizontal page overflow and new below-AA text contrast in daylight are caught even in UI that has no baseline yet.
 
 **Non-goals**

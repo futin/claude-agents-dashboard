@@ -40,7 +40,7 @@ without opening GitHub or the terminal.
 - **No `gh` launch per session per list poll.** `gh` runs only for a session whose chat modal is open, and at most once per PR per cache window — never for
   every row on the 3s board poll.
 - **No new outbound kind.** The server must not call `api.github.com` itself (no `fetch`, no `https`); it launches the local `gh` program, which is the
-  "launching a local program" exception in `.claude/CLAUDE.md`'s zero-deps rule. `test/outbound.test.ts` must stay green unchanged.
+  "launching a local program" exception in `.claude/CLAUDE.md`'s zero-deps rule. `test/guards/outbound.test.ts` must stay green unchanged.
 - **The card never pushes or reflows the transcript.** It lives in the sidecar; the transcript column is untouched.
 - **No hardcoded colours in `styles.css`.** State pills and check bars use existing tokens (`--green`, `--green-tint`, `--magenta`, `--red`, `--mustard`, …);
   a missing `--red-tint` / `--magenta-tint` is defined on `:root` as `color-mix(… var(--red) …)` like the existing tints, plus one Daylight line each,
@@ -196,7 +196,7 @@ The mockup's "Draft, checks failing" cell already follows the row rule; the `Che
 
 ## Verification the builder owns
 
-- Unit tests (node-assert, tmpdir JSONL fixtures, as `test/tasks.test.ts`): detection picks the newest created PR across both signals; prefers
+- Unit tests (node-assert, tmpdir JSONL fixtures, as `test/sessions/tasks.test.ts`): detection picks the newest created PR across both signals; prefers
   `gitOperation.pr` over the parse for the same call; the parse finds the URL in a compound command's result (heredoc body, `| tail -3`, `-R other/repo`);
   ignores a failed create, a `gh pr view` of another PR, a `pr-link` record, and a URL only in user/assistant prose; title parsed from `--title` and `-t`;
   incremental re-read after an append. Fixtures copy the record shapes from a real transcript on this machine, not from memory.

@@ -145,7 +145,7 @@ Five of the six hooks, `ask-remote.sh`, `plan-remote.sh`, `permission-notify.sh`
 or POST, when `CLAUDE_DASHBOARD_ROUTINE` is set in the environment. `plugin/lib/run-routine.mjs` stamps `CLAUDE_DASHBOARD_ROUTINE=<job>` on every step it
 launches, and the claude steps also run with `AskUserQuestion` disallowed. An unattended step must never be held for `answerSecs`, never push "finished" (the
 routine's own failure push is the only one), and never be told by `remote-decision.sh` to "ask in prose" and end its turn doing nothing. The guard sits right after
-the `CLAUDECODE` check (in `stop-notify.sh`, beside the `CLAUDE_DASHBOARD_REFRESH` exit), and an empty value does not trip it. Nothing to configure. `test/hooks-routine-marker.test.ts` pins it; the design is in
+the `CLAUDECODE` check (in `stop-notify.sh`, beside the `CLAUDE_DASHBOARD_REFRESH` exit), and an empty value does not trip it. Nothing to configure. `test/hooks/hooks-routine-marker.test.ts` pins it; the design is in
 [routines](../superpowers/specs/2026-10-19-scheduled-workflows-design.md).
 The same guard also honours `CLAUDE_DASHBOARD_SCHEDULE`, the marker a wrapper installed before Schedules became Routines still stamps.
 

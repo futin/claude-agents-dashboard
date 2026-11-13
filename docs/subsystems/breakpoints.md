@@ -26,7 +26,7 @@ true complement of the CSS's `min-width`, with no gap at fractional viewport wid
 
 `styles.css` carries the same table as a prose comment directly above `:root` — read that
 block before touching a query. Both copies must agree; this doc is the narrative, the CSS
-comment is the enforced reference (`test/breakpoints.test.ts` reads the CSS one).
+comment is the enforced reference (`test/guards/breakpoints.test.ts` reads the CSS one).
 
 ## The lock, derived
 
@@ -75,7 +75,7 @@ not as CSS custom properties. `@media` cannot read `var()` in its condition — 
 `--tier-2xl: 1536px` token would be unreachable from every query that needs it, and the
 value would drift the moment someone edited the token but not the query (or the reverse).
 The comment block is the single source of truth; every `@media` `min-width` in the file is a literal
-copy of one of its numbers, and `test/breakpoints.test.ts` guards that no other literal
+copy of one of its numbers, and `test/guards/breakpoints.test.ts` guards that no other literal
 width sneaks in beside them.
 The Sessions ledger's two `@container` queries (950px, 1200px) are not tiers and the guard does not read them: they key on the table's own width, which the
 aside and the Width setting decide, not on the viewport.
@@ -125,7 +125,7 @@ migration:
 
 - [2026-09-15-breakpoint-ladder-design.md](../superpowers/specs/2026-09-15-breakpoint-ladder-design.md) — the full design, per-surface tables, and the risks accepted for this migration.
 - `client/src/styles.css` — the enforced token comment, directly above `:root`.
-- `test/breakpoints.test.ts` — the guard test: the seven literals appear in `styles.css`
+- `test/guards/breakpoints.test.ts` — the guard test: the seven literals appear in `styles.css`
   only inside `@media` queries and the token comment, and `useNarrow.ts`'s `NARROW_PX`
   and `SHELL_NARROW_PX` mirror `md` and `sm` exactly.
 
@@ -134,7 +134,7 @@ migration:
     - client/src/styles.css
     - client/src/hooks/useNarrow.ts
     - client/src/components/configs/ConfigsView.tsx
-    - test/breakpoints.test.ts
+    - test/guards/breakpoints.test.ts
   kind: subsystem
   verified: 24f8d773dd459e02b1e4ef4a093aed285939555c
 -->

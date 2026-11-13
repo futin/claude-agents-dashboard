@@ -18,12 +18,12 @@ pace, do I run dry before the window resets?*
   `ANTHROPIC_BASE_URL`/`CLAUDE_CODE_API_BASE_URL` (those aim model inference at a
   proxy/gateway — Bedrock/Vertex/Ollama/LiteLLM — with no such route; that misroute
   returned `null` bars in practice). `CLAUDE_USAGE_BASE_URL` overrides for tests only;
-  the request is protocol-aware (http vs https). `test/usage-cycle.test.ts` uses it to run the whole cycle (`refreshNow` / `fetchUsage`) against a
+  the request is protocol-aware (http vs https). `test/usage/usage-cycle.test.ts` uses it to run the whole cycle (`refreshNow` / `fetchUsage`) against a
   local server, with `setUsageCycleDeps()` standing in for the keychain read and the renewal spawn so no test touches either.
 - **Response shape:** windows are **top-level**
   (`{ five_hour:{utilization,resets_at}, seven_day:{…}, … }`), *not* wrapped in
   `rate_limits`. `mapUsage()` accepts both shapes defensively and is pure, unit-tested on
-  its own (`test/usage.test.ts`).
+  its own (`test/usage/usage.test.ts`).
 - **Token:** read from the macOS keychain
   (`security find-generic-password -s "Claude Code-credentials"`), falling back to
   `~/.claude/.credentials.json` → `claudeAiOauth.accessToken`. Expired tokens are
@@ -479,7 +479,7 @@ Two things the grid alone cannot do:
     out.
 
   Rows are grouped by the browser's local *date*, so a DST day is still exactly one row and
-  no hour is lost or double-counted (pinned in `test/walk-rows.test.ts` across a 23-hour
+  no hour is lost or double-counted (pinned in `test/usage/walk-rows.test.ts` across a 23-hour
   and a 25-hour day). A day past the crossing that spends nothing prints no deficit figure:
   repeating the number above it would read as a second finding.
 - **Five figures before any picture** (`forecastStats` in
@@ -505,7 +505,7 @@ Two things the grid alone cannot do:
   borrowed past it, the walk. `TRUST_FLOOR_MIN` and the `TRUSTED_OK` gate are read from the
   constants that own them rather than re-typed. The `ceiling` term keeps its key and lost
   its figure: the plot's floor is a *ratio* now, so a number there would name a scale the
-  chart never draws — `test/usage-profile-view.test.ts` asserts that text carries no
+  chart never draws — `test/usage/usage-profile-view.test.ts` asserts that text carries no
   percentage at all.
 
   They are printed twice, from one string: once in a **Definitions sheet** at the foot of
@@ -1236,7 +1236,7 @@ deliberate: that flag is a two-term-only requirement, because the split's second
 regressor *is* the request column. A missing request count says nothing about
 the token totals. Copying `usableForSplit` wholesale would have thrown away the
 2000 of 5019 live ledger lines written before the recorder produced counts —
-~40% of the evidence — for nothing. `test/usage-rate-fit.test.ts` names that
+~40% of the evidence — for nothing. `test/usage/usage-rate-fit.test.ts` names that
 regression in a test title.
 
 **Which gates** — `SPLIT_RANK_TOL` for the solve, and
@@ -1671,7 +1671,7 @@ prints once under the table, from those constants, and a seventh glossary entry
 
 Every string the page says is a pure function in
 `client/src/lib/usageRatesFormat.ts`, so the statements are testable without a
-browser (`test/usage-rates-format.test.ts`; `pnpm test` prints the case count). The functions return
+browser (`test/usage/usage-rates-format.test.ts`; `pnpm test` prints the case count). The functions return
 *parts* — a headline and its counts, a current clause and a baseline clause —
 rather than pre-joined sentences, so a component can set one clause apart from
 another; the copy still lives in the lib. The 7-day floor is a

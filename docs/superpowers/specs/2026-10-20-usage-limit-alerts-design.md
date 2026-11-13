@@ -49,7 +49,7 @@ Two pushes close that gap: **limit reached** when the 5-hour window hits 100%, a
   guaranteed. The user chose: **alerts require recording on**. With recording off — or `SHOW_USAGE` off — both rows are disabled with a note saying why,
   and no alert is evaluated or sent even if something else triggers a read. **(user; the `showUsage` gate from doc-review 1)** No new timer.
 - The server stays at zero new runtime deps and makes no new kind of outbound call: the publish is the existing ntfy call in `lib/notify.ts`
-  (`test/outbound.test.ts`).
+  (`test/guards/outbound.test.ts`).
 - `shared/types.ts` first, then server, then client (repo rule). `NotifyEvent` gains two members; everything keyed by it must cover them — the
   `Record<NotifyEvent, …>` maps `TAGS` and `PHRASE` in `lib/notify.ts`, the `NOTIFY_EVENTS` list and defaults in `lib/settings.ts`, the Settings
   event list — and the prose that counts them (`NotifyEvent`'s "four session events" comment, push-notify.md's "fifth member").
@@ -141,7 +141,7 @@ is the contract. **(author's call)**
 
 - Phone: `<DASHBOARD_PUBLIC_URL>/?view=usage`. `client/src/lib/deepLink.ts` gains `usage` in both `DeepLinkView` and `readViewParam`'s whitelist, and
   `App.tsx`'s initial-section mapping (today `view === 'schedules' ? 'schedules' : 'management'`) gains `usage → 'usage'` — without that second change the
-  link lands on Management. `test/deep-link.test.ts` gains the `?view=usage` case. Without a public URL the push carries no link, as for every event.
+  link lands on Management. `test/sessions/deep-link.test.ts` gains the `?view=usage` case. Without a public URL the push carries no link, as for every event.
 - Desk: unchanged — `deskClickUrl` (`/api/dismiss`), like every desk push.
 
 ### Settings

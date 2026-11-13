@@ -1,0 +1,643 @@
+import assert from 'node:assert';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+
+import * as ch from '../../server/lib/compact-history.js';
+import * as cw from '../../server/lib/compact-window.js';
+import * as mi from '../../server/lib/model-identity.js';
+import * as tr from '../../server/lib/transcript.js';
+
+function test(name: string, fn: () => void): boolean {
+  try { fn(); console.log('  ✓ ' + name); return true; }
+  catch (e) { console.log('  ✗ ' + name); console.log('    ' + (e as Error).message); return false; }
+}
+
+function fixture(records: unknown[]): string {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cad-tr-'));
+  const file = path.join(dir, 's.jsonl');
+  fs.writeFileSync(file, records.map(r => (typeof r === 'string' ? r : JSON.stringify(r))).join('\n'));
+  return file;
+}
+
+export function run(): number {
+  console.log('\n=== transcript.ts ===\n');
+  let p = 0, f = 0;
+
+  // readTranscript reads each session's settings files for autoCompactWindow.
+  // Point the user-level and managed reads at an empty sandbox, so this
+  // machine's own ~/.claude/settings.json cannot leak into any window below.
+  const cwRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'cad-tr-cw-'));
+  fs.mkdirSync(path.join(cwRoot, 'home', '.claude'), { recursive: true });
+  cw.setCompactWindowHome(path.join(cwRoot, 'home'));
+  cw.setManagedSettingsPath(path.join(cwRoot, 'managed-settings.json'));
+  cw.resetCompactWindowCache();
+
+  if (test('usageTokens sums input + cache read + cache create', () => {
+    assert.strictEqual(tr.usageTokens({ message: { usage: { input_tokens: 10, cache_read_input_tokens: 90, cache_creation_input_tokens: 5 } } }), 105);
+    assert.strictEqual(tr.usageTokens({ message: {} }), 0);
+    assert.strictEqual(tr.usageTokens({}), 0);
+  })) p++; else f++;
+
+  // #159: the native window is a property of the family and version, measured
+  // against platform.claude.com's models overview on 2026-09-24 — not of `[1m]`.
+  if (test('resolveWindow: family and version decide the model maximum', () => {
+    assert.strictEqual(tr.resolveWindow(1000, 'claude-opus-5-5', {}), 1000000);
+    assert.strictEqual(tr.resolveWindow(1000, 'claude-opus-5', {}), 1000000);
+    assert.strictEqual(tr.resolveWindow(1000, 'claude-sonnet-5', {}), 1000000);
+    assert.strictEqual(tr.resolveWindow(1000, 'claude-fable-5-1', {}), 1000000);
+    assert.strictEqual(tr.resolveWindow(1000, 'claude-opus-4-8', {}), 1000000);
+    assert.strictEqual(tr.resolveWindow(1000, 'claude-opus-4-6', {}), 1000000);
+    assert.strictEqual(tr.resolveWindow(1000, 'claude-haiku-4-5-20251001', {}), 200000);
+    assert.strictEqual(tr.resolveWindow(1000, 'claude-sonnet-4-5', {}), 200000);
+    assert.strictEqual(tr.resolveWindow(1000, 'claude-sonnet-4-5-20250929', {}), 200000);
+    assert.strictEqual(tr.resolveWindow(1000, 'claude-opus-4-20250514', {}), 200000);
+    assert.strictEqual(tr.resolveWindow(1000, 'claude-opus-4-1', {}), 200000);
+    assert.strictEqual(tr.resolveWindow(1000, 'claude-3-5-sonnet-20241022', {}), 200000);
+    assert.strictEqual(tr.resolveWindow(1000, 'x', {}), 200000);
+    assert.strictEqual(tr.resolveWindow(1000, '<synthetic>', {}), 200000);
+    assert.strictEqual(tr.resolveWindow(1000, '', {}, null, null), 200000);
+  })) p++; else f++;
+
+  if (test('resolveWindow: [1m] marker, env override, overflow', () => {
+    assert.strictEqual(tr.resolveWindow(1000, 'claude-sonnet-4-5[1m]', {}), 1000000);
+    assert.strictEqual(tr.resolveWindow(1000, 'x', { CLAUDE_CODE_AUTO_COMPACT_WINDOW: '400000' }), 400000);
+    assert.strictEqual(tr.resolveWindow(250000, 'x', {}), 1000000);
+  })) p++; else f++;
+
+  // The model attachment's identity is checked before `message.model`.
+  if (test('resolveWindow: the identity decides, proof and env override beat it', () => {
+    assert.strictEqual(tr.resolveWindow(1000, 'claude-opus-5', {}, 'claude-haiku-4-5-20251001'), 200000);
+    assert.strictEqual(tr.resolveWindow(1000, 'x', {}, 'claude-opus-5'), 1000000);
+    assert.strictEqual(tr.resolveWindow(1000, 'claude-haiku-4-5-20251001', {}, 'claude-sonnet-4-5[1m]'), 1000000);
+    assert.strictEqual(tr.resolveWindow(1000, 'claude-opus-5', {}, '<synthetic>'), 1000000);
+    assert.strictEqual(tr.resolveWindow(250000, 'x', {}, 'claude-haiku-4-5-20251001'), 1000000);
+    assert.strictEqual(tr.resolveWindow(1000, 'x', { CLAUDE_CODE_AUTO_COMPACT_WINDOW: '400000' }, 'claude-opus-5[1m]'), 400000);
+  })) p++; else f++;
+
+  // bug-29: the session's autoCompactWindow caps the window, never raises it.
+  if (test('resolveWindow: a configured compact window caps the model maximum', () => {
+    assert.strictEqual(tr.resolveWindow(1000, 'claude-opus-5-5', {}, 'claude-opus-5-5', 300000), 300000);
+    assert.strictEqual(tr.resolveWindow(195290, 'claude-opus-5-5', {}, 'claude-opus-5-5', 300000), 300000);
+    assert.strictEqual(tr.resolveWindow(1000, 'claude-opus-5', {}, 'claude-opus-5[1m]', 200000), 200000);
+    assert.strictEqual(tr.resolveWindow(1000, 'claude-opus-5', {}, 'claude-opus-5[1m]', null), 1000000);
+    assert.strictEqual(tr.resolveWindow(1000, 'claude-opus-5', {}, 'claude-opus-5', 500000), 500000);
+    assert.strictEqual(tr.resolveWindow(1000, 'x', {}, 'claude-haiku-4-5-20251001', 300000), 200000);
+    assert.strictEqual(tr.resolveWindow(250000, 'x', {}, 'claude-opus-5[1m]', 200000), 1000000);
+    assert.strictEqual(tr.resolveWindow(1000, 'x', { CLAUDE_CODE_AUTO_COMPACT_WINDOW: '400000' }, 'claude-opus-5[1m]', 200000), 400000);
+  })) p++; else f++;
+
+  // #159: a compaction's preTokens is context the session really reached, so it
+  // proves the window the same way live tokens do — and outlives the compaction.
+  if (test('resolveWindow: a past compaction above 200k proves a larger window', () => {
+    const haiku = 'claude-haiku-4-5-20251001';
+    assert.strictEqual(tr.resolveWindow(195290, haiku, {}, haiku, null, 268844), 1000000);
+    assert.strictEqual(tr.resolveWindow(195290, haiku, {}, haiku, 300000, 268844), 300000);
+    assert.strictEqual(tr.resolveWindow(195290, haiku, {}, haiku, 200000, 268844), 1000000);
+    assert.strictEqual(tr.resolveWindow(195290, haiku, {}, haiku, null, 150000), 200000);
+    assert.strictEqual(tr.resolveWindow(195290, haiku, {}, haiku, null, null), 200000);
+  })) p++; else f++;
+
+  if (test('windowLabel formats k / M', () => {
+    assert.strictEqual(tr.windowLabel(200000), '200k');
+    assert.strictEqual(tr.windowLabel(1000000), '1M');
+  })) p++; else f++;
+
+  if (test('describeTool per tool type', () => {
+    assert.strictEqual(tr.describeTool({ name: 'Task', input: { subagent_type: 'Explore', description: 'find' } }), 'Explore: find');
+    assert.strictEqual(tr.describeTool({ name: 'Bash', input: { description: 'run', command: 'x' } }), 'run');
+    assert.strictEqual(tr.describeTool({ name: 'Edit', input: { file_path: '/a.js' } }), '/a.js');
+    assert.strictEqual(tr.describeTool({ name: 'Grep', input: { pattern: 'foo' } }), 'foo');
+  })) p++; else f++;
+
+  // The open body wraps this text, so the cut has to leave enough of a path or
+  // a command to recognise it by — 200, not the 80 that ate most of both.
+  if (test('describeTool caps a long argument at 200 chars', () => {
+    const long = '/src/' + 'a'.repeat(400);
+    assert.strictEqual(tr.describeTool({ name: 'Read', input: { file_path: long } }).length, 200);
+    assert.strictEqual(tr.describeTool({ name: 'Bash', input: { command: 'x'.repeat(400) } }), 'x'.repeat(200));
+    assert.strictEqual(tr.describeTool({ name: 'WebFetch', input: { url: 'u'.repeat(400) } }).length, 200);
+  })) p++; else f++;
+
+  if (test('readTranscript extracts tokens, model, activity, meta', () => {
+    const file = fixture([
+      { cwd: '/Users/me/proj', gitBranch: 'main', version: '2.1.0', timestamp: '2026-07-01T09:00:00Z', type: 'user' },
+      { message: { model: 'claude-opus-4-8', usage: { input_tokens: 100, cache_read_input_tokens: 900 } } },
+      { message: { model: 'claude-opus-4-8', content: [{ type: 'tool_use', name: 'Edit', input: { file_path: '/a/b.js' } }] } }
+    ]);
+    const s = tr.readTranscript(file)!;
+    assert.strictEqual(s.tokens, 1000);
+    assert.strictEqual(s.model, 'claude-opus-4-8');
+    assert.strictEqual(s.contextWindow, 1000000);
+    assert.strictEqual(s.contextPct, 0.1);
+    assert.strictEqual(s.activity!.tool, 'Edit');
+    assert.strictEqual(s.activity!.detail, '/a/b.js');
+    assert.strictEqual(s.cwd, '/Users/me/proj');
+    assert.strictEqual(s.gitBranch, 'main');
+    assert.strictEqual(s.version, '2.1.0');
+    assert.strictEqual(s.sessionName, null);
+    assert.strictEqual(s.entrypoint, null);   // no record carried one
+  })) p++; else f++;
+
+  if (test('readTranscript reports entrypoint off the newest record carrying one', () => {
+    // Real transcripts stamp `entrypoint` on every user/assistant record, and
+    // newest wins. That is not a tie-break detail: one transcript on this
+    // machine runs `sdk-cli` → `claude-desktop` (a headless session later picked
+    // up in the desktop app), and that session IS in the app's sidebar now — so
+    // reading the oldest value would label a visible session invisible.
+    const headless = tr.readTranscript(fixture([
+      { cwd: '/p', gitBranch: 'main', version: '2.1.0', timestamp: '2026-07-01T09:00:00Z', type: 'user', entrypoint: 'sdk-cli' },
+      { type: 'assistant', entrypoint: 'sdk-cli', message: { role: 'assistant', model: 'claude-opus-4-8', stop_reason: 'end_turn', content: [{ type: 'text', text: 'ok' }], usage: { input_tokens: 100 } } }
+    ]))!;
+    assert.strictEqual(headless.entrypoint, 'sdk-cli');
+
+    const resumed = tr.readTranscript(fixture([
+      { type: 'user', entrypoint: 'sdk-cli', message: { role: 'user', content: 'go' } },
+      { cwd: '/p', gitBranch: 'main', version: '2.1.0', timestamp: '2026-07-01T09:00:00Z', type: 'user', entrypoint: 'cli' },
+      { type: 'assistant', entrypoint: 'cli', message: { role: 'assistant', model: 'claude-opus-4-8', stop_reason: 'end_turn', content: [{ type: 'text', text: 'ok' }], usage: { input_tokens: 100 } } }
+    ]))!;
+    assert.strictEqual(resumed.entrypoint, 'cli');
+
+    // A non-string value is ignored rather than passed through.
+    const bogus = tr.readTranscript(fixture([
+      { type: 'user', entrypoint: 7, message: { role: 'user', content: 'go' } }
+    ]))!;
+    assert.strictEqual(bogus.entrypoint, null);
+  })) p++; else f++;
+
+  if (test('readTranscript extracts custom-title as sessionName', () => {
+    const s = tr.readTranscript(fixture([
+      { message: { role: 'user', content: 'hi' }, timestamp: '2026-07-01T09:00:00Z' },
+      { type: 'custom-title', customTitle: 'My work', sessionId: 'x' }
+    ]))!;
+    assert.strictEqual(s.sessionName, 'My work');
+  })) p++; else f++;
+
+  if (test('readTranscript finds custom-title buried under later records', () => {
+    // Claude Code re-appends custom-title on session select, then work piles on
+    // top of it. The newest-first scan must not stop before reaching it just
+    // because tokens/activity/cwd/version/message are already satisfied.
+    const s = tr.readTranscript(fixture([
+      { message: { role: 'user', content: 'hi' }, timestamp: '2026-07-01T09:00:00Z' },
+      { type: 'custom-title', customTitle: 'My work', sessionId: 'x' },
+      { cwd: '/Users/me/proj', gitBranch: 'main', version: '2.1.0', timestamp: '2026-07-01T09:01:00Z', message: { role: 'assistant', model: 'claude-opus-4-8', stop_reason: 'end_turn', usage: { input_tokens: 100 }, content: [{ type: 'tool_use', name: 'Edit', input: { file_path: '/a/b.js' } }] } },
+      { cwd: '/Users/me/proj', gitBranch: 'main', version: '2.1.0', timestamp: '2026-07-01T09:02:00Z', message: { role: 'assistant', model: 'claude-opus-4-8', stop_reason: 'end_turn', usage: { input_tokens: 200 }, content: [{ type: 'tool_use', name: 'Bash', input: { description: 'ls' } }] } }
+    ]))!;
+    assert.strictEqual(s.sessionName, 'My work');
+    assert.strictEqual(s.tokens, 200);           // still the newest usage, not the older one
+    assert.strictEqual(s.activity!.tool, 'Bash'); // still the newest activity
+  })) p++; else f++;
+
+  if (test('readTranscript treats "New session" placeholder as unnamed', () => {
+    const s = tr.readTranscript(fixture([
+      { message: { role: 'user', content: 'hi' }, timestamp: '2026-07-01T09:00:00Z' },
+      { type: 'custom-title', customTitle: 'New session', sessionId: 'x' }
+    ]))!;
+    assert.strictEqual(s.sessionName, null);
+  })) p++; else f++;
+
+  if (test('readTranscript returns null for missing file', () => {
+    assert.strictEqual(tr.readTranscript('/no/such.jsonl'), null);
+  })) p++; else f++;
+
+  if (test('api-request-blob replays never decide turn state or activity', () => {
+    const blob = { type: 'api-request-blob', sessionId: 's', hash: 'h', message: { role: 'assistant', content: [
+      { type: 'tool_use', name: 'Read', input: { file_path: '/old.ts' } }
+    ] } };
+    const s = tr.readTranscript(fixture([
+      { type: 'assistant', message: { role: 'assistant', stop_reason: 'tool_use', content: [{ type: 'tool_use', name: 'Edit', input: { file_path: '/a/b.js' } }] } },
+      { type: 'assistant', message: { role: 'assistant', stop_reason: 'end_turn', content: [{ type: 'text', text: 'done' }] } },
+      blob
+    ]))!;
+    assert.strictEqual(s.turnComplete, true);
+    assert.strictEqual(s.activity!.tool, 'Edit');
+  })) p++; else f++;
+
+  // #368: when a request fails for good, Claude Code ends the turn with this synthetic record, whose `stop_reason` is `stop_sequence`.
+  const apiErrorRec = (error: string, text: string, extra: object = {}) => ({
+    type: 'assistant', isApiErrorMessage: true, error, ...extra,
+    message: { role: 'assistant', model: '<synthetic>', stop_reason: 'stop_sequence', usage: { input_tokens: 0, output_tokens: 0 }, content: [{ type: 'text', text }] }
+  });
+  const LIMIT_TEXT = "You've hit your session limit · resets 6:30pm (Europe/Berlin)";
+  const realTurn = { type: 'assistant', message: { role: 'assistant', model: 'claude-opus-5-5', stop_reason: 'tool_use', content: [{ type: 'tool_use', name: 'Bash', input: { command: 'ls' } }], usage: { input_tokens: 4200 } } };
+
+  if (test('API-error record ends the turn, reports the error, and leaves tokens, model and activity on the last real turn', () => {
+    const s = tr.readTranscript(fixture([realTurn, apiErrorRec('rate_limit', `  ${LIMIT_TEXT}\n`, { quotaLimits: { resetsAt: 1789749000, rateLimitType: 'five_hour' } })]))!;
+    assert.strictEqual(s.turnComplete, true);
+    assert.strictEqual(s.waitingOnQuestion, false);
+    assert.deepStrictEqual(s.apiError, { kind: 'rate_limit', text: LIMIT_TEXT, resetsAtMs: 1789749000000 });
+    assert.strictEqual(s.tokens, 4200);
+    assert.strictEqual(s.model, 'claude-opus-5-5');
+    assert.deepStrictEqual(s.activity, { tool: 'Bash', detail: 'ls' });
+  })) p++; else f++;
+
+  if (test('API-error record: no usable reset time reads null, and the kind passes through verbatim', () => {
+    const noQuota = tr.readTranscript(fixture([apiErrorRec('rate_limit', LIMIT_TEXT)]))!;
+    assert.strictEqual(noQuota.turnComplete, true);
+    assert.strictEqual(noQuota.apiError!.resetsAtMs, null);
+    assert.strictEqual(tr.readTranscript(fixture([apiErrorRec('rate_limit', LIMIT_TEXT, { quotaLimits: { resetsAt: 'soon' } })]))!.apiError!.resetsAtMs, null);
+    for (const kind of ['server_error', 'authentication_failed', 'some_future_kind']) {
+      const s = tr.readTranscript(fixture([apiErrorRec(kind, 'nope')]))!;
+      assert.strictEqual(s.turnComplete, true);
+      assert.strictEqual(s.apiError!.kind, kind);
+    }
+  })) p++; else f++;
+
+  if (test('stop_sequence without the API-error flag is still mid-turn: the fix keys on the flag', () => {
+    const s = tr.readTranscript(fixture([
+      { type: 'assistant', message: { role: 'assistant', stop_reason: 'stop_sequence', content: [{ type: 'text', text: 'partial' }] } }
+    ]))!;
+    assert.strictEqual(s.turnComplete, false);
+    assert.strictEqual(s.apiError, null);
+  })) p++; else f++;
+
+  if (test('API-error record followed by a retry\'s real record: mid-turn again, no error', () => {
+    const s = tr.readTranscript(fixture([apiErrorRec('server_error', 'API Error: 529 Overloaded'), realTurn]))!;
+    assert.strictEqual(s.turnComplete, false);
+    assert.strictEqual(s.apiError, null);
+  })) p++; else f++;
+
+  if (test('an ordinary finished transcript has no API error', () => {
+    const s = tr.readTranscript(fixture([{ message: { role: 'assistant', stop_reason: 'end_turn', content: [{ type: 'text', text: 'done' }] } }]))!;
+    assert.strictEqual(s.apiError, null);
+  })) p++; else f++;
+
+  if (test('turnComplete/waitingOnQuestion (question + plan) from newest message record', () => {
+    const done = tr.readTranscript(fixture([
+      { message: { role: 'assistant', stop_reason: 'end_turn', content: [{ type: 'text', text: 'done' }] } }
+    ]))!;
+    assert.strictEqual(done.turnComplete, true);
+    assert.strictEqual(done.waitingOnQuestion, false);
+
+    const pending = tr.readTranscript(fixture([
+      { message: { role: 'assistant', stop_reason: 'tool_use', content: [{ type: 'tool_use', name: 'Bash', input: { command: 'ls' } }] } }
+    ]))!;
+    assert.strictEqual(pending.turnComplete, false);
+    assert.strictEqual(pending.waitingOnQuestion, false);
+
+    const asking = tr.readTranscript(fixture([
+      { message: { role: 'assistant', stop_reason: 'tool_use', content: [{ type: 'tool_use', name: 'AskUserQuestion', input: { questions: [] } }] } }
+    ]))!;
+    assert.strictEqual(asking.waitingOnQuestion, true);
+
+    // A proposed plan is the same shape of wait: the card is unanswered until a
+    // tool_result lands, so the trailing ExitPlanMode is the signal.
+    const planning = tr.readTranscript(fixture([
+      { message: { role: 'assistant', stop_reason: 'tool_use', content: [{ type: 'tool_use', name: 'ExitPlanMode', input: { plan: '## Steps\n1. do it' } }] } }
+    ]))!;
+    assert.strictEqual(planning.waitingOnQuestion, true);
+
+    const planAccepted = tr.readTranscript(fixture([
+      { message: { role: 'assistant', stop_reason: 'tool_use', content: [{ type: 'tool_use', name: 'ExitPlanMode', input: { plan: 'x' } }] } },
+      { message: { role: 'user', content: [{ type: 'tool_result', content: 'User has approved your plan.' }] } }
+    ]))!;
+    assert.strictEqual(planAccepted.waitingOnQuestion, false);
+
+    // Newest record is the user's tool_result → question answered, turn still open.
+    const answered = tr.readTranscript(fixture([
+      { message: { role: 'assistant', stop_reason: 'tool_use', content: [{ type: 'tool_use', name: 'AskUserQuestion', input: {} }] } },
+      { message: { role: 'user', content: [{ type: 'tool_result', content: 'ok' }] } }
+    ]))!;
+    assert.strictEqual(answered.waitingOnQuestion, false);
+    assert.strictEqual(answered.turnComplete, false);
+  })) p++; else f++;
+
+  if (test('commandOnly: only local slash-command records, and the cases that are not', () => {
+    // A `/login` in a fresh terminal writes three user records and stops: no
+    // assistant turn, no usage. Real on-disk shape (content is a plain string).
+    const loginOnly = tr.readTranscript(fixture([
+      { type: 'user', isMeta: true, timestamp: '2026-08-24T17:24:30.831Z', message: { role: 'user', content: '<local-command-caveat>Caveat: the messages below were generated by the user while running local commands.</local-command-caveat>' } },
+      { type: 'user', timestamp: '2026-08-24T17:24:30.831Z', message: { role: 'user', content: '<command-name>/login</command-name>\n            <command-message>login</command-message>\n            <command-args></command-args>' } },
+      { type: 'user', timestamp: '2026-08-24T17:24:30.831Z', message: { role: 'user', content: '<local-command-stdout>Login successful</local-command-stdout>' } }
+    ]))!;
+    assert.strictEqual(loginOnly.commandOnly, true);
+    assert.strictEqual(loginOnly.hasMessages, true);  // the older guard cannot catch it: these ARE message records
+
+    // A bang command is the same class of local plumbing.
+    const bangOnly = tr.readTranscript(fixture([
+      { type: 'user', message: { role: 'user', content: '<bash-input>ls</bash-input>' } },
+      { type: 'user', message: { role: 'user', content: '<bash-stdout>a.txt</bash-stdout>' } }
+    ]))!;
+    assert.strictEqual(bangOnly.commandOnly, true);
+
+    // Same command run at the END of a session that did real work: usage sits on
+    // an older assistant record, so this is a real session and must stay visible.
+    const afterWork = tr.readTranscript(fixture([
+      { type: 'assistant', message: { role: 'assistant', model: 'claude-opus-4-8', stop_reason: 'end_turn', usage: { input_tokens: 5000 }, content: [{ type: 'text', text: 'done' }] } },
+      { type: 'user', message: { role: 'user', content: '<command-name>/login</command-name>' } }
+    ]))!;
+    assert.strictEqual(afterWork.commandOnly, false);
+
+    // Fresh session, real prompt typed, assistant has not answered yet: 0 tokens
+    // but a real conversation — the green "working" row, must stay visible.
+    const firstPrompt = tr.readTranscript(fixture([
+      { type: 'user', message: { role: 'user', content: 'fix the login bug' } }
+    ]))!;
+    assert.strictEqual(firstPrompt.commandOnly, false);
+
+    // Block-array content that is not plumbing, still zero tokens.
+    const blockPrompt = tr.readTranscript(fixture([
+      { type: 'user', message: { role: 'user', content: [{ type: 'text', text: 'fix the login bug' }] } }
+    ]))!;
+    assert.strictEqual(blockPrompt.commandOnly, false);
+
+    // No conversational record at all: hasMessages already drops it, so
+    // commandOnly must not claim it too (the two guards stay distinct).
+    const empty = tr.readTranscript(fixture([
+      { type: 'queue-operation', timestamp: '2026-08-24T17:24:30.831Z' }
+    ]))!;
+    assert.strictEqual(empty.hasMessages, false);
+    assert.strictEqual(empty.commandOnly, false);
+  })) p++; else f++;
+
+  // ---- bug-7: originCwd, the launch cwd -------------------------------------
+
+  // A record big enough to pad a fixture past a window boundary, carrying no cwd.
+  const pad = (i: number) => ({ type: 'progress', note: 'p' + i + '-' + 'x'.repeat(280) });
+
+  if (test('originCwd is the oldest cwd, cwd the newest, when the tail is truncated', () => {
+    tr.resetOriginCache();
+    const file = fixture([
+      { type: 'attachment', cwd: '/a/repo', timestamp: '2026-09-01T10:00:00Z' },
+      ...Array.from({ length: 8 }, (_, i) => pad(i)),
+      { type: 'user', cwd: '/a/repo/sub', message: { role: 'user', content: 'x' }, timestamp: '2026-09-01T10:05:00Z' }
+    ]);
+    const p = tr.readTranscript(file, { tailBytes: 400 })!;
+    assert.strictEqual(p.originCwd, '/a/repo');
+    assert.strictEqual(p.cwd, '/a/repo/sub');
+  })) p++; else f++;
+
+  if (test('originCwd equals cwd when the session never drifted', () => {
+    tr.resetOriginCache();
+    const file = fixture([
+      { type: 'attachment', cwd: '/a/repo', timestamp: '2026-09-01T10:00:00Z' },
+      ...Array.from({ length: 8 }, (_, i) => pad(i)),
+      { type: 'user', cwd: '/a/repo', message: { role: 'user', content: 'x' }, timestamp: '2026-09-01T10:05:00Z' }
+    ]);
+    const p = tr.readTranscript(file, { tailBytes: 400 })!;
+    assert.strictEqual(p.originCwd, '/a/repo');
+    assert.strictEqual(p.cwd, '/a/repo');
+  })) p++; else f++;
+
+  if (test('originCwd is null (fail open) when no cwd sits in the head window', () => {
+    tr.resetOriginCache();
+    // 60 * ~300B = ~18 KB of cwd-less records ahead of the first cwd, so the
+    // 16 KB head window genuinely misses. No guess is made.
+    const file = fixture([
+      ...Array.from({ length: 60 }, (_, i) => pad(i)),
+      { type: 'user', cwd: '/a/repo/sub', message: { role: 'user', content: 'x' }, timestamp: '2026-09-01T10:05:00Z' }
+    ]);
+    const p = tr.readTranscript(file, { tailBytes: 400 })!;
+    assert.strictEqual(p.originCwd, null);
+    assert.strictEqual(p.cwd, '/a/repo/sub');
+  })) p++; else f++;
+
+  if (test('originCwd is memoized per path; only a shrunk file re-reads the head', () => {
+    tr.resetOriginCache();
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cad-oc-'));
+    const file = path.join(dir, 's.jsonl');
+    const line = (r: unknown) => JSON.stringify(r) + '\n';
+    const head = line({ type: 'attachment', cwd: '/a/repo', timestamp: '2026-09-01T10:00:00Z' });
+    const body = (n: number) => Array.from({ length: n }, (_, i) => line(pad(i))).join('');
+    const newest = line({ type: 'user', cwd: '/a/repo/sub', message: { role: 'user', content: 'x' }, timestamp: '2026-09-01T10:05:00Z' });
+
+    fs.writeFileSync(file, head + body(20) + newest);
+    assert.strictEqual(tr.readTranscript(file, { tailBytes: 400 })!.originCwd, '/a/repo');
+    assert.strictEqual(tr.readTranscript(file, { tailBytes: 400 })!.originCwd, '/a/repo');
+    assert.strictEqual(tr.originCacheStats().headReads, 1, 'second read served from the memo');
+
+    // Appends leave the launch cwd untouched, so no second head read.
+    fs.appendFileSync(file, newest);
+    assert.strictEqual(tr.readTranscript(file, { tailBytes: 400 })!.originCwd, '/a/repo');
+    assert.strictEqual(tr.originCacheStats().headReads, 1, 'an append does not invalidate');
+
+    // Smaller than before but still past the tail window: rotation/truncation,
+    // so nothing remembered describes this file any more.
+    fs.writeFileSync(file, head + body(10) + newest);
+    assert.strictEqual(tr.readTranscript(file, { tailBytes: 400 })!.originCwd, '/a/repo');
+    assert.strictEqual(tr.originCacheStats().headReads, 2, 'a shrunk file re-reads the head');
+  })) p++; else f++;
+
+  if (test('originCwd costs no head read when the whole file is inside the tail window', () => {
+    tr.resetOriginCache();
+    const file = fixture([
+      { type: 'attachment', cwd: '/a/repo', timestamp: '2026-09-01T10:00:00Z' },
+      { type: 'user', cwd: '/a/repo/sub', message: { role: 'user', content: 'x' }, timestamp: '2026-09-01T10:05:00Z' }
+    ]);
+    const p = tr.readTranscript(file)!;
+    assert.strictEqual(p.originCwd, '/a/repo');
+    assert.strictEqual(p.cwd, '/a/repo/sub');
+    assert.strictEqual(tr.originCacheStats().headReads, 0);
+  })) p++; else f++;
+
+  const IDENT = (id: string) => ({
+    type: 'attachment',
+    attachment: { type: 'model', identity: { modelId: id, marketingName: 'Opus 5' }, text: 'You are powered by ' + id }
+  });
+  const USAGE = (i: number) => ({
+    timestamp: '2026-07-01T09:00:00Z', cwd: '/p', gitBranch: 'main', version: '2.1.0',
+    message: { role: 'assistant', model: 'claude-opus-5', stop_reason: 'end_turn', usage: { input_tokens: 1000 + i }, content: [] }
+  });
+
+  const HAIKU = (i: number) => {
+    const u = USAGE(i);
+    return { ...u, message: { ...u.message, model: 'claude-haiku-4-5-20251001' } };
+  };
+
+  if (test('readTranscript: a [1m] model attachment sizes the window at 1M', () => {
+    mi.resetModelIdentityCache();
+    const s = tr.readTranscript(fixture([IDENT('claude-opus-5[1m]'), USAGE(0), USAGE(1)]))!;
+    assert.strictEqual(s.model, 'claude-opus-5');
+    assert.strictEqual(s.contextWindow, 1000000);
+    assert.strictEqual(s.contextWindowLabel, '1M');
+  })) p++; else f++;
+
+  if (test('readTranscript: the newest model attachment wins after a /model switch', () => {
+    mi.resetModelIdentityCache();
+    const s = tr.readTranscript(fixture([IDENT('claude-opus-5[1m]'), USAGE(0), IDENT('claude-haiku-4-5-20251001'), USAGE(1)]))!;
+    assert.strictEqual(s.contextWindow, 200000);
+  })) p++; else f++;
+
+  if (test('readTranscript: a model attachment below the tail window is found once, then remembered', () => {
+    mi.resetModelIdentityCache();
+    const pad: unknown[] = [];
+    for (let i = 0; i < 200; i++) pad.push(USAGE(i));
+    const file = fixture([IDENT('claude-opus-5[1m]'), ...pad]);
+    const tailBytes = 4096;
+    assert.strictEqual(tr.readTail(file, tailBytes)!.text.includes(mi.MODEL_MARKER), false, 'fixture must bury the attachment');
+    assert.strictEqual(tr.readTranscript(file, { tailBytes })!.contextWindow, 1000000);
+    assert.strictEqual(mi.modelIdentityCacheStats().fullScans, 1);
+    assert.strictEqual(tr.readTranscript(file, { tailBytes })!.contextWindow, 1000000);
+    assert.strictEqual(mi.modelIdentityCacheStats().fullScans, 1, 'second read must be served from the remembered range');
+  })) p++; else f++;
+
+  if (test('readTranscript: marker text inside a user message does not promote', () => {
+    mi.resetModelIdentityCache();
+    const s = tr.readTranscript(fixture([
+      { type: 'user', message: { role: 'user', content: 'grep for {"type":"model","identity":{"modelId":"claude-opus-5[1m]"}}' } },
+      HAIKU(0)
+    ]))!;
+    assert.strictEqual(s.contextWindow, 200000);
+  })) p++; else f++;
+
+  if (test('readTranscript: the launch directory\'s autoCompactWindow caps a [1m] session', () => {
+    mi.resetModelIdentityCache();
+    cw.resetCompactWindowCache();
+    const project = fs.mkdtempSync(path.join(os.tmpdir(), 'cad-tr-proj-'));
+    const settings = path.join(project, '.claude', 'settings.json');
+    fs.mkdirSync(path.dirname(settings), { recursive: true });
+    fs.writeFileSync(settings, JSON.stringify({ autoCompactWindow: 200000 }));
+    const at = (i: number) => ({ ...USAGE(i), cwd: project });
+    const file = fixture([IDENT('claude-opus-5[1m]'), at(0), at(1)]);
+    const capped = tr.readTranscript(file)!;
+    assert.strictEqual(capped.contextWindow, 200000);
+    assert.strictEqual(capped.contextWindowLabel, '200k');
+  })) p++; else f++;
+
+  // The Opus 5.5 session at 201.2k read 1M: the top-level 200k cap was the only one read, and 201k past it "proved" no cap.
+  if (test('readTranscript: modelSettings[<model>].autoCompactWindow caps the session past the top-level window', () => {
+    mi.resetModelIdentityCache();
+    cw.resetCompactWindowCache();
+    const project = fs.mkdtempSync(path.join(os.tmpdir(), 'cad-tr-proj-'));
+    const settings = path.join(project, '.claude', 'settings.json');
+    fs.mkdirSync(path.dirname(settings), { recursive: true });
+    fs.writeFileSync(settings, JSON.stringify({ autoCompactWindow: 200000, modelSettings: { 'claude-opus-5-5': { autoCompactWindow: 300000 } } }));
+    const at = (n: number) => ({ ...USAGE(0), cwd: project, message: { ...USAGE(0).message, model: 'claude-opus-5-5', usage: { input_tokens: n } } });
+    const s = tr.readTranscript(fixture([IDENT('claude-opus-5-5'), at(1000), at(201200)]))!;
+    assert.strictEqual(s.contextWindow, 300000);
+    assert.strictEqual(s.contextWindowLabel, '300k');
+    assert.strictEqual(tr.readTranscript(fixture([IDENT('claude-sonnet-5'), at(1000)]))!.contextWindow, 200000);
+  })) p++; else f++;
+
+  // #159: a session loads its settings once, at start — editing them later
+  // moves nothing for a session already running, so neither may the gauge.
+  if (test('readTranscript: the compact window is frozen per transcript at first sight', () => {
+    mi.resetModelIdentityCache();
+    cw.resetCompactWindowCache();
+    const project = fs.mkdtempSync(path.join(os.tmpdir(), 'cad-tr-proj-'));
+    const settings = path.join(project, '.claude', 'settings.json');
+    fs.mkdirSync(path.dirname(settings), { recursive: true });
+    fs.writeFileSync(settings, JSON.stringify({ autoCompactWindow: 300000 }));
+    const at = (i: number) => ({ ...USAGE(i), cwd: project });
+    const running = fixture([IDENT('claude-opus-5-5'), at(0)]);
+    assert.strictEqual(tr.readTranscript(running)!.contextWindow, 300000);
+    fs.writeFileSync(settings, JSON.stringify({ autoCompactWindow: 200000, pad: 'x' }));
+    fs.appendFileSync(running, '\n' + JSON.stringify(at(1)));
+    assert.strictEqual(tr.readTranscript(running)!.contextWindow, 300000, 'a running session keeps the window it started with');
+    const later = fixture([IDENT('claude-opus-5-5'), at(0)]);
+    assert.strictEqual(tr.readTranscript(later)!.contextWindow, 200000, 'a session first seen after the edit reads the new value');
+    fs.rmSync(settings);
+    assert.strictEqual(tr.readTranscript(fixture([IDENT('claude-opus-5-5'), at(0)]))!.contextWindow, 1000000);
+  })) p++; else f++;
+
+  if (test('readTranscript: a compaction below the tail window still proves the window', () => {
+    mi.resetModelIdentityCache();
+    ch.resetCompactHistoryCache();
+    const boundary = {
+      type: 'system', subtype: 'compact_boundary', timestamp: '2026-07-01T08:00:00Z',
+      compactMetadata: { trigger: 'auto', preTokens: 268844, postTokens: 30596 }
+    };
+    const pad: unknown[] = [];
+    for (let i = 0; i < 200; i++) pad.push(HAIKU(i));
+    const tailBytes = 4096;
+    const file = fixture([IDENT('claude-haiku-4-5-20251001'), boundary, ...pad]);
+    assert.strictEqual(tr.readTail(file, tailBytes)!.text.includes(ch.COMPACT_MARKER), false, 'fixture must bury the boundary');
+    assert.strictEqual(tr.readTranscript(file, { tailBytes })!.contextWindow, 1000000);
+    assert.strictEqual(tr.readTranscript(fixture([IDENT('claude-haiku-4-5-20251001'), ...pad]), { tailBytes })!.contextWindow, 200000);
+  })) p++; else f++;
+
+  // #352: the drawer's Effort fact. Every assistant record carries `effort` (measured 2026-10-30: 1521/1521 across this machine's newest 40
+  // transcripts), so the newest main-chain one is read inside the existing scan.
+  const EFF = (effort: unknown, extra: Record<string, unknown> = {}) => ({
+    type: 'assistant', effort, ...extra,
+    message: { role: 'assistant', model: 'claude-opus-5-5', stop_reason: 'end_turn', content: [{ type: 'text', text: 'x' }], usage: { input_tokens: 100 } }
+  });
+
+  if (test('readTranscript: effort is the newest main-chain assistant record\'s', () => {
+    assert.strictEqual(tr.readTranscript(fixture([EFF('low'), EFF('high')]))!.effort, 'high');
+  })) p++; else f++;
+
+  if (test('readTranscript: a sidechain record\'s effort is skipped for the main chain\'s', () => {
+    assert.strictEqual(tr.readTranscript(fixture([EFF('medium'), EFF('max', { isSidechain: true })]))!.effort, 'medium');
+  })) p++; else f++;
+
+  if (test('readTranscript: a sidechain record alone carrying effort yields null', () => {
+    assert.strictEqual(tr.readTranscript(fixture([EFF(undefined), EFF('max', { isSidechain: true })]))!.effort, null);
+  })) p++; else f++;
+
+  if (test('readTranscript: a non-assistant record carrying effort is ignored', () => {
+    const userEff = { type: 'user', effort: 'max', message: { role: 'user', content: 'hi' } };
+    assert.strictEqual(tr.readTranscript(fixture([EFF('low'), userEff]))!.effort, 'low');
+  })) p++; else f++;
+
+  if (test('readTranscript: a non-string effort falls through to an older one, else null', () => {
+    assert.strictEqual(tr.readTranscript(fixture([EFF('low'), EFF({ level: 'high' }), EFF(3)]))!.effort, 'low');
+    assert.strictEqual(tr.readTranscript(fixture([EFF({ level: 'high' }), EFF(3)]))!.effort, null);
+  })) p++; else f++;
+
+  if (test('readTranscript: no effort anywhere → null, the other fields as before', () => {
+    const s = tr.readTranscript(fixture([
+      { type: 'assistant', message: { role: 'assistant', model: 'claude-opus-5-5', content: [{ type: 'tool_use', name: 'Bash', input: { command: 'ls' } }], usage: { input_tokens: 4200 } } }
+    ]))!;
+    assert.strictEqual(s.effort, null);
+    assert.strictEqual(s.tokens, 4200);
+    assert.strictEqual(s.model, 'claude-opus-5-5');
+    assert.deepStrictEqual(s.activity, { tool: 'Bash', detail: 'ls' });
+  })) p++; else f++;
+
+  // lastSessionEffort's window. A partial first line usually fails JSON.parse and is skipped anyway, so a plain oversized fixture would not prove the skip:
+  // these size the padding so the window opens exactly on a parseable record.
+  const WINDOW = tr.DEFAULT_TAIL_BYTES;
+  const rawFixture = (text: string): string => {
+    const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'cad-tr-')), 's.jsonl');
+    fs.writeFileSync(file, text);
+    return file;
+  };
+  /** One newline-ended line with no `"effort"` in it, exactly `bytes` long. */
+  const padLine = (bytes: number): string => {
+    const shell = JSON.stringify({ type: 'progress', pad: '' }).length + 1;
+    return JSON.stringify({ type: 'progress', pad: 'a'.repeat(bytes - shell) }) + '\n';
+  };
+  const effLine = (effort: string): string => JSON.stringify(EFF(effort)) + '\n';
+
+  if (test('lastSessionEffort: a truncated tail skips its first line, even one that parses', () => {
+    const first = effLine('max');
+    const file = rawFixture('x' + first + padLine(WINDOW - first.length));
+    const tail = tr.readTail(file, WINDOW)!;
+    assert.strictEqual(tail.truncated, true, 'fixture must truncate');
+    assert.ok(tail.text.startsWith('{'), 'fixture must open the window on a parseable fragment');
+    assert.strictEqual(tr.lastSessionEffort(file), null);
+  })) p++; else f++;
+
+  if (test('lastSessionEffort: the first line of an untruncated file is read', () => {
+    const first = effLine('max');
+    const file = rawFixture(first + padLine(WINDOW - first.length));
+    assert.strictEqual(tr.readTail(file, WINDOW)!.truncated, false, 'fixture must fit the window exactly');
+    assert.strictEqual(tr.lastSessionEffort(file), 'max');
+  })) p++; else f++;
+
+  if (test('lastSessionEffort: an effort older than the window is not found', () => {
+    const file = rawFixture(effLine('high') + padLine(WINDOW + 1024));
+    assert.strictEqual(tr.readTail(file, WINDOW)!.text.includes('"effort"'), false, 'fixture must bury the effort');
+    assert.strictEqual(tr.lastSessionEffort(file), null);
+  })) p++; else f++;
+
+  if (test('lastSessionEffort: an oversized file reads the effort inside the window', () => {
+    assert.strictEqual(tr.lastSessionEffort(rawFixture(effLine('high') + padLine(WINDOW + 1024) + effLine('low'))), 'low');
+  })) p++; else f++;
+
+  if (test('lastSessionEffort: a missing file, an empty one, and one with no effort are all null', () => {
+    assert.strictEqual(tr.lastSessionEffort(path.join(os.tmpdir(), 'cad-tr-no-such-file.jsonl')), null);
+    assert.strictEqual(tr.lastSessionEffort(rawFixture('')), null);
+    assert.strictEqual(tr.lastSessionEffort(rawFixture(padLine(200))), null);
+  })) p++; else f++;
+
+  cw.setCompactWindowHome(null);
+  cw.setManagedSettingsPath(null);
+  cw.resetCompactWindowCache();
+
+  console.log('\nPassed: ' + p + '  Failed: ' + f + '\n');
+  return f;
+}
+
+if (import.meta.url === `file://${process.argv[1]}`) process.exit(run() > 0 ? 1 : 0);

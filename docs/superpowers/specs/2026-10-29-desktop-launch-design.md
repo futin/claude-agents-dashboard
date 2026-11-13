@@ -54,7 +54,7 @@ default**.
 ## Constraints
 
 - `server/` takes no new dependency and no new outbound kind. Launching `open` is already allowed (`lib/open-folder.ts`); this adds `open <claude:// url>`
-  beside it. `test/outbound.test.ts` pins network modules only and must still pass; the launched-program list to extend is the one in
+  beside it. `test/guards/outbound.test.ts` pins network modules only and must still pass; the launched-program list to extend is the one in
   `.claude/CLAUDE.md` (Code rules) and `docs/overview.md`.
 - macOS only, as the links are. On any other platform, or when `/Applications/Claude.app` is absent, Desktop is unavailable and the UI says so.
 - Same gates as `POST /api/spawn` today: `refuseWrite`, the remote-answer toggle, project membership.

@@ -214,7 +214,7 @@ excluded so it stays a fixed square instead of stretching to a third of the row.
 
 ## D. Tests, docs, risks
 
-**Tests** (`test/transcribe.test.ts`, node-assert, no audio, no spawned whisper):
+**Tests** (`test/chat/transcribe.test.ts`, node-assert, no audio, no spawned whisper):
 
 - `extForMime` allowlist including the rejection case
 - `buildFfmpegArgs` / `buildWhisperArgs` exact argv

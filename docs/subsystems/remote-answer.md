@@ -37,7 +37,7 @@ take one away. If the dashboard isn't running, the probe gives up in under a sec
      ~40ms. Below the threshold the hook exits 0 immediately, so at-the-desk behaviour is
      byte-for-byte the pre-hook behaviour. **Unreadable idle counts as at-desk** — never
      hide the dialog on a guess, which also means non-macOS effectively opts out unless the
-     threshold is `0` (skip the check, always wait). Unreadable and non-numeric idle are both pinned by `test/hook-decisions.test.ts`.
+     threshold is `0` (skip the check, always wait). Unreadable and non-numeric idle are both pinned by `test/hooks/hook-decisions.test.ts`.
 
      The threshold resolves as `${CLAUDE_DASHBOARD_IDLE_SECS:-<idleSecs from /api/health>}`,
      falling back to 60 — so Settings → Away after drives it, an explicitly exported env var
@@ -75,7 +75,7 @@ take one away. If the dashboard isn't running, the probe gives up in under a sec
   permissionDecisionReason:"<prose>"}}`: the tool call is cancelled and the reason is fed
   to the model, which then continues with the stated choice. `composeReason` therefore
   always ends with "do not ask again" — a denied question is otherwise an invitation to
-  re-ask. `test/hook-decisions.test.ts` pins that shape and the `answered` status it is printed for.
+  re-ask. `test/hooks/hook-decisions.test.ts` pins that shape and the `answered` status it is printed for.
 - **The mechanism is isolated on purpose.** The server returns structured `answers`
   *plus* a ready-made `reason`; the hook only echoes `reason`. Swapping in a native
   answer path later means editing step 3 of `scripts/ask-remote-hook.sh` and nothing
@@ -222,7 +222,7 @@ already decide this?" versus "is the user back?".
   together with the autopilot CLI (`sync.sh pull`), or a `running` run still idles on every denied question.
 - **A routine step steps the hook aside too.** `ask-remote-hook.sh` exits 0 right after its `CLAUDECODE` check when `CLAUDE_DASHBOARD_ROUTINE` (or the
   pre-rename `CLAUDE_DASHBOARD_SCHEDULE`) is set, before the session id is even parsed: the [routine wrapper](routines.md#the-wrapper) stamps it on an
-  unattended child, so there is nobody to hold a question for (`test/hooks-routine-marker.test.ts`).
+  unattended child, so there is nobody to hold a question for (`test/hooks/hooks-routine-marker.test.ts`).
 
 ## Security posture
 
@@ -232,7 +232,7 @@ passes while tailnet trust is on, and anyone else needs `Authorization: Bearer <
 (read-only when no token is set — see [remote-access](remote-access.md)); the `GET question` route stays open
 since it reveals no more than the transcript already does. The hook reads the token from
 `~/.claude/hooks/dashboard-token` (user-created — a server-generated file would fight the
-read-only Docker mount; `chmod 600`); it sends the Bearer header only when that file exists (`test/hooks-token.test.ts`); the browser persists it as `dashboard.answerToken`
+read-only Docker mount; `chmod 600`); it sends the Bearer header only when that file exists (`test/hooks/hooks-token.test.ts`); the browser persists it as `dashboard.answerToken`
 and asks for it when a 403 says a token would help. Every client caller reads it through `useAnswerToken`, one module-level store in `client/src/lib/answerToken.ts` with a `storage`
 listener, and builds the header with that file's `authHeaders` — so a token entered in one panel reaches every hook mounted beside it, where twelve
 private `usePersistedState` copies once each needed a remount to see it (#200). A refused write logs one stderr line — `rejected write: <METHOD>

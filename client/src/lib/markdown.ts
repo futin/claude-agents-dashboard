@@ -8,7 +8,7 @@
  * into React elements. Anything it doesn't recognise stays literal text, so the
  * worst case is what we had before.
  *
- * Pure and unit-tested (`test/markdown.test.ts`). Zero deps, and no HTML string
+ * Pure and unit-tested (`test/chat/markdown.test.ts`). Zero deps, and no HTML string
  * ever reaches the DOM (no `dangerouslySetInnerHTML`), so transcript content
  * can't inject markup.
  *

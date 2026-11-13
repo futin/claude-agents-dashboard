@@ -146,9 +146,9 @@ turn into the result line (direction, branch names, commit counts moved, or a fa
 
 Git is launched the way `lib/git-fetch.ts` launches it: array-form, never a shell, with the same never-prompt overlay (`GIT_TERMINAL_PROMPT=0`,
 `GIT_ASKPASS=''`, `SSH_ASKPASS=''`, `ssh -o BatchMode=yes`, `LC_ALL=C`, `git-fetch.ts:33-40` — reuse it rather than copy it), a timeout of its own. It is a git
-launch, so it is not a third kind of outbound call under the server rules. `test/outbound.test.ts` does not track git launchers by import; it pins
+launch, so it is not a third kind of outbound call under the server rules. `test/guards/outbound.test.ts` does not track git launchers by import; it pins
 `lib/git-fetch.ts` by checking that `.claude/CLAUDE.md` names it. The new module follows the same pattern: the CLAUDE.md "Keep new deps out of `server/`"
-paragraph gains one sentence naming it (a git launch, not a third kind), and `test/outbound.test.ts` gains the matching text assertion.
+paragraph gains one sentence naming it (a git launch, not a third kind), and `test/guards/outbound.test.ts` gains the matching text assertion.
 
 `docs/subsystems/git-stats.md` §"The reader stays read-only" stays true: the reader only gains the read-only `trunkCheckedOutElsewhere` field. The new
 module is a writer and gets its own section in that doc (or a sibling doc with a line in `docs/overview.md` §Map) saying so.

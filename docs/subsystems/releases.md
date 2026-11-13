@@ -15,7 +15,7 @@ the notes are ui-kit's own renderer), the chip's placement (the `.rel-chip` wrap
 Answers `ReleasesResponse` (`shared/types.ts`): `current` is the newest release tag reachable from HEAD and how many commits HEAD is past it, `releases`
 every release tag, newest first. Parsing the tag messages (subject, notes, `Release-Type` / `Release-Scope` / `Release-PR` / `Release-Breaking` /
 `Release-Items` trailers) is [release-kit](https://github.com/futin/release-kit)'s `createReleasesReader`, pinned to an exact `vX.Y.Z` tag (`v1.4.0` as of 2026-10-29) — the second of the two packages `server/` may import
-(`test/server-deps.test.ts`). It runs `git` and reads nothing else, so it adds no outbound call. A tag with no `Release-Type` trailer is the **baseline**:
+(`test/guards/server-deps.test.ts`). It runs `git` and reads nothing else, so it adds no outbound call. A tag with no `Release-Type` trailer is the **baseline**:
 where numbering starts, not a release of anything.
 
 **Items.** Each release carries `items`, the PRs it shipped: none for the baseline, one for a tag cut per PR (built from its own trailers), and one per
@@ -39,7 +39,7 @@ The reader never rejects, so the route has no error branch. The Docker images la
 A key git cannot produce is never memoised, and neither is an incomplete read, so a transient failure is not pinned. Concurrent requests under one key
 share one read. `overrideReleasesRoot` (a fresh reader, count reset) and `releasesReadCount` (the tag-listing `for-each-ref` launches, counted through
 the git port) are the test seams over it.
-`test/api-releases.test.ts` covers each of these through the real route table.
+`test/api/api-releases.test.ts` covers each of these through the real route table.
 
 ## The chip
 
@@ -70,7 +70,7 @@ block of any `position: fixed` child, so a drawer inside it would be clipped to 
 
 Structure and layout are ui-kit's (`ui-kit/styles.css`); this app themes it by mapping ui-kit's `--uk-*` properties onto its own tokens on the chip and
 scrim roots in `styles.css`. Badge colours are each status token on its own tint. The Breaking tint is 14% — at 16% daylight red measured 4.42:1 over
-`--strip-hi`. `test/releases-client.test.ts` pins the app-side wiring; ui-kit's own suite tests the logic.
+`--strip-hi`. `test/infra/releases-client.test.ts` pins the app-side wiring; ui-kit's own suite tests the logic.
 
 ## What is not here
 

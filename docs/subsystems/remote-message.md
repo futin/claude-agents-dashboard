@@ -22,7 +22,7 @@ does not:
 ```
 
 exit 0. The CLI reads `decision === "block"` at the top level and feeds `reason` into the
-model's next messages. `test/hook-decisions.test.ts` pins that output for an `answered` wait. The `hookSpecificOutput` shape for `Stop` exists too, but it only
+model's next messages. `test/hooks/hook-decisions.test.ts` pins that output for an `answered` wait. The `hookSpecificOutput` shape for `Stop` exists too, but it only
 carries `additionalContext` — background the model may or may not act on, not an
 instruction it continues with. This was confirmed by grepping the installed CLI binary
 (2.1.233) rather than trusting its docs, after two documentation lookups gave contradictory
@@ -94,7 +94,7 @@ constants instead of being kept in step by a test. Anchored at both ends, so any
 
 The wording is frozen by the transcripts already on disk: every past follow-up carries it,
 so changing it would make all of them stop unwrapping in the drawer. A change to it is a
-compatibility decision, not a copy edit — `test/remote-message-prose.test.ts` pins the exact
+compatibility decision, not a copy edit — `test/chat/remote-message-prose.test.ts` pins the exact
 bytes.
 
 ## Why a third parallel store
@@ -142,7 +142,7 @@ before the hold opens, so what the exemption covers is only headless holds that 
 A one-shot launch (`CLAUDE_DASHBOARD_ONESHOT`, [spawn](spawn.md#close-when-done-oneshot)) is turned away the same way, and so is the dashboard's own
 token-renewal turn (`CLAUDE_DASHBOARD_REFRESH`, [usage-limits](usage-limits.md)), which skips the push too.
 A routine step (`CLAUDE_DASHBOARD_ROUTINE=<job>`, set by the [routine wrapper](routines.md#the-wrapper)) is turned away before the hold opens as well, and
-skips the push: the Stop hook exits on the marker, so a step is never held for `answerSecs` and never reports "finished" (`test/hooks-routine-marker.test.ts`).
+skips the push: the Stop hook exits on the marker, so a step is never held for `answerSecs` and never reports "finished" (`test/hooks/hooks-routine-marker.test.ts`).
 
 ⚠️ **A missing TTY is not the same thing as a missing place to type,** and the TTY test
 alone got that wrong for a whole front-end. The desktop app runs the CLI with no pty
@@ -176,7 +176,7 @@ accepting remote input", which a headless session is not excused from).
 `released` is never pushed into the model — it is not an `answered` result, so the hook
 never prints a block. It differs from `dismissed` (you chose "let it stop" from the panel)
 only in who triggered it; both end the session the same way. Tests inject the idle reader
-(`setIdleReader`) so nothing in `test/messages.test.ts` spawns a real `ioreg`.
+(`setIdleReader`) so nothing in `test/chat/messages.test.ts` spawns a real `ioreg`.
 
 ## Endpoints
 

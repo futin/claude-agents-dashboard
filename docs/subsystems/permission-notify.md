@@ -159,7 +159,7 @@ silencing an unrelated prompt.
   CLIs name the reason in `notification_type`; older payloads carry only `message`, so the hook
   takes `notification_type == "permission_prompt"`, **or** — when that field is absent
   entirely — a `message` containing `permission`. A *known* other type is never sniffed. Both directions are pinned
-  by `test/hook-decisions.test.ts`.
+  by `test/hooks/hook-decisions.test.ts`.
 - **The hook targets the API port (4173), not Vite's 5174.** In dev the page is on 5174 but
   `/api` lives on the Node server; the hook talks to it directly. Override with
   `CLAUDE_DASHBOARD_URL`.
@@ -176,7 +176,7 @@ silencing an unrelated prompt.
   anyone on the LAN could light up rows.
 - **A routine step never notifies.** The hook exits 0 right after its `CLAUDECODE` check when `CLAUDE_DASHBOARD_ROUTINE` (or the pre-rename
   `CLAUDE_DASHBOARD_SCHEDULE`) is set, so a dialog in an unattended [routine](routines.md#the-wrapper) step neither lights the row nor pushes
-  (`test/hooks-routine-marker.test.ts`).
+  (`test/hooks/hooks-routine-marker.test.ts`).
 - **Per-session, not per-call:** one entry per session id, a second notify supersedes the first
   and re-arms the TTL — matching the CLI, which shows one dialog at a time.
 

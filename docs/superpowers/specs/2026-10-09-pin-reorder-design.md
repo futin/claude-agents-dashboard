@@ -149,7 +149,7 @@ Ported from the mockup, tokens only (the theme rule in `.claude/CLAUDE.md`):
 
 Exact cases. No literal test code is provided here on purpose; the implementer writes it.
 
-**`test/settings.test.ts` — `setPinOrder`**
+**`test/settings/settings.test.ts` — `setPinOrder`**
 
 | Stored | `order` | Expect |
 |---|---|---|
@@ -163,7 +163,7 @@ Exact cases. No literal test code is provided here on purpose; the implementer w
 | `[a, b, c]` | `[a, b, 3]` / `'a,b,c'` / `null` | null; unchanged |
 | `[a, b]` then `setPinned(c, true)` | — | `c` appended last (pin still appends) |
 
-**`test/api-pins.test.ts` — `POST /api/pins/order`**
+**`test/api/api-pins.test.ts` — `POST /api/pins/order`**
 
 - No token → 403, stored order unchanged.
 - `{}` / `{order: 'x'}` / `{order: ['a', 3]}` / non-JSON body → 400.
@@ -172,11 +172,11 @@ Exact cases. No literal test code is provided here on purpose; the implementer w
 - A dead pin in the stored list must be included in the order; leaving it out → 409.
 - `GET /api/pins/order` → 405.
 
-**`test/api-git-stats.test.ts`** — one case beside its existing pin-order cases (which already plant real fixture repos), titled distinctly from the
+**`test/api/api-git-stats.test.ts`** — one case beside its existing pin-order cases (which already plant real fixture repos), titled distinctly from the
 existing pin-order case (e.g. "follows a reorder"): pin `a`, `b`; `setPinOrder([b, a])`; `GET /api/git-stats` lists `b` before `a`. Proves the downstream
 claim in §1.
 
-**`test/pins-client.test.ts` — `movePin`**
+**`test/settings/pins-client.test.ts` — `movePin`**
 
 | `order` | `name` | `toIndex` | Expect |
 |---|---|---|---|

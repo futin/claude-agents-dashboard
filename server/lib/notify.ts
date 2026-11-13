@@ -425,7 +425,7 @@ export function maybeSend(
     // wanting it twice cannot spawn twice; still a thunk, so a policy without
     // `requireAfk` and a run without a desk topic never spawn at all. That last
     // property is the whole reason `shouldNotify` takes a thunk rather than a
-    // value, and `test/notify.test.ts` counts the calls to hold it.
+    // value, and `test/notify/notify.test.ts` counts the calls to hold it.
     let idleRead = false;
     let idleValue: number | null = null;
     const readIdle = (): number | null => {

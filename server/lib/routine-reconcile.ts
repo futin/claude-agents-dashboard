@@ -26,7 +26,7 @@ export const CRON_END = '# <<< claude-dashboard routines <<<';
 export const LEGACY_LABEL_PREFIX = 'com.claude-dashboard.schedule.';
 export const LEGACY_CRON_START = '# >>> claude-dashboard schedules >>>';
 export const LEGACY_CRON_END = '# <<< claude-dashboard schedules <<<';
-/** `scripts/sync-plugin.ts` `PLUGIN_ID`; `test/routine-reconcile.test.ts` pins the two together, since the server does not import a script. */
+/** `scripts/sync-plugin.ts` `PLUGIN_ID`; `test/routines/routine-reconcile.test.ts` pins the two together, since the server does not import a script. */
 export const PLUGIN_ID = 'claude-agents-dashboard@claude-agents-dashboard-marketplace';
 
 export type { ReconcileChange, ReconcileReport, ReconcileState };

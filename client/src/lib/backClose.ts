@@ -9,7 +9,7 @@
  * nobody is watching.
  *
  * Everything here runs over an injected host so the state machine is testable
- * with no DOM (`test/back-close.test.ts`); `browserHost()` is the only impure
+ * with no DOM (`test/ui/back-close.test.ts`); `browserHost()` is the only impure
  * part.
  */
 
