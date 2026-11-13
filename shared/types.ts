@@ -1764,6 +1764,7 @@ export interface HookInfo {
   /** Lifecycle event: PreToolUse | Notification | Stop | SessionStart | … */
   event: string;
   matcher: string | null;
+  /** Secret-shaped values (`Bearer …`, `TOKEN=…`, URL query values, raw credentials) are redacted server-side (#408). */
   command: string;
   source: ItemSource;
   /** Absolute path of the settings.json / hooks.json that declared it. */
@@ -1807,8 +1808,9 @@ export interface McpServerInfo {
   /** Declared `type` ('stdio' | 'http' | 'sse' | …), else 'stdio'. */
   transport: string;
   command: string | null;
-  /** String args only; anything else is dropped. */
+  /** String args only; anything else is dropped. Secret-shaped values are redacted server-side (#408): the value after a secret-named flag, `NAME=…`, `Bearer …`, raw credentials. */
   args: string[];
+  /** Userinfo, credential-shaped path segments and every query value are redacted server-side (#408). */
   url: string | null;
   /** Sorted `env` key names; values are never included. */
   envKeys: string[];

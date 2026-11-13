@@ -1141,6 +1141,116 @@ export async function run(): Promise<number> {
     assert.strictEqual(rows[1].disabled, true);
   }));
 
+  /* ------------------------------------------- secret scrubbing (#408) */
+
+  tally(await test('redactArgs: a secret-ish flag redacts the next arg whole; other flags and values untouched', () => {
+    assert.deepStrictEqual(mgmt.redactArgs(['--api-key', 'abc123', '--port', '8080']), ['--api-key', '[redacted]', '--port', '8080']);
+  }));
+
+  tally(await test('redactArgs: --flag=value redacts the value; package names untouched', () => {
+    assert.deepStrictEqual(mgmt.redactArgs(['--token=abc', '-y', '@scope/server']), ['--token=[redacted]', '-y', '@scope/server']);
+  }));
+
+  tally(await test('redactArgs: NAME=value, Bearer and URL query values inside a bash -c script are scrubbed', () => {
+    const out = mgmt.redactArgs(['API_KEY=xyz', 'bash', '-c', 'curl -H "Authorization: Bearer tok" https://h/x?key=k']);
+    assert.deepStrictEqual(out, ['API_KEY=[redacted]', 'bash', '-c', 'curl -H "Authorization: Bearer [redacted]" https://h/x?key=[redacted]']);
+    assert.ok(!out.join(' ').includes('tok'));
+    assert.ok(!out.join(' ').includes('key=k'));
+  }));
+
+  tally(await test('redactArgs: a non-http connection string loses its userinfo password', () => {
+    const out = mgmt.redactArgs(['-y', '@modelcontextprotocol/server-postgres', 'postgresql://user:hunter2@localhost/db', 'redis://:secretpw@localhost:6379']);
+    assert.deepStrictEqual(out, ['-y', '@modelcontextprotocol/server-postgres', 'postgresql://[redacted]@localhost/db', 'redis://[redacted]@localhost:6379']);
+  }));
+
+  tally(await test('redactArgs mirror: ordinary args come back byte-identical', () => {
+    for (const args of [['--model', 'claude-opus'], ['--port', '3000'], ['npx', '-y', '@modelcontextprotocol/server-filesystem', '/Users/x/dir'], ['serve', '--mcp'], ['file:///Users/x/dir']]) {
+      assert.deepStrictEqual(mgmt.redactArgs(args), args);
+    }
+  }));
+
+  tally(await test('scrubSecretText: header form, raw credentials and known prefixes redacted; a plain command untouched', () => {
+    assert.strictEqual(mgmt.scrubSecretText('X-Api-Key: xyz'), 'X-Api-Key: [redacted]');
+    assert.strictEqual(mgmt.scrubSecretText('Authorization: xyz'), 'Authorization: [redacted]');
+    assert.strictEqual(mgmt.scrubSecretText('API_KEY="xyz" node s.js'), 'API_KEY="[redacted]" node s.js');
+    assert.strictEqual(mgmt.scrubSecretText("Bash(OPENAI_API_KEY='sk-abc' python x.py)"), "Bash(OPENAI_API_KEY='[redacted]' python x.py)");
+    assert.strictEqual(mgmt.scrubSecretText('Bash(export GH_TOKEN="ghp_short")'), 'Bash(export GH_TOKEN="[redacted]")');
+    assert.strictEqual(mgmt.scrubSecretText('MODE="fast" PORT=3000'), 'MODE="fast" PORT=3000');
+    assert.strictEqual(mgmt.scrubSecretText('echo ghp_abcdefghij0123'), 'echo [redacted]');
+    assert.strictEqual(mgmt.scrubSecretText('use a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7 now'), 'use [redacted] now');
+    for (const plain of ['echo hi', 'Bash(gh auth status)', 'Bash(git push:*)', '"$CLAUDE_PROJECT_DIR"/.claude/hooks/x.sh', 'x'.repeat(40)]) {
+      assert.strictEqual(mgmt.scrubSecretText(plain), plain);
+    }
+  }));
+
+  tally(await test('redactUrl: plain URL unchanged; userinfo, credential path segment and every query value redacted; unparseable fails closed', () => {
+    assert.strictEqual(mgmt.redactUrl('https://mcp.example.com/sse'), 'https://mcp.example.com/sse');
+    assert.strictEqual(mgmt.redactUrl('https://x'), 'https://x');
+    const out = mgmt.redactUrl('https://u:p@h.com/v1/abcdef0123456789abcdef0123456789/sse?apiKey=s&region=eu#frag');
+    for (const gone of ['u:p', 'abcdef0123456789abcdef0123456789', 'apiKey=s', 'region=eu', 'frag']) assert.ok(!out.includes(gone), gone);
+    for (const kept of ['h.com', '/v1/', '/sse', 'apiKey=', 'region=']) assert.ok(out.includes(kept), kept);
+    assert.strictEqual(mgmt.redactUrl('not a url'), '[redacted]');
+  }));
+
+  tally(await test('normalizeMcpServers: args and url values are redacted in the row', () => {
+    const [row] = mgmt.normalizeMcpServers({ s: { command: 'node', args: ['--api-key', 'KSECRET'], url: 'https://h/?token=TSECRET' } }, 'user', '/d', new Set());
+    assert.ok(!JSON.stringify(row.args).includes('KSECRET'));
+    assert.ok(!String(row.url).includes('TSECRET'));
+  }));
+
+  tally(await test('scope payload end to end: an MCP server key in args or url never reaches readGlobalScope', async () => {
+    const home = makeHome();
+    put(home, '.claude.json', JSON.stringify({ mcpServers: { s: { command: 'node', args: ['--api-key', 'KSECRET'], url: 'https://h/?token=TSECRET' } } }));
+    const json = JSON.stringify(await mgmt.readGlobalScope(home));
+    assert.ok(!json.includes('KSECRET'));
+    assert.ok(!json.includes('TSECRET'));
+  }));
+
+  tally(await test('hook command: inline bearer token scrubbed in HookInfo.command, script path still resolves', async () => {
+    const proj = makeProject();
+    const script = put(proj, '.claude/hooks/x.sh', '#!/bin/sh\n');
+    put(proj, '.claude/settings.json', JSON.stringify({ hooks: { Stop: [{ hooks: [
+      { type: 'command', command: 'curl -H "Authorization: Bearer HSECRET" https://x' },
+      { type: 'command', command: `"${script}" API_TOKEN=HSECRET2` }
+    ] }] } }));
+    const scope = await mgmt.readProjectScope(proj, '-p', makeHome());
+    const payload = JSON.stringify(scope.hooks);
+    assert.ok(!payload.includes('HSECRET'));
+    assert.ok(scope.hooks.some(h => h.command === 'curl -H "Authorization: Bearer [redacted]" https://x'));
+    // The script path resolves from the raw command although the payload's command is the scrubbed one.
+    const withScript = scope.hooks.find(h => h.command.includes('API_TOKEN='))!;
+    assert.strictEqual(withScript.scriptPath, script);
+  }));
+
+  tally(await test('served settings: permissions entries, apiKeyHelper and mcpServers args scrubbed; keys unchanged', async () => {
+    const { file } = await serveSettings(makeHome(), JSON.stringify({
+      permissions: { allow: ['Bash(curl -H "Authorization: Bearer TSECRET1" https://x)'] },
+      apiKeyHelper: '/bin/echo TSECRET2',
+      mcpServers: { s: { command: 'c', args: ['--token', 'TSECRET3'], url: 'https://h/?k=TSECRET4' } }
+    }));
+    for (const s of ['TSECRET1', 'TSECRET2', 'TSECRET3', 'TSECRET4']) assert.ok(!file.content.includes(s), s);
+    const json = JSON.parse(file.content);
+    assert.strictEqual(json.apiKeyHelper, '[redacted]');
+    assert.deepStrictEqual(Object.keys(json), ['permissions', 'apiKeyHelper', 'mcpServers']);
+    assert.deepStrictEqual(json.mcpServers.s.args, ['--token', '[redacted]']);
+  }));
+
+  tally(await test('served plugin manifest: inline mcpServers env and args redacted; unparseable manifest answers null', async () => {
+    const home = makeHome();
+    const installPath = putPlugin(home, 'plug@mkt', {
+      pluginJson: { name: 'plug', mcpServers: { s: { command: 'c', env: { K: 'VSECRET' }, args: ['--api-key', 'ASECRET'] } } }
+    });
+    const manifest = path.join(installPath, '.claude-plugin', 'plugin.json');
+    const allowed = await servableFor(makeProject(), home);
+    assert.ok(allowed.has(manifest));
+    const file = await mgmt.readServableFile(manifest, allowed);
+    assert.ok(!file!.content.includes('VSECRET'));
+    assert.ok(!file!.content.includes('ASECRET'));
+    assert.strictEqual(JSON.parse(file!.content).mcpServers.s.env.K, '[redacted]');
+    fs.writeFileSync(manifest, '{"mcpServers":');
+    assert.strictEqual(await mgmt.readServableFile(manifest, new Set([manifest])), null);
+  }));
+
   console.log(`\nmanagement: ${p} passed, ${f} failed`);
   return f;
 }
