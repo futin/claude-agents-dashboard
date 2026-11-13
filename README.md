@@ -208,7 +208,7 @@ Answers, plan verdicts, messages and dictation are session write paths. All of t
 
 ## Optional setup
 
-- **All six hooks, one command** — `pnpm hooks:install` symlinks them into `~/.claude` and merges the seven settings entries, idempotently, with `--dry-run`
+- **All six hooks, one command** — `pnpm hooks:install` symlinks them into `~/.claude` and merges the eight settings entries, idempotently, with `--dry-run`
   and `--uninstall`: [setup](docs/workflows/hooks-setup.md). Everything below that mentions a hook is what it automates; you still choose the token, the
   topic, and whether remote answering is on. One of the six is not a dashboard feature at all: `kill-guard.sh` refuses a broad `pkill`/`killall` from a
   Bash tool call, which is what once took this repo's own dev server down from a session running somewhere else.

@@ -35,7 +35,7 @@ hooks in place:
 | `scripts/remote-decision-hook.sh` | `remote-decision.sh` |
 | `scripts/kill-guard-hook.sh` | `kill-guard.sh` |
 
-**Seven entries** in `~/.claude/settings.json`:
+**Eight entries** in `~/.claude/settings.json`:
 
 | Event | Matcher | Hook | Timeout |
 |---|---|---|---|
@@ -46,10 +46,14 @@ hooks in place:
 | `Notification` | — | `permission-notify.sh` | 5 |
 | `Stop` | — | `stop-notify.sh` | 630 |
 | `UserPromptSubmit` | — | `remote-decision.sh` | 5 |
+| `SessionStart` | `compact\|resume\|clear` | `remote-decision.sh` | 5 |
 
-Seven entries, six scripts: `permission-notify.sh` is registered twice on purpose —
+Eight entries, six scripts: `permission-notify.sh` is registered twice on purpose —
 `PermissionRequest` is the live signal, `Notification` the legacy fallback
-([permission-notify](../subsystems/permission-notify.md)).
+([permission-notify](../subsystems/permission-notify.md)) — and so is `remote-decision.sh`, which prints its banner once per session on
+`UserPromptSubmit` and re-prints it on `SessionStart` after compaction, resume or `/clear`
+([remote-plan](../subsystems/remote-plan.md#once-per-session)). An install from before that second row needs one re-run of `pnpm hooks:install` to add
+it; without it the banner still prints on the first prompt, but a compacted session loses it until the mode flips.
 
 ### The odd one out: `kill-guard.sh`
 

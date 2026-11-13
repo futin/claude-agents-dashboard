@@ -123,8 +123,9 @@ instead of an `ExitPlanMode` call is fully steerable remotely. The CLI's tool pr
 the model not to use `AskUserQuestion` for plan approval, which is right at the desk and
 wrong when you're away.
 
-`scripts/remote-decision-hook.sh` (a `UserPromptSubmit` hook) flips that default exactly
-when it's wrong. On every user prompt it checks three conditions and otherwise stays silent:
+`scripts/remote-decision-hook.sh` (a `UserPromptSubmit` hook, plus a `SessionStart` one — see
+[once per session](#once-per-session)) flips that default exactly when it's wrong. On every
+user prompt it checks three conditions and otherwise stays silent:
 
 1. `permission_mode` (on every hook's stdin) is auto-ish — default set
    `auto bypassPermissions dontAsk`, override with `CLAUDE_DASHBOARD_DECISION_MODES`;
@@ -144,7 +145,7 @@ the banner. `tokenRequired` means *this caller* would need the token (`writeAcce
 sends no `tokenRequired`, which reads as `false` and keeps the old behaviour rather than
 warning wrongly. `test/hooks/hooks-token.test.ts` pins all three readings against the real script.
 
-When all hold it injects an instruction for that turn: put each decision that is the user's through
+When all hold it injects an instruction, once per session: put each decision that is the user's through
 `AskUserQuestion` (including skill-driven asks like the brainstorming skill's mode pick),
 never end a turn on a prose question, don't enter plan mode — summarize the plan and ask
 proceed/revise instead — and prefer already-allowed tools, since a permission dialog would
@@ -165,6 +166,27 @@ saying so. The instruction now says: while the tool is unavailable the rule does
 ask in prose rather than deciding silently. The fallback clause is as load-bearing as the
 condition, because a session left with no instruction at all is the state that produced the
 silent deciding.
+
+### Once per session
+
+The banner is ~2 KB and every copy stays in the transcript, so printing it on every prompt cost a 15-prompt session ~10k tokens of identical text
+(context-floor audit, 2026-11-13). The hook keeps a per-session marker, `~/.claude/hooks/.remote-decision/<session_id>`, holding what the model was last
+told — `ARMED`, `NOTARMED` or `OFF`, plus the permission mode — and prints only when that changes:
+
+| Situation | Prints |
+|---|---|
+| First prompt with all three conditions true | the full banner |
+| Later prompts, same state (a switch between two auto-ish modes included) | nothing |
+| Armed → off: toggle off, health probe failing, or a non-auto mode | one `REMOTE DECISION MODE is OFF` line, so the earlier banner stops steering |
+| Off → armed again | the full banner |
+| `SessionStart` with source `compact`, `resume` or `clear` | whatever the current state calls for, even if unchanged |
+| Token required but missing | the NOT armed notice, also once |
+
+There is no per-prompt "still active" one-liner: the full copy is already in context, the one way it leaves is compaction, which the `SessionStart` entry
+covers, and a reminder per prompt would rebuild the cost this removes. `SessionStart` may arrive without `permission_mode`, so it falls back to the mode
+the marker recorded. A session that is never armed writes no marker. Markers untouched for 7 days are pruned whenever one is written. A marker that cannot
+be read, parsed or written reads as "never told", so the full banner prints — the old behaviour, never nothing; a `session_id` outside `[A-Za-z0-9_-]` is
+never used as a path and gets the same treatment. `test/hooks/remote-decision-once.test.ts` pins every row.
 
 Approving work this way in auto mode grants nothing new — the session already edits and
 runs without asking; the POST only picks *which* pre-authorized path it takes. The

@@ -488,7 +488,7 @@ that area:
 - [configuration](workflows/configuration.md) — the `.env` / hook-side variable reference
 - [ci](workflows/ci.md) — the PR gate: `ci / checks`, `ci / pr-title`, `ci / skills` from release-kit's reusable workflow, and the `main-pr-only` ruleset
 - [docker](workflows/docker.md) — running in containers, dev + prod
-- [hooks-setup](workflows/hooks-setup.md) — `pnpm hooks:install`: all six hooks (seven `settings.json` entries — permission-notify registers twice), one command
+- [hooks-setup](workflows/hooks-setup.md) — `pnpm hooks:install`: all six hooks (eight `settings.json` entries — permission-notify and remote-decision register twice), one command
 - [remote-answer-setup](workflows/remote-answer-setup.md) — per-machine hook install
 - [push-notify-setup](workflows/push-notify-setup.md) — ntfy topic, phone subscription, Stop hook
 - [dictation-setup](workflows/dictation-setup.md) — installing whisper.cpp and a model, and the HTTPS tunnel phone use needs
