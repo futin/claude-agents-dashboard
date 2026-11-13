@@ -45,9 +45,13 @@ const REDACTED = '[redacted]';
 /** A name that marks the value beside it as secret: `--api-key`, `X_AUTH_TOKEN`, `client_secret` match; `--port`, `--model` do not. */
 const SECRET_NAME = /key|token|secret|password|passwd|pwd|auth|bearer|credential|cookie|session/i;
 const BEARER = /\b(Bearer|Basic)(\s+)(?!\[redacted\])[^\s"')]+/gi;
-/** `name=value`, or the header form `name: value` (whitespace required, so `Bash(gh auth:*)` is not read as one). */
-const NAME_VALUE = /([A-Za-z0-9_-]+)(=|:\s+)(?!(?:Bearer|Basic)\s)(?!\[redacted\])([^\s"')]+)/g;
-const URL_IN_TEXT = /(https?:\/\/[^\s"'<>)]+)/i;
+/**
+ * `name=value`, or the header form `name: value` (whitespace required, so `Bash(gh auth:*)` is not read as one). The value is a quoted run (`NAME="v"`,
+ * `NAME='v'`, quotes kept) or an unquoted one ending at whitespace, a quote or a paren; an unquoted `Bearer`/`Basic` is left to {@link BEARER}.
+ */
+const NAME_VALUE = /([A-Za-z0-9_-]+)(=|:\s+)("[^"]*"|'[^']*'|(?!(?:Bearer|Basic)\s)[^\s"')]+)/g;
+/** Any `scheme://…` — http(s), but also `postgresql://user:pw@…`, `redis://:pw@…`, `ws://…` connection strings. */
+const URL_IN_TEXT = /([A-Za-z][A-Za-z0-9+.-]*:\/\/[^\s"'<>)]+)/;
 const TOKEN_RUN = /[A-Za-z0-9_.-]+/g;
 const KNOWN_PREFIXES = ['sk-', 'ghp_', 'gho_', 'github_pat_', 'xoxb-', 'xoxp-'];
 
@@ -62,7 +66,13 @@ function isRawCredential(tok: string): boolean {
 function scrubPlain(s: string): string {
   return s
     .replace(BEARER, (_m, scheme: string, ws: string) => `${scheme}${ws}${REDACTED}`)
-    .replace(NAME_VALUE, (m, name: string, sep: string) => (SECRET_NAME.test(name) ? `${name}${sep}${REDACTED}` : m))
+    .replace(NAME_VALUE, (m, name: string, sep: string, value: string) => {
+      if (!SECRET_NAME.test(name)) return m;
+      const quote = value[0] === '"' || value[0] === "'" ? value[0] : '';
+      const inner = quote ? value.slice(1, -1) : value;
+      if (!inner || inner === REDACTED || (!quote && inner.startsWith(REDACTED))) return m;
+      return `${name}${sep}${quote}${REDACTED}${quote}`;
+    })
     .replace(TOKEN_RUN, tok => (isRawCredential(tok) ? REDACTED : tok));
 }
 

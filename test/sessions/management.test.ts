@@ -1158,8 +1158,13 @@ export async function run(): Promise<number> {
     assert.ok(!out.join(' ').includes('key=k'));
   }));
 
+  tally(await test('redactArgs: a non-http connection string loses its userinfo password', () => {
+    const out = mgmt.redactArgs(['-y', '@modelcontextprotocol/server-postgres', 'postgresql://user:hunter2@localhost/db', 'redis://:secretpw@localhost:6379']);
+    assert.deepStrictEqual(out, ['-y', '@modelcontextprotocol/server-postgres', 'postgresql://[redacted]@localhost/db', 'redis://[redacted]@localhost:6379']);
+  }));
+
   tally(await test('redactArgs mirror: ordinary args come back byte-identical', () => {
-    for (const args of [['--model', 'claude-opus'], ['--port', '3000'], ['npx', '-y', '@modelcontextprotocol/server-filesystem', '/Users/x/dir'], ['serve', '--mcp']]) {
+    for (const args of [['--model', 'claude-opus'], ['--port', '3000'], ['npx', '-y', '@modelcontextprotocol/server-filesystem', '/Users/x/dir'], ['serve', '--mcp'], ['file:///Users/x/dir']]) {
       assert.deepStrictEqual(mgmt.redactArgs(args), args);
     }
   }));
@@ -1167,6 +1172,10 @@ export async function run(): Promise<number> {
   tally(await test('scrubSecretText: header form, raw credentials and known prefixes redacted; a plain command untouched', () => {
     assert.strictEqual(mgmt.scrubSecretText('X-Api-Key: xyz'), 'X-Api-Key: [redacted]');
     assert.strictEqual(mgmt.scrubSecretText('Authorization: xyz'), 'Authorization: [redacted]');
+    assert.strictEqual(mgmt.scrubSecretText('API_KEY="xyz" node s.js'), 'API_KEY="[redacted]" node s.js');
+    assert.strictEqual(mgmt.scrubSecretText("Bash(OPENAI_API_KEY='sk-abc' python x.py)"), "Bash(OPENAI_API_KEY='[redacted]' python x.py)");
+    assert.strictEqual(mgmt.scrubSecretText('Bash(export GH_TOKEN="ghp_short")'), 'Bash(export GH_TOKEN="[redacted]")');
+    assert.strictEqual(mgmt.scrubSecretText('MODE="fast" PORT=3000'), 'MODE="fast" PORT=3000');
     assert.strictEqual(mgmt.scrubSecretText('echo ghp_abcdefghij0123'), 'echo [redacted]');
     assert.strictEqual(mgmt.scrubSecretText('use a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7 now'), 'use [redacted] now');
     for (const plain of ['echo hi', 'Bash(gh auth status)', 'Bash(git push:*)', '"$CLAUDE_PROJECT_DIR"/.claude/hooks/x.sh', 'x'.repeat(40)]) {

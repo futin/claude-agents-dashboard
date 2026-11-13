@@ -168,7 +168,8 @@ control (the type is a column now, not a collapsible header) and the
   secret on that header. The cost is that the owner too sees `[redacted]` here and opens the file in an editor to read a value. Every other string (`permissions` entries,
   `pluginConfigs` values, hook and `statusLine` `command` strings) goes through `scrubSecretText`, and `mcpServers.*.args`/`url` through `redactArgs`/`redactUrl` —
   the same scrubbers the scope payload uses for MCP args/urls and `HookInfo.command`. The scrubber redacts `Bearer`/`Basic` values, values beside a secret-ish name
-  (`key`, `token`, `secret`, `auth`, … in `NAME=v`, `--flag=v`, `Header: v`, or a secret-named flag's next arg), every URL query value, URL userinfo, and raw
+  (`key`, `token`, `secret`, `auth`, … in `NAME=v`, `NAME="v"`, `--flag=v`, `Header: v`, or a secret-named flag's next arg), every URL query value, URL userinfo
+  (any `scheme://`, so a `postgresql://user:pw@…` connection string too), and raw
   credentials (≥ 32 chars with a letter and a digit, or a `sk-`/`ghp_`/`xoxb-`-style prefix). It is a heuristic: a secret with no secret-ish name, under 32 chars
   and outside a URL (`--k abc`) still passes through. Object keys are never altered.
 - **⚠️ The skill-dir walk feeds that set, so it enumerates only what it can see itself:**
