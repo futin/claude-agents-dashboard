@@ -12,6 +12,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
+import { stateDir } from './paths.js';
 import { listUsageTranscripts, projectsRoot } from './scan.js';
 import { getSettings } from './settings.js';
 import { repoRoot } from './usage-history.js';
@@ -337,7 +338,7 @@ export function ledgerReadStats(): { bytes: number } {
 }
 
 function ledgerPath(dir?: string): string {
-  return path.join(dir ?? repoRoot(), LEDGER_FILE);
+  return path.join(dir ?? stateDir(repoRoot()), LEDGER_FILE);
 }
 
 function remember(cursor: FileCursor, id: string): void {

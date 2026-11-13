@@ -32,7 +32,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-import { claudeHome } from './paths.js';
+import { claudeHome, stateDir } from './paths.js';
 import type { EnvOverride, GitFetchSecs, LaunchSurface, NoneMissing, NotifyEvent, NotifyPolicy, ServerSettings, ServerSettingsPatch } from '../../shared/types.js';
 
 /** Gitignored, repo-local — never inside `~/.claude` (read-only under Docker). */
@@ -108,7 +108,7 @@ let cached: Stored | null = null;
 let persisted = true;
 
 function statePath(): string {
-  return path.join(process.cwd(), SETTINGS_FILE);
+  return path.join(stateDir(process.cwd()), SETTINGS_FILE);
 }
 
 /** Coerce to a whole second count inside the allowed range, or null if unusable. */

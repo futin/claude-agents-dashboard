@@ -275,7 +275,7 @@ ink, a needs-you button and a running timeline bar fade in place — all off und
 `prefers-reduced-motion`.
 
 Mock: `docs/guides/mockups/redesign-mock.html` `#sessions`. Plan:
-`docs/superpowers/plans/2026-09-11-sessions-redesign.md`.
+[`docs/superpowers/plans/2026-09-11-sessions-redesign.md`](https://github.com/futin/claude-agents-dashboard/blob/85b39e0/docs/superpowers/plans/2026-09-11-sessions-redesign.md).
 
 ### 8.4 Usage — the analyst's read, on §8.2's sheets
 

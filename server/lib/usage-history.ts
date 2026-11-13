@@ -49,6 +49,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
+import { stateDir } from './paths.js';
 import { getSettings } from './settings.js';
 import { HOURS_PER_WEEK, hourOfWeek, localOffsetMinutes } from './usage-forecast.js';
 import type { DutyProfile } from './usage-forecast.js';
@@ -438,11 +439,11 @@ export function repoRoot(startDir: string = import.meta.dirname): string {
 }
 
 function historyPath(dir?: string): string {
-  return path.join(dir ?? repoRoot(), HISTORY_FILE);
+  return path.join(dir ?? stateDir(repoRoot()), HISTORY_FILE);
 }
 
 function profilePath(dir?: string): string {
-  return path.join(dir ?? repoRoot(), PROFILE_FILE);
+  return path.join(dir ?? stateDir(repoRoot()), PROFILE_FILE);
 }
 
 /**

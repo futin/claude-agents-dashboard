@@ -24,6 +24,9 @@ RUN pnpm build
 FROM node:20-alpine AS runtime
 WORKDIR /app
 ENV NODE_ENV=production
+# State files (settings, remote toggle, usage ledger/history/profile) go to the volume docker-compose.yml mounts here, not the throwaway /app layer.
+ENV DASHBOARD_STATE_DIR=/data
+RUN mkdir -p /data
 COPY --from=deps /app/node_modules ./node_modules
 COPY package.json ./
 COPY server ./server

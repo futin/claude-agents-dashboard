@@ -4,7 +4,7 @@
 with a committed PNG under `test/visual/__screenshots__/`. It also checks that no view overflows horizontally at any tier and that daylight text contrast has
 not regressed. It exists so a CSS refactor (the CSS Modules migration first) can prove it changed nothing visible. It is on demand, macOS only, and not part
 of `pnpm test`. Design and plan: [2026-10-01-visual-regression-design.md](../superpowers/specs/2026-10-01-visual-regression-design.md),
-[2026-10-01-visual-regression.md](../superpowers/plans/2026-10-01-visual-regression.md).
+[2026-10-01-visual-regression.md](https://github.com/futin/claude-agents-dashboard/blob/85b39e0/docs/superpowers/plans/2026-10-01-visual-regression.md).
 
 ## What it covers
 
