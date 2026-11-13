@@ -6,7 +6,8 @@ client/dist/
 .idea/
 .claude/launch.json
 .claude/settings.local.json
-.ua/.trash-*/
+# understand-anything knowledge graph — generated, local only; untracked 2026-11-13 after four months stale
+.ua/
 .remote-answer.json
 .dashboard-settings.json
 .usage-history.jsonl
