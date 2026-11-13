@@ -7,7 +7,8 @@ interface Props {
 /**
  * Structured MCP server card, shaped like HookDetail but with no FileBlock anywhere: every file that
  * declares a server (~/.claude.json, .mcp.json) holds env values, so none is servable and a FileBlock
- * would draw a 403. Everything shown comes from the API payload, where env/header values are already gone.
+ * would draw a 403. Everything shown comes from the API payload, where env/header values are already gone and args/url arrive
+ * with secret-shaped values redacted server-side (#408).
  */
 export function McpDetail({ mcp }: Props) {
   return (

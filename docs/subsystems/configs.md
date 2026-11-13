@@ -158,15 +158,19 @@ control (the type is a column now, not a collapsible header) and the
   `serveSessionDetail`). Content capped at 256 KB (`truncated` flag). `~/.claude.json`
   (large, private) is read for its two `mcpServers` locations and nothing else, parsed at most once per (path, mtime, size),
   and is **never servable** — nor is any `.mcp.json`, project or plugin: each can hold `env` values, and `normalizeMcpServers`
-  reduces `env`/`headers` to key names so no value reaches the payload. (A plugin manifest with inline `mcpServers` stays
-  servable as the Plugins row's file — it is the plugin's published file, not local config.)
-- **⚠️ Settings files are served redacted, to every peer (#355).** `settings.json` and `settings.local.json` directly under a `.claude` dir stay viewable, but
-  `readServableFile` parses them whole and re-serializes through `redactSettings`: every `env` and `headers` value, at any depth, becomes `[redacted]`, and an object
-  under those keys keeps its key names. **It fails closed:** JSON that does not parse answers null (HTTP 404), never the raw text, and it never edits the raw text by
+  reduces `env`/`headers` to key names so no value reaches the payload, and passes `args` through `redactArgs` and `url` through `redactUrl` (#408). (A plugin
+  manifest with inline `mcpServers` stays servable as the Plugins row's file, through the same JSON redactor as a settings file, below.)
+- **⚠️ Settings files and plugin manifests are served redacted, to every peer (#355, #408).** `settings.json` and `settings.local.json` directly under a `.claude`
+  dir, and a plugin's `.claude-plugin/plugin.json`, stay viewable, but `readServableFile` parses them whole and re-serializes through `redactSettings`: every `env`,
+  `headers` and `apiKeyHelper` value, at any depth, becomes `[redacted]`, and an object under those keys keeps its key names. **It fails closed:** JSON that does not parse answers null (HTTP 404), never the raw text, and it never edits the raw text by
   pattern, because a duplicate or escaped `env` key would slip past that. The cap applies to the redacted text, so `truncated` describes that text while `size` stays
   the byte size on disk. The answer does not vary by peer: `resolvePeer` reads a tunnel without `X-Forwarded-For` as `local`, so a per-peer answer would rest the
-  secret on that header. The cost is that the owner too sees `[redacted]` here and opens the file in an editor to read a value. Other secret-shaped text in these files
-  (`permissions` entries, `pluginConfigs` values, hook `command` strings) is not redacted.
+  secret on that header. The cost is that the owner too sees `[redacted]` here and opens the file in an editor to read a value. Every other string (`permissions` entries,
+  `pluginConfigs` values, hook and `statusLine` `command` strings) goes through `scrubSecretText`, and `mcpServers.*.args`/`url` through `redactArgs`/`redactUrl` —
+  the same scrubbers the scope payload uses for MCP args/urls and `HookInfo.command`. The scrubber redacts `Bearer`/`Basic` values, values beside a secret-ish name
+  (`key`, `token`, `secret`, `auth`, … in `NAME=v`, `--flag=v`, `Header: v`, or a secret-named flag's next arg), every URL query value, URL userinfo, and raw
+  credentials (≥ 32 chars with a letter and a digit, or a `sk-`/`ghp_`/`xoxb-`-style prefix). It is a heuristic: a secret with no secret-ish name, under 32 chars
+  and outside a URL (`--k abc`) still passes through. Object keys are never altered.
 - **⚠️ The skill-dir walk feeds that set, so it enumerates only what it can see itself:**
   **symlinks and dotfiles/dot-dirs are skipped**. A symlink inside a skill dir pointing at
   `~/.claude/.credentials.json` or a project `.env` would otherwise turn into a servable

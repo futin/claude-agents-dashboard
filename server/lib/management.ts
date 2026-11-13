@@ -4,7 +4,8 @@
  * settings for the global scope (~/.claude, including every installed
  * plugin's subtree) and for individual project scopes (<cwd>/.claude), plus
  * the MCP servers each scope declares (~/.claude.json, <cwd>/.mcp.json,
- * plugin .mcp.json) — env/header values redacted to key names here.
+ * plugin .mcp.json) — env/header values redacted to key names here, args and
+ * urls scrubbed of secret-shaped values (#408).
  *
  * Everything fails open: a missing directory, unreadable file, or malformed
  * JSON yields empty arrays/nulls — a scope is always a complete shape.
@@ -35,9 +36,82 @@ export const FILE_CONTENT_CAP = 256 * 1024;
 /** A scope's settings files, both directly under its `.claude` dir. */
 const SETTINGS_FILES = ['settings.json', 'settings.local.json'];
 
-/** Keys of a settings file whose values never leave the server, at any depth. */
-const REDACTED_KEYS = new Set(['env', 'headers']);
+/** Keys of a served settings file or plugin manifest whose values never leave the server, at any depth. */
+const REDACTED_KEYS = new Set(['env', 'headers', 'apiKeyHelper']);
 const REDACTED = '[redacted]';
+
+/* ---------------------------------------------------------- secret scrubbing (#408) */
+
+/** A name that marks the value beside it as secret: `--api-key`, `X_AUTH_TOKEN`, `client_secret` match; `--port`, `--model` do not. */
+const SECRET_NAME = /key|token|secret|password|passwd|pwd|auth|bearer|credential|cookie|session/i;
+const BEARER = /\b(Bearer|Basic)(\s+)(?!\[redacted\])[^\s"')]+/gi;
+/** `name=value`, or the header form `name: value` (whitespace required, so `Bash(gh auth:*)` is not read as one). */
+const NAME_VALUE = /([A-Za-z0-9_-]+)(=|:\s+)(?!(?:Bearer|Basic)\s)(?!\[redacted\])([^\s"')]+)/g;
+const URL_IN_TEXT = /(https?:\/\/[^\s"'<>)]+)/i;
+const TOKEN_RUN = /[A-Za-z0-9_.-]+/g;
+const KNOWN_PREFIXES = ['sk-', 'ghp_', 'gho_', 'github_pat_', 'xoxb-', 'xoxp-'];
+
+/** A whole token shaped like a raw credential: ≥ 32 chars with a letter and a digit, or a known vendor prefix plus ≥ 10 chars. */
+function isRawCredential(tok: string): boolean {
+  if (!/^[A-Za-z0-9_.-]+$/.test(tok)) return false;
+  if (KNOWN_PREFIXES.some(pre => tok.startsWith(pre) && tok.length - pre.length >= 10)) return true;
+  return tok.length >= 32 && /[A-Za-z]/.test(tok) && /[0-9]/.test(tok);
+}
+
+/** The non-URL rules: Bearer/Basic values, secret-named values, raw credentials. */
+function scrubPlain(s: string): string {
+  return s
+    .replace(BEARER, (_m, scheme: string, ws: string) => `${scheme}${ws}${REDACTED}`)
+    .replace(NAME_VALUE, (m, name: string, sep: string) => (SECRET_NAME.test(name) ? `${name}${sep}${REDACTED}` : m))
+    .replace(TOKEN_RUN, tok => (isRawCredential(tok) ? REDACTED : tok));
+}
+
+/**
+ * Free text with secret-shaped values replaced by `[redacted]` and everything else untouched, so a command still reads as itself. Heuristic: a secret with
+ * no secret-ish name, under 32 chars and outside a URL (`--k abc`) passes through.
+ */
+export function scrubSecretText(s: string): string {
+  // split with a capture group alternates plain text (even) and URLs (odd); a URL gets only the URL rules, so a query value is never redacted twice.
+  return s.split(URL_IN_TEXT).map((part, i) => (i % 2 ? redactUrl(part) : scrubPlain(part))).join('');
+}
+
+/**
+ * A URL keeping scheme, host, port and ordinary path segments; userinfo, credential-shaped path segments and every query value become `[redacted]`, and a
+ * fragment is dropped. Returned byte-identical when none of those is present; unparseable → `[redacted]` (fails closed).
+ */
+export function redactUrl(u: string): string {
+  let parsed: URL;
+  try {
+    parsed = new URL(u);
+  } catch {
+    return REDACTED;
+  }
+  const segments = parsed.pathname.split('/');
+  const redactedSegments = segments.map(seg => (isRawCredential(seg) ? REDACTED : seg));
+  const pathChanged = redactedSegments.some((seg, i) => seg !== segments[i]);
+  const hasUserinfo = parsed.username !== '' || parsed.password !== '';
+  if (!pathChanged && !hasUserinfo && !parsed.search && !parsed.hash) return u;
+  const query = parsed.search
+    .slice(1)
+    .split('&')
+    .filter(Boolean)
+    .map(pair => (pair.includes('=') ? `${pair.slice(0, pair.indexOf('='))}=${REDACTED}` : REDACTED))
+    .join('&');
+  return `${parsed.protocol}//${hasUserinfo ? `${REDACTED}@` : ''}${parsed.host}${redactedSegments.join('/')}${query ? `?${query}` : ''}`;
+}
+
+/** MCP/CLI args: a secret-named flag with no `=` (`--api-key`, `-token`) redacts the next arg whole, then every arg goes through {@link scrubSecretText}. */
+export function redactArgs(args: string[]): string[] {
+  let redactNext = false;
+  return args.map(arg => {
+    if (redactNext) {
+      redactNext = false;
+      return REDACTED;
+    }
+    if (/^--?[A-Za-z0-9_-]+$/.test(arg) && SECRET_NAME.test(arg)) redactNext = true;
+    return scrubSecretText(arg);
+  });
+}
 
 /** Max files listed per skill dir (after sorting, so SKILL.md always survives). */
 export const SKILL_FILES_CAP = 200;
@@ -259,7 +333,8 @@ export function readHooksConfig(
         out.push({
           event,
           matcher,
-          command,
+          // Scrubbed for the payload; the raw command still resolves the script path below.
+          command: scrubSecretText(command),
           source,
           declaredIn,
           scriptPath: resolveScriptPath(resolved, scriptRoots)
@@ -315,9 +390,9 @@ function stringList(v: unknown): string[] {
 }
 
 /**
- * One `mcpServers` object → rows sorted by name. The scope payload's only redaction: `env` and
- * `headers` are reduced to their key names, so no value of either can reach the payload. A served
- * settings file has its own, {@link redactSettings}.
+ * One `mcpServers` object → rows sorted by name. `env` and `headers` are reduced to their key names, so no
+ * value of either can reach the payload; `args` go through {@link redactArgs} and `url` through
+ * {@link redactUrl}. A served settings file or plugin manifest has its own, {@link redactSettings}.
  */
 export function normalizeMcpServers(raw: unknown, source: string, declaredIn: string, disabledNames: ReadonlySet<string>): McpServerInfo[] {
   if (!isObject(raw)) return [];
@@ -329,8 +404,8 @@ export function normalizeMcpServers(raw: unknown, source: string, declaredIn: st
       source,
       transport: typeof entry.type === 'string' && entry.type ? entry.type : 'stdio',
       command: typeof entry.command === 'string' ? entry.command : null,
-      args: stringList(entry.args),
-      url: typeof entry.url === 'string' ? entry.url : null,
+      args: redactArgs(stringList(entry.args)),
+      url: typeof entry.url === 'string' ? (entry.url ? redactUrl(entry.url) : entry.url) : null,
       envKeys: sortedKeys(entry.env),
       headerKeys: sortedKeys(entry.headers),
       declaredIn,
@@ -802,8 +877,8 @@ export function resolveProject(config: Partial<Config>, dirName: string, options
  * path this scanner itself enumerated across the global scope and all recent
  * project scopes. Exact membership only — secrets under the same roots
  * (~/.claude/.credentials.json, history.jsonl, project .env) are never
- * members because no scanner emits them. Settings files are members, and
- * {@link readServableFile} redacts them on the way out.
+ * members because no scanner emits them. Settings files and plugin manifests
+ * are members, and {@link readServableFile} redacts them on the way out.
  */
 export async function collectServablePaths(config: Partial<Config>, options: ProjectsOptions = {}): Promise<Set<string>> {
   const projects = listRecentProjects(config, options);
@@ -842,22 +917,50 @@ function isSettingsPath(p: string): boolean {
   return SETTINGS_FILES.includes(path.basename(p)) && path.basename(path.dirname(p)) === '.claude';
 }
 
+/** True for a plugin's `.claude-plugin/plugin.json`, which can declare inline `mcpServers` (#408). */
+function isPluginManifestPath(p: string): boolean {
+  return path.basename(p) === 'plugin.json' && path.basename(path.dirname(p)) === '.claude-plugin';
+}
+
+/** One `mcpServers` entry: `args` through {@link redactArgs}, `url` through {@link redactUrl}, every other key as {@link redactEntry} has it. */
+function redactMcpServer(server: unknown): unknown {
+  if (!isObject(server)) return redactSettings(server);
+  return Object.fromEntries(Object.entries(server).map(([k, val]) => {
+    if (k === 'args' && Array.isArray(val)) return [k, redactArgsMixed(val)];
+    if (k === 'url' && typeof val === 'string') return [k, val ? redactUrl(val) : val];
+    return [k, redactEntry(k, val)];
+  }));
+}
+
+/** One object entry's value, decided by its key. */
+function redactEntry(k: string, val: unknown): unknown {
+  if (REDACTED_KEYS.has(k)) return isObject(val) ? Object.fromEntries(Object.keys(val).map(name => [name, REDACTED])) : REDACTED;
+  if (k === 'mcpServers' && isObject(val)) return Object.fromEntries(Object.entries(val).map(([name, s]) => [name, redactMcpServer(s)]));
+  return redactSettings(val);
+}
+
+/** A file's raw `args`: the strings go through {@link redactArgs} as one sequence (flag/value pairs intact), anything else is walked. */
+function redactArgsMixed(val: unknown[]): unknown[] {
+  const strings = redactArgs(val.filter((a): a is string => typeof a === 'string'));
+  let i = 0;
+  return val.map(a => (typeof a === 'string' ? strings[i++] : redactSettings(a)));
+}
+
 /**
- * Copy of parsed settings JSON with every `env` and `headers` value replaced, at any depth. An
- * object keeps its key names so the file still reads as itself; anything else is replaced whole.
+ * Copy of a parsed settings file or plugin manifest with every secret-shaped value replaced, at any depth: `env`, `headers` and `apiKeyHelper` values whole
+ * (an object keeps its key names so the file still reads as itself), `mcpServers.*.args`/`url` through the arg and URL redactors, and every other string
+ * through {@link scrubSecretText}. Object keys are never altered.
  */
 export function redactSettings(v: unknown): unknown {
   if (Array.isArray(v)) return v.map(redactSettings);
+  if (typeof v === 'string') return scrubSecretText(v);
   if (!isObject(v)) return v;
-  return Object.fromEntries(Object.entries(v).map(([k, val]) => {
-    if (!REDACTED_KEYS.has(k)) return [k, redactSettings(val)];
-    return [k, isObject(val) ? Object.fromEntries(Object.keys(val).map(name => [name, REDACTED])) : REDACTED];
-  }));
+  return Object.fromEntries(Object.entries(v).map(([k, val]) => [k, redactEntry(k, val)]));
 }
 
 /**
  * Serve one enumerated file. Null on any rejection (relative path, `..`
- * survivor, non-member, unreadable, a settings file that does not parse) — the
+ * survivor, non-member, unreadable, a settings file or plugin manifest that does not parse) — the
  * API layer distinguishes 403 vs 404 by re-checking membership itself.
  */
 export async function readServableFile(p: string, allowed: Set<string>, cap = FILE_CONTENT_CAP): Promise<FileContent | null> {
@@ -866,7 +969,7 @@ export async function readServableFile(p: string, allowed: Set<string>, cap = FI
   try {
     const stat = await fsp.stat(p);
     if (!stat.isFile()) return null;
-    if (isSettingsPath(p)) {
+    if (isSettingsPath(p) || isPluginManifestPath(p)) {
       // Parsed whole and never edited as text: a duplicate or escaped `env` key would slip past a text edit, and a cap applied first would cut the JSON.
       const text = Buffer.from(JSON.stringify(redactSettings(JSON.parse(await fsp.readFile(p, 'utf8'))), null, 2));
       return { path: p, content: text.subarray(0, cap).toString('utf8'), size: stat.size, truncated: text.length > cap };
