@@ -25,7 +25,8 @@ release-level `pr`. The field is optional in `shared/types.ts` only so a client 
 Lightweight tags and names that are not exactly `vX.Y.Z` are ignored.
 
 **The empty shape.** A folder that is not a checkout, a checkout with no tags, or any git failure answers `{ current: null, releases: [] }`, with 200.
-The reader never rejects, so the route has no error branch.
+The reader never rejects, so the route has no error branch. The Docker images land here: they carry no `.git` and no `git` binary
+([docker](../workflows/docker.md#container-specific-behavior)).
 
 **The memo** is release-kit's, not this repo's. One read per change, not per request. The key is the root, HEAD, plus the mtimes of `packed-refs` and `refs/tags` under the **common** git dir
 (`git rev-parse HEAD --git-common-dir`):

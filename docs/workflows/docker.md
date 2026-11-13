@@ -45,8 +45,14 @@ Two things a container can't reach on its own:
   [session status](../subsystems/sessions.md#the-status-machine-the-left-dot).
 - The dev compose bind-mounts the source but keeps the container's own Linux
   `node_modules` (an anonymous volume shadows the host's).
-- `~/.claude` is mounted read-only, which is also why the remote-answer toggle persists
-  to a repo-root file instead of anywhere under `~/.claude`.
+- **State lives on the `dashboard-state` volume, mounted at `/data`.** `~/.claude` is mounted read-only, and `/app` is the container's own writable layer,
+  which a recreate (`docker compose up --build`) throws away. So the runtime stage sets `DASHBOARD_STATE_DIR=/data` and the production compose file mounts
+  a named volume there; the five state files live on it — `.dashboard-settings.json`, `.remote-answer.json`, `.usage-ledger.jsonl`,
+  `.usage-history.jsonl` and `.usage-profile.json` — and survive a rebuild. `docker compose down -v` deletes the volume and them with it. The dev compose
+  needs none of this: it bind-mounts the repo, so those files already sit in your checkout.
+- **The What's new drawer and the version chip are empty in these images.** `.dockerignore` drops `.git` and `node:20-alpine` ships no `git` binary,
+  so the [releases](../subsystems/releases.md) reader has no checkout to read and answers its empty shape — designed behavior, not a broken state. Same fix
+  as dictation and spawn below: run the server on the host.
 - **Dictation is unavailable in these images.** `config.ts` reads `WHISPER_MODEL`,
   `WHISPER_BIN` and `FFMPEG_BIN`, but neither compose file passes them and the
   `node:20-alpine` stages install neither `whisper-cli` nor `ffmpeg` — so `probeTranscribe`

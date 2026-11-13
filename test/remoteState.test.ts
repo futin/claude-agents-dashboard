@@ -18,6 +18,19 @@ function cfg(remoteAnswer: boolean): Config {
   return { remoteAnswer, answerToken: '' } as Config;
 }
 
+/** Run `fn` with `DASHBOARD_STATE_DIR` set to `value` (deleted when undefined), restoring the caller's value after (#407). */
+function withStateDir(value: string | undefined, fn: () => void): void {
+  const prev = process.env.DASHBOARD_STATE_DIR;
+  try {
+    if (value === undefined) delete process.env.DASHBOARD_STATE_DIR;
+    else process.env.DASHBOARD_STATE_DIR = value;
+    fn();
+  } finally {
+    if (prev === undefined) delete process.env.DASHBOARD_STATE_DIR;
+    else process.env.DASHBOARD_STATE_DIR = prev;
+  }
+}
+
 /** The state file is resolved from cwd, so tests run inside a tmpdir. */
 function inTmpCwd(fn: (dir: string) => void): void {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cad-ra-'));
@@ -104,6 +117,30 @@ export function run(): number {
     assert.deepStrictEqual(seen, [{ status: 'dismissed' }, { status: 'dismissed' }]);
     assert.strictEqual(dismissAll(), 0, 'nothing left to release');
     resetStore();
+  })) p++; else f++;
+
+  if (test('DASHBOARD_STATE_DIR set: the toggle file goes there, not to the cwd (#407)', () => {
+    const stateA = fs.mkdtempSync(path.join(os.tmpdir(), 'cad-ra-state-'));
+    try {
+      withStateDir(stateA, () => {
+        inTmpCwd(cwdB => {
+          setEnabled(cfg(true), false);
+          assert.ok(fs.existsSync(path.join(stateA, STATE_FILE)), 'the write must land in DASHBOARD_STATE_DIR');
+          assert.ok(!fs.existsSync(path.join(cwdB, STATE_FILE)), 'nothing may appear in the cwd');
+          resetState(); // simulate the server restarting
+          assert.strictEqual(getState(cfg(true)).enabled, false, 'and it is read back from there');
+        });
+      });
+    } finally { fs.rmSync(stateA, { recursive: true, force: true }); }
+  })) p++; else f++;
+
+  if (test('DASHBOARD_STATE_DIR unset: the toggle file stays in the cwd', () => {
+    withStateDir(undefined, () => {
+      inTmpCwd(cwdB => {
+        setEnabled(cfg(true), false);
+        assert.ok(fs.existsSync(path.join(cwdB, STATE_FILE)));
+      });
+    });
   })) p++; else f++;
 
   console.log(`\n  ${p} passed, ${f} failed`);

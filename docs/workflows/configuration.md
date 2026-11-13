@@ -62,6 +62,7 @@ that starts the server:
 |-----|---------|---------|
 | `CLAUDE_CODE_AUTO_COMPACT_WINDOW` | `server/lib/transcript.ts` | Force the context-window size (tokens) used for every session's `%` bar — a global override in the *dashboard's* env. A session's own window belongs in its settings files (`autoCompactWindow`), which `server/lib/compact-window.ts` reads per session |
 | `CLAUDE_CREDENTIALS_JSON` | `server/lib/usage.ts` | OAuth creds blob for the usage bars when the host keychain isn't reachable (Docker — see [docker.md](docker.md)) |
+| `DASHBOARD_STATE_DIR` | `server/lib/paths.ts` (`stateDir`) | Directory for the five state files (settings, remote toggle, usage ledger/history/profile) instead of the cwd / repo root. Unset on the host; the Docker runtime image sets it to `/data`, the `dashboard-state` volume — see [docker.md](docker.md) |
 | `RUN_ROUTINE_GRACE_MS` | `plugin/lib/run-routine.mjs` | A test seam for the wrapper's 10 s SIGTERM-to-SIGKILL grace on a stopped step. Never baked into an installed job, so it is only ever set by a test |
 
 ## Hook-side (remote answers)

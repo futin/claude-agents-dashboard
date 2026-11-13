@@ -23,16 +23,17 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 import type { Config } from './config.js';
+import { stateDir } from './paths.js';
 import type { RemoteAnswerState } from '../../shared/types.js';
 
-/** Gitignored, repo-local — never inside `~/.claude` (read-only under Docker). */
+/** Gitignored, repo-local (or under `DASHBOARD_STATE_DIR`) — never inside `~/.claude` (read-only under Docker). */
 export const STATE_FILE = '.remote-answer.json';
 
 let cached: boolean | null = null;
 let persisted = true;
 
 function statePath(): string {
-  return path.join(process.cwd(), STATE_FILE);
+  return path.join(stateDir(process.cwd()), STATE_FILE);
 }
 
 /** The stored toggle, or null when there's nothing usable on disk. */

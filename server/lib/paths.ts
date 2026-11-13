@@ -1,7 +1,8 @@
 /**
  * paths.ts — where Claude keeps its own files on this machine: `~/.claude`, `~/.claude.json`, and the roots Claude makes working dirs under. A leaf on
  * purpose (Node built-ins only): `scan.ts`, `management.ts`, `compact-window.ts` and the rest all need these, and while they lived in `management.ts`
- * every importer closed an import cycle back through it. `test/import-cycles.test.ts` keeps them broken.
+ * every importer closed an import cycle back through it. `test/import-cycles.test.ts` keeps them broken. Also {@link stateDir}, where the dashboard's own
+ * state files go.
  */
 
 import fs from 'node:fs';
@@ -40,6 +41,16 @@ export function defaultClaudeRoots(homeDir?: string): readonly string[] {
   const roots = [os.tmpdir(), '/tmp', '/private/tmp', claudeHome(homeDir), path.join(home, 'Library', 'Application Support', 'Claude')];
   try { roots.push(fs.realpathSync(os.tmpdir())); } catch { /* keep the literal */ }
   return roots;
+}
+
+/**
+ * Where the dashboard writes its own state files (settings, remote toggle, usage ledger, history, profile): `DASHBOARD_STATE_DIR` when set, else
+ * `fallback` unchanged. The production Docker image sets it to a volume, because its `/app` is the container's unmounted writable layer and a recreate
+ * would wipe every file there (#407). Read from `process.env`, not `loadConfig` — the callers have no `Config` in scope. Does not create the directory.
+ */
+export function stateDir(fallback: string): string {
+  const value = process.env.DASHBOARD_STATE_DIR?.trim();
+  return value ? path.resolve(value) : fallback;
 }
 
 /** Whether `p` is `root` itself or lies inside it, by path alone — no symlink is resolved. */

@@ -331,7 +331,8 @@ Consequence for the client: `ratePerHour × 24` overstates the daily figure by
 - Both are gitignored, and both resolve from the **repo root, found by walking up for
   `package.json`** — deliberately *not* `settings.ts`'s `process.cwd()`. A settings file
   that resets when you start the server elsewhere is a nuisance; a history file that does
-  is weeks of learning silently replaced by an empty one, with no error.
+  is weeks of learning silently replaced by an empty one, with no error. `DASHBOARD_STATE_DIR`, when set, replaces the repo root for both and for the
+  ledger below (the Docker image sets it — `/app` there is thrown away on a recreate); an explicit `dir` argument, the test seam, still wins.
 - Recording is **opt-in, default off** (`recordUsageHistory`, see
   [settings](./settings.md)). Switching it on makes the server call Anthropic about once a
   minute for as long as the process lives, with nobody necessarily watching — that should
@@ -743,7 +744,7 @@ proxy correct and traceable; it does not make it verified.
 
 ### The ledger (`lib/usage-ledger.ts`)
 
-One line per tick to `.usage-ledger.jsonl` (repo root, gitignored, sibling of
+One line per tick to `.usage-ledger.jsonl` (repo root, or `DASHBOARD_STATE_DIR` when set; gitignored, sibling of
 the history log), written from the same fetch-success path that calls
 `recordTick`, so a ledger line and a history sample describe the same instant.
 Each tick reads only the bytes appended to each transcript since the last one
