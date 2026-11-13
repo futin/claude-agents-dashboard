@@ -85,7 +85,9 @@ control (the type is a column now, not a collapsible header) and the
   longer a directory is dropped (an orchestrator run merges and prunes its worktrees, so most
   throwaway rows are dead paths; deleted or moved repos go too), and so is a linked git
   worktree — `.git` is a file whose `gitdir:` points into some git dir's `worktrees/`,
-  wherever the worktree sits. Hidden outright, not folded under the parent repo: Sessions
+  wherever the worktree sits — and so is anything inside a dir named `worktrees` or `.worktrees`, by path alone, which
+  catches a full clone an A/B harness parks under `…/worktrees/v1/` and a `.claude/worktrees/x` leftover whose `.git` file
+  is already gone (a dir that is itself named `worktrees` is kept). Hidden outright, not folded under the parent repo: Sessions
   already shows a run's worktree sessions live, and a worktree's config only duplicates the
   branch it was cut from. A `.git` dir, no `.git`, a submodule's `.git` file, or one with no
   readable `gitdir:` line is kept — fail open. Pure `fs`, no `git` subprocess. Unconditional,
@@ -109,16 +111,16 @@ control (the type is a column now, not a collapsible header) and the
   project spawnable, lists it on the rail, and **widens the servable-path set** to its config files —
   all three intended, and the last is why `POST /api/pins` only accepts a dirName the server itself
   enumerated. **The rail lists pinned rows only** (`pinnedProjects` in `client/src/lib/configsEntries.ts`, applied in
-  `ConfigsScopeProvider`): the index still carries every recent cwd, but a recent-only row — a full clone under a `worktrees/` dir, a
-  scratch workspace, a session scratchpad — is noise there, and pinning is the user's way to say which projects matter. A persisted scope that
+  `ConfigsScopeProvider`): the index still carries every recent cwd, but a recent-only row is noise there, and pinning is the user's way to say which projects matter. A persisted scope that
   is not pinned resolves back to Global. The rail reads the index fetched once per load, so a pin made in Management shows there after ↻ or a
   reload. `listOlderProjects` is what is offered for pinning: dirs whose newest transcript is
   outside the lookback but inside `OLDER_PROJECTS_DAYS` (30), minus anything already listed, any cwd
   under a Claude root (`defaultClaudeRoots`: `os.tmpdir()` and its realpath, `/tmp`, `/private/tmp` —
   session scratchpads — plus `~/.claude` and `~/Library/Application Support/Claude`, the desktop app's
-  scratch workspaces) and anything failing bug-21. `GET /api/pins` drops Claude-root cwds from its
-  `recent` offers the same way; they stay in the launch select, and a pin already made
-  under one still lists under `pinned`. The 30 days cap only what is *offered*; a pin already made stays
+  scratch workspaces) and anything failing bug-21. Every API caller of `listRecentProjects` passes those roots too
+  (`pinOptions` in `api.ts`), so a Claude-root cwd is on no list at all — not the launch select, not the index, not
+  `GET /api/pins` — and is neither spawnable nor pinnable; a pin stored under one before that rule reads `listed: false`
+  under `pinned`, where it can be unpinned. Called directly, `listRecentProjects` filters roots only when given them. The 30 days cap only what is *offered*; a pin already made stays
   listed at any age.
   **The order is user-set:** a new pin appends, and Management › Projects' drag grip (or ↑/←/↓/→ on a focused grip) saves the whole list through
   `POST /api/pins/order`, which `setPinOrder` accepts only as an exact permutation of the stored pins — anything else is a 409, so a tab that missed a pin

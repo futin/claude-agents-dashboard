@@ -18,7 +18,7 @@ import type { Harness } from './api-harness.js';
 import { overridePinsPayload } from '../server/api.js';
 import { encodeProjectDir } from '../server/lib/management.js';
 import { overrideClaudeRoots } from '../server/lib/paths.js';
-import { getPinnedProjects, resetSettings } from '../server/lib/settings.js';
+import { getPinnedProjects, resetSettings, setPinned } from '../server/lib/settings.js';
 import type { PinsResponse, ProjectRef } from '../shared/types.js';
 
 const ENV = 'SHOW_USAGE=false\nSKIP_PROC_SCAN=true\n';
@@ -141,7 +141,7 @@ export async function run(): Promise<number> {
     });
   }));
 
-  check(await testAsync('a recent dir under a Claude root is not offered, and a pin already made there stays listed', async () => {
+  check(await testAsync('a recent dir under a Claude root is neither offered nor pinnable, and a pin already stored there reads unlisted', async () => {
     await withPins(ENV, async h => {
       overrideClaudeRoots([path.join(h.home, '.claude')]);
       const mine = plantProject(h, 'mine', 1 / 24);
@@ -149,11 +149,33 @@ export async function run(): Promise<number> {
       const before = (await h.req('/api/pins')).json as unknown as PinsResponse;
       assert.deepStrictEqual(before.recent.map(r => r.dirName), [mine.dirName]);
 
-      // The gate still knows it — it is listed on the rail — so a pin made before the filter survives it.
-      assert.equal((await post(h, { dirName: own.dirName, pinned: true })).status, 200);
+      // Not on any list, so the gate does not know it.
+      assert.equal((await post(h, { dirName: own.dirName, pinned: true })).status, 404);
+      assert.deepStrictEqual(getPinnedProjects(), []);
+
+      // A pin stored before the filter existed stays in the list so it can be unpinned, but nothing lists it.
+      setPinned(own.dirName, true);
       const after = (await h.req('/api/pins')).json as unknown as PinsResponse;
-      assert.deepStrictEqual(after.pinned.map(r => [r.dirName, r.listed]), [[own.dirName, true]]);
+      assert.deepStrictEqual(after.pinned.map(r => [r.dirName, r.listed]), [[own.dirName, false]]);
       assert.deepStrictEqual(after.recent.map(r => r.dirName), [mine.dirName]);
+      assert.equal((await post(h, { dirName: own.dirName, pinned: false })).status, 200);
+      assert.deepStrictEqual(getPinnedProjects(), []);
+    });
+  }));
+
+  check(await testAsync('a project inside a worktrees dir is neither offered nor pinnable, whatever its .git', async () => {
+    await withPins(ENV, async h => {
+      const mine = plantProject(h, 'mine', 1 / 24);
+      // A full clone (its own .git dir) parked under a `worktrees` dir, as an A/B harness lays them out.
+      const clone = plantProject(h, 'clone', 1 / 24, path.join(h.home, 'ab', 'worktrees', 'v1', 'repo'));
+      fs.mkdirSync(path.join(clone.cwd, '.git'));
+      // A leftover dir under `.claude/worktrees` whose `.git` file is already gone.
+      const leftover = plantProject(h, 'leftover', 5, path.join(mine.cwd, '.claude', 'worktrees', 'feat'));
+      const pins = (await h.req('/api/pins')).json as unknown as PinsResponse;
+      assert.deepStrictEqual(pins.recent.map(r => r.dirName), [mine.dirName]);
+      assert.deepStrictEqual(pins.older, []);
+      assert.equal((await post(h, { dirName: clone.dirName, pinned: true })).status, 404);
+      assert.equal((await post(h, { dirName: leftover.dirName, pinned: true })).status, 404);
     });
   }));
 
