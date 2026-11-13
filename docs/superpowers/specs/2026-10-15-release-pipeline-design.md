@@ -193,8 +193,8 @@ No fetch is added: `git pull` already brings annotated tags that point at pulled
 ### Dependency
 
 `release-kit` becomes the second allowed package under `server/`, pinned to a git tag (`github:futin/release-kit#v1.x.y`) the same way as `lookout-widgets`.
-`test/server-deps.test.ts` pins both names and tags; `.claude/CLAUDE.md` "Keep new deps out of `server/`" names it. `readReleases` uses Node built-ins only
-and launches `git`, which is not a new outbound-call kind (`test/outbound.test.ts` unchanged).
+`test/guards/server-deps.test.ts` pins both names and tags; `.claude/CLAUDE.md` "Keep new deps out of `server/`" names it. `readReleases` uses Node built-ins only
+and launches `git`, which is not a new outbound-call kind (`test/guards/outbound.test.ts` unchanged).
 
 ### UI
 
@@ -252,7 +252,7 @@ Dashboard:
 - `/api/releases` over a tmpdir repo (same fixture style as existing tests) for the `null` and populated shapes, and a commit made after the first read
   (`ahead` must move from 0 to 1)
 - client domain logic: unseen-dot decision, first-visit seed, version comparison (`0.10.0` > `0.9.0`)
-- `test/server-deps.test.ts` updated for the second package
+- `test/guards/server-deps.test.ts` updated for the second package
 - visual baseline for chip and panel in `pnpm test:visual` (macOS, on demand)
 
 Workflows are verified by real runs on release-kit itself and then on a throwaway PR here; the plan records which runs proved which behaviour.

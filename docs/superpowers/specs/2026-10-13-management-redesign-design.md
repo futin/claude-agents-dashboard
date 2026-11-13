@@ -307,7 +307,7 @@ Plurals follow the mock's `plural`: `es` after `ch`, `sh`, `s` or `x`, else `s`,
      → 403 `{error: 'not a pinned project'}`. Nothing is joined or normalised, so `/a/b/` does not match `/a/b`.
   5. The runner rejects → 500 `{error: 'open failed'}`.
   6. Otherwise 200 `{ok: true}`.
-- `test/outbound.test.ts` is **not affected**. It flags `node:http(s)`, `net`, `tls`, `dgram` and `fetch(`. `open-folder.ts` imports
+- `test/guards/outbound.test.ts` is **not affected**. It flags `node:http(s)`, `net`, `tls`, `dgram` and `fetch(`. `open-folder.ts` imports
   `node:child_process`, and `open` opens a Finder window without any network call.
 - Client `hooks/useOpenFolder.ts`: `{open(path), pending, note}`. It POSTs with the `dashboard.answerToken` Bearer header as `usePins` does. Notes:
   403 `bad token` → `Open folder needs the Answer token — set it under Settings › Local › Connection.`; 403 otherwise → `That folder is no longer pinned.`;
@@ -336,7 +336,7 @@ checked against the `client/src/styles.css` token block on 2026-10-13:
 
 Also:
 
-- **No `max-width` media query**, because `test/breakpoints.test.ts` fails on one. The mock's queries are inverted mobile-first onto the ladder: 560 / 640
+- **No `max-width` media query**, because `test/guards/breakpoints.test.ts` fails on one. The mock's queries are inverted mobile-first onto the ladder: 560 / 640
   → `sm` 640, 860 → `lg` 1024, 1100 → `xl` 1280.
 - The mock's `.card` / `.tagpill` / `.status` are the live `.s-card` / `.proj-pill` / `.spill`, so `.status.g-*` ships as `.spill.g-*`.
 - Existing live rules the mock repeats (`.git-age`, `.git-bname`, `.git-bname-t`, `.git-caret`, `.git-chip*`, `.git-sync*`, `.git-dot*`) are kept as they
@@ -344,7 +344,7 @@ Also:
 
 ## 8. Tests
 
-New files are registered in `test/run-all.ts` beside their neighbours: `test/git-levels.test.ts`, `test/git-links.test.ts`, `test/api-open-folder.test.ts`.
+New files are registered in `test/run-all.ts` beside their neighbours: `test/git/git-levels.test.ts`, `test/git/git-links.test.ts`, `test/api/api-open-folder.test.ts`.
 The plan lists every case by name. Summary:
 
 - `pins-client.test.ts`: `dropMark`, column and grid, start / middle / end, gap 0 / 6, null cases.

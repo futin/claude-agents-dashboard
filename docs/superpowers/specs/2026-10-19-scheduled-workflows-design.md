@@ -59,7 +59,7 @@ uses, and all of it keeps firing with the dashboard closed. A job that needs non
 ## Constraints
 
 - Server stays zero-dep (`.claude/CLAUDE.md` §Code rules). The wrapper is plain Node with built-ins only, no TypeScript, no imports from `server/`.
-- Launching `launchctl`, `crontab`, `git` and the `claude` CLI are local launches, not a new outbound kind; `test/outbound.test.ts` keeps pinning the list.
+- Launching `launchctl`, `crontab`, `git` and the `claude` CLI are local launches, not a new outbound kind; `test/guards/outbound.test.ts` keeps pinning the list.
 - `shared/types.ts` first for every new API field; `shared/frontmatter.ts` stays the one parser both sides run, and gains a writer beside it.
 - CSS: theme tokens only, no literal colours; new class names prefixed `.sch-`; ui-kit `.uk-*` classes untouched.
 - The sessions scan stays capped (`SCAN_CAPS`, 168 h / 50 rows). Old runs are reached by id, not by widening the scan.
@@ -171,7 +171,7 @@ weekday; use one`.
 
 The paths baked into a plist are read once at reconcile time: `process.execPath` for node, the installed plugin's `bin/run-schedule.mjs` for the wrapper
 (`~/.claude/plugins/…/claude-agents-dashboard/lib/run-schedule.mjs`, the directory `scripts/sync-plugin.ts` installs into). It is `lib/`, not `bin/`:
-Claude Code puts every plugin's `bin/` on the Bash PATH of every session, which `test/plugin-manifest.test.ts` exists to prevent; that test's allowed
+Claude Code puts every plugin's `bin/` on the Bash PATH of every session, which `test/guards/plugin-manifest.test.ts` exists to prevent; that test's allowed
 entries gain `lib`, and `sync-plugin.ts` `PUBLISHED_PATHS` gains it too. If the installed plugin is
 missing, reconcile reports `plugin not installed` and installs nothing.
 
@@ -279,7 +279,7 @@ wrapper's are never taken from a request.
   `run:` when absent, everything else byte for byte). `parseJob` reads the raw frontmatter lines itself rather than trusting `parseFrontmatter`'s data:
   a nested block, an empty value, a duplicate key or an unknown key is an error naming the line, inline lists are `[a, b]` only, a line whose first non-blank character is `#` is a comment, and a ` #` outside quotes starts one — so the example
   file above and the drawer templates parse as written. Zero deps, runs on server and client (the drawer's live summary). The wrapper runs `plugin/lib/schedule-file.mjs`, `cron.mjs` and `frontmatter.mjs`: generated
-  from the TS by `pnpm plugin:gen` (`typescript`'s `transpileModule`, already a dev dep), and `test/plugin-manifest.test.ts` regenerates and compares, so a
+  from the TS by `pnpm plugin:gen` (`typescript`'s `transpileModule`, already a dev dep), and `test/guards/plugin-manifest.test.ts` regenerates and compares, so a
   TS edit without the regen fails CI, and `plugin/lib/frontmatter.mjs` is generated the same way since `parseJob` imports it. The generated files are
   `.mjs` (`schedule-file.mjs`, `cron.mjs`, `frontmatter.mjs`): the plugin has no `package.json`, so a `.js` would load as CommonJS on the Node 18–20
   this repo still allows and the wrapper would die before its first log line. The plugin is still never
@@ -382,5 +382,5 @@ the first time (an id set in memory plus a `~/.claude/schedules/notified.json` s
 - Exact plist template and the `launchctl` invocation sequence on macOS 15+ (`bootstrap`/`bootout` vs `load`/`unload`).
 - Component split under `client/src/components/management/schedules/`; hook shape (`useSchedules`, `useScheduleRuns`).
 - Test fixtures: a tmpdir schedules folder, a fake spawner, a fake `launchctl`/`crontab` via the same override seam `git-fetch.ts` uses for its runner.
-- The docs: `docs/subsystems/schedules.md` and a line in `docs/overview.md` §Map; `docs/subsystems/spawn.md` gains the wrapper launch; `test/outbound.test.ts`
-  and `test/plugin-manifest.test.ts` updated for the new launches and `plugin/lib/`.
+- The docs: `docs/subsystems/schedules.md` and a line in `docs/overview.md` §Map; `docs/subsystems/spawn.md` gains the wrapper launch; `test/guards/outbound.test.ts`
+  and `test/guards/plugin-manifest.test.ts` updated for the new launches and `plugin/lib/`.

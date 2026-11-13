@@ -28,7 +28,7 @@
  *
  * So the number lives in exactly one place — `.env`, read by the same
  * `loadConfig` the server and `vite.config.ts` read — and this script asks for
- * it. There is nothing left to keep in sync. `test/tailnet.test.ts` asserts
+ * it. There is nothing left to keep in sync. `test/infra/tailnet.test.ts` asserts
  * against this file's own source text that no dashboard port literal appears
  * in here at all.
  *

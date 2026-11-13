@@ -27,7 +27,7 @@ export function blankCells(): UsageProfileCell[] {
 
 /**
  * Shape one `GET /api/usage/profile` body. Pure — no clock, no disk, no
- * timezone — so every calendar edge is testable (test/usage-profile-api.test.ts).
+ * timezone — so every calendar edge is testable (test/usage/usage-profile-api.test.ts).
  *
  * The walk is re-run here with the *same* implementation that produced the
  * projection in `usage-pace.ts`, so the inspector can never drift from what it
@@ -163,7 +163,7 @@ export function emptyRates(nowMs: number, recording: boolean, error?: true): Usa
 
 /**
  * Shape one `GET /api/usage/rates` body. Pure — no clock, no disk — so the
- * arithmetic and every honesty rule are testable (test/api-usage-rates.test.ts).
+ * arithmetic and every honesty rule are testable (test/api/api-usage-rates.test.ts).
  *
  * One row per model that either owns an attributable interval **or** is
  * identified by the one-term joint fit, richest evidence first: the model you

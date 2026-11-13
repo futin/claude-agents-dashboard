@@ -1,6 +1,6 @@
 /**
  * gitChecks.ts — the Git Inspector pane's check tiles (Working tree, Your branch, Trunk, Origin data; State for a repo git cannot read), apart from React so a
- * node test can drive them (`test/git-checks.test.ts`). `GitInspector` draws them.
+ * node test can drive them (`test/git/git-checks.test.ts`). `GitInspector` draws them.
  */
 import type { FetchClock, FetchError } from '../../../shared/types';
 import { formatAgo } from './format';

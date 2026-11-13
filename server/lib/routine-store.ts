@@ -2,7 +2,7 @@
  * routine-store.ts — the job folder on disk, the pins snapshot the wrapper reads, the owner lock that lets one server per machine touch `~/.claude/routines/`,
  * and the start-up sweep of dead wrappers' locks. Callers gate on `isOwner()`; nothing here refuses a write for a non-owner, so a test or the seam can still
  * drive a folder. The wrapper (`plugin/lib/run-routine.mjs`) owns `locks/` while it runs: `bootId`, `isWrapperCommand` and the lock shape below mirror its own
- * and `test/routine-store.test.ts` pins them against its source, because the server cannot import the plugin.
+ * and `test/routines/routine-store.test.ts` pins them against its source, because the server cannot import the plugin.
  */
 
 import { execFileSync } from 'node:child_process';

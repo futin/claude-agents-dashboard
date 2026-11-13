@@ -39,7 +39,7 @@ Where the two disagree, **this spec wins**. Known differences:
 | D1  | **Full rename**, not label-only: rail id, hooks, components, `/api/management*` paths and localStorage keys move to `configs`. CSS class names stay. |
 | D2  | The freed `management` id becomes the new tab, with sub-nav **Git** (default) and **Pinned**. Settings loses its Pinned sub-view.                     |
 | D3  | **Pinned projects only.** Repo paths come from `listPinRows` (`server/lib/management.ts`), never from the request.                                   |
-| D4  | **Read-only, zero network.** The server never runs `git fetch`, `gh`, or anything that writes to a repo. `test/outbound.test.ts` does not change.     |
+| D4  | **Read-only, zero network.** The server never runs `git fetch`, `gh`, or anything that writes to a repo. `test/guards/outbound.test.ts` does not change.     |
 | D5  | **Local branches only.** A branch pushed from another machine appears once it is checked out here (or after a Phase 2 Sync).                        |
 | D6  | **Own reader in `server/`**, not the git-sync engine. The server never runs plugin code; `survey` measures branches against `origin/<branch>`, not the trunk, and calls `gh`. |
 | D7  | Trunk = git-sync's `trunkOf` rule: `origin/HEAD`, else `main`, else `master`, remote-tracking ref before local. Copied, not imported.             |
@@ -53,7 +53,7 @@ Where the two disagree, **this spec wins**. Known differences:
 ## §1 Why not the git-sync engine
 
 `plugin/skills/git-sync/tools/git-sync.mjs` is plugin code: the server never imports or runs anything under `plugin/`. That is a `.claude/CLAUDE.md` rule ("never
-imported by server or client at runtime"), and §7 adds a sweep test for it. `test/plugin-manifest.test.ts` pins only what may live under `plugin/`. Its `survey` also answers a different question. It reports a branch ahead of `origin/<branch>` (unpushed), while this page wants ahead/behind the
+imported by server or client at runtime"), and §7 adds a sweep test for it. `test/guards/plugin-manifest.test.ts` pins only what may live under `plugin/`. Its `survey` also answers a different question. It reports a branch ahead of `origin/<branch>` (unpushed), while this page wants ahead/behind the
 trunk, and it calls `gh` for PR state, which is network. Two ideas are borrowed and re-implemented, each in a few lines: `trunkOf` (D7) and the `git cherry`
 squash-merge proof (`cherrySigns`, its M2 case). git-sync's M3 probe is not borrowed, because it writes a probe commit object with `commit-tree`, and D4 rules
 out writes.
@@ -176,7 +176,7 @@ can reach the dashboard. `docs/subsystems/remote-access.md` lists it.
 - The server module `server/lib/management.ts` keeps its name for now: it also holds the project listing that pins and Git Stats use. Renaming it is out of
   scope (see Out of scope).
 - **CSS class names do not change** (`.wide-mgmt` and the rest), per the repo rule. The new Management tab gets the plain `wrap wide`.
-- Tests that hit the old routes (`test/api-management-analytics.test.ts`, `test/management.test.ts`) move to the new paths. A sweep test asserts that no
+- Tests that hit the old routes (`test/api/api-management-analytics.test.ts`, `test/sessions/management.test.ts`) move to the new paths. A sweep test asserts that no
   `'/api/management` string remains under `client/src`.
 
 ## §5 Phase 0: the new Management tab

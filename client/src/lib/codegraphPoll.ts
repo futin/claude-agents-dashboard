@@ -1,5 +1,5 @@
 /**
- * The CodeGraph sub-view's poll and run rules, apart from React so `test/codegraph-client.test.ts` can drive them: when the page polls fast, and which
+ * The CodeGraph sub-view's poll and run rules, apart from React so `test/codegraph/codegraph-client.test.ts` can drive them: when the page polls fast, and which
  * line a `POST /api/codegraph/run` answer leaves under the band.
  */
 import type { CodegraphResponse, CodegraphRunKind } from '../../../shared/types';

@@ -1,6 +1,6 @@
 /**
  * composer.ts — the chat drawer composers' keyboard, shaped after the Desktop app's: Enter sends, Shift+Enter breaks the line, and Tab in an empty box
- * takes the suggested reply. Pure — `test/composer.test.ts`.
+ * takes the suggested reply. Pure — `test/chat/composer.test.ts`.
  *
  * The suggestion is the session's own: the first next-step button of its last `wrap_up` call (`suggestion` on that tool line, `server/lib/chat.ts`).
  * Only Desktop sessions call wrap_up, so a CLI session simply never has one.

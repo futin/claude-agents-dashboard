@@ -4,7 +4,7 @@
  * The server sends per-window burn rate + projected exhaustion (usage-pace.ts);
  * this derives what the strip actually draws: where "now" sits inside the
  * window, where the projected wall tick lands, and the wall/lasts verdict.
- * Pure so it's unit-testable (test/pace-view.test.ts).
+ * Pure so it's unit-testable (test/usage/pace-view.test.ts).
  */
 
 import type { ForecastConfidence, RateLimit } from '../../../shared/types';

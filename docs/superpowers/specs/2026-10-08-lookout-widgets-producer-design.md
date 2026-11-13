@@ -108,7 +108,7 @@ non-optional param and no case is reported as a failure (`<widgetId>: param <par
     (`MAX_SESSIONS`, default 5) — the same rows the Sessions page shows — and no `total` is sent, since the scan reports none beyond what it returns.
 - **`server/index.ts`** — before the existing routes: when the pathname starts with `/api/hub/`, parse the JSON body on POST, call the handler, send its reply;
   `null` falls through to the existing table. GET only reads data the dashboard already exposes; with no actions declared, no POST reaches `run`.
-- **Network surface** — unchanged. The package makes no calls; `test/outbound.test.ts` is untouched.
+- **Network surface** — unchanged. The package makes no calls; `test/guards/outbound.test.ts` is untouched.
 - **Docs** — new `docs/subsystems/hub-widgets.md`, one line in `docs/overview.md` §Map, the endpoint list in `server/index.ts`'s header comment, and the
   CLAUDE.md exception.
 

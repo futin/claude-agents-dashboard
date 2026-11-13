@@ -38,8 +38,8 @@ task tools.
 - New `Session.taskPlan: string | null` — the plan's file name without `.md` (e.g. `2026-10-07-task-progress`) when `tasks` came from a plan, else `null`.
 - `Session.tasks` keeps its meaning: `null` = nothing to show. A plan with no task headings and no task numbers seen in the transcript falls back to the
   `TaskCreate` list (§2.4), so `null` only without one.
-- `taskPlan` is required, so every `Session` literal gains `taskPlan: null`: `test/visual/fixtures/sessions.ts`, `test/filter-sort.test.ts`,
-  `test/triage.test.ts`, `test/web-notify.test.ts` and any other the typecheck names.
+- `taskPlan` is required, so every `Session` literal gains `taskPlan: null`: `test/visual/fixtures/sessions.ts`, `test/sessions/filter-sort.test.ts`,
+  `test/sessions/triage.test.ts`, `test/notify/web-notify.test.ts` and any other the typecheck names.
 
 ## 2. Server — `server/lib/tasks.ts`
 
@@ -126,7 +126,7 @@ lines carry the whole dispatch prompt (several KB), so parsing them is the new c
 | Plan amended mid-run (new heading) | new row on the next poll (mtime changed) |
 | Two plans in one session | the latest plan only |
 
-## 5. Testing — `test/tasks.test.ts` (new cases), fixtures in the per-run temp root, plan files written beside them
+## 5. Testing — `test/sessions/tasks.test.ts` (new cases), fixtures in the per-run temp root, plan files written beside them
 
 1. Ledger header via a Bash `printf … >> …/sdd/x/progress.md` resolves the plan; headings become pending rows in order; `taskPlan` = basename.
 2. Same header written via Write `content`, and via Edit `new_string` — both resolve.

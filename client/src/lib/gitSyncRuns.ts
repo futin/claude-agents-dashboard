@@ -1,6 +1,6 @@
 /**
  * gitSyncRuns.ts — what a new sessions payload does to the remembered Git Sync runs. Kept apart from `useGitSync` so the transition is tested without
- * React (`test/git-sync-client.test.ts`).
+ * React (`test/git/git-sync-client.test.ts`).
  */
 
 import type { SessionsResponse } from '../../../shared/types';

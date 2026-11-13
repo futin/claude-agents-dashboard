@@ -181,14 +181,14 @@ branch unmemoised). The memo is module-level and outlives a request:
 ## Tests
 
 `overrideGitRunner(run | null)` swaps the runner behind the route process-wide (the `overrideClaudeRoots` pattern); `gitStatsMemoKeys()` exposes the memo to
-tests and nothing else. `test/git-stats.test.ts` drives `readRepo` over real repos built by `test/git-fixture.ts`; `test/api-git-stats.test.ts` drives the
+tests and nothing else. `test/git/git-stats.test.ts` drives `readRepo` over real repos built by `test/git-fixture.ts`; `test/api/api-git-stats.test.ts` drives the
 route.
 
 The fetch has the same kind of seams: `overrideFetchRunner(run | null)` swaps its runner, `overrideFetchClock(now | null)` its clock, and `resetGitFetch()`
-clears the clock, the in-flight promise, the verdicts and the watched stamp. `test/git-fetch.test.ts` runs real fetches against `GitFixture` bare origins (no
+clears the clock, the in-flight promise, the verdicts and the watched stamp. `test/git/git-fetch.test.ts` runs real fetches against `GitFixture` bare origins (no
 network) and pins the classifier table, the argv and env overlay, worktree dedupe, single flight, the timer rules and the process-group kill;
-`test/api-git-fetch.test.ts` drives the POST and the payload fields. The client's clock logic (`client/src/lib/gitClock.ts`) is pure and tested in
-`test/git-stats-client.test.ts`.
+`test/api/api-git-fetch.test.ts` drives the POST and the payload fields. The client's clock logic (`client/src/lib/gitClock.ts`) is pure and tested in
+`test/git/git-stats-client.test.ts`.
 
 ## Client
 
@@ -197,7 +197,7 @@ the Projects sub-view and every other section run no poll.
 
 **The poll.** `useGitStats` fetches on mount, then every **30s** while the page is visible; a `visibilitychange` back to visible polls at once and restarts
 the 30s, and going hidden drops the timer, so a backgrounded tab makes no requests. The schedule is `startGitPoll` in `client/src/lib/gitPoll.ts`, written
-against injected timer and visibility functions so `test/git-stats-client.test.ts` drives it with fakes; the hook only hands it `document` and `window`.
+against injected timer and visibility functions so `test/git/git-stats-client.test.ts` drives it with fakes; the hook only hands it `document` and `window`.
 `startGitPoll` also reports when it next fires, which the hook exposes as `nextPollAtMs` beside `polling` and `skewMs` (client receipt minus the payload's
 `generatedAt`; every server clock is read shifted by it). A `refresh()` asked while a poll is out queues one more poll after it, so a poll that predates a
 fetch is never the last word. The mount's poll asks for `?stale=ok`, and on a `stale` answer the hook shows it, leaves `updatedAt` and `skewMs` alone (an

@@ -41,7 +41,7 @@
  * Neither line ever carries the value. Anything else on stderr — or either code
  * without its marker — means the reader failed and the caller must say so, not
  * quietly translate it into "no token set". `scripts/install-hooks.sh` is the
- * one production caller and does exactly that; `test/install-hooks-token.test.ts`
+ * one production caller and does exactly that; `test/hooks/install-hooks-token.test.ts`
  * pins the behaviour, including a reader made to crash on purpose.
  *
  * Values are trimmed, mirroring `loadConfig`, which trims every string field it

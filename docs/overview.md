@@ -66,7 +66,7 @@ via `tsx`, dev and prod alike).
   [`tick-capped` push](subsystems/push-notify.md#the-backlog-tick-event-tick-capped) reads `~/.backlog-manager/tick/*/last-decide.json` and never writes there.
 - **Zero runtime dependencies on the backend.** `server/` uses Node built-ins only, with two pinned exceptions, neither with deps of its own:
   `lookout-widgets` ([hub-widgets](subsystems/hub-widgets.md#the-dependency-exception)) and `release-kit`, whose memoised `createReleasesReader` backs
-  [`GET /api/releases`](subsystems/releases.md); `test/server-deps.test.ts` pins both. Keep new npm deps out of it.
+  [`GET /api/releases`](subsystems/releases.md); `test/guards/server-deps.test.ts` pins both. Keep new npm deps out of it.
 - **Fail-open everywhere.** A missing token, an unreadable file, a failed probe — every
   auxiliary feature degrades to "not shown" rather than crashing the monitor.
 - **Path safety.** Endpoints never join request input into filesystem paths. IDs are
@@ -244,7 +244,7 @@ server/
                   then one haiku turn) so the bars self-heal
   lib/management.ts   config scanner + servable-path security set
   lib/paths.ts        `~/.claude`, `~/.claude.json` and the Claude-owned roots never offered for pinning — a Node-only leaf, so no lib module
-                  reaches them through management.ts and closes an import cycle (`test/import-cycles.test.ts`)
+                  reaches them through management.ts and closes an import cycle (`test/guards/import-cycles.test.ts`)
   lib/git-stats.ts    read-only git reader for the pinned repos: runner, trunk, memoised branch counts + merged proof
   lib/codegraph.ts    the `codegraph` CLI reader: runner (update check off), status parser, graph-root walk, pid files
   lib/codegraph-store.ts  CodeGraph's per-(root, pin) status cache, runs, lock-loss rule and the payload
@@ -394,7 +394,11 @@ vite.config.ts    dev proxy /api → backend; reuses the server config loader;
                   name (probed via `tailscale status --json`), without which
                   the short-name tailnet URL 403s (subsystems/remote-access.md), plus
                   `ALLOWED_HOSTS` (`*` turns the check off), matching lib/request-guard.ts
-test/             node-assert tests over backend + client domain logic
+test/             node-assert tests over backend + client domain logic, one level of feature folders:
+                  api, sessions, chat, spawn, usage, git, codegraph, routines, notify, hooks, analytics,
+                  settings, ui, infra, plus guards/ for the source guards that read across the repo.
+                  Helpers (api-harness.ts, git-fixture.ts, tmp-root.ts) and the runners stay at the root;
+                  run-all.ts imports every suite by hand, so a new one needs its line there
   visual/         the Playwright suite behind `pnpm test:visual` (config in playwright.config.ts at the
                   root): mocked API, screenshots, overflow and contrast (subsystems/visual-tests.md)
 .github/workflows/  ci.yml (the PR gate) and release.yml (tags and publishes each release) — workflows/ci.md
@@ -420,7 +424,7 @@ scripts/          install-hooks.sh (`pnpm hooks:install`), ask-remote-hook.sh,
                   docs-only PR just the suites that read the changed docs, run through
                   test/run-some.ts (workflows/ci.md §Scoped checks),
                   gen-plugin-lib.ts (`pnpm plugin:gen`) — transpiles shared/{cron,frontmatter,
-                  routine-file}.ts into plugin/lib/*.mjs; test/plugin-manifest.test.ts
+                  routine-file}.ts into plugin/lib/*.mjs; test/guards/plugin-manifest.test.ts
                   regenerates and compares,
                   session-analytics.ts (`pnpm session-analytics`) — prints one
                   session's SessionAnalysis as JSON without the server running,

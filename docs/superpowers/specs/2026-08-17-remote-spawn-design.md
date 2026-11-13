@@ -225,7 +225,7 @@ no new polling loop, and the phantom row arrives on the same 3s cadence as every
 
 ## D. Tests, docs, risks
 
-**Tests** (`test/spawn.test.ts`, registered in `run-all.ts`). Nothing here spawns a real
+**Tests** (`test/spawn/spawn.test.ts`, registered in `run-all.ts`). Nothing here spawns a real
 `claude` — `launch` takes an injected spawner, the way `messages.ts` takes an injected idle
 reader:
 

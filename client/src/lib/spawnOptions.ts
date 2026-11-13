@@ -10,7 +10,7 @@
  * `string`, not a literal union, precisely so the server can accept or drop a
  * value independently of what any given client build knows about. Because
  * this is a plain duplication rather than a derived/generated copy, drift is
- * only caught by a test: `test/spawn-options.test.ts` asserts all three stay
+ * only caught by a test: `test/spawn/spawn-options.test.ts` asserts all three stay
  * byte-for-byte equal to the server's arrays, so a change on one side that
  * forgets the other fails a test instead of silently degrading the picker.
  */
@@ -41,7 +41,7 @@ export const PERMISSION_MODE_LABEL: Record<PermissionMode, string> = {
 /** Mirrors server/lib/spawn.ts's NAME_CAP. */
 export const NAME_CAP = 60;
 
-/** Mirrors server/lib/spawn.ts's NAME_RE: a name outside it is dropped by the server without a word. `test/git-sync-client.test.ts` pins the parity. */
+/** Mirrors server/lib/spawn.ts's NAME_RE: a name outside it is dropped by the server without a word. `test/git/git-sync-client.test.ts` pins the parity. */
 export const NAME_RE = /^[A-Za-z0-9][A-Za-z0-9 ._-]*$/;
 
 /** Mirrors server/lib/spawn.ts's PROMPT_CAP. */

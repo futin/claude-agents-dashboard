@@ -19,7 +19,7 @@
 const SAFE_SUFFIXES = ['.localhost', '.local', '.ts.net'];
 
 /** An IPv4 dotted quad or an IPv6 literal (only those carry a `:` once {@link hostname} has dropped the port). Not `node:net` — that import would
- * count as network surface in test/outbound.test.ts for a check that never touches a socket. */
+ * count as network surface in test/guards/outbound.test.ts for a check that never touches a socket. */
 const isIpLiteral = (name: string): boolean => name.includes(':') || /^\d{1,3}(\.\d{1,3}){3}$/.test(name);
 
 /** `Host` header → bare lower-cased hostname: port, IPv6 brackets and a trailing root dot removed. */

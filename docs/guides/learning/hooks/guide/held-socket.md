@@ -64,7 +64,7 @@ imports **no HTTP types at all** — it takes a `(r: WaitResult) => void`:
 ```ts
 // server/lib/pending.ts:14-15
  *  - No HTTP types. The handler injects `resolve`, which is what makes the whole
- *    state machine unit-testable (see test/pending.test.ts).
+ *    state machine unit-testable (see test/chat/pending.test.ts).
 ```
 
 **What it does:** the store is a pure state machine over a `Map<string, Entry>`. Registering
@@ -78,7 +78,7 @@ the store:
 
 | | injected `resolve` (chosen) | store the `res` |
 |---|---|---|
-| Unit-testable | `test/pending.test.ts` passes a plain function and asserts on what it gets | Needs a fake socket, or a real server per test |
+| Unit-testable | `test/chat/pending.test.ts` passes a plain function and asserts on what it gets | Needs a fake socket, or a real server per test |
 | Coupling | Store knows nothing about HTTP | Store owns transport *and* lifecycle |
 | Reuse | One `createWaitStore` behind 3 stores | Re-derived 3× |
 | Cost | An indirection, and the handler must guard `writableEnded` itself | Slightly less ceremony |

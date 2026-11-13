@@ -48,7 +48,7 @@ The switch is itself a write (`POST /api/settings`): a tailnet device that turns
 always `local`, can turn it back on. Turn it off and use the token if you **share the tailnet**: tagged devices and users of other tailnets this machine is
 shared with have tailnet addresses, and are trusted while it is on.
 
-**Two kinds of write.** Every route behind the write gate is one of these, and the docs use the two terms in exactly this sense (`test/write-paths.test.ts`
+**Two kinds of write.** Every route behind the write gate is one of these, and the docs use the two terms in exactly this sense (`test/guards/write-paths.test.ts`
 pins the split against `server/api.ts`):
 
 - **Session write path** — the remote-answer switch (`REMOTE_ANSWER`, or the runtime pill) is checked *before* the gate, and off means 404. There are **four**,
@@ -138,7 +138,7 @@ The Board card in the Sessions aside shows a small pill — `local`, `LAN`, `tai
 noticing.
 
 - **The same verdict the write gate uses.** `server/lib/origin.ts` (pure, zero-dep, unit-tested in
-  `test/origin.test.ts`) resolves the peer with `resolvePeer` (above); the value rides on
+  `test/sessions/origin.test.ts`) resolves the peer with `resolvePeer` (above); the value rides on
   `GET /api/health` as `HealthResponse.origin` and renders via
   `components/OriginBadge.tsx`. Badge and gate share one function, so they can never disagree.
 - No Tailscale installed ⇒ the tailnet branches never match and the badge reads `local`
@@ -181,7 +181,7 @@ static-serves the built `client/dist`, so every change needs a `pnpm build` *and
 >
 > **The proxy target stays `127.0.0.1`, not `localhost`.** A literal address needs no
 > resolver and cannot land on `::1` while the dev server holds only the IPv4 wildcard.
-> `test/tailnet.test.ts` asserts the emitted command against `http://127.0.0.1:<port>`.
+> `test/infra/tailnet.test.ts` asserts the emitted command against `http://127.0.0.1:<port>`.
 
 ### Publishing to the tailnet (`pnpm tailnet`)
 
@@ -235,7 +235,7 @@ went from "nicer bookmark" to "the only way a phone dictates" without any change
 `/api/git-stats` repo paths and branch names, `/api/configs/file` config bodies (settings `env` / `headers` values redacted, the rest readable) — and
 with `CLAUDE_BIN` set, [spawn](spawn.md) starts
 a real Claude Code session on this machine. The tailnet *is* the perimeter;
-`tailscale funnel` is the one command that removes it. `test/tailnet.test.ts` asserts the
+`tailscale funnel` is the one command that removes it. `test/infra/tailnet.test.ts` asserts the
 word never appears in the script.
 
 #### Why a script and not the one-liner it replaced
@@ -249,7 +249,7 @@ than a stale mapping. This section used to carry a "keep them in sync" warning a
 defence.
 
 Now the number lives in exactly one place — `.env`, read by the same `loadConfig` the server
-and `vite.config.ts` read — and the script asks for it. `test/tailnet.test.ts` asserts
+and `vite.config.ts` read — and the script asks for it. `test/infra/tailnet.test.ts` asserts
 against the script's own source text that no dashboard port literal appears in it at all;
 443 is allowed, as the named `HTTPS_LISTEN_PORT`, because it is a Tailscale listener number
 and not a dashboard port.

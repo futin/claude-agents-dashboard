@@ -119,14 +119,14 @@ both deliberate:
 
 ## Tests
 
-- `test/account.test.ts` — the mapping rules against the pure
+- `test/usage/account.test.ts` — the mapping rules against the pure
   `shapeProfile`/`planLabel`/`seatLabel`, then the disk behaviour (missing, torn, no key,
   re-read after a write) against `readAccountProfile` over a tmpdir home.
-- `test/api-account.test.ts` — the route over a real socket: body shape, the `SHOW_USAGE`
+- `test/api/api-account.test.ts` — the route over a real socket: body shape, the `SHOW_USAGE`
   gate, and that an absent or torn profile is a 200 with `profile: null` rather than a 404
   or a 500. `SHOW_USAGE` stays false except in the case about it, so no run depends on
   whether the developer's own token happens to be valid.
-- `test/breakpoints.test.ts` — `useShellNarrow` mirrors the `sm` tier (639.98), which is
+- `test/guards/breakpoints.test.ts` — `useShellNarrow` mirrors the `sm` tier (639.98), which is
   what keeps the chip out of a phone bar that is already `display:none` in the 640–767
   band.
 

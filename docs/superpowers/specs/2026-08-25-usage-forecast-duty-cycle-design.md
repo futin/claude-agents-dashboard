@@ -349,8 +349,8 @@ branch merges — worth saying out loud so the first week's output is not read a
 
 ## Testing
 
-Pure functions, fixed clocks, no network — matching `test/usage.test.ts` and
-`test/pace-view.test.ts`.
+Pure functions, fixed clocks, no network — matching `test/usage/usage.test.ts` and
+`test/usage/pace-view.test.ts`.
 
 - `walkForward` with a synthetic 09:00–19:00 Mon–Fri profile: from Friday 18:00 at
   60% and 5%/active-hour, assert the crossing lands Monday, not Saturday.

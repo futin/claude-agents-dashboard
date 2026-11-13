@@ -1,6 +1,6 @@
 /**
  * gitSync.ts — the rules behind Management › Git's Sync button (git-stats spec §9): which repos get one, the `POST /api/spawn` body it sends, what a
- * remembered run is doing now, and every string the button and its note show. Pure, so `test/git-sync-client.test.ts` drives it without React.
+ * remembered run is doing now, and every string the button and its note show. Pure, so `test/git/git-sync-client.test.ts` drives it without React.
  */
 
 import type { HealthResponse, RepoGitStats, Session, SessionsResponse, SpawnRequest } from '../../../shared/types';

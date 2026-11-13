@@ -12,7 +12,7 @@
  *
  * Design notes:
  *  - No HTTP types. The handler injects `resolve`, which is what makes the whole
- *    state machine unit-testable (see test/pending.test.ts).
+ *    state machine unit-testable (see test/chat/pending.test.ts).
  *  - One entry per session — the CLI only ever has one question open at a time.
  *    A second `register` supersedes the first rather than erroring, which
  *    self-heals a re-asked question after a deny.

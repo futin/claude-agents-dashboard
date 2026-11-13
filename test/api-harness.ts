@@ -9,7 +9,7 @@
  * those (a body that never parses, a client that hangs up mid-wait) have no
  * meaning without a real request stream, and the route table's ordering traps
  * (chat before detail, `:id/answer` before `:id`) have no meaning without the
- * router. `test/spawn-endpoint.test.ts` predates this and drives its two
+ * router. `test/spawn/spawn-endpoint.test.ts` predates this and drives its two
  * handlers directly; everything added since goes through here.
  *
  * Isolation, and why each piece is needed:

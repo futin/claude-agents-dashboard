@@ -97,11 +97,11 @@ Keep existing CSS class conventions; new styles go in `client/src/styles.css`.
 
 ### 6. Tests
 
-- `test/usage.test.ts`: status mapping — expired token, missing token, ok.
+- `test/usage/usage.test.ts`: status mapping — expired token, missing token, ok.
 - New `test/usage-refresh.test.ts` with a fake spawner: success path
   (cache re-fetch triggered), non-zero exit → 502, ENOENT → 502,
   concurrent request → 409.
-- `test/scan.test.ts` (or equivalent): a transcript under the refresh dir is
+- `test/sessions/scan.test.ts` (or equivalent): a transcript under the refresh dir is
   filtered out.
 
 No test spawns the real `claude` binary.

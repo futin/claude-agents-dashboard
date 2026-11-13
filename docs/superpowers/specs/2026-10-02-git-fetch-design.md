@@ -173,7 +173,7 @@ stays, although each card's **Sync** key means git-sync: the popover sub-line sa
 
 Plans and tasks specify cases and expected values, never literal code; the implementer writes the tests.
 
-`test/git-fetch.test.ts`, over `GitFixture` repos using its existing `bare()` and `clone()` (`test/git-fixture.ts:78,93`; a plain-path origin, a real fetch
+`test/git/git-fetch.test.ts`, over `GitFixture` repos using its existing `bare()` and `clone()` (`test/git-fixture.ts:78,93`; a plain-path origin, a real fetch
 with no network), with `resetGitFetch()` between cases and `overrideFetchClock` where a clock is named:
 
 1. A commit added to the bare origin: before `fetchAll`, Git Stats reads `trunkVsOrigin.behind === 0`; after, `1`. `gitStatsMemoKeys()` is identical before
@@ -201,17 +201,17 @@ with no network), with `resetGitFetch()` between cases and `overrideFetchClock` 
 12. `makeFetchRunner({ timeoutMs: 200, bin: <a script that spawns 'sleep 30' and waits> })`: resolves with `timedOut: true` within a second, and neither the
     script's pid nor the sleep's is alive afterwards (the group kill).
 
-`test/api-git-fetch.test.ts`: `POST` with a token configured and none sent → 403, nothing fetched; with the bearer → 200 and `fetch.lastEndedMs` set, and
+`test/api/api-git-fetch.test.ts`: `POST` with a token configured and none sent → 403, nothing fetched; with the bearer → 200 and `fetch.lastEndedMs` set, and
 `fetch.nextAtMs` non-null at interval 60 (the POST marked the clock watched); `GET` → 405; `GET /api/git-stats` carries `fetch` and each `ok` repo's
 `lastFetch`, and after `resetGitFetch()` its first answer has a non-null `nextAtMs` when the interval is on.
 
 Settings tests: `parseGitFetchSecs` accepts the six values, rejects `45`, `-1`, `'300'`, `null`; a `POST /api/settings` with `gitFetchSecs: 45` is refused
 whole; the default is `0`; `getGitFetchSecs()` reflects a `setSettings` patch at once.
 
-`test/outbound.test.ts`: `ALLOWED` is **unchanged** — `git-fetch.ts` imports no network module and calls no `fetch(`; the doc half still passes because the
+`test/guards/outbound.test.ts`: `ALLOWED` is **unchanged** — `git-fetch.ts` imports no network module and calls no `fetch(`; the doc half still passes because the
 outbound sentence stays plural. Add one assertion: the CLAUDE.md launcher sentence names `lib/git-fetch.ts`.
 
-Client (`test/git-stats-client.test.ts` or a sibling): each FETCH reading in §4's table with fixed clocks (`3:12` at 192s left of 300, `12s`, `0s` at
+Client (`test/git/git-stats-client.test.ts` or a sibling): each FETCH reading in §4's table with fixed clocks (`3:12` at 192s left of 300, `12s`, `0s` at
 `nextAtMs ≤ now`, `overdue` at `nextAtMs + interval + 1`, `off`, `fetching…` from `runningSinceMs` and from an own POST, `…`); precedence: `fetching…` beats
 `off`, and `…` beats `overdue` when `nextAtMs` is `null` (the `null + interval` trap); skew: `generatedAt = S`, `nextAtMs = S + 10_000`, received at client
 clock `S − 5_000` → `skewMs = −5_000` and the reading at receipt is `10s` (the uncorrected `15s` is the bug); SYNC `failed` when `error`, with and without a

@@ -115,7 +115,7 @@ them load-bearing:
   `offsetHeight`, not a bounding rect: `.shell{zoom}` multiplies the rect but not the layout
   box, and what goes back is a style px. A constant pad was not enough — a composer is taller
   than 40px, so the newest turn sat under it with no way to reach it. `.chat-body` declares
-  its padding three times (base, phone, the `min-width:768px` restore) and `test/chat-pinned-pad.test.ts`
+  its padding three times (base, phone, the `min-width:768px` restore) and `test/chat/chat-pinned-pad.test.ts`
   asserts all three carry the var; two out of three reads as fixed at one width only.
 - One layer rather than five, so the panels keep stacking in normal flow inside it and the
   layer — not each panel — is what caps and scrolls.
@@ -166,7 +166,7 @@ request for it and `/api/sessions/:id/chat` knows nothing of it. Three behaviour
 
 - **One DOM serves both widths.** The drawer has no `matchMedia` and the stylesheet is mobile-first, so the `<ol>` is always rendered and folding is a `.folded`
   class on the card: the base (band) tier hides the list under it, and a rule inside the `min-width:768px` block shows the list regardless, so on desktop the
-  class does nothing and the folded line gives way to the head row. A `max-width` query is not available — `test/breakpoints.test.ts` fails on one. Fold state
+  class does nothing and the folded line gives way to the head row. A `max-width` query is not available — `test/guards/breakpoints.test.ts` fails on one. Fold state
   is component state, not persisted.
 - **The list scrolls to the running task once.** The first time the card has something to show, the first running task (else the first pending) is centred by
   setting the list's own `scrollTop` — `scrollIntoView` would drag the drawer and the page — and never again, so a later poll does not fight a reader who
@@ -230,7 +230,7 @@ request for it and `/api/sessions/:id/chat` knows nothing of it. Three behaviour
 - **Client:** `ChatDrawer` is a `React.lazy` default export (own chunk; the sessions
   bundle is unchanged), keyed by session id in `SessionsView` so switching sessions
   remounts the tail. `useSessionChat` keeps `cursor`/`headOffset` in `createChatPaging` (`client/src/lib/chatPaging.ts`, node-tested in
-  `test/chat-paging.test.ts`) — outside React state, so the poll always sees the latest without re-arming — and it holds four rules: no poll before the
+  `test/chat/chat-paging.test.ts`) — outside React state, so the poll always sees the latest without re-arming — and it holds four rules: no poll before the
   first page lands (`?after=0` would ship the whole file); one poll out at a time, because `?after=` is stateless and two polls with the same cursor would
   append the same page twice when a poll outlasts the refresh interval; an epoch per (re)tail, so a poll or "load older" page fetched before a reset
   is dropped instead of merged into the new transcript; and a failed tail retries. `endTail` answers `land`, `stale` or `failed`, and `failed` — no page, or

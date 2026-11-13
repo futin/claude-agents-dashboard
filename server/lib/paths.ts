@@ -1,7 +1,7 @@
 /**
  * paths.ts — where Claude keeps its own files on this machine: `~/.claude`, `~/.claude.json`, and the roots Claude makes working dirs under. A leaf on
  * purpose (Node built-ins only): `scan.ts`, `management.ts`, `compact-window.ts` and the rest all need these, and while they lived in `management.ts`
- * every importer closed an import cycle back through it. `test/import-cycles.test.ts` keeps them broken. Also {@link stateDir}, where the dashboard's own
+ * every importer closed an import cycle back through it. `test/guards/import-cycles.test.ts` keeps them broken. Also {@link stateDir}, where the dashboard's own
  * state files go.
  */
 
