@@ -145,8 +145,9 @@ filling them with nothing.
 - A guide's `tools/*.mjs` must find the repo root by **walking up for `package.json`**, never a
   fixed `../..` hop count — a fixed count silently repoints the next time a guide moves and
   every citation reports as `gone`. This has bitten twice.
-- Reference docs → `docs/subsystems/` + `docs/overview.md`. Records of a moment →
-  `docs/superpowers/`. Raw study notes → `docs/learning-notes/`.
+- Reference docs → `docs/subsystems/` + `docs/overview.md`. Records of a moment → `docs/superpowers/`: design specs (code comments cite them) and
+  decision logs stay; a plan stays only while its PR is open, and review reports are gitignored ([README](../docs/superpowers/README.md)). Raw study
+  notes → `docs/learning-notes/`.
 - A figure measured off this machine's own data (a count of transcripts, records or dirs, or a ratio over them) carries its
   measurement date inline beside the number, in docs and code comments alike — swap it for a command only when one in the repo prints it.
 

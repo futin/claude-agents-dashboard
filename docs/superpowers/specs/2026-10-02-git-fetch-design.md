@@ -7,7 +7,7 @@ pushes or prompts in the terminal. No Claude session is involved: a fetch is one
 
 Brainstormed 2026-10-02 in this repo. Builds on [the Git Stats spec](2026-10-01-git-stats-design.md) (§2 reader, §6 sub-view, §9 Sync button) and leaves
 its reader read-only: the fetch is a module of its own. It **supersedes** the parent's D4 ("the server never runs `git fetch`") and its Out-of-scope line for
-`git fetch`. Reviews: [round 1](../reviews/2026-10-02-git-fetch-design-review-1.md), [round 2](../reviews/2026-10-02-git-fetch-design-review-2.md).
+`git fetch`. Reviews: [round 1](https://github.com/futin/claude-agents-dashboard/blob/85b39e0/docs/superpowers/reviews/2026-10-02-git-fetch-design-review-1.md), [round 2](https://github.com/futin/claude-agents-dashboard/blob/85b39e0/docs/superpowers/reviews/2026-10-02-git-fetch-design-review-2.md).
 
 Mockups: [2026-10-02-git-fetch-mockups.html](2026-10-02-git-fetch-mockups.html), the chosen shape (P1) at desktop and 375px with its states, the card copy and
 the Settings card. Where the two disagree, **this spec wins**. Known differences:
