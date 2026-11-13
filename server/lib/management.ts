@@ -59,9 +59,9 @@ interface ProjectsOptions {
    */
   pinnedDirs?: ReadonlySet<string> | null;
   /**
-   * Roots whose cwds are never offered for pinning — see {@link defaultClaudeRoots}.
-   * Omitted ⇒ that default. A test seam as much as an option: every fixture cwd
-   * lives under `os.tmpdir()`.
+   * Roots whose cwds are never offered for pinning — see {@link defaultClaudeRoots}. {@link listOlderProjects}: omitted ⇒ that default.
+   * {@link listRecentProjects}: omitted ⇒ no filter, given ⇒ a cwd under one is dropped even when pinned; the API passes the default (`pinOptions`), so
+   * a scratchpad or scratch workspace is never listed, spawnable or pinnable. A test seam as much as an option: every fixture cwd lives under `os.tmpdir()`.
    */
   claudeRoots?: readonly string[];
   /**
@@ -701,8 +701,9 @@ export function listRecentProjects(config: Partial<Config>, options: ProjectsOpt
   }
 
   // bug-21: only now, once each dir has settled on its cwd, ask whether that cwd belongs on the rail at all.
+  const claudeRoots = options.claudeRoots;
   return [...refsByCwd(newest).values()]
-    .filter(r => isListedProjectPath(r.path))
+    .filter(r => isListedProjectPath(r.path) && !(claudeRoots && isClaudeOwned(r.path, claudeRoots)))
     .map(r => (pinned && pinned.has(r.dirName) ? { ...r, pinned: true as const } : r))
     .sort((a, b) => b.lastActiveMs - a.lastActiveMs);
 }
@@ -762,11 +763,14 @@ export function listPinRows(config: Partial<Config>, dirNames: readonly string[]
  * directory — an orchestrator run merges and prunes its worktrees, so most throwaway rows are dead paths, plus deleted
  * or moved repos — and a linked git worktree, whose `.git` is a file with a `gitdir:` pointing into a `worktrees/`
  * dir of some git dir, wherever the worktree itself sits. A worktree only duplicates the config of the branch it was
- * cut from, and the Sessions tab already shows its sessions live. Everything else is kept, failing open: a `.git`
+ * cut from, and the Sessions tab already shows its sessions live. Also dropped, by path alone: anything inside a dir named `worktrees` or
+ * `.worktrees` (`.claude/worktrees/x`, an A/B harness's `ab/worktrees/v1/repo`), which catches a full clone parked there and a leftover dir whose `.git`
+ * file is already gone; a dir that is itself named so is kept. Everything else is kept, failing open: a `.git`
  * dir, no `.git` at all, a submodule's `.git` file (`gitdir: ../.git/modules/sub`), or one that cannot be read or
  * has no `gitdir:` line. Pure `fs`, no `git` subprocess.
  */
 export function isListedProjectPath(dir: string): boolean {
+  if (path.resolve(dir).split(path.sep).slice(0, -1).some(seg => seg === 'worktrees' || seg === '.worktrees')) return false;
   try {
     if (!fs.statSync(dir).isDirectory()) return false;
   } catch {

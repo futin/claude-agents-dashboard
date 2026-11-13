@@ -34,6 +34,7 @@ import { setPsRunner } from '../server/lib/scan.js';
 import { resetArchivedCache } from '../server/lib/archived.js';
 import { DESKTOP_RAIL_MAX, handOverInFlight, overrideDesktop, reserveDesktopLaunch, resetDesktopProbe, resetDesktopRail } from '../server/lib/desktop.js';
 import { handOverFailedIds, markHandOverFailed, resetHandOvers, watchedHandOvers } from '../server/lib/handover.js';
+import { overrideClaudeRoots } from '../server/lib/paths.js';
 import { withServer } from './api-harness.js';
 import type { Spawner } from '../server/lib/spawn.js';
 import type { ChildProcess } from 'node:child_process';
@@ -168,6 +169,8 @@ const BAD_BODY = '{not json';
 const CAP_BODY = JSON.stringify({ prompt: 'x', project: 'no-such-project' });
 
 export async function run(): Promise<number> {
+  // Every fixture cwd sits under os.tmpdir(), a Claude root the API now drops from every project list; lifted for the suite, restored at its end.
+  overrideClaudeRoots([]);
   console.log('\n=== spawn endpoints (api.ts) ===\n');
   let ok = 0, total = 0;
   const check = (r: boolean): void => { total++; if (r) ok++; };
@@ -1029,5 +1032,6 @@ export async function run(): Promise<number> {
   }));
 
   console.log(`\n  ${ok}/${total} passed`);
+  overrideClaudeRoots(null);
   return total - ok;
 }

@@ -30,7 +30,7 @@ import { blankCells, emptyRates, shapeUsageProfile, shapeUsageRates } from './li
 import {
   collectServablePaths, listOlderProjects, listPinRows, listRecentProjects, readGlobalScope, readProjectScope, readServableFile, resolveProject
 } from './lib/management.js';
-import { claudeHome, defaultClaudeRoots, isClaudeOwned } from './lib/paths.js';
+import { claudeHome, defaultClaudeRoots } from './lib/paths.js';
 import { listReports, reviewStatus } from './lib/analytics.js';
 import {
   CHAT_PAGE_MESSAGES, DEFAULT_CAPS, NO_CAPS, readChatAfter, readChatBefore, readChatTail
@@ -1493,9 +1493,10 @@ export async function serveConfigsFile(config: Config, rawPath: string, res: Ser
 /**
  * The stored pins, as the `ProjectsOptions` every project-list caller passes
  * (#161). Read per request — `settings.ts` caches it, so this costs nothing.
+ * The Claude roots ride along so no list, spawn or pin ever reaches a scratchpad, a scratch workspace or a dir under `~/.claude`.
  */
-function pinOptions(): { pinnedDirs: ReadonlySet<string> } {
-  return { pinnedDirs: new Set(getPinnedProjects()) };
+function pinOptions(): { pinnedDirs: ReadonlySet<string>; claudeRoots: readonly string[] } {
+  return { pinnedDirs: new Set(getPinnedProjects()), claudeRoots: defaultClaudeRoots() };
 }
 
 let pinsPayloadOverride: ((config: Config) => PinsResponse) | null = null;
@@ -1506,19 +1507,16 @@ export function overridePinsPayload(fn: ((config: Config) => PinsResponse) | nul
 }
 
 /**
- * A recent project Claude made for itself (a scratch workspace, a dir under
- * `~/.claude`) stays on the rail but is not offered here, the same rule
- * `listOlderProjects` applies. A pin already made there still lists under
- * `pinned` — that is where it can be removed.
+ * A project Claude made for itself (a scratch workspace, a dir under `~/.claude`) is on no list at all (`pinOptions`). A pin stored there before that
+ * rule still shows under `pinned`, unlisted — that is where it can be removed.
  */
 function pinsPayload(config: Config): PinsResponse {
   if (pinsPayloadOverride) return pinsPayloadOverride(config);
   // One listing for all three lists, which used to enumerate the tree five times between them.
   const options = { archivedIds: archivedSessionIds(), ...pinOptions(), transcripts: listTranscripts(projectsRoot()) };
-  const claudeRoots = defaultClaudeRoots();
   return {
     pinned: listPinRows(config, getPinnedProjects(), options),
-    recent: listRecentProjects(config, options).filter(r => !r.pinned && !isClaudeOwned(r.path, claudeRoots)),
+    recent: listRecentProjects(config, options).filter(r => !r.pinned),
     older: listOlderProjects(config, options),
     home: nodePath.dirname(claudeHome())
   };

@@ -336,14 +336,15 @@ export async function run(): Promise<number> {
   // path — the repo's dir resolving to the worktree would spawn there. Which dir
   // wins depends on the order `readdirSync` hands back the dirs, so both orders
   // are pinned. These pin the naming rule, so the "worktree" here is a plain dir
-  // with no `.git` file: a real linked worktree is dropped by the bug-21 filter,
-  // which is intended, not a breakage.
+  // with no `.git` file and not under a `worktrees` dir: a real linked worktree,
+  // or anything inside a `worktrees` dir, is dropped by the bug-21 filter, which
+  // is intended, not a breakage.
   for (const [label, ownerDir] of [['after', '-repo-worktrees-X'], ['before', '-a-worktree-owner']]) {
     tally(await test(`resolveProject: an older dir holding the worktree cwd (sorting ${label} the repo's) keeps both dirs intact`, async () => {
       const NOW = Date.parse('2026-07-12T12:00:00Z');
       const HOUR = 3600_000;
       const repo = makeProject();
-      const worktree = path.join(repo, '.worktrees', 'X');
+      const worktree = path.join(repo, 'nested', 'X');
       fs.mkdirSync(worktree, { recursive: true });
       const root = makeProjectsRoot([
         { dirName: ownerDir, id: 'own', cwd: worktree, mtimeMs: NOW - 5 * HOUR },
@@ -375,7 +376,7 @@ export async function run(): Promise<number> {
     const NOW = Date.parse('2026-07-12T12:00:00Z');
     const HOUR = 3600_000;
     const repo = makeProject();
-    const worktree = path.join(repo, '.worktrees', 'X');
+    const worktree = path.join(repo, 'nested', 'X');
     fs.mkdirSync(worktree, { recursive: true });
     const repoDir = mgmt.encodeProjectDir(repo);
     const wtDir = mgmt.encodeProjectDir(worktree);
@@ -396,7 +397,7 @@ export async function run(): Promise<number> {
     // phantom project. Padding puts the file past the 256 KB tail window while
     // its head carries no cwd record.
     const NOW = Date.parse('2026-07-12T12:00:00Z');
-    const worktree = path.join(makeProject(), '.worktrees', 'X');
+    const worktree = path.join(makeProject(), 'nested', 'X');
     fs.mkdirSync(worktree, { recursive: true });
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'cad-mroot-'));
     const file = path.join(root, '-nohead', 'pad.jsonl');
@@ -471,6 +472,43 @@ export async function run(): Promise<number> {
     assert.strictEqual(mgmt.isListedProjectPath(plain), true, 'no .git at all');
     const file = put(makeProject(), 'not-a-dir', 'x');
     assert.strictEqual(mgmt.isListedProjectPath(file), false, 'a file is not a project dir');
+  }));
+
+  tally(await test('isListedProjectPath: anything inside a worktrees or .worktrees dir is dropped, whatever its .git; the dir itself is kept', async () => {
+    const base = makeProject();
+    const clone = path.join(base, 'ab', 'worktrees', 'v1', 'repo');
+    fs.mkdirSync(path.join(clone, '.git'), { recursive: true });
+    const leftover = path.join(base, '.claude', 'worktrees', 'feat');
+    fs.mkdirSync(leftover, { recursive: true });
+    const dotted = path.join(base, '.worktrees', 'bug-4');
+    fs.mkdirSync(dotted, { recursive: true });
+    const named = path.join(base, 'worktrees');
+    fs.mkdirSync(named, { recursive: true });
+    const lookalike = path.join(base, 'my-worktrees', 'repo');
+    fs.mkdirSync(lookalike, { recursive: true });
+    assert.strictEqual(mgmt.isListedProjectPath(clone), false, 'a full clone under worktrees/');
+    assert.strictEqual(mgmt.isListedProjectPath(leftover), false, 'a leftover under .claude/worktrees/ with no .git');
+    assert.strictEqual(mgmt.isListedProjectPath(dotted), false, 'a plain dir under .worktrees/');
+    assert.strictEqual(mgmt.isListedProjectPath(named), true, 'a dir that is itself named worktrees');
+    assert.strictEqual(mgmt.isListedProjectPath(lookalike), true, 'a segment that only contains the word');
+  }));
+
+  tally(await test('listRecentProjects: given claudeRoots, a cwd under one is dropped even when pinned and stops resolving; omitted, it is kept', async () => {
+    const NOW = Date.parse('2026-07-12T12:00:00Z');
+    const fakeRoot = makeProject();
+    const scratch = path.join(fakeRoot, 'scratch-workspaces', 's1');
+    fs.mkdirSync(scratch, { recursive: true });
+    const repo = makeProject();
+    const root = makeProjectsRoot([
+      { dirName: '-repo', id: 'r', cwd: repo, mtimeMs: NOW - 2000 },
+      { dirName: '-scratch', id: 's', cwd: scratch, mtimeMs: NOW - 1000 }
+    ]);
+    const cfg = { lookbackHours: 24 };
+    const opts = { root, now: NOW, pinnedDirs: new Set(['-scratch']), claudeRoots: [fakeRoot] };
+    assert.deepStrictEqual(mgmt.listRecentProjects(cfg, opts).map(r => r.path), [repo]);
+    assert.strictEqual(mgmt.resolveProject(cfg, '-scratch', opts), null);
+    assert.deepStrictEqual(mgmt.listPinRows(cfg, ['-scratch'], opts).map(r => [r.path, r.listed]), [[scratch, false]]);
+    assert.deepStrictEqual(mgmt.listRecentProjects(cfg, { root, now: NOW }).map(r => r.path), [scratch, repo]);
   }));
 
   tally(await test('resolveProject: known dirName → ref; unknown → null', async () => {

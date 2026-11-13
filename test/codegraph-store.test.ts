@@ -238,7 +238,8 @@ export async function run(): Promise<number> {
 
   await it('cache: pins on one root each read from their own path and keep their own worktreeMismatch', async () => {
     const top = repo('mono');
-    const sub = pinned(path.join(top.dir, '.claude', 'worktrees', 'wt'), false);
+    // Not under a `worktrees` dir: the project list drops anything there, so such a pin would never be read. The mismatch comes from the fake alone.
+    const sub = pinned(path.join(top.dir, 'nested', 'wt'), false);
     const mismatch = { worktreeRoot: sub.dir, indexRoot: top.dir };
     const f = fake(async cwd => ({ code: 0, stdout: JSON.stringify({ ...JSON.parse(FIXTURE), worktreeMismatch: cwd === sub.dir ? mismatch : null }), stderr: '' }));
     overrideCodegraphRunner(f.run);

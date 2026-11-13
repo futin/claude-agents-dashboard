@@ -21,6 +21,7 @@ import path from 'node:path';
 
 import { testAsync, withServer } from './api-harness.js';
 import { appSessionsRoot, resetArchivedCache } from '../server/lib/archived.js';
+import { overrideClaudeRoots } from '../server/lib/paths.js';
 
 const ID = '11111111-1111-4111-8111-111111111111';
 const ENV = 'SHOW_USAGE=false\nSKIP_PROC_SCAN=true\n';
@@ -29,6 +30,8 @@ const ENV = 'SHOW_USAGE=false\nSKIP_PROC_SCAN=true\n';
 const PROJECT_DIR = '-fake-proj';
 
 export async function run(): Promise<number> {
+  // Every fixture cwd sits under os.tmpdir(), a Claude root the API now drops from every project list; lifted for the suite, restored at its end.
+  overrideClaudeRoots([]);
   console.log('\n=== management + analytics endpoints (api.ts via the router) ===\n');
   let ok = 0, total = 0;
   const check = (r: boolean): void => { total++; if (r) ok++; };
@@ -222,5 +225,6 @@ export async function run(): Promise<number> {
   }));
 
   console.log(`\n  ${ok}/${total} passed`);
+  overrideClaudeRoots(null);
   return total - ok;
 }
