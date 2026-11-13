@@ -61,7 +61,7 @@ or are read-only because none is set), and the field's hint says it is needed on
 wants five rows in the light theme and a slow poll; the laptop wants twenty, the dark theme and
 three seconds. Sharing these would make one device wrong.
 
-**Shared — `.dashboard-settings.json`** (repo-local, gitignored, never inside `~/.claude`).
+**Shared — `.dashboard-settings.json`** (repo-local, gitignored, never inside `~/.claude`; under `DASHBOARD_STATE_DIR` when that is set — the Docker image sets it).
 Only settings a *separate process* has to agree on: `idleSecs` (how long until you count as
 away) and `answerSecs` (how long a question, plan, or [reply window](remote-message.md)
 then waits here), read by the remote-answer hooks — now three of them — plus the `notify`

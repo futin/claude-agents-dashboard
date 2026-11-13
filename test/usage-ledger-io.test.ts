@@ -20,6 +20,19 @@ function test(name: string, fn: () => void): boolean {
   catch (e) { console.log('  ✗ ' + name); console.log('    ' + (e as Error).message); return false; }
 }
 
+/** Run `fn` with `DASHBOARD_STATE_DIR` set to `value` (deleted when undefined), restoring the caller's value after (#407). */
+function withStateDir(value: string | undefined, fn: () => void): void {
+  const prev = process.env.DASHBOARD_STATE_DIR;
+  try {
+    if (value === undefined) delete process.env.DASHBOARD_STATE_DIR;
+    else process.env.DASHBOARD_STATE_DIR = value;
+    fn();
+  } finally {
+    if (prev === undefined) delete process.env.DASHBOARD_STATE_DIR;
+    else process.env.DASHBOARD_STATE_DIR = prev;
+  }
+}
+
 const T0 = 1_700_000_000_000;
 const MIN = 60_000;
 
@@ -375,6 +388,33 @@ export function run(): number {
       assert.ok(fs.statSync(fx.ledgerPath).size >= LEDGER_UNROTATED_MAX_BYTES);
       assert.strictEqual(ledgerStartMs(fx.dir), null,
         'past half the maximum the first surviving line is a floor, not a start');
+    });
+  })) p++; else f++;
+
+  if (test('DASHBOARD_STATE_DIR set: the ledger goes there when no dir is passed (#407)', () => {
+    withFixture(fx => {
+      const stateA = fs.mkdtempSync(path.join(fx.dir, 'state-a-'));
+      withStateDir(stateA, () => {
+        recordLedgerTick({ root: fx.root, nowMs: T0 });
+        fs.appendFileSync(fx.transcript, assistantLine(T0 + 20_000, 'opus-5', 'm1', { in: 4, out: 0, cc: 0, cr: 0 }) + '\n');
+        recordLedgerTick({ root: fx.root, nowMs: T0 + MIN });
+        assert.ok(fs.existsSync(path.join(stateA, LEDGER_FILE)), 'the ledger must land in DASHBOARD_STATE_DIR');
+        assert.deepStrictEqual(fx.ledgerLines(), [], 'nothing may appear in the cwd');
+        assert.strictEqual(readLedgerSince(0).length, 1, 'and the default read finds it there');
+      });
+    });
+  })) p++; else f++;
+
+  if (test('DASHBOARD_STATE_DIR set: an explicit dir argument still wins', () => {
+    withFixture(fx => {
+      const stateA = fs.mkdtempSync(path.join(fx.dir, 'state-a-'));
+      withStateDir(stateA, () => {
+        recordLedgerTick({ dir: fx.dir, root: fx.root, nowMs: T0 });
+        fs.appendFileSync(fx.transcript, assistantLine(T0 + 20_000, 'opus-5', 'm1', { in: 4, out: 0, cc: 0, cr: 0 }) + '\n');
+        recordLedgerTick({ dir: fx.dir, root: fx.root, nowMs: T0 + MIN });
+        assert.strictEqual(fx.ledgerLines().length, 1);
+        assert.deepStrictEqual(fs.readdirSync(stateA), [], 'the env var must not pull a seam write away from dir');
+      });
     });
   })) p++; else f++;
 

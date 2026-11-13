@@ -41,6 +41,19 @@ function inTmpCwd(fn: (dir: string) => void): void {
   }
 }
 
+/** Run `fn` with `DASHBOARD_STATE_DIR` set to `value` (deleted when undefined), restoring the caller's value after (#407). */
+function withStateDir(value: string | undefined, fn: () => void): void {
+  const prev = process.env.DASHBOARD_STATE_DIR;
+  try {
+    if (value === undefined) delete process.env.DASHBOARD_STATE_DIR;
+    else process.env.DASHBOARD_STATE_DIR = value;
+    fn();
+  } finally {
+    if (prev === undefined) delete process.env.DASHBOARD_STATE_DIR;
+    else process.env.DASHBOARD_STATE_DIR = prev;
+  }
+}
+
 /** Only the fields scanOverrides reads. */
 function cfg(): Config {
   return { maxSessions: 10, lookbackHours: 24, activeWindowMin: 5 } as Config;
@@ -643,6 +656,30 @@ export function run(): number {
       assert.deepStrictEqual(getPinnedProjects(), ['-b', '-a']);
       setPinned('-c', true);
       assert.deepStrictEqual(getPinnedProjects(), ['-b', '-a', '-c']);
+    });
+  })) p++; else f++;
+
+  if (test('DASHBOARD_STATE_DIR set: the settings file goes there, not to the cwd (#407)', () => {
+    const stateA = fs.mkdtempSync(path.join(os.tmpdir(), 'cad-set-state-'));
+    try {
+      withStateDir(stateA, () => {
+        inTmpCwd(cwdB => {
+          setSettings({ idleSecs: 42 });
+          assert.ok(fs.existsSync(path.join(stateA, SETTINGS_FILE)), 'the write must land in DASHBOARD_STATE_DIR');
+          assert.ok(!fs.existsSync(path.join(cwdB, SETTINGS_FILE)), 'nothing may appear in the cwd');
+          resetSettings(); // simulate the server restarting
+          assert.strictEqual(getSettings().idleSecs, 42, 'and it is read back from there');
+        });
+      });
+    } finally { fs.rmSync(stateA, { recursive: true, force: true }); }
+  })) p++; else f++;
+
+  if (test('DASHBOARD_STATE_DIR unset: the settings file stays in the cwd', () => {
+    withStateDir(undefined, () => {
+      inTmpCwd(cwdB => {
+        setSettings({ idleSecs: 42 });
+        assert.ok(fs.existsSync(path.join(cwdB, SETTINGS_FILE)));
+      });
     });
   })) p++; else f++;
 

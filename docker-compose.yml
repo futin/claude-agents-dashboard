@@ -31,3 +31,9 @@ services:
     volumes:
       # read-only mount of the host's ~/.claude — this is what the dashboard scans
       - ${HOME}/.claude:/root/.claude:ro
+      # read-write named volume behind DASHBOARD_STATE_DIR=/data (set in the Dockerfile's runtime stage): settings, the remote toggle and the usage
+      # ledger/history/profile survive `docker compose up --build`. `docker compose down -v` deletes them.
+      - dashboard-state:/data
+
+volumes:
+  dashboard-state:

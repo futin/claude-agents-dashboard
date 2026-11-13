@@ -212,7 +212,7 @@ already decide this?" versus "is the user back?".
   file falls back to the env default. The file is read **once per process** (`cached`),
   so hand-editing it while the server runs does nothing until a restart — flip it through
   the pill or `POST /api/remote-answer`, which updates both. It is cwd-relative, so a
-  server started from another directory keeps its own state file.
+  server started from another directory keeps its own state file — or under `DASHBOARD_STATE_DIR` when that is set (the Docker image sets it).
 - **An `autopilot` run in progress steps the hook aside.** `ask-remote-hook.sh` reads `~/.claude/autopilot/<session_id>.json` (written by the `autopilot` CLI in
   claude-global) and exits 0 silently when its `status` is `running`, before the `/api/health` probe, so the session costs no network call and never registers a
   pending question. Hooks on one event run in parallel and the CLI applies a deny only after every one has returned, so without this the autopilot gate's deny

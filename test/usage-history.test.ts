@@ -36,6 +36,19 @@ function test(name: string, fn: () => void): boolean {
   catch (e) { console.log('  ✗ ' + name); console.log('    ' + (e as Error).message); return false; }
 }
 
+/** Run `fn` with `DASHBOARD_STATE_DIR` set to `value` (deleted when undefined), restoring the caller's value after (#407). */
+function withStateDir(value: string | undefined, fn: () => void): void {
+  const prev = process.env.DASHBOARD_STATE_DIR;
+  try {
+    if (value === undefined) delete process.env.DASHBOARD_STATE_DIR;
+    else process.env.DASHBOARD_STATE_DIR = value;
+    fn();
+  } finally {
+    if (prev === undefined) delete process.env.DASHBOARD_STATE_DIR;
+    else process.env.DASHBOARD_STATE_DIR = prev;
+  }
+}
+
 const H = 3_600_000;
 const MIN = 60_000;
 const R1 = '2026-08-28T23:00:00.000Z';
@@ -739,6 +752,29 @@ export function run(): number {
     assert.strictEqual(all[0].t, 0);
     assert.strictEqual(readSamplesSince(1_990 * MIN, dir).length, 10);
     assert.deepStrictEqual(readSamplesSince(0, fs.mkdtempSync(path.join(tmp, 'since-empty-'))), []);
+  })) p++; else f++;
+
+  if (test('DASHBOARD_STATE_DIR set: history and profile go there when no dir is passed (#407)', () => {
+    const stateA = fs.mkdtempSync(path.join(tmp, 'state-a-'));
+    withStateDir(stateA, () => {
+      appendSample(s(MON_09, 10));
+      assert.strictEqual(saveProfileState(emptyState()), true);
+      assert.ok(fs.existsSync(path.join(stateA, HISTORY_FILE)), 'history must land in DASHBOARD_STATE_DIR');
+      assert.ok(fs.existsSync(path.join(stateA, PROFILE_FILE)), 'profile must land in DASHBOARD_STATE_DIR');
+      assert.deepStrictEqual(readRecentSamples(), [s(MON_09, 10)], 'and the default read finds it there');
+    });
+  })) p++; else f++;
+
+  if (test('DASHBOARD_STATE_DIR set: an explicit dir argument still wins', () => {
+    const stateA = fs.mkdtempSync(path.join(tmp, 'state-a-'));
+    const dir = fs.mkdtempSync(path.join(tmp, 'seam-'));
+    withStateDir(stateA, () => {
+      appendSample(s(MON_09, 10), dir);
+      saveProfileState(emptyState(), dir);
+      assert.ok(fs.existsSync(path.join(dir, HISTORY_FILE)));
+      assert.ok(fs.existsSync(path.join(dir, PROFILE_FILE)));
+      assert.deepStrictEqual(fs.readdirSync(stateA), [], 'the env var must not pull a seam write away from dir');
+    });
   })) p++; else f++;
 
   resetRecorder();

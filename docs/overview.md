@@ -43,7 +43,8 @@ via `tsx`, dev and prod alike).
   [settings](subsystems/settings.md)), and the usage-recording set
   `.usage-history.jsonl` / `.usage-ledger.jsonl` / `.usage-profile.json`, written only while
   the Settings tab's recording switch is on (off by default — see
-  [usage limits](subsystems/usage-limits.md)); and, going
+  [usage limits](subsystems/usage-limits.md)) — all five under `DASHBOARD_STATE_DIR` instead when it is set (the Docker image sets it,
+  [docker](workflows/docker.md)); and, going
   further than any of those, [spawning a new `claude -p` process](subsystems/spawn.md) on
   this machine — off by default (empty `CLAUDE_BIN`), and the first exception that reaches
   outside the dashboard's own state, since what it writes is a whole new session's
