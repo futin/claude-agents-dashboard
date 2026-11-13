@@ -8,6 +8,7 @@ import http from 'node:http';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { createPollGate } from '../client/src/lib/gitClock.js';
 import { createPollSeq, pollFetch } from '../client/src/lib/pollSeq.js';
 
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -76,13 +77,33 @@ export async function run(): Promise<number> {
     assert.strictEqual(typeof seq.next(false), 'number');
   }))) p++; else f++;
 
-  for (const hook of ['useSessions', 'usePullRequest', 'useRoutines', 'useRoutineRuns', 'useSessionChat']) {
+  // The Git and CodeGraph views' gate reopens only in a request's `.finally`, so a hung request kept it shut for good (#406).
+  if (await test('a hung request frees the poll gate once its bound runs out', () => withServer(silent, async url => {
+    const gate = createPollGate();
+    assert.strictEqual(gate.request(), 'run');
+    assert.strictEqual(gate.request(), 'queued');
+    assert.strictEqual(gate.request(), 'dropped', 'later polls are dropped while the request is out');
+    assert.strictEqual(await outcome(pollFetch(url, 50)), 'rejected');
+    assert.strictEqual(gate.end(), true, 'the queued poll runs');
+    assert.strictEqual(gate.end(), false);
+    assert.strictEqual(gate.request(), 'run');
+  }))) p++; else f++;
+
+  const hooks = ['useSessions', 'usePullRequest', 'useRoutines', 'useRoutineRuns', 'useSessionChat', 'useGitStats', 'useCodegraph', 'usePendingReply'];
+  for (const hook of hooks) {
     if (await test(`${hook} polls through pollFetch, never a bare fetch`, () => {
       const source = fs.readFileSync(path.join(REPO, 'client/src/hooks', `${hook}.ts`), 'utf8');
       assert.ok(source.includes('pollFetch('), 'no pollFetch call');
       assert.doesNotMatch(source, /\bfetch\(/);
     })) p++; else f++;
   }
+
+  // The skip and the stale-answer drop need a DOM to exercise; the repo has no hook harness, so the source pins that both are wired.
+  if (await test('usePendingReply polls through createPollSeq', () => {
+    const source = fs.readFileSync(path.join(REPO, 'client/src/hooks/usePendingReply.ts'), 'utf8');
+    assert.ok(source.includes('createPollSeq('), 'no createPollSeq call');
+    assert.ok(source.includes('.settle('), 'no settle call');
+  })) p++; else f++;
 
   console.log(`\n  ${p} passed, ${f} failed`);
   return f;

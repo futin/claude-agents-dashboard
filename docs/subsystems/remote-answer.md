@@ -269,7 +269,8 @@ then turn tailnet trust off and use the token; behind a *public* tunnel it is th
 - **`usePendingQuestion`** — like `usePendingPlan` and `usePendingMessage`, a thin wrapper over `usePendingReply` (`client/src/hooks/usePendingReply.ts`),
   whose every transition is a pure function in `client/src/lib/pendingReply.ts` — polls the question endpoint at the configured refresh rate
   (`useSettings().settings.refreshMs`, same cadence as `useSessionChat`; the response is a
-  ~50-byte in-memory lookup). The reset-on-new-question effect is deliberately kept in its
+  ~50-byte in-memory lookup). A tick is skipped while a poll is out, an answer a newer one superseded is dropped (`createPollSeq`), and each request carries
+  `pollFetch`'s 30s bound. The reset-on-new-question effect is deliberately kept in its
   own `useEffect` keyed on `id` alone, while the poll's effect also depends on `refreshMs` —
   retuning the rate restarts the interval, and that must not wipe the panel of a question
   already on screen. Phase is

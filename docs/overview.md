@@ -365,7 +365,7 @@ client/src/
                   useStuckStrip (when the phone's aside strip pins)
   lib/            routines (the Routines page's pure helpers: pills, run folding, the Repos helper, write-failure text), routineForm (the job drawer's
                   Form view: one read/write/summary per row over the file text), filterSort, analyticsFilterSort, chatFilter, chatPaging (the chat drawer's byte offsets: one
-                  tail poll at a time, an epoch per re-tail, a retry after a failed tail), pollSeq (`createPollSeq`, the skip-while-in-flight rule useSessions and the Routines
+                  tail poll at a time, an epoch per re-tail, a retry after a failed tail), pollSeq (`createPollSeq`, the skip-while-in-flight rule useSessions, usePendingReply and the Routines
                   polls share, and `pollFetch`, the 30s bound every guarded poll's request carries),
                   heldBody (which timeline body a pinned panel folds), markdown, configsEntries,
                   format, settings, persistedReset (Settings › Reset's reach into mounted usePersistedState holders),

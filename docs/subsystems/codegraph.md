@@ -84,7 +84,7 @@ Rank is level, then summed severity, then pin order. A live rebuild is a run, no
 
 `CodegraphView` is the band, a toolbar (Inbox | Matrix | Inspector, and the clock chip with READ and WATCHERS meters) and one layout. It ranks once per payload and hands every layout
 the same `CodegraphLayoutProps`. `useCodegraph` polls every 30 s while the page is visible and every 3 s while any repo has a `run` (`codegraphPoll.ts`); it is mounted with the view, so
-leaving the tab stops it. `useCodegraphRun` provides `run` and `runAll` and reuses Git's write gating (`tokenRequired`, `writeAccess`). The layout is stored per device under
+leaving the tab stops it. Each request carries `pollFetch`'s 30s bound, so a hung one fails as any failed poll does and frees the gate. `useCodegraphRun` provides `run` and `runAll` and reuses Git's write gating (`tokenRequired`, `writeAccess`). The layout is stored per device under
 `management.codegraphLayout` (default `inbox`, swept by Settings › Reset); Matrix is wide-only, and a phone draws Inbox for a stored Matrix while the choice waits for a wider window
 (`drawableCodegraphLayout`). The shapes are Git's, so the classes are too (`.git-dot`, `.git-chip`, `.git-sync`); only the kinds strip, the Inspector tiles and the Matrix's tighter gutters and 100 px name floor (`.cg-mx`, so its twelve columns and both keys fit the 1280 tier) are `cg-*`. Every string is in
 `codegraphText.ts`.
