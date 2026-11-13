@@ -75,6 +75,7 @@ async function fakeDashboard(): Promise<{ url: string; reqs: Recorded[]; close: 
 async function runHook(hook: Hook, url: string, home: string, payload: Record<string, unknown>): Promise<{ code: number | null; stdout: string }> {
   const env: NodeJS.ProcessEnv = { ...process.env, CLAUDECODE: '1', CLAUDE_DASHBOARD_URL: url, CLAUDE_DASHBOARD_IDLE_SECS: '0', HOME: home };
   delete env.BM_ORCH_RUN;
+  delete env.CLAUDE_CONFIG_DIR;
   delete env.CLAUDE_DASHBOARD_ONESHOT;
   delete env.CLAUDE_DASHBOARD_ANSWER_TIMEOUT;
   const child = spawn('bash', [path.join(REPO, 'scripts', hook.script)], { env, stdio: ['pipe', 'pipe', 'ignore'] });

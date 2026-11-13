@@ -104,7 +104,8 @@ Stop event*; that belongs behind a command someone chose to run, not behind `git
 - **Anything else in `settings.json`.** Other people's hooks, your `permissions`, your
   `model`. The previous file is copied to `settings.json.bak.<stamp>` before any write, and
   the new one is validated as JSON before it replaces anything.
-- **Your token.** `~/.claude/hooks/dashboard-token` is written only if it does not exist
+- **Your token.** `~/.claude/hooks/dashboard-token` (`$CLAUDE_CONFIG_DIR/hooks/` when that variable is set — the hooks read the same path) is written
+  only if it does not exist
   *and* this checkout's `.env` has an `ANSWER_TOKEN` to copy. With no token anywhere it says
   `no token file needed`: the hooks reach the dashboard on loopback, which the write gate
   always trusts. It is never read from or written to the repo.

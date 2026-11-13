@@ -134,7 +134,7 @@ string counts as set.
 
 `ANSWER_TOKEN` is passed through the same way, beside them. Inside a container every client — a hook on the host included — arrives from the bridge
 gateway, which the write gate classifies as LAN, so without a token the image is read-only and every hook POST that would raise a push is refused. Put
-the same value in `~/.claude/hooks/dashboard-token` ([remote-access](../subsystems/remote-access.md)).
+the same value in `~/.claude/hooks/dashboard-token` (`$CLAUDE_CONFIG_DIR/hooks/` when that variable is set) ([remote-access](../subsystems/remote-access.md)).
 
 ⚠️ `DASHBOARD_PUBLIC_URL` matters most here. It has no default anywhere, and inside a
 container even a hand-written `localhost` would resolve to the container's own network

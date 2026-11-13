@@ -132,7 +132,7 @@ user prompt it checks three conditions and otherwise stays silent:
 2. `GET /api/health` reports `remoteAnswer: true` — the same field, and so the same
    env-switch-AND-toggle, that gates `ask-remote-hook.sh`;
 3. if that same probe reports `tokenRequired: true`, `~/.claude/hooks/dashboard-token`
-   exists.
+   exists (`$CLAUDE_CONFIG_DIR/hooks/dashboard-token` when that variable is set).
 
 Condition 3 exists because the banner was once the only visible signal and it was wrong.
 `/api/health` is untokened, so it answers cheerfully while every *write* — the ask, plan
