@@ -6,7 +6,8 @@ client/dist/
 .idea/
 .claude/launch.json
 .claude/settings.local.json
-.ua/.trash-*/
+# understand-anything knowledge graph — generated, local only; untracked 2026-11-13 after four months stale
+.ua/
 .remote-answer.json
 .dashboard-settings.json
 .usage-history.jsonl
@@ -15,3 +16,6 @@ client/dist/
 test-results/
 playwright-report/
 .playwright-mcp/
+
+# reviewer reports (doc-review, ui-verify, plan reviews) — spent once their findings are applied; 88 were pruned on 2026-11-13, see docs/superpowers/README.md
+docs/superpowers/reviews/
