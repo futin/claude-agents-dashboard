@@ -408,7 +408,9 @@ if [ "$UNINSTALL" != "true" ]; then
        step "         Idle is unreadable here, which counts as \"at the desk\" — questions,"
        step "         plans and the turn-end reply window all stay in the terminal."
        step "         Set Settings › Away after to 0 (or CLAUDE_DASHBOARD_IDLE_SECS=0) to"
-       step "         make questions and plans always wait for the dashboard." ;;
+       step "         make questions and plans always wait for the dashboard — but then"
+       step "         every turn end is also held for the Answer window (600s default),"
+       step "         and coming back to the keyboard does not release it." ;;
   esac
   step "The hooks talk to \$CLAUDE_DASHBOARD_URL, default http://127.0.0.1:4173."
   step "Serving on another port (a dev 5174, say)? Export it, or they no-op."

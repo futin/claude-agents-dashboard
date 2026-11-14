@@ -174,8 +174,10 @@ The hooks install and run, but the **at-desk gate does not work**: it reads keyb
 time via `ioreg`, which is macOS-only. Unreadable idle counts as "at the desk", so `ask-remote.sh` and `plan-remote.sh` exit 0 before the dashboard POST:
 questions and plans stay in the terminal and never reach your phone. `stop-notify.sh` falls back to a plain push for the same reason, so the turn-end reply
 window ([remote-message](../subsystems/remote-message.md)) never opens either. The way out is a threshold of `0`: set Settings › Away after to `0` (or export
-`CLAUDE_DASHBOARD_IDLE_SECS=0`) to skip the idle check, and every question and plan then waits for the dashboard — even while you are at the keyboard. The
-gate itself is described in [remote-answer](../subsystems/remote-answer.md). The installer prints this warning on any non-Darwin host rather than letting
+`CLAUDE_DASHBOARD_IDLE_SECS=0`) to skip the idle check, and every question and plan then waits for the dashboard — even while you are at the keyboard. It
+costs something: with the check skipped, every interactive turn end is also held in the reply window until you answer from the dashboard or the Answer window
+(600 s by default) runs out, and returning to the keyboard does not release it early. The gate itself is described in
+[remote-answer](../subsystems/remote-answer.md). The installer prints this warning on any non-Darwin host rather than letting
 you discover it as silence.
 
 <!-- docs-sync:
