@@ -107,6 +107,11 @@ export function world(t, { host = 'github.com' } = {}) {
     return run(REAL_GIT, ['-C', dir, ...args], { cwd: dir, env })
   }
 
+  // `git` with `input` piped to its stdin — SKILL.md's phase 1 commit, `git commit -F -`, is the one call that needs it.
+  function gitIn(dir, input, ...args) {
+    return run(REAL_GIT, ['-C', dir, ...args], { cwd: dir, env, input })
+  }
+
   // Writes `file` under `dir`, stages and commits it; `daysAgo`, when given, backdates both the
   // author and committer timestamps so later tasks can build fixtures for the staleness rules
   // (§5's 30-day threshold) without waiting real days.
@@ -176,11 +181,12 @@ export function world(t, { host = 'github.com' } = {}) {
   // Runs the engine exactly as a user would: a fresh `node tools/git-sync.mjs ... --cwd <dir>`
   // process, under this world's sandboxed env. `json` is the parsed stdout envelope when stdout
   // is valid JSON (every implemented subcommand), and `null` for the argument-error path, whose
-  // contract is stderr-only.
-  function cli(dir, args = [], extraEnv = {}) {
+  // contract is stderr-only. `input`, when given, is piped to the engine's stdin (`plan --answers -`).
+  function cli(dir, args = [], extraEnv = {}, { input } = {}) {
     const result = spawnSync(process.execPath, [CLI_PATH, ...args, '--cwd', dir], {
       env: { ...env, ...extraEnv },
       encoding: 'utf8',
+      input,
     })
     let json = null
     try {
@@ -198,5 +204,5 @@ export function world(t, { host = 'github.com' } = {}) {
     return context(dir, { env })
   }
 
-  return { root, origin: originPath, a: aPath, b: bPath, env, git, commit, stub, calls, cli, ctx, rules }
+  return { root, origin: originPath, a: aPath, b: bPath, env, git, gitIn, commit, stub, calls, cli, ctx, rules }
 }

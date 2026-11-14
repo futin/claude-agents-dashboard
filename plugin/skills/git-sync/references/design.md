@@ -258,7 +258,8 @@ Settled in conversation on 2026-09-24, each against its alternatives:
 
 Each was settled while the implementation plan was written; where one differs from the sections above, this one wins.
 
-- `plan` and `report` are engine subcommands, so the model never hand-writes `plan.json` or the report; it writes only `answers.json` and the commit message.
+- `plan` and `report` are engine subcommands, so the model never hand-writes `plan.json` or the report; it authors only the answers and the commit message,
+  and since R41 hands both over stdin, never as a file.
 - `survey` emits the decision round pre-chunked: `rounds` (calls of at most 4 questions, in the §7 order) and `followups.merged` (asked only on "let me pick").
 - `git worktree prune` moved from survey to the start of `apply`, keeping survey strictly read-only.
 - A record is merged only when every present tip — local and remote — is proven; a remote copy the other box moved on keeps the record unmerged.
@@ -335,9 +336,13 @@ Rulings made while the tasks were implemented that change behaviour this spec de
   head→tip change then passes R11's containment gate. `prLookup` reports that case as `merged-below-tip`, and the reason names the later commits.
 - R40 — opt-in auto answers (2026-11-10, the user's call): `survey --auto-merged --auto-clean` answers the merged question, the clean worktrees of
   superseded/abandoned/gone-unproven branches, and superseded branches whose worktrees are all clean, so none of them is asked. The answers ride in
-  `survey.auto` (not `answers.json`) and `plan` folds them in (`foldAuto`: lists unite, maps fill the unanswered, the user's scalar wins), so the model
+  `survey.auto` (not the model's answers) and `plan` folds them in (`foldAuto`: lists unite, maps fill the unanswered, the user's scalar wins), so the model
   never maps them. Unlike `unattended` they never lose uncommitted work, never touch a detached or active/protected tree, and never delete an
   abandoned or gone-unproven branch, since nothing proves its content is elsewhere. Dirty trees stay a question. `apply` re-proves as for any answer.
+- R41 — no model-written file in the state dir (2026-11-14, #465): Claude Code guards `.git/`, so an unattended session's write of `answers.json` or
+  `commit-msg.txt` there was refused and the run ended without a report (6 of 100 runs, 2026-11-02 → 11-13). `plan --answers -` reads the answers JSON
+  from stdin, `plan --unattended` plans `survey.unattended` from the run's own survey.json, and phase 1 commits with `git commit -F -`, the message on
+  stdin. `--unattended` belongs to `plan` alone and never goes with `--answers`; `--answers <file>` still works for a caller outside `.git/`.
 - Phase B (2026-10-15): PR-only trunks — `main` of the dashboard repo accepts changes only through a pull request, so git-sync reads the trunk's rules
   (§6), never pushes a PR-only trunk, and offers to carry its local commits to a PR branch (`carry-trunk`, invariant 11). The design and the rest of the
   release pipeline are in `docs/superpowers/specs/2026-10-15-release-pipeline-design.md`.

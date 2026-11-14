@@ -41,7 +41,7 @@ export const SUBCOMMANDS = [
   'report',
 ]
 
-export const USAGE = `Usage: git-sync <command> [--cwd <dir>] [--answers <file>] [--plan <file>] [--auto-merged] [--auto-clean]\n\nCommands:\n  ${SUBCOMMANDS.join('\n  ')}\n`
+export const USAGE = `Usage: git-sync <command> [--cwd <dir>] [--answers <file>|-] [--unattended] [--plan <file>] [--auto-merged] [--auto-clean]\n\nCommands:\n  ${SUBCOMMANDS.join('\n  ')}\n`
 
 // spawnSync kills a child whose captured stdout or stderr passes `maxBuffer` (1 MB by default) and reports ENOBUFS, so a staged diff, a staged name
 // list or a check's log over 1 MB failed the run (#464). Every spawn that captures output passes this ceiling instead.
@@ -327,8 +327,8 @@ function preflight(ctx) {
 
   return {
     root: r.root,
-    // R31: SKILL.md writes commit-msg.txt and answers.json here and reads the path from this payload, never deriving it: it sits under the git
-    // common dir, which is not `<root>/.git` for a submodule or any other `.git`-file layout.
+    // R31: SKILL.md reads the path from this payload, never deriving it: it sits under the git common dir, which is not `<root>/.git` for a
+    // submodule or any other `.git`-file layout. The model never writes a file here (R41): Claude Code guards `.git/`.
     stateDir: ctx.stateDir,
     trunk: r.trunk,
     remoteKind: r.remoteKind,
@@ -1615,19 +1615,21 @@ export function buildPlan(survey, answers) {
   return actions.sort((a, b) => ACTION_RANK[a.kind] - ACTION_RANK[b.kind])
 }
 
-// Phase 4 (§7): the plan for the answers in `answersFile` (none → `{}`, an empty plan), built against the survey.json this run's survey wrote —
-// the plan is only meaningful against the exact tips that survey saw, so without one there is nothing to build against.
-function plan(ctx, answersFile) {
+// Phase 4 (§7): the plan for the answers in `answersFile` (none → `{}`, an empty plan; `-` → stdin), or with `unattended` for the survey's own
+// `unattended` answers, built against the survey.json this run's survey wrote — the plan is only meaningful against the exact tips that survey saw,
+// so without one there is nothing to build against. R41: stdin and `--unattended` exist so the model never writes a file under `.git/`.
+function plan(ctx, answersFile, unattended) {
   let answers = {}
   if (answersFile !== null) {
     try {
-      answers = JSON.parse(fs.readFileSync(answersFile, 'utf8'))
+      answers = JSON.parse(fs.readFileSync(answersFile === '-' ? 0 : answersFile, 'utf8'))
     } catch (err) {
       throw new Stop('bad-answers', { why: 'answers file unreadable or not JSON', file: answersFile, error: err.message })
     }
   }
   const surveyed = readState(ctx, 'survey')
   if (!surveyed?.ok) throw new Stop('no-survey', { stateDir: ctx.stateDir })
+  if (unattended) answers = surveyed.unattended ?? {}
   return { actions: buildPlan(surveyed, foldAuto(answers, surveyed.auto)) }
 }
 
@@ -2708,7 +2710,7 @@ function emit(ctx, envelope) {
 
 // `--cwd <dir>` is the only global flag and may appear on either side of the subcommand. `--answers <file>` is `plan`'s own and `--plan <file>`
 // `apply`'s, each resolved against the caller's cwd like any path typed on a command line; missing its value either is a bad argument
-// (`undefined`), not an empty plan.
+// (`undefined`), not an empty plan. `--answers -` is stdin and is never resolved. `--unattended` is `plan`'s too, and excludes `--answers`.
 function parseArgv(argv) {
   let cwd = process.cwd()
   let cmd = null
@@ -2725,7 +2727,9 @@ function parseArgv(argv) {
       const file = argv[i + 1]
       const key = argv[i].slice(2)
       if (file && !file.startsWith('--')) i++
-      files[key] = file && !file.startsWith('--') ? path.resolve(file) : undefined
+      files[key] = file && !file.startsWith('--') ? (key === 'answers' && file === '-' ? '-' : path.resolve(file)) : undefined
+    } else if (argv[i] === '--unattended') {
+      modes.unattended = true
     } else if (argv[i] === '--auto-merged') {
       modes.merged = true
     } else if (argv[i] === '--auto-clean') {
@@ -2755,6 +2759,10 @@ export function main(argv) {
     process.stderr.write(`${USAGE}--answers <file> belongs to plan and needs a file\n`)
     return 1
   }
+  if (modes.unattended && (cmd !== 'plan' || answers !== null)) {
+    process.stderr.write(`${USAGE}--unattended belongs to plan and never goes with --answers\n`)
+    return 1
+  }
   if (planFile !== null && (cmd !== 'apply' || planFile === undefined)) {
     process.stderr.write(`${USAGE}--plan <file> belongs to apply and needs a file\n`)
     return 1
@@ -2778,7 +2786,7 @@ export function main(argv) {
     if (cmd === 'stage-scan') return emit(ctx, { ok: true, cmd, ...stageScan(ctx) })
     if (cmd === 'sync') return emit(ctx, { ok: true, cmd, ...sync(ctx) })
     if (cmd === 'survey') return emit(ctx, { ok: true, cmd, ...survey(ctx, modes) })
-    if (cmd === 'plan') return emit(ctx, { ok: true, cmd, ...plan(ctx, answers) })
+    if (cmd === 'plan') return emit(ctx, { ok: true, cmd, ...plan(ctx, answers, modes.unattended === true) })
     if (cmd === 'verify') return emit(ctx, { ok: true, cmd, ...verify(ctx) })
     if (cmd === 'push-trunk') return emit(ctx, { ok: true, cmd, ...pushTrunk(ctx) })
     if (cmd === 'apply') return emit(ctx, { ok: true, cmd, ...apply(ctx, planFile) })
