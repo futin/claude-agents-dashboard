@@ -12,22 +12,15 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
+import { foldLines } from './jsonl-tail.js';
 import { stateDir } from './paths.js';
 import { listUsageTranscripts, projectsRoot } from './scan.js';
 import { getSettings } from './settings.js';
 import { repoRoot } from './usage-history.js';
+import { assistantUsage } from './usage-line.js';
+import type { TokenCounts } from './usage-line.js';
 
-/** One bucket of tokens. Names are the ledger's on-disk keys, kept short. */
-export interface TokenCounts {
-  /** `input_tokens` */
-  in: number;
-  /** `output_tokens` */
-  out: number;
-  /** `cache_creation_input_tokens` — a cache *write*. */
-  cc: number;
-  /** `cache_read_input_tokens` */
-  cr: number;
-}
+export type { TokenCounts } from './usage-line.js';
 
 /** One recorded tick: everything consumed in `(prevT, t]`, split by model. */
 export interface LedgerLine {
@@ -350,10 +343,6 @@ function remember(cursor: FileCursor, id: string): void {
   }
 }
 
-function numField(value: unknown): number {
-  return typeof value === 'number' && Number.isFinite(value) ? value : 0;
-}
-
 /**
  * Read one transcript record into an event, or null when it carries no spend.
  *
@@ -367,36 +356,23 @@ function numField(value: unknown): number {
  * still carries is ignored.
  */
 function eventFromRecord(raw: unknown, cursor: FileCursor): UsageEvent | null {
-  if (!raw || typeof raw !== 'object') return null;
-  const rec = raw as Record<string, any>;
-  const msg = rec.message;
-  if (!msg || typeof msg !== 'object' || msg.role !== 'assistant') return null;
-  const u = msg.usage;
-  if (!u || typeof u !== 'object') return null;
-
-  const tok: TokenCounts = {
-    in: numField(u.input_tokens),
-    out: numField(u.output_tokens),
-    cc: numField(u.cache_creation_input_tokens),
-    cr: numField(u.cache_read_input_tokens)
-  };
+  const line = assistantUsage(raw);
+  if (!line) return null;
+  const { tok, model, id, ts } = line;
   if (rawTokens(tok) <= 0) return null;
-
-  const model = typeof msg.model === 'string' ? msg.model : '';
   if (!model) return null;
 
   // Without an id the record is its own turn — the same fail-open `analyze.ts`
   // takes, and the honest one: under-counting a real turn is worse than the
   // rare double-count a missing id could hide.
-  const id = typeof msg.id === 'string' && msg.id ? msg.id : '';
   if (id) {
     if (cursor.seenSet.has(id)) return null;
     remember(cursor, id);
   }
 
-  const ts = typeof rec.timestamp === 'string' ? Date.parse(rec.timestamp) : Number.NaN;
   if (!Number.isFinite(ts)) return null;
 
+  const rec = raw as Record<string, any>;
   const surface = typeof rec.entrypoint === 'string' ? rec.entrypoint : '';
   return { ts, model, tok, surface };
 }
@@ -406,7 +382,7 @@ function eventFromRecord(raw: unknown, cursor: FileCursor): UsageEvent | null {
  *
  * Offsets only ever advance to a **line boundary**: a transcript being written
  * while we read it ends mid-line, and re-reading that fragment next tick is the
- * only way it is ever seen whole.
+ * only way it is ever seen whole. The read loop is `jsonl-tail.ts`'s `foldLines`.
  */
 function collectEvents(root: string): UsageEvent[] {
   const events: UsageEvent[] = [];
@@ -423,24 +399,20 @@ function collectEvents(root: string): UsageEvent[] {
     let fd: number | undefined;
     try {
       fd = fs.openSync(ref.file, 'r');
-      const length = size - cursor.offset;
-      const buf = Buffer.alloc(length);
-      bytesRead += fs.readSync(fd, buf, 0, length, cursor.offset);
-      const lastNewline = buf.lastIndexOf(NEWLINE);
-      if (lastNewline === -1) continue; // no complete line yet — re-read next tick
-      const complete = buf.subarray(0, lastNewline);
-      cursor.offset += lastNewline + 1;
-      for (const line of complete.toString('utf8').split('\n')) {
-        if (line.trim() === '') continue;
+      const fileCursor = cursor;
+      // An unterminated last line is left unconsumed and re-read next tick.
+      foldLines(fd, fileCursor, size, buf => {
+        const line = buf.toString('utf8');
+        if (line.trim() === '') return;
         let parsed: unknown;
         try {
           parsed = JSON.parse(line);
         } catch {
-          continue; // a junk line costs one record, never the tick
+          return; // a junk line costs one record, never the tick
         }
-        const event = eventFromRecord(parsed, cursor);
+        const event = eventFromRecord(parsed, fileCursor);
         if (event) events.push(event);
-      }
+      }, { onRead: n => { bytesRead += n; } });
     } catch {
       /* unreadable transcript — skip it, never break the tick */
     } finally {

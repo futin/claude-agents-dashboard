@@ -25,6 +25,7 @@ import { readAgentsCached } from './agents-cache.js';
 import { createTail, followJsonl, type JsonlTail } from './jsonl-tail.js';
 import { SUBAGENT_DIR } from './subagent-usage.js';
 import { isConversationRecord } from './transcript.js';
+import { assistantUsage, type TokenCounts } from './usage-line.js';
 
 interface Tally {
   tail: JsonlTail;
@@ -45,14 +46,10 @@ interface CacheEntry {
 const MAX_ENTRIES = 32;
 const cache = new Map<string, CacheEntry>();
 
-function num(v: unknown): number {
-  return typeof v === 'number' && Number.isFinite(v) ? v : 0;
-}
-
-function addUsage(t: Tally, u: any): void {
-  const billable = num(u.input_tokens) + num(u.output_tokens) + num(u.cache_creation_input_tokens);
+function addUsage(t: Tally, tok: TokenCounts): void {
+  const billable = tok.in + tok.out + tok.cc;
   t.billable += billable;
-  t.combined += billable + num(u.cache_read_input_tokens);
+  t.combined += billable + tok.cr;
 }
 
 function onMainRecord(t: Tally, rec: any): void {
@@ -61,23 +58,24 @@ function onMainRecord(t: Tally, rec: any): void {
   if (rec.isCompactSummary === true || !isConversationRecord(rec)) return;
   const msg = rec.message;
   if (!msg || msg.role !== 'assistant') return;
-  // `analyzeSession` spends a turn on its first record even when that record has no usage.
+  // `analyzeSession` spends a turn on its first record even when that record has no usage, so the id is read here, ahead of the usage parse.
   const id = typeof msg.id === 'string' && msg.id ? msg.id : null;
   const first = id === null || !t.seen.has(id);
   if (id !== null) t.seen.add(id);
-  if (first && msg.usage && typeof msg.usage === 'object') addUsage(t, msg.usage);
+  const line = first ? assistantUsage(rec) : null;
+  if (line) addUsage(t, line.tok);
 }
 
 function onSubagentRecord(t: Tally, rec: any): void {
   if (!rec) return;
   if (rec.compactMetadata && typeof rec.compactMetadata === 'object') t.compactions++;
-  const msg = rec.message;
-  if (!msg || msg.role !== 'assistant' || !msg.usage || typeof msg.usage !== 'object') return;
-  if (typeof msg.id === 'string' && msg.id) {
-    if (t.seen.has(msg.id)) return;
-    t.seen.add(msg.id);
+  const line = assistantUsage(rec);
+  if (!line) return;
+  if (line.id) {
+    if (t.seen.has(line.id)) return;
+    t.seen.add(line.id);
   }
-  addUsage(t, msg.usage);
+  addUsage(t, line.tok);
 }
 
 function follow(files: Map<string, Tally>, filePath: string, size: number, onRecord: (t: Tally, rec: any) => void): Tally {

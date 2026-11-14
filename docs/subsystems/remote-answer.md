@@ -170,7 +170,7 @@ already decide this?" versus "is the user back?".
   off everywhere else, so it's off here too). Unreadable idle failing to "held" is the
   opposite direction from the notifier's own predicate (see
   [push-notify](push-notify.md#fail-directions)), because a wrong guess here ends a hold early
-  instead of merely sending an extra ping. The comparison itself is `notify.ts`'s
+  instead of merely sending an extra ping. The comparison itself is `idle.ts`'s
   `atDesk`, shared with callers that already hold an idle reading; the zero-threshold check
   runs *before* the read, so that case never spawns `ioreg`. Each store still declares *what* is releasable and *which*
   status it settles as — `createWaitStore`'s `releasable` and `released` options — and keeps its own `sweepIdle()` export; the interval is one, and

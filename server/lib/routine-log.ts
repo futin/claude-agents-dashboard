@@ -11,6 +11,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 import type { RoutineRun, RoutineStats, RoutineStep } from '../../shared/types.js';
+import { foldLines } from './jsonl-tail.js';
 
 const AGE_SLACK_MS = 5 * 60_000;
 const WATCH_DEBOUNCE_MS = 100;
@@ -108,31 +109,23 @@ export function createLogReader(
     }
   }
 
-  /** Complete lines from `offset` on; a torn last line stays unread until its newline arrives. Returns the new offset. */
+  /** Complete lines from `offset` on (`jsonl-tail.ts`'s `foldLines`); a torn last line stays unread until its newline arrives. Returns the new offset. */
   function readFrom(file: string, offset: number, size: number): number {
     if (size <= offset) return offset;
-    const buf = Buffer.alloc(size - offset);
+    const cursor = { offset };
+    const machine = machineOf(file);
     const fd = fs.openSync(path.join(dir, file), 'r');
-    let got = 0;
     try {
-      while (got < buf.length) {
-        const n = fs.readSync(fd, buf, got, buf.length - got, offset + got);
-        if (n === 0) break;
-        got += n;
-      }
+      foldLines(fd, cursor, size, buf => {
+        if (buf.length === 0) return;
+        let rec: unknown;
+        try { rec = JSON.parse(buf.toString('utf8')); } catch { return; }
+        if (rec && typeof rec === 'object' && !Array.isArray(rec)) apply(rec as Rec, machine);
+      });
     } finally {
       fs.closeSync(fd);
     }
-    const last = buf.subarray(0, got).lastIndexOf(0x0a);
-    if (last < 0) return offset;
-    const machine = machineOf(file);
-    for (const line of buf.subarray(0, last).toString('utf8').split('\n')) {
-      if (line === '') continue;
-      let rec: unknown;
-      try { rec = JSON.parse(line); } catch { continue; }
-      if (rec && typeof rec === 'object' && !Array.isArray(rec)) apply(rec as Rec, machine);
-    }
-    return offset + last + 1;
+    return cursor.offset;
   }
 
   function sync(): void {

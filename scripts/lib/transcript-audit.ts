@@ -18,7 +18,9 @@ import path from 'node:path';
 
 import { listUsageTranscripts } from '../../server/lib/scan.js';
 import { rawTokens, sumWindow, weightedTokens, weightsFor } from '../../server/lib/usage-ledger.js';
-import type { LedgerLine, TokenCounts, UsageEvent } from '../../server/lib/usage-ledger.js';
+import type { LedgerLine, UsageEvent } from '../../server/lib/usage-ledger.js';
+import { assistantUsage } from '../../server/lib/usage-line.js';
+import type { TokenCounts } from '../../server/lib/usage-line.js';
 import { DOMINANCE, isUnpriced, rateSurface, totalWeighted } from '../../server/lib/usage-rate.js';
 import type { Interval } from '../../server/lib/usage-rate.js';
 
@@ -120,10 +122,6 @@ export interface AuditRecord {
   stopReason: string;
 }
 
-function num(v: unknown): number {
-  return typeof v === 'number' && Number.isFinite(v) ? v : 0;
-}
-
 function str(v: unknown): string {
   return typeof v === 'string' ? v : '';
 }
@@ -134,20 +132,13 @@ function str(v: unknown): string {
  * No dedupe here — that is {@link readRecords}' job, and it is global.
  */
 export function recordFromLine(raw: Record<string, any>, nested: boolean, session = ''): AuditRecord | null {
-  const msg = raw.message;
-  if (!msg || typeof msg !== 'object' || msg.role !== 'assistant') return null;
-  const u = msg.usage;
-  if (!u || typeof u !== 'object') return null;
-  if (typeof msg.model !== 'string' || msg.model === '') return null;
-  const ts = typeof raw.timestamp === 'string' ? Date.parse(raw.timestamp) : Number.NaN;
-  if (!Number.isFinite(ts)) return null;
+  const line = assistantUsage(raw);
+  if (!line || !line.model || !Number.isFinite(line.ts)) return null;
+  const u = line.usage;
   return {
-    ts,
-    model: msg.model,
-    tok: {
-      in: num(u.input_tokens), out: num(u.output_tokens),
-      cc: num(u.cache_creation_input_tokens), cr: num(u.cache_read_input_tokens)
-    },
+    ts: line.ts,
+    model: line.model,
+    tok: line.tok,
     entrypoint: str(raw.entrypoint),
     effort: str(raw.effort),
     nested,
@@ -156,7 +147,7 @@ export function recordFromLine(raw: Record<string, any>, nested: boolean, sessio
     speed: str(u.speed),
     serviceTier: str(u.service_tier),
     isApiError: raw.isApiErrorMessage === true,
-    stopReason: str(msg.stop_reason)
+    stopReason: str(raw.message.stop_reason)
   };
 }
 

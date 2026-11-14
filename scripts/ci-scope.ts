@@ -19,6 +19,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { listSuites } from '../test/suites.js';
+
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
 export type Scope = 'docs' | 'full';
@@ -90,11 +92,10 @@ export function makePlan(files: string[] | null, suites: { tsx: Suite[]; node: S
   return { scope, steps };
 }
 
-/** The modules `test/run-all.ts` imports — the one list of what `pnpm test` runs, read rather than spelled again here, so a suite added there is
- * selectable at once and a helper like `api-harness.ts` never is. */
+/** The modules `test/run-all.ts` runs — `listSuites`, the one list of what `pnpm test` runs, so a suite added to the tree is selectable at once and a
+ * helper like `api-harness.ts` never is. */
 export function tsxSuitePaths(root = REPO_ROOT): string[] {
-  const src = fs.readFileSync(path.join(root, 'test', 'run-all.ts'), 'utf8');
-  return [...src.matchAll(/^import \{ run as \w+ \} from '\.\/([\w./-]+)\.js';/gm)].map(m => `test/${m[1]}.ts`).sort();
+  return listSuites(root);
 }
 
 /** The `node --test` suites `pnpm test` runs, expanded from its own glob in package.json. Only `*` segments occur in it, so a readdir per segment is the

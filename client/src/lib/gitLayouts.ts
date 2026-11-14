@@ -21,10 +21,7 @@ export function isGitLayout(v: unknown): v is GitLayout {
   return GIT_LAYOUTS.some(l => l.key === v);
 }
 
-/** The keys the previous switcher stored. They are not layouts any more; `parseGitLayout` folds them into the default. */
-export const LEGACY_GIT_LAYOUTS = ['cards', 'table', 'triage'] as const;
-
-/** A stored value read as a layout: a current key stands for itself, anything else (the legacy keys included) is the default. */
+/** A stored value read as a layout: a current key stands for itself, anything else (the old switcher's keys included) is the default. */
 export function parseGitLayout(v: unknown): GitLayout {
   return isGitLayout(v) ? v : DEFAULT_GIT_LAYOUT;
 }

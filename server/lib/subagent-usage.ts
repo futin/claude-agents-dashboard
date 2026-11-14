@@ -18,6 +18,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 import type { TokenTotals } from '../../shared/types.js';
+import { assistantUsage } from './usage-line.js';
 
 /** The per-session directory the CLI writes subagent transcripts into. */
 export const SUBAGENT_DIR = 'subagents';
@@ -29,10 +30,6 @@ export interface SubagentFileUsage {
   /** The launching tool_use id from the `.meta.json` sidecar, null when it is absent. */
   toolUseId: string | null;
   usage: TokenTotals;
-}
-
-function num(v: unknown): number {
-  return typeof v === 'number' && Number.isFinite(v) ? v : 0;
 }
 
 export function emptyTotals(): TokenTotals {
@@ -49,21 +46,18 @@ export function addTotals(a: TokenTotals, b: TokenTotals): void {
 function sumTranscript(text: string): TokenTotals {
   const t = emptyTotals();
   const seen = new Set<string>();
-  for (const line of text.split('\n')) {
-    const trimmed = line.trim();
+  for (const raw of text.split('\n')) {
+    const trimmed = raw.trim();
     if (!trimmed) continue;
-    let rec: any;
+    let rec: unknown;
     try { rec = JSON.parse(trimmed); } catch { continue; }
-    const msg = rec && rec.message;
-    if (!msg || msg.role !== 'assistant' || !msg.usage || typeof msg.usage !== 'object') continue;
-    if (typeof msg.id === 'string' && msg.id) {
-      if (seen.has(msg.id)) continue;
-      seen.add(msg.id);
+    const line = assistantUsage(rec);
+    if (!line) continue;
+    if (line.id) {
+      if (seen.has(line.id)) continue;
+      seen.add(line.id);
     }
-    const u = msg.usage;
-    const inp = num(u.input_tokens), out = num(u.output_tokens);
-    const cc = num(u.cache_creation_input_tokens), cr = num(u.cache_read_input_tokens);
-    t.input += inp; t.output += out; t.cacheCreation += cc; t.cacheRead += cr;
+    t.input += line.tok.in; t.output += line.tok.out; t.cacheCreation += line.tok.cc; t.cacheRead += line.tok.cr;
   }
   t.combined = t.input + t.output + t.cacheCreation + t.cacheRead;
   t.billableApprox = t.input + t.output + t.cacheCreation;

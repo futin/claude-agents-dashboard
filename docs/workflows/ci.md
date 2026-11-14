@@ -32,8 +32,8 @@ they can break: a PR that touches only docs never needs `tsc` or `vite build` (n
   on the PR, not on `main`.
 - **Which suites "name" a file** is found by scanning the suites' source at run time — no hand-kept list. A path piece counts when it is bounded by quotes or
   slashes on a code line (comment lines are dropped): the file's top-level directory (`'docs'`, which `docs-links` joins from), its parent, the file
-  itself, its basename (`'../SKILL.md'`) or its parent's name. The suite lists are read too: `run-all.ts`'s imports, and the `*.test.mjs` glob in
-  `package.json`'s `test` script. It is a heuristic, generous on purpose: a suite picked wrongly costs seconds.
+  itself, its basename (`'../SKILL.md'`) or its parent's name. The suite lists are read too: `listSuites` (`test/suites.ts`, the list `run-all.ts`
+  runs), and the `*.test.mjs` glob in `package.json`'s `test` script. It is a heuristic, generous on purpose: a suite picked wrongly costs seconds.
 - **Every doubt runs the full suite**: a push to `main`, a PR merge commit that is not two-parented, a failed fetch, an empty diff, and any path that is
   not a doc. `scripts/**`, `test/**` and `.github/**` are full even when they are markdown, because they change how the suites run.
 - **The push run on `main` is the backstop.** A suite the scan misses — one that reaches a doc through a helper or a computed path — passes the PR and fails
