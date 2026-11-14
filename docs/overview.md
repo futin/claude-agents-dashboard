@@ -451,7 +451,7 @@ plugin/           the installable Claude Code plugin (`/plugin install`, README 
                   (never `bin/`: Claude Code puts that on every session's PATH)
   skills/git-sync/  repo chores across machines; engine tools/git-sync.mjs, own `node --test`
                   suite run by `pnpm test:skills` (~4 min, 2026-10-01)
-  skills/kaizen/  session post-mortem; analyzer kaizen.mjs, own `node --test` suite run
+  skills/kaizen/  session post-mortem and last-N-runs-of-a-skill review; analyzer kaizen.mjs, own `node --test` suite run
                   inside `pnpm test`; its log line grammar is a contract with Analytics
                   (docs/subsystems/analytics.md)
 ```
