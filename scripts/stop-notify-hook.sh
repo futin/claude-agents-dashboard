@@ -46,7 +46,7 @@ command -v jq > /dev/null 2>&1 || exit 0
 [ -n "$CLAUDE_DASHBOARD_ROUTINE$CLAUDE_DASHBOARD_SCHEDULE" ] && exit 0
 
 DASH="${CLAUDE_DASHBOARD_URL:-http://127.0.0.1:4173}"
-TOKEN_FILE="$HOME/.claude/hooks/dashboard-token"
+TOKEN_FILE="${CLAUDE_CONFIG_DIR:-$HOME/.claude}/hooks/dashboard-token"
 
 SHA=$(printf '%s' "$INPUT" | jq -r '.stop_hook_active // false')
 
@@ -112,10 +112,16 @@ case "$TTY_NAME" in '??'|'?') HEADLESS=true ;; esac
 # new headless front-end still fails closed.
 case "$CLAUDE_CODE_ENTRYPOINT" in claude-desktop) HEADLESS=false ;; esac
 
-AUTH=()
-if [ -f "$TOKEN_FILE" ]; then
-  AUTH=(-H "Authorization: Bearer $(tr -d '\n' < "$TOKEN_FILE")")
-fi
+# curl, plus the dashboard token when there is one. The header goes in through a file descriptor (`-H @/dev/fd/N`), never argv, which any local `ps` can
+# read for the whole hold. The substitution is expanded inside the curl command itself so its fd is still open when curl reads it, and `printf` is a
+# builtin, so the token is no process's argv at all. No token file → no Authorization header, as before.
+dash_curl() {
+  if [ -f "$TOKEN_FILE" ]; then
+    curl -H @<(printf 'Authorization: Bearer %s\n' "$(tr -d '\n' < "$TOKEN_FILE")") "$@"
+  else
+    curl "$@"
+  fi
+}
 
 # The pre-feature behaviour: tell the dashboard a turn finished (it decides
 # whether that is worth a push) and end the turn. Mid-conversation stops
@@ -124,7 +130,7 @@ notify_fallback() {
   [ "$SHA" = "true" ] && exit 0
   BODY=$(jq -cn --arg sid "$SESSION_ID" --arg pm "$PERM_MODE" \
     '{sessionId: $sid, event: "stop", permissionMode: $pm}') || exit 0
-  curl -sf -m 1 -X POST -H 'Content-Type: application/json' "${AUTH[@]}" \
+  dash_curl -sf -m 1 -X POST -H 'Content-Type: application/json' \
     -d "$BODY" "$DASH/api/notify/event" > /dev/null 2>&1 || true
   exit 0
 }
@@ -205,8 +211,8 @@ BODY=$(jq -cn \
 # you touch the keyboard — the idle sweep); curl's cap is only a backstop. A
 # non-2xx (feature flipped off mid-flight, restart) falls back to the plain
 # notify so the "task finished" push never regresses.
-RESP=$(curl -sf -m "$((TIMEOUT_S + 15))" -X POST \
-  -H 'Content-Type: application/json' "${AUTH[@]}" \
+RESP=$(dash_curl -sf -m "$((TIMEOUT_S + 15))" -X POST \
+  -H 'Content-Type: application/json' \
   -d "$BODY" "$DASH/api/messages/wait" 2>/dev/null) || notify_fallback
 
 [ "$(printf '%s' "$RESP" | jq -r '.status // empty')" = "answered" ] || exit 0

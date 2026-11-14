@@ -19,7 +19,8 @@ pnpm dev:docker
 
 Inside a container every client — the desk browser, the host's `tailscale serve` and the hooks alike — arrives from the bridge gateway, which the write gate
 classifies as LAN, so a container run is read-only without a token ([remote-access](../subsystems/remote-access.md#who-may-write)). Set `ANSWER_TOKEN` in the
-host `.env` (both compose files forward it), enter it in the browser under Settings › Local › Connection, and put it in `~/.claude/hooks/dashboard-token`.
+host `.env` (both compose files forward it), enter it in the browser under Settings › Local › Connection, and put it in `~/.claude/hooks/dashboard-token`
+(`$CLAUDE_CONFIG_DIR/hooks/` when that variable is set).
 
 ## What the helper scripts bridge
 

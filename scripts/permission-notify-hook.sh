@@ -52,7 +52,7 @@ INPUT=$(cat)
 
 # The API port, not Vite's: in dev the page is on :5174 but /api lives here.
 DASH="${CLAUDE_DASHBOARD_URL:-http://127.0.0.1:4173}"
-TOKEN_FILE="$HOME/.claude/hooks/dashboard-token"
+TOKEN_FILE="${CLAUDE_CONFIG_DIR:-$HOME/.claude}/hooks/dashboard-token"
 
 command -v jq > /dev/null 2>&1 || exit 0
 
@@ -97,14 +97,20 @@ PERM_MODE=$(printf '%s' "$INPUT" | jq -r '.permission_mode // empty' 2>/dev/null
 BODY=$(jq -cn --arg sid "$SESSION_ID" --arg m "$MSG" --arg pm "$PERM_MODE" \
   '{sessionId: $sid, message: $m, permissionMode: $pm}') || exit 0
 
-AUTH=()
-if [ -f "$TOKEN_FILE" ]; then
-  AUTH=(-H "Authorization: Bearer $(tr -d '\n' < "$TOKEN_FILE")")
-fi
+# curl, plus the dashboard token when there is one. The header goes in through a file descriptor (`-H @/dev/fd/N`), never argv, which any local `ps` can
+# read for the whole hold. The substitution is expanded inside the curl command itself so its fd is still open when curl reads it, and `printf` is a
+# builtin, so the token is no process's argv at all. No token file → no Authorization header, as before.
+dash_curl() {
+  if [ -f "$TOKEN_FILE" ]; then
+    curl -H @<(printf 'Authorization: Bearer %s\n' "$(tr -d '\n' < "$TOKEN_FILE")") "$@"
+  else
+    curl "$@"
+  fi
+}
 
 # Best-effort. Dashboard down, wrong port, bad token → the dialog behaves exactly
 # as it did before this hook existed. The 1s cap matters more here than on the
 # Notification path: PermissionRequest runs INLINE, before the prompt is drawn.
-curl -sf -m 1 -X POST -H 'Content-Type: application/json' "${AUTH[@]}" \
+dash_curl -sf -m 1 -X POST -H 'Content-Type: application/json' \
   -d "$BODY" "$DASH/api/permissions/notify" > /dev/null 2>&1 || true
 exit 0

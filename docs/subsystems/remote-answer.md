@@ -231,8 +231,10 @@ verbatim. The write gate covers **both** POSTs: this machine always passes, a ta
 passes while tailnet trust is on, and anyone else needs `Authorization: Bearer <ANSWER_TOKEN>`
 (read-only when no token is set — see [remote-access](remote-access.md)); the `GET question` route stays open
 since it reveals no more than the transcript already does. The hook reads the token from
-`~/.claude/hooks/dashboard-token` (user-created — a server-generated file would fight the
-read-only Docker mount; `chmod 600`); it sends the Bearer header only when that file exists (`test/hooks/hooks-token.test.ts`); the browser persists it as `dashboard.answerToken`
+`~/.claude/hooks/dashboard-token` — `$CLAUDE_CONFIG_DIR/hooks/dashboard-token` when that variable is set, the same path the installer writes, with no
+fallback to the default (user-created — a server-generated file would fight the
+read-only Docker mount; `chmod 600`); it sends the Bearer header only when that file exists, and hands it to curl through a file descriptor
+(`-H @/dev/fd/N`), never on curl's argv where any local `ps` could read it for the whole hold (`test/hooks/hooks-token.test.ts`); the browser persists it as `dashboard.answerToken`
 and asks for it when a 403 says a token would help. Every client caller reads it through `useAnswerToken`, one module-level store in `client/src/lib/answerToken.ts` with a `storage`
 listener, and builds the header with that file's `authHeaders` — so a token entered in one panel reaches every hook mounted beside it, where twelve
 private `usePersistedState` copies once each needed a remount to see it (#200). A refused write logs one stderr line — `rejected write: <METHOD>

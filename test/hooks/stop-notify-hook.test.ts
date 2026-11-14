@@ -56,7 +56,7 @@ async function runHook(
   const env: NodeJS.ProcessEnv = { ...process.env, CLAUDECODE: '1', CLAUDE_DASHBOARD_URL: url, CLAUDE_DASHBOARD_IDLE_SECS: '0', HOME: home };
   // Every marker the hook reads is cleared, so a suite run from inside a routine or a desktop session sees the case's env, not its own.
   for (const k of ['BM_ORCH_RUN', 'CLAUDE_DASHBOARD_ONESHOT', 'CLAUDE_DASHBOARD_ANSWER_TIMEOUT', 'CLAUDE_DASHBOARD_REFRESH', 'CLAUDE_DASHBOARD_ROUTINE',
-    'CLAUDE_DASHBOARD_SCHEDULE', 'CLAUDE_CODE_ENTRYPOINT']) delete env[k];
+    'CLAUDE_DASHBOARD_SCHEDULE', 'CLAUDE_CODE_ENTRYPOINT', 'CLAUDE_CONFIG_DIR']) delete env[k];
   if (oneShot !== undefined) env.CLAUDE_DASHBOARD_ONESHOT = oneShot;
   Object.assign(env, extra);
   const child = spawn('bash', [HOOK], { env, stdio: ['pipe', 'pipe', 'ignore'] });

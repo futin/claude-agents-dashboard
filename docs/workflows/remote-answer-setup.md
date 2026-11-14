@@ -88,7 +88,7 @@ without waiting for a real question.
   the wait window; the CLI kills the hook first (see the warning in step 3).
 - **403 from the POSTs** — the caller is not trusted (a LAN device, a container, or a
   tailnet device with tailnet trust off) and its token is missing or wrong in
-  `~/.claude/hooks/dashboard-token` or the browser prompt; a body of `read-only from this
+  `~/.claude/hooks/dashboard-token` (`$CLAUDE_CONFIG_DIR/hooks/` when that is set) or the browser prompt; a body of `read-only from this
   network` means no token is set at all (see [remote-access](../subsystems/remote-access.md)).
   The hook swallows the 403, but the server no longer does: it prints `[dashboard] rejected
   write: POST /api/questions/wait from lan (bad or missing token)` on its own stderr — method, path and peer class only,

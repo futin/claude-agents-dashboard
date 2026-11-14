@@ -142,7 +142,7 @@ case " $MODES " in
       #
       # `// false` matters: an older server has no tokenRequired field, and warning on
       # a server that never said it needs a token would be the same mistake inverted.
-      TOKEN_FILE="$HOME/.claude/hooks/dashboard-token"
+      TOKEN_FILE="${CLAUDE_CONFIG_DIR:-$HOME/.claude}/hooks/dashboard-token"
       if [ "$(printf '%s' "$HEALTH" | jq -r '.tokenRequired // false' 2>/dev/null)" = "true" ] && [ ! -f "$TOKEN_FILE" ]; then
         STATE=NOTARMED
       fi

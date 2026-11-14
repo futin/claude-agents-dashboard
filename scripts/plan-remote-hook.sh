@@ -38,7 +38,7 @@ INPUT=$(cat)
 [ -n "$CLAUDE_DASHBOARD_ROUTINE$CLAUDE_DASHBOARD_SCHEDULE" ] && exit 0
 
 DASH="${CLAUDE_DASHBOARD_URL:-http://127.0.0.1:4173}"
-TOKEN_FILE="$HOME/.claude/hooks/dashboard-token"
+TOKEN_FILE="${CLAUDE_CONFIG_DIR:-$HOME/.claude}/hooks/dashboard-token"
 
 command -v jq > /dev/null 2>&1 || exit 0
 
@@ -116,16 +116,22 @@ BODY=$(jq -cn \
   --argjson t "$((TIMEOUT_S * 1000))" \
   '{sessionId: $sid, toolInput: $ti, timeoutMs: $t, permissionMode: $pm}') || exit 0
 
-AUTH=()
-if [ -f "$TOKEN_FILE" ]; then
-  AUTH=(-H "Authorization: Bearer $(tr -d '\n' < "$TOKEN_FILE")")
-fi
+# curl, plus the dashboard token when there is one. The header goes in through a file descriptor (`-H @/dev/fd/N`), never argv, which any local `ps` can
+# read for the whole hold. The substitution is expanded inside the curl command itself so its fd is still open when curl reads it, and `printf` is a
+# builtin, so the token is no process's argv at all. No token file → no Authorization header, as before.
+dash_curl() {
+  if [ -f "$TOKEN_FILE" ]; then
+    curl -H @<(printf 'Authorization: Bearer %s\n' "$(tr -d '\n' < "$TOKEN_FILE")") "$@"
+  else
+    curl "$@"
+  fi
+}
 
 # 3. Register and wait. The server resolves this itself at the deadline, so
 #    curl's own cap is only a backstop for a hung server. A non-2xx, a reset
 #    (server restarted), or a timeout all mean: use the plan card.
-RESP=$(curl -sf -m "$((TIMEOUT_S + 15))" -X POST \
-  -H 'Content-Type: application/json' "${AUTH[@]}" \
+RESP=$(dash_curl -sf -m "$((TIMEOUT_S + 15))" -X POST \
+  -H 'Content-Type: application/json' \
   -d "$BODY" "$DASH/api/plans/wait" 2>/dev/null) || exit 0
 
 [ "$(printf '%s' "$RESP" | jq -r '.status // empty')" = "rejected" ] || exit 0

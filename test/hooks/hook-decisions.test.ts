@@ -52,7 +52,7 @@ async function runHook(
 ): Promise<{ code: number | null; stdout: string }> {
   const env: NodeJS.ProcessEnv = { ...process.env, CLAUDECODE: '1', CLAUDE_DASHBOARD_URL: url, CLAUDE_DASHBOARD_IDLE_SECS: '0', HOME: home };
   for (const k of ['BM_ORCH_RUN', 'CLAUDE_DASHBOARD_ONESHOT', 'CLAUDE_DASHBOARD_REFRESH', 'CLAUDE_DASHBOARD_ANSWER_TIMEOUT', 'CLAUDE_DASHBOARD_ROUTINE',
-    'CLAUDE_DASHBOARD_SCHEDULE', 'CLAUDE_DASHBOARD_HOOK_LOG']) delete env[k];
+    'CLAUDE_DASHBOARD_SCHEDULE', 'CLAUDE_DASHBOARD_HOOK_LOG', 'CLAUDE_CONFIG_DIR']) delete env[k];
   Object.assign(env, extra);
   if (binDir) env.PATH = `${binDir}:${env.PATH ?? ''}`;
   const child = spawn('bash', [path.join(REPO, 'scripts', script)], { env, stdio: ['pipe', 'pipe', 'ignore'] });

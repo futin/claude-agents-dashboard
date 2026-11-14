@@ -49,7 +49,7 @@ async function rig(): Promise<Rig> {
   const url = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
   r.hook = async payload => {
     const env: NodeJS.ProcessEnv = { ...process.env, CLAUDECODE: '1', CLAUDE_DASHBOARD_URL: url, HOME: home };
-    for (const k of ['CLAUDE_DASHBOARD_ROUTINE', 'CLAUDE_DASHBOARD_SCHEDULE', 'CLAUDE_DASHBOARD_DECISION_MODES']) delete env[k];
+    for (const k of ['CLAUDE_DASHBOARD_ROUTINE', 'CLAUDE_DASHBOARD_SCHEDULE', 'CLAUDE_DASHBOARD_DECISION_MODES', 'CLAUDE_CONFIG_DIR']) delete env[k];
     const child = spawn('bash', [path.join(REPO, 'scripts', 'remote-decision-hook.sh')], { env, stdio: ['pipe', 'pipe', 'ignore'] });
     let stdout = '';
     child.stdout.on('data', c => { stdout += c; });

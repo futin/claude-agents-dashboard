@@ -308,7 +308,8 @@ what is registered.
 - **Docker runs need `ANSWER_TOKEN` to write** — Tailscale runs on the host and forwards to the
   published ports, and inside the container every client, the desk browser and the hooks
   included, arrives from the bridge gateway and classifies `lan`. Set the token in the host
-  `.env` (both compose files forward it), in the browser, and in `~/.claude/hooks/dashboard-token`.
+  `.env` (both compose files forward it), in the browser, and in `~/.claude/hooks/dashboard-token` (`$CLAUDE_CONFIG_DIR/hooks/` when that variable
+  is set — the hooks and the installer both follow it). The hooks pass it to curl through a file descriptor (`-H @/dev/fd/N`), never on argv.
 
 <!-- docs-sync:
   sources:
