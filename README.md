@@ -126,9 +126,10 @@ Answers, plan verdicts, messages and dictation are session write paths. All of t
   - Off by default (empty `CLAUDE_BIN`). How much a launch can do unattended is bounded by the `SPAWN_MAX_PERMISSION` ceiling on the host, never by the
     browser. `SPAWN_OWN_ENTRYPOINT=true` makes spawns and routine runs stamp the dashboard's own entrypoint label instead of `sdk-cli`
     ([why, and why it is unsupported](docs/subsystems/spawn.md#own-entrypoint-label)).
-- **[Routines](docs/subsystems/routines.md)** — scheduled jobs as markdown files in a git-synced folder (default `~/claude-global/routines/`), installed as
-  launchd jobs (macOS) or crontab lines (WSL), with a Jobs ledger, an editor drawer (a Form view or the raw file) and the Runs log; a failed run sends a
-  push. No scheduler runs in the server: the OS fires the plugin's wrapper, so a job still runs while the dashboard is down.
+- **[Routines](docs/subsystems/routines.md)** — scheduled jobs as markdown files kept per machine in `~/.claude/routines/jobs` (`ROUTINES_DIR` overrides
+  it; an older git-synced `~/claude-global/routines/` is [copied in once](docs/subsystems/routines.md#per-machine-since-2026-11-09) and then no longer
+  read), installed as launchd jobs (macOS) or crontab lines (WSL), with a Jobs ledger, an editor drawer (a Form view or the raw file) and the Runs log; a
+  failed run sends a push. No scheduler runs in the server: the OS fires the plugin's wrapper, so a job still runs while the dashboard is down.
 
 ### Your repos
 
