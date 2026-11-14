@@ -294,6 +294,20 @@ export function run(): number {
     assert.ok(a.notes.some(n => /unknown token/i.test(n)));
   })) p++; else f++;
 
+  if (test('killed background subagent → counted from its transcript, not unknown (#420)', () => {
+    const file = fixture([
+      taskRec('tK', 'Explore', '2026-07-01T10:00:00Z'),
+      resultRec('tK', '2026-07-01T10:00:01Z', { content: 'Async agent launched successfully.\nagentId: aKill (internal)' }),
+      humanRec('<task-notification>\n<task-id>aKill</task-id>\n<status>killed</status>\n</task-notification>', '2026-07-01T10:02:00Z')
+    ]);
+    subagentFile(file, 'aKill', [
+      usageRec({ input_tokens: 3, output_tokens: 7, cache_creation_input_tokens: 0, cache_read_input_tokens: 0 }, '2026-07-01T10:00:30Z', { id: 'msg_k' })
+    ]);
+    const a = analyzeSession(file)!;
+    assert.strictEqual(a.subagentTotals.unknownTokenCount, 0);
+    assert.strictEqual(a.subagentTotals.tokens, 10);
+  })) p++; else f++;
+
   if (test('multi-model models[]', () => {
     const file = fixture([
       usageRec({ input_tokens: 100 }, '2026-07-01T10:00:00Z', { model: 'claude-opus-4-8' }),
