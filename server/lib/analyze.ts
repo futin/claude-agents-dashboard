@@ -45,6 +45,7 @@ import fs from 'node:fs';
 import { readAgents } from './agents.js';
 import { addTotals, emptyTotals, readSubagentUsage } from './subagent-usage.js';
 import { isConversationRecord } from './transcript.js';
+import { assistantUsage } from './usage-line.js';
 import type {
   AgentJob, ErrorSignals, SessionAnalysis, SubagentTotals, ToolStat
 } from '../../shared/types.js';
@@ -181,22 +182,21 @@ export function analyzeSession(filePath: string, id?: string): SessionAnalysis |
       countedTurns.add(turnKey);
       const turn = getTurn(turnKey);
 
-      const u = msg.usage;
-      if (u && typeof u === 'object') {
-        const inp = num(u.input_tokens), out = num(u.output_tokens);
-        const cc = num(u.cache_creation_input_tokens), cr = num(u.cache_read_input_tokens);
+      const line = assistantUsage(rec);
+      if (line) {
+        const { in: inp, out, cc, cr } = line.tok;
         if (out > 0 && turn.out === 0) turn.out = out;
         const combined = inp + out + cc + cr;
         // Only the turn's first record contributes — the rest are copies of it.
         if (combined > 0 && firstOfTurn) {
           input += inp; output += out; cacheCreation += cc; cacheRead += cr;
-          if (typeof msg.model === 'string' && msg.model) models.add(msg.model);
+          if (line.model) models.add(line.model);
           const idx = turnCount++;
           sumCombined += combined;
           if (combined < maxCombined * COMPACTION_DROP_RATIO) compacted = true;
           if (combined > maxCombined) { maxCombined = combined; maxTurnIndex = idx; }
         }
-        const stu = u.server_tool_use;
+        const stu = line.usage.server_tool_use;
         if (stu && typeof stu === 'object' && firstOfTurn) {
           serverWebSearch += num(stu.web_search_requests);
           serverWebFetch += num(stu.web_fetch_requests);

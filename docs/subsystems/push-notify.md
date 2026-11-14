@@ -373,7 +373,7 @@ describes, including the number of `ioreg` spawns per push.
 and a double-buzz on every alert is a worse default than the rare missed one: an alert raised
 while you are at the desk does not reach the phone if you walk away ten seconds later.
 
-The rule is `atDesk(idleSecs, thresholdSecs)` in `notify.ts` — one predicate, three callers:
+The rule is `atDesk(idleSecs, thresholdSecs)` in `idle.ts` — one predicate, three callers:
 `backAtDesk()` releasing held waits, the `requireAfk` clause suppressing a push, and this
 routing. Three cases fall back to the **phone**, all meaning "cannot tell":
 

@@ -5,9 +5,8 @@
  * creates are usually written far below `readTranscript`'s 256 KB tail. So the whole file is folded once, the byte offset reached is remembered, and every
  * later poll reads only what was appended. Transcripts are append-only; a file that shrank was rotated or truncated and starts over.
  *
- * Bytes are split on `0x0A` before decoding (as in `chat.ts`), since a multibyte sequence can straddle any chunk boundary. A chunk's tail after its last
- * newline is carried into the next chunk rather than dropped, because single records run past a whole chunk (1.36 MB seen, 2026-10-07); only the file's
- * own unterminated last line is deferred to the next poll.
+ * The read loop is `jsonl-tail.ts`'s `foldLines`: bytes split on `0x0A` before decoding, chunked, a line longer than a chunk carried whole, and only the
+ * file's own unterminated last line deferred to the next poll.
  *
  * The same fold also collects plan signals (`plan-progress.ts`): which superpowers plan the session executes and which of its tasks are running or done.
  * Current models never call TaskCreate, so when a plan yields rows it is the list, and the TaskCreate list is the fallback.
@@ -19,10 +18,11 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 import type { SessionTask, TaskStatus } from '../../shared/types.js';
+import { FOLD_CHUNK_BYTES, foldLines } from './jsonl-tail.js';
 import { composePlanTasks, planSignals, readPlanHeadings, resetPlanCache, resolvePlanFile, type PlanSignal } from './plan-progress.js';
 
-/** Most bytes read per `readSync` (MiB, as `record-cache.ts`). */
-export const CHUNK_BYTES = 1024 * 1024;
+/** Most bytes per read (MiB, as `record-cache.ts`): `jsonl-tail.ts`'s chunk, named here for the tests that pin a chunk boundary. */
+export const CHUNK_BYTES = FOLD_CHUNK_BYTES;
 const MAX_ENTRIES = 64;
 
 const CREATE = 'TaskCreate';
@@ -160,26 +160,9 @@ function foldLine(entry: Entry, line: Buffer): void {
   }
 }
 
-/** Fold `[entry.offset, size)`; `entry.offset` advances chunk by chunk, so a read error leaves it at the last fully folded line. */
+/** Fold `[entry.offset, size)` (`foldLines`); `entry.offset` advances line by line, so a read error leaves it at the last fully folded line. */
 function foldFrom(fd: number, entry: Entry, size: number): void {
-  let pos = entry.offset;
-  let carry: Buffer | null = null;
-  while (pos < size) {
-    const chunk = Buffer.allocUnsafe(Math.min(CHUNK_BYTES, size - pos));
-    const n = fs.readSync(fd, chunk, 0, chunk.length, pos);
-    if (n <= 0) break;
-    pos += n;
-    bytesRead += n;
-
-    const buf: Buffer = carry ? Buffer.concat([carry, chunk.subarray(0, n)]) : chunk.subarray(0, n);
-    let start = 0;
-    for (let nl = buf.indexOf(0x0a); nl !== -1; nl = buf.indexOf(0x0a, start)) {
-      foldLine(entry, buf.subarray(start, nl));
-      start = nl + 1;
-    }
-    entry.offset += start;
-    carry = start < buf.length ? buf.subarray(start) : null;
-  }
+  foldLines(fd, entry, size, line => foldLine(entry, line), { chunkBytes: CHUNK_BYTES, onRead: n => { bytesRead += n; } });
 }
 
 /** The plan file is read here, not in the fold, so an amended plan shows on the next poll even when the transcript did not grow. */

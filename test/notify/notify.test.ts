@@ -5,9 +5,10 @@ import os from 'node:os';
 import path from 'node:path';
 
 import {
-  atDesk, AUTO_MODES, maybeSend, ntfyHeaders, resetNotify, resolveLabel, routineClickUrl, sendRoutineEvent, sendTest, sendTickCappedEvent, sendUsageEvent,
+  AUTO_MODES, maybeSend, ntfyHeaders, resetNotify, resolveLabel, routineClickUrl, sendRoutineEvent, sendTest, sendTickCappedEvent, sendUsageEvent,
   setIdleSource, setLabelResolver, setRequest, setSender, shouldNotify, tickCanSend, tickCappedClickUrl, usageCanSend, usageClickUrl
 } from '../../server/lib/notify.js';
+import { atDesk } from '../../server/lib/idle.js';
 import { DEFAULT_NOTIFY, NOTIFY_EVENTS, resetSettings, setSettings } from '../../server/lib/settings.js';
 import { resetState } from '../../server/lib/remoteState.js';
 import type { NotifyPayload, PredicateContext } from '../../server/lib/notify.js';

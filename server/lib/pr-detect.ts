@@ -8,7 +8,8 @@
  * Never the top-level `pr-link` record: Claude Code writes it for any PR URL seen in output, and on this machine (2026-10-24) it marked 11 PRs that
  * sessions did not create. Subagent files are not read — only the parent transcript the caller hands in.
  *
- * Same incremental fold as `tasks.ts`: the file is read once, the offset reached is remembered, and later polls read only what was appended.
+ * Same incremental fold as `tasks.ts` (`jsonl-tail.ts`'s `foldLines`): the file is read once, the offset reached is remembered, and later polls read
+ * only what was appended.
  * Unlike `readSessionTasks`, an I/O error other than a missing file throws, because the one caller is the `/pr` endpoint and it answers 500.
  *
  * Design: docs/superpowers/specs/2026-10-24-chat-pr-card-design.md §How a PR is found.
@@ -16,7 +17,7 @@
 
 import fs from 'node:fs';
 
-import { CHUNK_BYTES } from './tasks.js';
+import { foldLines } from './jsonl-tail.js';
 
 const MAX_ENTRIES = 64;
 const CREATE_CMD = 'gh pr create';
@@ -118,25 +119,9 @@ function foldLine(entry: Entry, line: Buffer): void {
   }
 }
 
-/** Fold `[entry.offset, size)`; `entry.offset` advances past whole lines only, so an unterminated last line waits for the next call. */
+/** Fold `[entry.offset, size)` (`foldLines`); `entry.offset` advances past whole lines only, so an unterminated last line waits for the next call. */
 function foldFrom(fd: number, entry: Entry, size: number): void {
-  let pos = entry.offset;
-  let carry: Buffer | null = null;
-  while (pos < size) {
-    const chunk = Buffer.allocUnsafe(Math.min(CHUNK_BYTES, size - pos));
-    const n = fs.readSync(fd, chunk, 0, chunk.length, pos);
-    if (n <= 0) break;
-    pos += n;
-
-    const buf: Buffer = carry ? Buffer.concat([carry, chunk.subarray(0, n)]) : chunk.subarray(0, n);
-    let start = 0;
-    for (let nl = buf.indexOf(0x0a); nl !== -1; nl = buf.indexOf(0x0a, start)) {
-      foldLine(entry, buf.subarray(start, nl));
-      start = nl + 1;
-    }
-    entry.offset += start;
-    carry = start < buf.length ? buf.subarray(start) : null;
-  }
+  foldLines(fd, entry, size, line => foldLine(entry, line));
 }
 
 /** The newest PR the session created; null when none or the file is gone. Throws on any other I/O error, keeping what was folded. */

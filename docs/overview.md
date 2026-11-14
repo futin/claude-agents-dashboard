@@ -273,7 +273,10 @@ server/
                   the one reader; findings: docs/superpowers/decisions/2026-11-12-context-mode-evaluation.md)
   lib/subagent-usage.ts  sums one session's subagent transcripts → per-subagent token classes
   lib/session-spend.ts  GET /api/sessions/:id/spend: main + claimed subagent transcripts, followed incrementally
-  lib/jsonl-tail.ts  byte-offset JSONL follower shared by agents-cache.ts and session-spend.ts
+  lib/usage-line.ts  the one parse of an assistant usage line (id, model, ts, four counts); usage-ledger, subagent-usage, session-spend,
+                  analyze and scripts/lib/transcript-audit.ts each keep their own gates on it
+  lib/jsonl-tail.ts  byte-offset JSONL follower: foldLines, the chunked read loop of all seven followers (tasks.ts, pr-detect.ts,
+                  usage-ledger.ts, routine-log.ts, routine-run.ts directly; agents-cache.ts and session-spend.ts through followJsonl)
   lib/sessionAnalyticsLog.ts  parses ~/.claude/session-analytics-log.md
   lib/analytics.ts  reader for the Analytics tab
   lib/pending.ts  in-memory pending-question store (the first of the four session write paths)
@@ -284,13 +287,14 @@ server/
                   cancel, and the one 5s idle reaper across them (one `backAtDesk()` per tick)
   lib/remote-message-prose.ts  the reply prose, wrap + unwrap in one import-free leaf
   lib/idle.ts     the shared `backAtDesk()` policy behind the stores' 5s idle release —
-                  threshold, ioreg reading, test seam, fail directions (the rule
-                  itself is `atDesk` in lib/notify.ts)
+                  threshold, the ioreg reading (`readIdleSecs`), the `atDesk` rule,
+                  test seam, fail directions; a leaf lib/notify.ts imports, never
+                  the reverse
   lib/remoteState.ts  remote-answer switch (env gate + persisted toggle)
   lib/settings.ts persisted idle threshold, answer window, push policy + the
                   usage-recording switch
-  lib/notify.ts   server-sent ntfy pushes — the layered policy, the `atDesk`
-                  predicate, phone-vs-desk topic routing, and one of the backend's
+  lib/notify.ts   server-sent ntfy pushes — the layered policy (on idle.ts's `atDesk`
+                  predicate), phone-vs-desk topic routing, and one of the backend's
                   two outbound calls (the other is `lib/usage.ts`)
   lib/origin.ts   connection classifier → local | lan | tailnet | unknown; `resolvePeer` is
                   both the badge and the write gate's verdict (`refuseWrite` in api.ts)
@@ -397,8 +401,9 @@ vite.config.ts    dev proxy /api → backend; reuses the server config loader;
 test/             node-assert tests over backend + client domain logic, one level of feature folders:
                   api, sessions, chat, spawn, usage, git, codegraph, routines, notify, hooks, analytics,
                   settings, ui, infra, plus guards/ for the source guards that read across the repo.
-                  Helpers (api-harness.ts, git-fixture.ts, tmp-root.ts) and the runners stay at the root;
-                  run-all.ts imports every suite by hand, so a new one needs its line there
+                  Helpers (api-harness.ts, git-fixture.ts, tmp-root.ts, suites.ts) and the runners stay at the
+                  root; run-all.ts runs every *.test.ts suites.ts finds outside visual/, so a new suite needs
+                  no line anywhere
   visual/         the Playwright suite behind `pnpm test:visual` (config in playwright.config.ts at the
                   root): mocked API, screenshots, overflow and contrast (subsystems/visual-tests.md)
 .github/workflows/  ci.yml (the PR gate) and release.yml (tags and publishes each release) — workflows/ci.md

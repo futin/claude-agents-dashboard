@@ -9,6 +9,7 @@ import path from 'node:path';
 
 import type { RoutineRunConflict } from '../../shared/types.js';
 import type { Config } from './config.js';
+import { foldLines } from './jsonl-tail.js';
 import { machineName, routineDirs, routineEnv } from './routine-config.js';
 import { installedWrapper } from './routine-reconcile.js';
 import { bootId, createProbe, readJobs, wrapperAlive } from './routine-store.js';
@@ -51,35 +52,33 @@ function liveLockPid(config: Config, name: string, probe: Probe): number | null 
  * wrapper's above all, answers nothing, and neither does anything at all without a pid. Created before the spawn so its offset predates the child.
  */
 function createStartWatcher(file: string, job: string, since: number): (pid: number | undefined) => ReadBack | null {
-  let offset = 0;
+  // `cursor.offset` is the last line boundary read; `carry` the bytes after it, already read. Split on bytes (`foldLines`), so a multibyte character torn
+  // across two reads is decoded whole.
+  const cursor = { offset: 0 };
+  let carry: Buffer = Buffer.alloc(0);
   let ino: number | null = null;
-  let pending = '';
-  try { const st = fs.statSync(file); offset = st.size; ino = st.ino; } catch { /* no log yet */ }
+  try { const st = fs.statSync(file); cursor.offset = st.size; ino = st.ino; } catch { /* no log yet */ }
   return pid => {
     if (pid === undefined) return null;
     let fd: number;
     try { fd = fs.openSync(file, 'r'); } catch { return null; }
+    let answer: ReadBack | null = null;
     try {
       const st = fs.fstatSync(fd);
       // Rotation or truncation: the new file is all ours.
-      if ((ino !== null && st.ino !== ino) || st.size < offset) { offset = 0; pending = ''; }
+      if ((ino !== null && st.ino !== ino) || st.size < cursor.offset + carry.length) { cursor.offset = 0; carry = Buffer.alloc(0); }
       ino = st.ino;
-      if (st.size === offset) return null;
-      const buf = Buffer.alloc(st.size - offset);
-      const n = fs.readSync(fd, buf, 0, buf.length, offset);
-      offset += n;
-      pending += buf.subarray(0, n).toString('utf8');
+      if (st.size === cursor.offset + carry.length) return null;
+      carry = foldLines(fd, cursor, st.size, buf => {
+        if (answer) return;
+        let rec: Record<string, unknown>;
+        try { rec = JSON.parse(buf.toString('utf8')); } catch { return; }
+        if (!rec || rec.job !== job || rec.pid !== pid || rec.trigger !== 'manual' || !(Date.parse(String(rec.at)) >= since)) return;
+        if (rec.kind === 'start' && typeof rec.run === 'string') answer = { status: 202, run: rec.run };
+        else if (rec.kind === 'refused' && rec.why === 'running') answer = { status: 409, error: 'already-running' };
+      }, { carry });
     } finally { fs.closeSync(fd); }
-    const lines = pending.split('\n');
-    pending = lines.pop() ?? '';
-    for (const line of lines) {
-      let rec: Record<string, unknown>;
-      try { rec = JSON.parse(line); } catch { continue; }
-      if (rec.job !== job || rec.pid !== pid || rec.trigger !== 'manual' || !(Date.parse(String(rec.at)) >= since)) continue;
-      if (rec.kind === 'start' && typeof rec.run === 'string') return { status: 202, run: rec.run };
-      if (rec.kind === 'refused' && rec.why === 'running') return { status: 409, error: 'already-running' };
-    }
-    return null;
+    return answer;
   };
 }
 

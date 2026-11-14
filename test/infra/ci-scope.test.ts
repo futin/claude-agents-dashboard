@@ -6,6 +6,8 @@
  */
 import assert from 'node:assert';
 import { spawnSync } from 'node:child_process';
+import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -108,12 +110,27 @@ export function run(): number {
     assert.strictEqual(prFiles(() => { throw new Error('fetch failed'); }, 'pull_request').files, null);
   }));
 
-  r(test('the suite lists come from the real tree: run-all.ts imports and the test script glob', () => {
+  r(test('the suite lists come from the real tree: the discovered *.test.ts files and the test script glob', () => {
     const tsx = tsxSuitePaths(ROOT);
     assert.ok(tsx.includes('test/guards/docs-links.test.ts'));
     assert.ok(tsx.includes('test/infra/ci-scope.test.ts'));
     assert.ok(!tsx.includes('test/api-harness.ts') && !tsx.includes('test/run-all.ts'), 'helpers and the runner are not suites');
     assert.ok(nodeSuitePaths(ROOT).includes('plugin/skills/kaizen/test/skill.test.mjs'));
+  }));
+
+  r(test('a suite on disk is selectable without any line in run-all.ts naming it', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cad-ci-scope-'));
+    try {
+      fs.mkdirSync(path.join(dir, 'test', 'docs'), { recursive: true });
+      fs.writeFileSync(path.join(dir, 'test', 'run-all.ts'), "import './tmp-root.js';\n");
+      fs.writeFileSync(path.join(dir, 'test', 'docs', 'reader.test.ts'), "const doc = 'docs/subsystems/x.md';\n");
+      fs.writeFileSync(path.join(dir, 'package.json'), JSON.stringify({ scripts: { test: 'tsx test/run-all.ts' } }));
+      const suites = readSuites(dir);
+      assert.deepStrictEqual(suites.tsx.map(s => s.file), ['test/docs/reader.test.ts']);
+      assert.deepStrictEqual(selectSuites(['docs/subsystems/x.md'], suites.tsx), ['test/docs/reader.test.ts']);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
   }));
 
   r(test("this repo's doc guards are selected by the files they read", () => {

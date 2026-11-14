@@ -16,8 +16,45 @@
  * See `docs/subsystems/remote-answer.md`.
  */
 
-import { atDesk, readIdleSecs } from './notify.js';
+import { execFileSync } from 'node:child_process';
+
 import { getSettings } from './settings.js';
+
+/**
+ * Seconds since the last keyboard/mouse event, or null when unreadable.
+ *
+ * Same source `ask-remote-hook.sh` uses. Unreadable means non-macOS or a
+ * container, and the predicate treats that as "push anyway" — see
+ * `shouldNotify` in `notify.ts`.
+ */
+export function readIdleSecs(): number | null {
+  try {
+    const out = execFileSync('ioreg', ['-c', 'IOHIDSystem'], { encoding: 'utf8', timeout: 1000 });
+    const match = out.match(/"HIDIdleTime"\s*=\s*(\d+)/);
+    if (!match) return null;
+    return Math.floor(Number(match[1]) / 1_000_000_000);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Are they at the keyboard right now? Pure — the reading is the caller's to make.
+ *
+ * Three callers, one rule: `backAtDesk()` (`idle.ts`) releases held waits on it,
+ * `shouldNotify`'s `requireAfk` clause suppresses a push on its inverse, and
+ * `maybeSend` routes to the desk topic on it. It lived inline in the first two
+ * and the third would have been a third copy.
+ *
+ * `thresholdSecs === 0` is false, not "always at the desk": zero disables the
+ * idle gate everywhere else in the app, so it disables these too. A null reading
+ * is false for the same reason `backAtDesk` fails that way — never decide from a
+ * guess.
+ */
+export function atDesk(idleSecs: number | null, thresholdSecs: number): boolean {
+  if (thresholdSecs === 0) return false;
+  return idleSecs !== null && idleSecs < thresholdSecs;
+}
 
 let idleReader: (() => number | null) | null = null;
 

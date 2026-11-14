@@ -169,6 +169,22 @@ export async function run(): Promise<number> {
     } finally { fx.done(); }
   }));
 
+  check(await test('a record whose two writes split a multibyte character is read with that character whole', async () => {
+    const fx = fixture();
+    try {
+      fs.writeFileSync(path.join(fx.routines, 'git-sync.md'), JOB());
+      const log = path.join(fx.runs, 'mac.jsonl');
+      fs.writeFileSync(log, '');
+      const bytes = Buffer.from(startRec('run-é', 'git-sync', 'manual', new Date(Date.now() + 10_000)));
+      const cut = bytes.indexOf(Buffer.from('é')) + 1; // between é's two bytes
+      fakeSpawner(() => {
+        later(20, () => fs.appendFileSync(log, bytes.subarray(0, cut)));
+        later(120, () => fs.appendFileSync(log, bytes.subarray(cut)));
+      });
+      assert.deepStrictEqual(await runJob(fx.config, 'git-sync', undefined, NO_PROBE), { status: 202, run: 'run-é' });
+    } finally { fx.done(); }
+  }));
+
   check(await test('no start record within 2 s answers 202 with run null, and the wrapper was spawned', async () => {
     const fx = fixture();
     try {

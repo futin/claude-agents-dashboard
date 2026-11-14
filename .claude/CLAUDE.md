@@ -17,7 +17,7 @@ the typed JSON in `shared/types.ts`, plus four zero-dep modules both sides run: 
   `frontmatter.ts`, `gitUpstream.ts`, `cron.ts` and `routine-file.ts` are the only modules both sides run.
 - `test/` — node-assert tests over backend + client domain logic, tmpdir JSONL fixtures. One level of feature folders (`test/usage/`, `test/routines/`, …)
   plus `test/guards/` for the source guards that read across the repo; helpers and the runners stay at `test/`. A new suite goes in its feature
-  folder and needs its import line in `test/run-all.ts`, which lists every suite by hand.
+  folder, and being a `*.test.ts` there is all it takes: `test/run-all.ts` finds every suite on disk (`listSuites`, `test/suites.ts`).
 - `plugin/` — the installable Claude Code plugin (the repo root's `.claude-plugin/marketplace.json` points at it): the skills the dashboard depends on, plain
   JS, never imported by server or client at runtime; `plugin/lib/` holds the Routines wrapper and its generated `.mjs` copies of the shared modules.
   `test/guards/plugin-manifest.test.ts` pins what may live in it.
