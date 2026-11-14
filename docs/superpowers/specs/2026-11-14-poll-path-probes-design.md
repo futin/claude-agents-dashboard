@@ -77,8 +77,11 @@ blocked loop per unfinished live-pid run per 10 s, not per poll). A run that gai
 **A5 — `GET /api/routines` reads a coalesced, short-lived plan.** A new `planReconcileCached(config)`: concurrent callers share one in-flight `plan`, and a
 result younger than `PLAN_TTL_MS = 5 s` is served as is. `applyOnce` seeds the cache with its post-apply plan — or with the bare report its early return
 produces when `plan` answers one (`routine-reconcile.ts:432`) — and the reconcile watchers' trigger drops it at trigger time, before the debounce. A
-**generation counter** guards the race: every seed and drop bumps it, and an in-flight plan stores its result only if the generation is unchanged since it
-started (its own callers still get it). A rejected plan is never cached.
+**generation counter** guards the race: every seed and drop bumps it, and any plan — a shared GET plan or `applyOnce`'s post-apply plan alike — stores its
+result only if the generation is unchanged since that plan started (its own callers still get it). A drop also detaches the in-flight shared plan, so a GET
+arriving after a drop starts a fresh plan instead of joining a pre-drop one. A rejected plan is never cached. The TTL reads a module-local clock
+(`Date.now` by default, settable in tests); `setRoutineRunner`, `setReconcileHost` and a new `resetReconcileCache()` drop the cache and the in-flight plan, so
+API tests that swap fakes between cases never see a previous case's plan.
 `POST /api/routines/reconcile` (dry run and apply) keeps calling the uncached `planReconcile` — an explicit user action reads the OS fresh. Inside `plan`,
 the per-plist `launchctl print` calls run concurrently (`Promise.all`), keeping `installed` keyed and ordered as today.
 
@@ -93,8 +96,9 @@ costs one `stat`), which keeps `sync`'s "a tracked file vanished → full rebuil
 
 **A7 — The run fold is pruned and the built list is reused.** After each `sync`, folds and refusals whose `startedAt` is before the cutoff instant (A6) are
 dropped, with one exception: per job, the run `serveRoutines` would show as `last` — the newest run whose state is not `running`, of any state (`ok`,
-`failed`, `lost`, `refused`; `server/api.ts:1808`) — is kept whatever its age, so pruning never changes a job's `last` row. Unfinished runs before the
-cutoff are dropped like any other (they read `lost` by then). `read()`
+`failed`, `lost`, `refused`; `server/api.ts:1808`) — is kept whatever its age, so pruning never changes a job's `last` row. That includes an unfinished run
+that reads `lost`. Because `lost` is derived in `build` at read time (`routine-log.ts:204-213`), the prune runs inside `read()` after the runs are built and
+uses the states built in that same `read()`; every other run before the cutoff, unfinished or not, is dropped. `read()`
 keeps the built `RoutineRun` of every finished run (immutable once its `end` record is folded) and rebuilds only unfinished ones; the sorted list is rebuilt
 only when a fold was added, changed or pruned, or an unfinished run's state changed. `read()` still returns a fresh array each call, so no caller can mutate
 the cache.
