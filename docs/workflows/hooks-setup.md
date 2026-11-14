@@ -161,8 +161,8 @@ Three things the installer cannot do for you:
 1. **Set `ANSWER_TOKEN`** in `.env` (and in the token file) — only if a hook runs in a
    container or points at a non-loopback `CLAUDE_DASHBOARD_URL`, or a LAN client must write.
    See [remote-access](../subsystems/remote-access.md).
-2. **Turn remote answering on** in the dashboard. It is off by default, and every hook
-   checks it before doing anything ([remote-answer](../subsystems/remote-answer.md)).
+2. **Check remote answering is on** in the dashboard. It is on by default (`REMOTE_ANSWER` defaults to `true`); `REMOTE_ANSWER=false` in `.env`, or the
+   status-plate / Settings toggle, switches it off, and every hook checks it before doing anything ([remote-answer](../subsystems/remote-answer.md)).
 3. **Point the hooks at the right port** if you are not serving on `127.0.0.1:4173` —
    export `CLAUDE_DASHBOARD_URL`. A hook that cannot reach the dashboard exits 0 within its
    1s probe, so the failure mode is "nothing happens", which is hard to tell from "not
@@ -171,10 +171,14 @@ Three things the installer cannot do for you:
 ## Not macOS?
 
 The hooks install and run, but the **at-desk gate does not work**: it reads keyboard idle
-time via `ioreg`, which is macOS-only. Unreadable idle fails to "at the desk", so remote
-questions and plans still travel to your phone, while the turn-end reply window
-([remote-message](../subsystems/remote-message.md)) never opens. The installer prints this
-warning on any non-Darwin host rather than letting you discover it as silence.
+time via `ioreg`, which is macOS-only. Unreadable idle counts as "at the desk", so `ask-remote.sh` and `plan-remote.sh` exit 0 before the dashboard POST:
+questions and plans stay in the terminal and never reach your phone. `stop-notify.sh` falls back to a plain push for the same reason, so the turn-end reply
+window ([remote-message](../subsystems/remote-message.md)) never opens either. The way out is a threshold of `0`: set Settings › Away after to `0` (or export
+`CLAUDE_DASHBOARD_IDLE_SECS=0`) to skip the idle check, and every question and plan then waits for the dashboard — even while you are at the keyboard. It
+costs something: with the check skipped, every interactive turn end is also held in the reply window until you answer from the dashboard or the Answer window
+(600 s by default) runs out, and returning to the keyboard does not release it early. The gate itself is described in
+[remote-answer](../subsystems/remote-answer.md). The installer prints this warning on any non-Darwin host rather than letting
+you discover it as silence.
 
 <!-- docs-sync:
   sources:
