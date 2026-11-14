@@ -49,7 +49,7 @@ test('T14.3 the four hard rules appear verbatim', () => {
   const text = skill()
   for (const rule of [
     'Never work around a stop.',
-    'The only git command you run yourself is git commit -F, in phase 1.',
+    'The only git command you run yourself is git commit -F -, in phase 1, with the message on stdin.',
     'Without AskUserQuestion, plan with survey.unattended unchanged, run every phase, and ask the rest in prose after the report.',
     'Never kill a process by pattern.',
   ]) {
@@ -121,4 +121,12 @@ test('T14.9 every engine call goes through the plugin root', () => {
   assert.ok(!text.includes('~/.claude/skills/'), 'SKILL.md must not name the old ~/.claude/skills home')
   assert.ok(!/\$CLAUDE_PLUGIN_ROOT/.test(text), 'SKILL.md must use the braced ${CLAUDE_PLUGIN_ROOT}')
   assert.ok(!text.includes('CLAUDE_SKILL_DIR'), 'SKILL.md must not use CLAUDE_SKILL_DIR')
+})
+
+// #465: Claude Code guards `.git/`, where the state dir lives, so an unattended session's file write there is refused and the run ends without a
+// report. The procedure hands the commit message and the answers over stdin instead, and never asks the model to author a file at all.
+test('T14.10 SKILL.md never has the model write a file: the commit message and the answers go over stdin', () => {
+  const text = skill()
+  for (const name of ['answers.json', 'commit-msg.txt']) assert.ok(!text.includes(name), `SKILL.md still names ${name}`)
+  for (const call of ['commit -F -', 'plan --answers -', 'plan --unattended']) assert.ok(text.includes(call), `SKILL.md never names ${call}`)
 })

@@ -374,6 +374,65 @@ test('T8.13 unattended answers are empty when nothing is merged', (t) => {
   assert.deepEqual(buildPlan(s, s.unattended), [])
 })
 
+// #465: Claude Code guards `.git/`, so an unattended session cannot write answers.json into the state dir. Both input channels below need no file.
+test('T8.14 plan --answers - reads the answers from stdin, exactly as from a file', (t) => {
+  const w = world(t)
+  w.rules([]) // not about the trunk's ruleset: an unreadable one reads as PR-only and moves every proof to origin/main
+  mergedInWorktree(w, 'm1')
+  branch(w, 'stale', { daysAgo: 40 })
+  const s = surveyOf(w)
+  const answers = { merged: 'all', asked: ['stale'] }
+  const fromFile = planCli(w, answers)
+  assert.equal(fromFile.status, 0, fromFile.stdout + fromFile.stderr)
+  const fromStdin = w.cli(w.a, ['plan', '--answers', '-'], {}, { input: JSON.stringify(answers) })
+  assert.equal(fromStdin.status, 0, fromStdin.stdout + fromStdin.stderr)
+  assert.ok(fromStdin.json.actions.length > 0)
+  assert.deepEqual(fromStdin.json, fromFile.json)
+  assert.ok(byId(s, 'asked:0'))
+
+  // Not JSON on stdin is bad-answers naming stdin, never a file called `-` resolved against the cwd.
+  const garbled = w.cli(w.a, ['plan', '--answers', '-'], {}, { input: 'not json' })
+  assert.equal(garbled.status, 2, garbled.stdout + garbled.stderr)
+  assert.equal(garbled.json.stop, 'bad-answers')
+  assert.equal(garbled.json.detail.file, '-')
+})
+
+test('T8.15 plan --unattended plans survey.unattended with no answers given at all', (t) => {
+  const w = world(t)
+  w.rules([]) // not about the trunk's ruleset: an unreadable one reads as PR-only and moves every proof to origin/main
+  mergedInWorktree(w, 'm1')
+  mergedInWorktree(w, 'm2')
+  fs.writeFileSync(path.join(w.root, 'wt m2', 'm2.txt'), 'changed\n') // T8.12's shape: the dirty one's worktree is a question of its own
+  branch(w, 'stale', { daysAgo: 40 })
+  const s = surveyOf(w)
+  assert.deepEqual(s.unattended, { merged: 'all', worktrees: { [realWt(w, 'm2')]: 'remove' } })
+  const expected = planCli(w, s.unattended)
+  assert.equal(expected.status, 0, expected.stdout + expected.stderr)
+  const result = w.cli(w.a, ['plan', '--unattended'])
+  assert.equal(result.status, 0, result.stdout + result.stderr)
+  assert.ok(result.json.actions.length > 0)
+  assert.deepEqual(result.json, expected.json)
+
+  // The mirror: --unattended plans only what survey.unattended holds, so nothing merged is an empty plan even with questions open.
+  const quiet = world(t)
+  branch(quiet, 'stale', { daysAgo: 40 })
+  assert.ok(surveyOf(quiet).rounds.length > 0)
+  const empty = quiet.cli(quiet.a, ['plan', '--unattended'])
+  assert.equal(empty.status, 0, empty.stdout + empty.stderr)
+  assert.deepEqual(empty.json.actions, [])
+})
+
+test('T8.16 --unattended belongs to plan alone and never beside --answers', (t) => {
+  const w = world(t)
+  surveyOf(w)
+  for (const args of [['plan', '--unattended', '--answers', '-'], ['survey', '--unattended'], ['apply', '--unattended']]) {
+    const result = w.cli(w.a, args, {}, { input: '{}' })
+    assert.equal(result.status, 1, `${args.join(' ')}: ${result.stdout}`)
+    assert.equal(result.stdout, '')
+    assert.match(result.stderr, /^Usage:/)
+  }
+})
+
 // B2: the carry answer.
 function carryWorld(t) {
   const w = world(t)

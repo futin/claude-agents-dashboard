@@ -1,5 +1,5 @@
 // End-to-end runs of the whole skill flow (Task 14), every phase through the CLI in SKILL.md's order, with the one step the model owns — writing the
-// commit message and running `git commit -F` on it — done here exactly as SKILL.md tells the model to. T14.4 is one world holding one of each thing
+// commit message and running `git commit -F -` with it on stdin — done here exactly as SKILL.md tells the model to. T14.4 is one world holding one of each thing
 // the flow acts on; T14.5 runs the same flow again on the result and proves a second run on a tidy repo changes nothing (§10.10).
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
@@ -41,30 +41,24 @@ function setup(t) {
   return { w, stashSha, bSha }
 }
 
-function step(w, args) {
-  const result = w.cli(w.a, args)
+function step(w, args, input) {
+  const result = w.cli(w.a, args, {}, { input })
   assert.equal(result.status, 0, `${args[0]}: ${result.stdout}${result.stderr}`)
   assert.equal(result.json.ok, true)
   assert.equal(result.json.cmd, args[0])
   return result.json
 }
 
-// SKILL.md's phases 0–8 in order. Phase 1's commit is the model's: only when stage-scan left something staged, a message file in the state dir and
-// `git commit -F` on it. Phase 4's answers go to answers.json in the state dir, which preflight's reset has already cleared of any earlier run's.
+// SKILL.md's phases 0–8 in order. Phase 1's commit is the model's: only when stage-scan left something staged, `git commit -F -` with the message
+// on stdin. Phase 4's answers go to `plan --answers -` on stdin. Neither writes a file: Claude Code guards `.git/`, where the state dir sits (R41).
 function run(w, answers) {
   const out = {}
   out.preflight = step(w, ['preflight'])
   out.stageScan = step(w, ['stage-scan'])
-  if (!out.stageScan.clean) {
-    const msgFile = path.join(out.preflight.stateDir, 'commit-msg.txt')
-    fs.writeFileSync(msgFile, `feat: ${out.stageScan.staged.join(', ')}\n`)
-    w.git(w.a, 'commit', '-F', msgFile)
-  }
+  if (!out.stageScan.clean) w.gitIn(w.a, `feat: ${out.stageScan.staged.join(', ')}\n`, 'commit', '-F', '-')
   out.sync = step(w, ['sync'])
   out.survey = step(w, ['survey'])
-  const answersFile = path.join(out.preflight.stateDir, 'answers.json')
-  fs.writeFileSync(answersFile, JSON.stringify(answers))
-  out.plan = step(w, ['plan', '--answers', answersFile])
+  out.plan = step(w, ['plan', '--answers', '-'], JSON.stringify(answers))
   out.verify = step(w, ['verify'])
   out.pushTrunk = step(w, ['push-trunk'])
   out.apply = step(w, ['apply'])

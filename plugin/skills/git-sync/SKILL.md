@@ -21,7 +21,7 @@ Every call below may take `--cwd <dir>` to point at the repo; without it the eng
 `{ "ok": true, "cmd": …, …payload }` or `{ "ok": false, "cmd": …, "stop": …, "detail": … }`, and mirrors it into `<stateDir>` as `<cmd>.json`.
 Exit code 0 is `ok: true` and 2 is a stop. Exit code 1 prints nothing on stdout and means one of two things, told apart by stderr:
 
-- stderr starts with `Usage:`: your own call was malformed (an unknown subcommand, a misplaced `--answers` or `--plan`). Fix the call and run it
+- stderr starts with `Usage:`: your own call was malformed (an unknown subcommand, a misplaced `--answers`, `--unattended` or `--plan`). Fix the call and run it
   again, once. It is not a stop.
 - anything else, usually a stack trace: an engine failure. Stop the flow there, never re-run or work around it, run `report`, and relay the report
   together with the first line of stderr. An engine failure can only follow a successful preflight, so the repo and its state dir are this run's.
@@ -42,8 +42,8 @@ every deletion they name, exactly as it does for one the user ticked.
   when all its worktrees are clean. Without asking those questions. Never touches a dirty worktree, a detached one, an active or protected branch,
   or an abandoned or gone-unproven branch itself.
 
-The answered items are missing from `survey.rounds`; `survey.auto` holds their answers and `plan` folds them in by itself, so `answers.json` holds
-only what the user chose in the round. `survey.autoModes` says which flags were on. Name them in one line before the decision round.
+The answered items are missing from `survey.rounds`; `survey.auto` holds their answers and `plan` folds them in by itself, so the answers you pass
+hold only what the user chose in the round. `survey.autoModes` says which flags were on. Name them in one line before the decision round.
 
 ## Procedure
 
@@ -56,8 +56,9 @@ only what the user chose in the round. `survey.autoModes` says which flags were 
    junk-shaped hit restores the index exactly and stops with `secret-or-junk-staged`, whose `detail.hits` name each path and reason (never the secret).
    With `clean: true` there is nothing to commit; go to phase 2. Otherwise write one conventional-commit message (`type(scope): subject`, a short body
    only when the subject cannot carry the why) from its `staged` list and `stat` alone — never read the diff — ending with the session's attribution
-   trailer, to `commit-msg.txt` in `<stateDir>`, and commit on the current branch with `git -C <root> commit -F <stateDir>/commit-msg.txt`, both
-   paths spelled out in full. If that commit fails (a hook, signing), stop and report it as the stop; never retry with `--no-verify` or any other flag.
+   trailer, and commit on the current branch with `git -C <root> commit -F -`, `<root>` spelled out in full and the message on stdin through a
+   quoted heredoc (`<<'EOF'`). Never write the message to a file: Claude Code guards `.git/`, so an unattended run cannot. If that commit fails
+   (a hook, signing), stop and report it as the stop; never retry with `--no-verify` or any other flag.
 
 2. **Sync the trunk.** `node "${CLAUDE_PLUGIN_ROOT}/skills/git-sync/tools/git-sync.mjs" sync`. It fetches `--all --prune`, checks out the trunk and rebases
    it onto the fetched `origin/<trunk>`; `pulled` counts the commits that arrived and `switchedFrom` names the branch it left. A conflict is aborted in
@@ -75,12 +76,12 @@ only what the user chose in the round. `survey.autoModes` says which flags were 
 4. **Decision round.** Ask every call in `survey.rounds`, in order, back to back, with nothing else in between. Pass each call to AskUserQuestion as
    given: each question's `header`, `question`, `multiSelect` and `options` (labels and descriptions) unchanged, and its `id` kept aside to map the
    answer back. Ask `followups.merged` only when the user chose `Let me pick` on the `merged` question, right after the call that held it. Without
-   AskUserQuestion, follow the hard rule instead: write `survey.unattended` to answers.json as it stands, never adding to it, and run every phase
-   after it. Those answers remove merged branches and every worktree on a merged branch, dirty ones included, and keep everything else; list the
-   questions they left unanswered in prose after the report. Otherwise write `answers.json` in `<stateDir>` from the chosen labels — branch labels
-   are exact branch names, copied character for character:
+   AskUserQuestion, follow the hard rule instead: run `node "${CLAUDE_PLUGIN_ROOT}/skills/git-sync/tools/git-sync.mjs" plan --unattended`, which
+   plans `survey.unattended` as it stands, and run every phase after it. Those answers remove merged branches and every worktree on a merged branch,
+   dirty ones included, and keep everything else; list the questions they left unanswered in prose after the report. Otherwise build the answers
+   JSON from the chosen labels — branch labels are exact branch names, copied character for character:
 
-   | Question id | Chosen label(s) | answers.json |
+   | Question id | Chosen label(s) | Answers JSON |
    | --- | --- | --- |
    | `carry` | `Open a PR` / `Leave on <trunk>` | `"carry": "pr"` / `"carry": "keep"` |
    | `merged` | `Delete all` / `Keep all` / `Let me pick` | `"merged": "all"` / `"merged": "none"` / from the follow-up, below |
@@ -92,10 +93,10 @@ only what the user chose in the round. `survey.autoModes` says which flags were 
    | `worktree:<path>` | `Keep` / `Remove` | `"worktrees": { "<path>": "keep" / "remove" }` |
 
    `<sha>` and `<path>` are the rest of the id after the first `:`. A question left unanswered, or answered with free text that is not one of its
-   labels, is left out of answers.json: a missing answer means keep. When `rounds` is empty there is nothing to ask; write `{}`. Then run
-   `node "${CLAUDE_PLUGIN_ROOT}/skills/git-sync/tools/git-sync.mjs" plan --answers <stateDir>/answers.json`, `<stateDir>` spelled out as the absolute path
-   from preflight's payload. It validates every name against what was
-   offered and writes `plan.json`; never write or edit `plan.json` yourself.
+   labels, is left out of the answers: a missing answer means keep. When `rounds` is empty there is nothing to ask; pass `{}`. Then run
+   `node "${CLAUDE_PLUGIN_ROOT}/skills/git-sync/tools/git-sync.mjs" plan --answers -` with the JSON on stdin through a quoted heredoc (`<<'EOF'`),
+   never a file: Claude Code guards `.git/`, where `<stateDir>` sits. It validates every name against what was offered and writes `plan.json`;
+   never write or edit `plan.json` yourself.
 
 5. **Verify.** `node "${CLAUDE_PLUGIN_ROOT}/skills/git-sync/tools/git-sync.mjs" verify`. It installs dependencies when needed, runs every discovered check
    even after one fails, and reports `status`: `green`, `red` or `unverified` (no checks found). On `red`, read only the last 40 lines of each failing
@@ -141,18 +142,18 @@ Two stops are the exception: relay their envelope directly and never run `report
 | `no-upstream` | sync | Set the trunk's upstream to `origin/<trunk>`. |
 | `rebase-conflict` | sync | The rebase was aborted and the tree is clean; resolve `detail.files` by hand. |
 | `no-survey` | plan | Survey did not complete this run; start again. |
-| `bad-answers` | plan | answers.json named something the survey did not offer, or has the wrong shape; rebuild it from the table above and re-run `plan`. |
+| `bad-answers` | plan | The answers named something the survey did not offer, or have the wrong shape; rebuild them from the table above and re-run `plan`. |
 | `no-plan` | apply | Plan did not complete this run; start again. |
 | `bad-plan` | apply | plan.json is malformed; start again. |
 | `bad-state` | any | A state file in the state dir is unreadable (`detail.file` names it); start again. |
 
-`bad-answers` is the one stop that is your own error rather than the repo's: correct answers.json from the labels the user actually chose — never
+`bad-answers` is the one stop that is your own error rather than the repo's: correct the answers from the labels the user actually chose — never
 add a choice they did not make — and run `plan` again, once. Correcting your own mapping is not working around a stop.
 
 ## Hard rules
 
 - Never work around a stop.
-- The only git command you run yourself is git commit -F, in phase 1.
+- The only git command you run yourself is git commit -F -, in phase 1, with the message on stdin.
 - Without AskUserQuestion, plan with survey.unattended unchanged, run every phase, and ask the rest in prose after the report.
 - Never kill a process by pattern.
 - **Destructive operations happen only in `apply`, and only for what the user chose.** Deleting a branch, removing a worktree, dropping a stash,
