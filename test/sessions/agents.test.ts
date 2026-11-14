@@ -504,6 +504,95 @@ export function run(): number {
     assert.deepStrictEqual(jobs.map(j => [j.id, j.tokens]), [['toolu_d2', 2], ['toolu_d1', 1]]);
   })) p++; else f++;
 
+  // ── Terminal statuses other than completed (#420) ──
+  // A failed, killed or stopped run has ended too; left open it read as running
+  // forever, with a duration that never stopped climbing.
+
+  for (const status of ['failed', 'killed', 'stopped']) {
+    if (test(`background agent ${status} → done at the notification, duration from the timestamps`, () => {
+      const [a] = readAgents(fixture([
+        taskRec('toolu_t', 'Explore', 'look', '2026-07-01T10:00:00Z', 'Agent'),
+        ackRec('toolu_t', 'tt01', '2026-07-01T10:00:00.030Z', { structured: true }),
+        notifyRec('tt01', status, '2026-07-01T10:02:00Z')
+      ]))!;
+      assert.strictEqual(a.status, 'done');
+      assert.strictEqual(a.endedAt, '2026-07-01T10:02:00Z');
+      assert.strictEqual(a.durationMs, 120000);
+      assert.strictEqual(a.tokens, null);
+      assert.strictEqual(a.toolUses, null);
+    })) p++; else f++;
+  }
+
+  if (test('failed notification carrying usage → its tokens, tool uses and duration', () => {
+    const [a] = readAgents(fixture([
+      taskRec('toolu_u', 'Explore', 'look', '2026-07-01T10:00:00Z', 'Agent'),
+      ackRec('toolu_u', 'uu01', '2026-07-01T10:00:00.030Z', { structured: true }),
+      notifyRec('uu01', 'failed', '2026-07-01T10:02:00Z', { tokens: 321, toolUses: 5, durationMs: 119000 })
+    ]))!;
+    assert.strictEqual(a.status, 'done');
+    assert.strictEqual(a.tokens, 321);
+    assert.strictEqual(a.toolUses, 5);
+    assert.strictEqual(a.durationMs, 119000);
+  })) p++; else f++;
+
+  if (test('non-terminal status in a user-message notification → still running', () => {
+    const [a] = readAgents(fixture([
+      taskRec('toolu_n', 'Explore', 'look', '2026-07-01T10:00:00Z', 'Agent'),
+      ackRec('toolu_n', 'nn01', '2026-07-01T10:00:00.030Z', { structured: true }),
+      notifyRec('nn01', 'running', '2026-07-01T10:02:00Z')
+    ]))!;
+    assert.strictEqual(a.status, 'running');
+    assert.strictEqual(a.endedAt, null);
+  })) p++; else f++;
+
+  if (test('stopped then completed, no resume between → the first terminal notification wins', () => {
+    const [a] = readAgents(fixture([
+      taskRec('toolu_s', 'Explore', 'look', '2026-07-01T10:00:00Z', 'Agent'),
+      ackRec('toolu_s', 'ss01', '2026-07-01T10:00:00.030Z', { structured: true }),
+      notifyRec('ss01', 'stopped', '2026-07-01T10:01:00Z'),
+      notifyRec('ss01', 'completed', '2026-07-01T10:03:00Z', { tokens: 9, toolUses: 1, durationMs: 180000 })
+    ]))!;
+    assert.strictEqual(a.endedAt, '2026-07-01T10:01:00Z');
+    assert.strictEqual(a.durationMs, 60000);
+    assert.strictEqual(a.tokens, null);
+  })) p++; else f++;
+
+  if (test('resume of a background agent with no notification → original closed at the SendMessage', () => {
+    const records = [
+      taskRec('toolu_o', 'Explore', 'look', '2026-07-01T10:00:00Z', 'Agent'),
+      ackRec('toolu_o', 'oo01', '2026-07-01T10:00:00.030Z', { structured: true }),
+      sendRec('toolu_so', 'oo01', '2026-07-01T10:04:00Z', 'again'),
+      resumeRec('toolu_so', 'oo01', '2026-07-01T10:04:01Z')
+    ];
+    let [resume, orig] = readAgents(fixture(records))!;
+    assert.strictEqual(orig.id, 'toolu_o');
+    assert.strictEqual(orig.status, 'done');
+    assert.strictEqual(orig.endedAt, '2026-07-01T10:04:00Z');
+    assert.strictEqual(orig.durationMs, 240000);
+    assert.strictEqual(orig.tokens, null);
+    assert.strictEqual(resume.status, 'running');
+    [resume, orig] = readAgents(fixture([...records, notifyRec('oo01', 'completed', '2026-07-01T10:09:00Z', { tokens: 50, toolUses: 2, durationMs: 299000 })]))!;
+    assert.strictEqual(resume.status, 'done');
+    assert.strictEqual(resume.endedAt, '2026-07-01T10:09:00Z');
+    assert.strictEqual(resume.tokens, 50);
+    assert.strictEqual(orig.endedAt, '2026-07-01T10:04:00Z');
+    assert.strictEqual(orig.tokens, null);
+  })) p++; else f++;
+
+  if (test('stopped, resumed, completed → each run ends at its own notification', () => {
+    const [resume, orig] = readAgents(fixture([
+      taskRec('toolu_p', 'Explore', 'look', '2026-07-01T10:00:00Z', 'Agent'),
+      ackRec('toolu_p', 'pp01', '2026-07-01T10:00:00.030Z', { structured: true }),
+      notifyRec('pp01', 'stopped', '2026-07-01T10:01:00Z'),
+      sendRec('toolu_sp', 'pp01', '2026-07-01T10:02:00Z', 'again'),
+      resumeRec('toolu_sp', 'pp01', '2026-07-01T10:02:01Z'),
+      notifyRec('pp01', 'completed', '2026-07-01T10:03:00Z')
+    ]))!;
+    assert.strictEqual(orig.endedAt, '2026-07-01T10:01:00Z');
+    assert.strictEqual(resume.endedAt, '2026-07-01T10:03:00Z');
+    assert.strictEqual(resume.status, 'done');
+  })) p++; else f++;
+
   console.log('\nPassed: ' + p + '  Failed: ' + f + '\n');
   return f;
 }

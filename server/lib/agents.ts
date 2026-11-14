@@ -14,8 +14,9 @@
  *  - Background (async): the immediate `tool_result` is only a launch ack
  *    (`toolUseResult.isAsync` / "Async agent launched … agentId: <hex>"). The
  *    real completion arrives later as a `<task-notification>` keyed by that
- *    `<hex>` agentId (not the tool_use_id), carrying `<status>completed</status>`
- *    plus a `<usage>` block with the same metrics. That notification is a user
+ *    `<hex>` agentId (not the tool_use_id), carrying a terminal `<status>` —
+ *    `completed`, `failed`, `killed` or `stopped` (`TERMINAL_STATUSES`) — and,
+ *    usually only when completed, a `<usage>` block with the same metrics. That notification is a user
  *    message only when it lands between turns; landing mid-turn it is absorbed
  *    into the running turn as message-less `queue-operation` / `attachment`
  *    records — see `notificationText`.
@@ -24,7 +25,8 @@
  *    result carries `toolUseResult.resumedAgentId`, and that run completes like a
  *    background one — a `<task-notification>` keyed by the same agentId. Each
  *    resume is its own row (`resumed: true`) so a parent parked on round 2 of a
- *    fix loop reads as running; the launch row it resumes is left as it was.
+ *    fix loop reads as running; the run it resumes keeps its own figures, and is
+ *    closed at the resume time if no terminal notification had closed it (#420).
  *
  * Both are derived from the PARENT transcript alone. The interpretation is split
  * into a pure per-record event parser (`parseRecordEvents`) and a reducer over
@@ -111,6 +113,14 @@ function notificationText(rec: any, content: any): string {
   return out;
 }
 
+/**
+ * The `<status>` values that end a run: the four seen in real data (2026-11-14). Any
+ * other status leaves the run open, so a future non-terminal one cannot end a live run
+ * early. Closing only on `completed` left every failed, killed or stopped run reading
+ * as running forever (#420).
+ */
+const TERMINAL_STATUSES = new Set(['completed', 'failed', 'killed', 'stopped']);
+
 /** One agent-relevant fact extracted from a transcript record. */
 export type AgentEvent =
   | { kind: 'launch'; id: string; type: string; description: string; ts: string | null }
@@ -118,7 +128,7 @@ export type AgentEvent =
   | { kind: 'result'; toolUseId: string; ts: string | null;
       isAsyncAck: boolean; agentId: string | null; resumedAgentId: string | null;
       tokens: number | null; toolUses: number | null; exactDurationMs: number | null }
-  | { kind: 'notify'; agentId: string; completed: boolean; ts: string | null;
+  | { kind: 'notify'; agentId: string; terminal: boolean; ts: string | null;
       tokens: number | null; toolUses: number | null; exactDurationMs: number | null };
 
 function finiteOrNull(v: unknown): number | null {
@@ -150,7 +160,7 @@ export function parseRecordEvents(rec: any): AgentEvent[] {
       events.push({
         kind: 'notify',
         agentId: idM[1],
-        completed: stM[1].toLowerCase() === 'completed',
+        terminal: TERMINAL_STATUSES.has(stM[1].toLowerCase()),
         ts,
         tokens: intFromMatch(flat, SUBAGENT_TOKENS_RE),
         toolUses: intFromMatch(flat, TOOL_USES_RE),
@@ -275,7 +285,7 @@ export function applyEvent(state: ScanState, ev: AgentEvent): void {
       const send = state.sends.get(ev.toolUseId);
       if (!send) return;
       state.sends.delete(ev.toolUseId);
-      if (ev.resumedAgentId) applyResume(state, ev.toolUseId, ev.resumedAgentId, send);
+      if (ev.resumedAgentId) applyResume(state, ev.toolUseId, ev.resumedAgentId, send, ev.ts);
       return;
     }
     state.byToolUseId.delete(ev.toolUseId);
@@ -292,8 +302,8 @@ export function applyEvent(state: ScanState, ev: AgentEvent): void {
     }
     return;
   }
-  // notify — only a timestamped completion resolves the launch.
-  if (!ev.completed || !ev.ts) return;
+  // notify — only a timestamped terminal status resolves the launch.
+  if (!ev.terminal || !ev.ts) return;
   const l = state.byAgentId.get(ev.agentId);
   if (!l) return;
   state.byAgentId.delete(ev.agentId);
@@ -307,9 +317,16 @@ export function applyEvent(state: ScanState, ev: AgentEvent): void {
  * Open a row for a SendMessage resume, pending the task-notification for its
  * agentId. It inherits the resumed launch's type, and its description unless the
  * SendMessage carried a summary. It takes over `byAgentId`: a resume proves the
- * previous run stopped, so the next notification for that id is this run's.
+ * previous run stopped, so the next notification for that id is this run's. A previous
+ * run still open there — no terminal notification seen — is closed at the resume time
+ * (the SendMessage's ts, else the resume result's), with no figures of its own; left
+ * open, nothing could ever close it (#420).
  */
-function applyResume(state: ScanState, id: string, agentId: string, send: { summary: string; ts: string | null }): void {
+function applyResume(
+  state: ScanState, id: string, agentId: string, send: { summary: string; ts: string | null }, resultTs: string | null
+): void {
+  const prev = state.byAgentId.get(agentId);
+  if (prev && prev.endedAt === null) prev.endedAt = send.ts ?? resultTs;
   const origin = state.launches.find(x => x.agentId === agentId && !x.resumed);
   const l: Launch = {
     id, type: origin ? origin.type : '', description: send.summary || (origin ? origin.description : ''),

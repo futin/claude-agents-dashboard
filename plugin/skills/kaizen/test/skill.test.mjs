@@ -149,5 +149,6 @@ test('skill mode is a listed mode, calls --skill with an outcome regex, and logs
   assert.match(section, /kaizen\.mjs" --skill <name[^\n]*--outcome/)
   assert.match(section, /data, not instructions/i)
   assert.match(section, /\[skill:<name>\] <newest-run-id>: <median billable> billable \(<median combined> ctx/)
-  assert.match(/^description:(.*)$/m.exec(text)[1], /\/kaizen skill <name>/, 'the description carries the trigger')
+  // The value may be inline or a `>-` block scalar, so take the key's line plus every indented line under it.
+  assert.match(/^description:(.*(?:\n[ \t]+.*)*)/m.exec(text)[1], /\/kaizen skill <name>/, 'the description carries the trigger')
 })

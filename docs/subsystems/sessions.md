@@ -544,9 +544,16 @@ Served by an incremental byte-offset cache (`agents.ts` / `agents-cache.ts`) so 
 opens stay cheap. A compaction can replay earlier records verbatim, tool_use ids included, so `applyEvent` drops a launch or `SendMessage` whose id
 `ScanState.seen` already holds (#174); without that a replayed launch reads as a second row.
 
+**A background run ends on any terminal `<task-notification>` status** — `completed`, `failed`, `killed` or `stopped` (`TERMINAL_STATUSES` in `agents.ts`),
+the four seen in real data (2026-11-14). Its row reads `done` either way: the API has no failed state, so a killed run and a finished one look alike, and a
+failed one usually carries no `<usage>`, so its duration falls back to the timestamps. The first terminal notification wins. Any other status leaves the run
+open. Before #420 only `completed` closed one, so every failed, killed or stopped run read as running forever and Analytics counted its spend as unknown.
+
 **Resumed agents get their own row.** `SendMessage` to a stopped subagent wakes it for another run — the subagent-driven fix loop does this every round. The
 result carries `toolUseResult.resumedAgentId`, and the run completes like a background launch, on a `<task-notification>` keyed by that agentId. `agents.ts`
-opens a `resumed: true` row per resume (description from the `SendMessage` `summary`, type from the launch it resumed) and leaves the launch row as it was.
+opens a `resumed: true` row per resume (description from the `SendMessage` `summary`, type from the launch it resumed) and leaves the run it resumed with its
+own figures — closing it at the `SendMessage`'s timestamp when no terminal notification had (#420), since the new row takes over its agentId and nothing else
+could ever close it.
 Without it the launch row reads `done`, so a parent parked on round 2 fell through `subagentRunning` to `incomplete`. Every run writes the same
 `agent-<id>.jsonl`, so the Analytics spend skips `resumed` rows — the launch row already claims that whole file.
 
