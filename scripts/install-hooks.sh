@@ -405,12 +405,14 @@ if [ "$UNINSTALL" != "true" ]; then
   case "$(uname -s)" in
     Darwin) : ;;
     *) step "$(uname -s): the at-desk gate reads idle time via ioreg, which is macOS-only."
-       step "         Idle is unreadable here, which fails to \"at the desk\" — questions and"
-       step "         plans still travel, but a turn-end reply window never opens." ;;
+       step "         Idle is unreadable here, which counts as \"at the desk\" — questions,"
+       step "         plans and the turn-end reply window all stay in the terminal."
+       step "         Set Settings › Away after to 0 (or CLAUDE_DASHBOARD_IDLE_SECS=0) to"
+       step "         make questions and plans always wait for the dashboard." ;;
   esac
   step "The hooks talk to \$CLAUDE_DASHBOARD_URL, default http://127.0.0.1:4173."
   step "Serving on another port (a dev 5174, say)? Export it, or they no-op."
-  step "Remote answering also has to be ON in the dashboard — it is off by default."
+  step "Remote answering has to be ON in the dashboard — on by default; REMOTE_ANSWER=false or the toggle turns it off."
 fi
 
 say ""
