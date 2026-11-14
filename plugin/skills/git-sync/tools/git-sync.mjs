@@ -43,6 +43,10 @@ export const SUBCOMMANDS = [
 
 export const USAGE = `Usage: git-sync <command> [--cwd <dir>] [--answers <file>|-] [--unattended] [--plan <file>] [--auto-merged] [--auto-clean]\n\nCommands:\n  ${SUBCOMMANDS.join('\n  ')}\n`
 
+// spawnSync kills a child whose captured stdout or stderr passes `maxBuffer` (1 MB by default) and reports ENOBUFS, so a staged diff, a staged name
+// list or a check's log over 1 MB failed the run (#464). Every spawn that captures output passes this ceiling instead.
+export const SPAWN_MAX_BUFFER = 256 * 1024 * 1024
+
 // Every git invocation goes through here so the whole engine shares one hardening pass:
 // `-C <root>` instead of relying on process.cwd, colour and quoting forced off so stdout stays
 // script-safe no matter the user's own config (a hostile `color.ui=always` must not leak escape
@@ -66,6 +70,7 @@ export function git(root, args, opts = {}) {
   const result = spawnSync('git', ['-C', root, '-c', 'color.ui=never', '-c', 'core.quotepath=off', ...args], {
     env,
     encoding: 'utf8',
+    maxBuffer: SPAWN_MAX_BUFFER,
   })
   // spawnSync sets `.error` (and leaves `.status` null) when the binary itself can't be
   // launched at all. Folding that into a synthetic failure keeps this function's contract —
@@ -826,7 +831,7 @@ function runGhPrList(repo, headArgs) {
   const result = spawnSync(
     'gh',
     ['pr', 'list', ...headArgs, '--state', 'all', '--json', 'number,state,headRefOid,baseRefName', '--limit', '20'],
-    { cwd: repo.root, env, encoding: 'utf8', timeout: GH_TIMEOUT_MS },
+    { cwd: repo.root, env, encoding: 'utf8', timeout: GH_TIMEOUT_MS, maxBuffer: SPAWN_MAX_BUFFER },
   )
   // `.error` is spawnSync's own signal that the child never ran at all (ENOENT) or was killed (a timeout sets `ETIMEDOUT`) — either way there is
   // no exit status to read, so this is checked before `.status`.
@@ -915,6 +920,7 @@ export function trunkRules(repo) {
     env,
     encoding: 'utf8',
     timeout: GH_TIMEOUT_MS,
+    maxBuffer: SPAWN_MAX_BUFFER,
   })
   if (result.error) return { prOnly: true, reason: result.error.code === 'ENOENT' ? 'gh-absent' : 'gh-failed' }
   if (result.status !== 0) return { prOnly: true, reason: 'gh-failed' }
@@ -1775,6 +1781,7 @@ function runCheck(ctx, check, timeoutMs) {
     env,
     shell: check.shell,
     encoding: 'utf8',
+    maxBuffer: SPAWN_MAX_BUFFER,
     timeout: timeoutMs,
     killSignal: 'SIGKILL',
     detached: true,
@@ -2317,6 +2324,7 @@ function carryTrunk(r, a) {
     env: { ...process.env, ...r.env },
     encoding: 'utf8',
     timeout: GH_TIMEOUT_MS,
+    maxBuffer: SPAWN_MAX_BUFFER,
   })
   const extra = { pr: null, tip: a.expectTip }
   if (gh.error?.code === 'ENOENT') return ['done', 'carried', 'gh absent', extra]

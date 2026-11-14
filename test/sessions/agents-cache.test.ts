@@ -37,13 +37,13 @@ function ackRec(toolUseId: string, agentId: string, iso: string) {
     message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: toolUseId, content: 'Async agent launched successfully.\nagentId: ' + agentId }] }
   };
 }
-function notifyRec(agentId: string, iso: string, usage?: { tokens: number; toolUses: number; durationMs: number }) {
+function notifyRec(agentId: string, iso: string, usage?: { tokens: number; toolUses: number; durationMs: number }, status = 'completed') {
   const usageXml = usage
     ? `\n<usage><subagent_tokens>${usage.tokens}</subagent_tokens><tool_uses>${usage.toolUses}</tool_uses><duration_ms>${usage.durationMs}</duration_ms></usage>`
     : '';
   return {
     timestamp: iso,
-    message: { role: 'user', content: [{ type: 'text', text: `<task-notification>\n<task-id>${agentId}</task-id>\n<status>completed</status>${usageXml}\n</task-notification>` }] }
+    message: { role: 'user', content: [{ type: 'text', text: `<task-notification>\n<task-id>${agentId}</task-id>\n<status>${status}</status>${usageXml}\n</task-notification>` }] }
   };
 }
 
@@ -286,6 +286,19 @@ export function run(): number {
     assert.strictEqual(readAgentsCached(files[32]), first[32], '33rd transcript was not cached — it evicted itself');
     assert.strictEqual(readAgentsCached(files[1]), first[1], 'second-oldest entry was evicted instead of the oldest');
     assert.notStrictEqual(readAgentsCached(files[0]), first[0], 'oldest entry was not evicted');
+  })) p++; else f++;
+
+  if (test('killed notification in a later append closes the run, matching the oracle (#420)', () => {
+    _resetAgentsCache();
+    const file = tmpFile();
+    fs.writeFileSync(file, [taskRec('k', 'Explore', 'async', '2026-07-01T10:00:00Z'),
+      ackRec('k', 'bgK', '2026-07-01T10:00:00.030Z')].map(r => JSON.stringify(r)).join('\n') + '\n');
+    assert.strictEqual(readAgentsCached(file)![0].status, 'running');
+    fs.appendFileSync(file, JSON.stringify(notifyRec('bgK', '2026-07-01T10:03:00Z', undefined, 'killed')) + '\n');
+    assertMatchesOracle(file);
+    const k = readAgentsCached(file)![0];
+    assert.strictEqual(k.status, 'done');
+    assert.strictEqual(k.endedAt, '2026-07-01T10:03:00Z');
   })) p++; else f++;
 
   console.log('\nPassed: ' + p + '  Failed: ' + f + '\n');

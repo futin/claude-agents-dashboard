@@ -298,3 +298,16 @@ test('T3.12 GIT_INDEX_FILE is the index that is snapshotted and restored (R35)',
   assert.equal(fs.readFileSync(alt).toString('base64'), altBefore)
   assert.equal(fs.readFileSync(path.join(w.a, '.git', 'index')).toString('base64'), mainBefore)
 })
+
+// #464: Node's spawnSync caps captured output at 1 MB by default and kills the child past it (ENOBUFS), which the scan used to report as
+// `scan-failed`. A zero-filled binary (T3.4) diffs as one "Binary files differ" line, so a text diff is what crosses the cap. A staged name list over
+// 1 MB fails through the same `git` helper; it is not tested on its own because ~1 MB of paths makes the per-path scan take minutes.
+test('T3.13 a staged text diff over 1 MB still scans clean', (t) => {
+  const w = world(t)
+  const lines = []
+  for (let i = 0; lines.length * 32 < 2 * 1024 * 1024; i++) lines.push(`export const value${String(i).padStart(8, '0')} = ${i}\n`)
+  fs.writeFileSync(path.join(w.a, 'big.js'), lines.join(''))
+  const result = w.cli(w.a, ['stage-scan'])
+  assert.equal(result.json.ok, true, JSON.stringify(result.json))
+  assert.deepEqual(result.json.staged, ['big.js'])
+})

@@ -280,3 +280,17 @@ test('T9.14 a check that cannot be spawned logs why', (t) => {
   assert.equal(result.json.status, 'red')
   assert.match(fs.readFileSync(result.json.checks[0].log, 'utf8'), /ENOENT/)
 })
+
+// #464: a check that prints more than spawnSync's default 1 MB maxBuffer was killed with ENOBUFS and logged as red although it passed.
+test('T9.15 a check printing more than 1 MB stays green and keeps its whole log', (t) => {
+  const w = world(t)
+  writePackageJson(w.a, { test: 'x' })
+  fs.mkdirSync(path.join(w.a, 'node_modules'), { recursive: true })
+  const big = 'ok line\n'.repeat(256 * 1024) // 2 MB
+  w.stub('npm', { stdout: big })
+
+  const result = w.cli(w.a, ['verify'])
+  assert.equal(result.json.status, 'green', JSON.stringify(result.json.checks))
+  assert.equal(result.json.checks[0].exit, 0)
+  assert.equal(fs.statSync(result.json.checks[0].log).size, big.length)
+})
