@@ -5,26 +5,16 @@ import './tmp-root.js';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
-import { listSuites } from './suites.js';
-
-type Suite = { run?: unknown };
+import { listSuites, runSuites, type SuiteModule } from './suites.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const files = listSuites(ROOT);
 
 // Every module is imported before the first run(), as the static imports this list replaced did: a suite's top level never sees another suite's run.
-const mods: Suite[] = [];
-for (const file of files) mods.push(await import(pathToFileURL(path.join(ROOT, file)).href) as Suite);
+const suites: { file: string; mod: SuiteModule }[] = [];
+for (const file of files) suites.push({ file, mod: await import(pathToFileURL(path.join(ROOT, file)).href) as SuiteModule });
 
-let failed = 0;
-for (const [i, mod] of mods.entries()) {
-  if (typeof mod.run !== 'function') {
-    console.log(`\n  ✗ ${files[i]} exports no run()`);
-    failed += 1;
-    continue;
-  }
-  failed += await (mod.run as () => number | Promise<number>)();
-}
+const failed = await runSuites(suites);
 
 console.log(failed > 0 ? `FAILED (${failed})` : 'ALL PASS');
 process.exit(failed > 0 ? 1 : 0);
