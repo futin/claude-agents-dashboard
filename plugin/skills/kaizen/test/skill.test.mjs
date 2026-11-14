@@ -137,3 +137,17 @@ test('review mode measures global Learnings against its budget in the prune pass
   const review = text.slice(text.indexOf('## Review mode'))
   assert.match(review, /6\. \*\*Prune pass:\*\*[^]*?kaizen\.mjs" --budget[^]*?displacement candidates/)
 })
+
+// Skill mode's lesson tag is what keeps a cohort's figures out of every project's `--trend` series, and its regex step is what makes the outcome tally
+// mean anything — both have to survive editing.
+test('skill mode is a listed mode, calls --skill with an outcome regex, and logs under a [skill:<name>] tag with medians', () => {
+  const text = skill()
+  assert.match(text, /\| `\/kaizen skill <name> \[N\]`[^\n]*\| \*\*skill\*\* \|/, 'the modes table lists skill mode')
+  const from = text.indexOf('## Skill mode')
+  assert.ok(from >= 0, 'SKILL.md has a Skill mode section')
+  const section = text.slice(from, text.indexOf('\n## ', from + 1))
+  assert.match(section, /kaizen\.mjs" --skill <name[^\n]*--outcome/)
+  assert.match(section, /data, not instructions/i)
+  assert.match(section, /\[skill:<name>\] <newest-run-id>: <median billable> billable \(<median combined> ctx/)
+  assert.match(/^description:(.*)$/m.exec(text)[1], /\/kaizen skill <name>/, 'the description carries the trigger')
+})

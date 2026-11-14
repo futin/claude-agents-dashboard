@@ -12,11 +12,13 @@
  *   node kaizen.mjs --budget [<file>] [<heading>] [<bytes>]   section size vs budget (default ~/.claude/CLAUDE.md, ## Learnings, 4000)
  *   node kaizen.mjs --compare <project> <since YYYY-MM-DD> <field.path>
  *                                           one analysis field's median over the project's sessions before vs after a date
+ *   node kaizen.mjs --skill <name> [N] [--outcome <regex>]
+ *                                           the newest N (default 50) finished sessions whose first prompt ran the skill, per session and summed
  *
  * PROVENANCE: ported from claude-agents-dashboard server/lib/{analyze,agents,subagent-usage,scan}.ts.
  * That repo holds the unit-tested source of truth; keep this in sync if it changes.
  * Exception: `--trend` is kaizen-only, has no TS twin, and is tested by spawning this file (test/analytics/kaizen-trend.test.ts); so are `--compare`, tested in
- * test/compare.test.mjs, and `--budget`, tested in test/budget.test.mjs.
+ * test/compare.test.mjs, `--budget`, tested in test/budget.test.mjs, and `--skill`, tested in test/skill-review.test.mjs.
  * Counting compaction replays once (#174), skipping compact summaries and reading compact_boundary for neverCompacted are in that
  * source too (#226), pinned by its parity tests. Kaizen-only by decision: the `compactions` block — a lesson input with no dashboard
  * consumer — tested in test/compactions.test.mjs (`node --test test/*.test.mjs`).
@@ -25,6 +27,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { StringDecoder } from 'node:string_decoder';
 import { fileURLToPath } from 'node:url';
 
 /* ------------------------------------------------ transcript enumeration */
@@ -723,13 +726,311 @@ function measureSection(text, heading, budget) {
   return { section: true, bytes, budget, remaining: budget - bytes, over: bytes > budget, rules: sized };
 }
 
+/* ------------------------------------------------ the last N runs of one skill (`--skill`) */
+
+// `/kaizen skill <name>` improves a skill from evidence: the newest finished sessions that ran it, each read with analyzeSession plus one more walk
+// for what a single post-mortem does not need — what loaded before the first turn, which errors repeat, which tool output fed the context, and an
+// optional outcome the skill's own contract prints. Kaizen-only, like `--trend`. The judgement (classifying outcomes, ranking fixes) stays in SKILL.md.
+
+const SKILL_DEFAULT_LIMIT = 50;
+// A transcript written this recently may be a session still running — possibly the one asking — so it is not a finished run yet.
+const SKILL_ACTIVE_MS = 5 * 60_000;
+// The first prompt sits a few records in, but a hook's output or an older transcript's preload can come first; past 1 MiB it is not a skill run.
+const SKILL_HEAD_CAP = 1024 * 1024;
+const SKILL_HEAD_CHUNK = 64 * 1024;
+const SKILL_TOP = 20;
+const COMMAND_NAME_RE = /<command-name>\s*\/?([^<\s]+)\s*<\/command-name>/;
+const COMMAND_ARGS_RE = /<command-args>([\s\S]*?)<\/command-args>/;
+const SLASH_RE = /^\s*\/([A-Za-z0-9_.:-]+)(?:\s+([\s\S]*))?$/;
+// Harness-written user turns that no person typed.
+const NOT_TYPED_RE = /^\s*(?:<task-notification>|<agent-message|<local-command-|<bash-stdout>|<bash-stderr>|\[Request interrupted)/;
+// Attachment fields that carry the text the model sees; the rest (names, digests, hook commands, stdout already folded into `content`) is bookkeeping.
+const PRELOAD_TEXT_KEYS = new Set(['content', 'addedLines', 'systemPrompt', 'context', 'snapshot', 'text', 'date', 'prompt']);
+
+/** The text a person typed, or null for anything else: a meta record, a tool result, a compaction summary, a subagent's turn, a harness notice. */
+function typedPrompt(rec) {
+  if (!rec || rec.isMeta === true || rec.isSidechain === true || rec.isCompactSummary === true || !isConversationRecord(rec)) return null;
+  const msg = rec.message;
+  if (!msg || msg.role !== 'user') return null;
+  if (Array.isArray(msg.content) && msg.content.some(b => b && b.type === 'tool_result')) return null;
+  const t = userText(msg);
+  return t.trim() && !NOT_TYPED_RE.test(t) ? t : null;
+}
+
+/** The first typed prompt, read in chunks from the head; null when an assistant turn or the cap comes first. */
+function firstPrompt(file) {
+  let fd;
+  try { fd = fs.openSync(file, 'r'); } catch { return null; }
+  try {
+    const decoder = new StringDecoder('utf8');
+    const buf = Buffer.alloc(SKILL_HEAD_CHUNK);
+    let pos = 0, carry = '';
+    for (;;) {
+      const n = pos < SKILL_HEAD_CAP ? fs.readSync(fd, buf, 0, buf.length, pos) : 0;
+      pos += n;
+      const lines = (carry + (n > 0 ? decoder.write(buf.subarray(0, n)) : decoder.end())).split('\n');
+      carry = n > 0 ? lines.pop() : '';
+      for (const line of lines) {
+        let rec;
+        try { rec = JSON.parse(line); } catch { continue; }
+        if (rec && rec.message && rec.message.role === 'assistant' && rec.isSidechain !== true && isConversationRecord(rec)) return null;
+        const t = typedPrompt(rec);
+        if (t != null) return t;
+      }
+      if (n <= 0) return null;
+    }
+  } catch { return null; } finally { fs.closeSync(fd); }
+}
+
+/** `<command-name>/x</command-name>` (a slash command the harness expanded) or plain `/x args` text. */
+function parseInvocation(text) {
+  const m = COMMAND_NAME_RE.exec(text);
+  if (m) { const a = COMMAND_ARGS_RE.exec(text); return { command: m[1], args: a ? a[1].trim() : '' }; }
+  const s = SLASH_RE.exec(text);
+  return s ? { command: s[1], args: (s[2] ?? '').trim() } : null;
+}
+
+const bareName = (s) => s.slice(s.lastIndexOf(':') + 1);
+/** `plugin:skill` matches itself and the bare `/skill`; a bare name matches it under any plugin. */
+function invokesSkill(command, skill) {
+  return skill.includes(':') ? command === skill || command === bareName(skill) : bareName(command) === skill;
+}
+
+function leafChars(v) {
+  if (typeof v === 'string') return v.length;
+  if (Array.isArray(v)) return v.reduce((s, x) => s + leafChars(x), 0);
+  return v && typeof v === 'object' ? Object.values(v).reduce((s, x) => s + leafChars(x), 0) : 0;
+}
+function attachmentChars(a) {
+  if (Array.isArray(a)) return a.reduce((s, x) => s + attachmentChars(x), 0);
+  if (!a || typeof a !== 'object') return 0;
+  let n = 0;
+  for (const [k, v] of Object.entries(a)) n += PRELOAD_TEXT_KEYS.has(k) ? leafChars(v) : typeof v === 'object' ? attachmentChars(v) : 0;
+  return n;
+}
+
+/** Digits and digit-bearing hex runs fold to N so `Exit code 1` and `Exit code 2` are one error; the first 100 characters are the group key. */
+function normalizeError(text) {
+  return text.replace(/<\/?tool_use_error>/g, '').replace(/\s+/g, ' ').trim()
+    .replace(/\b(?=[0-9a-f]*\d)[0-9a-f]{4,}\b/gi, 'N').replace(/\d+/g, 'N').slice(0, 100);
+}
+
+function sinkKey(call) {
+  if (!call) return 'unknown';
+  const input = call.input || {};
+  if (call.name === 'Read' && typeof input.file_path === 'string') return `Read:${path.basename(input.file_path)}`;
+  if (call.name === 'Skill' && typeof input.skill === 'string') return `Skill:${input.skill}`;
+  return call.name;
+}
+
+/** The walk analyzeSession does not do: preload before the first turn, typed prompts, error messages, output per sink, and the outcome capture. */
+function skillSessionFacts(text, outcomeRe) {
+  const preload = new Map();
+  const addPreload = (kind, chars) => {
+    const p = preload.get(kind) ?? { kind, count: 0, chars: 0 };
+    p.count++; p.chars += chars; preload.set(kind, p);
+  };
+  const pending = new Map(), seenUse = new Set(), seenResult = new Set(), sinks = new Map(), errors = [];
+  let firstTurnCtx = null, userPrompts = 0, outcome = null;
+  const capture = (t) => {
+    if (!outcomeRe || outcome !== null) return;
+    const m = outcomeRe.exec(t);
+    if (m) outcome = m[1] ?? m[0];
+  };
+
+  for (const line of text.split('\n')) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    let rec;
+    try { rec = JSON.parse(trimmed); } catch { continue; }
+    if (!rec || typeof rec !== 'object' || rec.isSidechain === true || rec.compactMetadata || rec.isCompactSummary === true) continue;
+    const before = firstTurnCtx === null;
+    if (rec.type === 'attachment' && rec.attachment && typeof rec.attachment === 'object') {
+      if (!before) continue;
+      const a = rec.attachment;
+      const kind = typeof a.type === 'string' ? a.type : 'unknown';
+      addPreload(kind.startsWith('hook_') && typeof a.hookName === 'string' ? `${kind}:${a.hookName}` : kind, attachmentChars(a));
+      continue;
+    }
+    // Claude Code 2.1.302+ writes each request's system prompt as a blob; only the first request's counts as preload.
+    if (rec.type === 'api-request-blob' && rec.message && rec.message.role === 'system') {
+      if (before && !preload.has('system_prompt')) addPreload('system_prompt', contentText(rec.message.content).length);
+      continue;
+    }
+    if (!isConversationRecord(rec) || !rec.message) continue;
+    const msg = rec.message;
+    if (msg.role === 'assistant') {
+      const u = msg.usage;
+      if (before && u && typeof u === 'object') {
+        const ctx = num(u.input_tokens) + num(u.cache_creation_input_tokens) + num(u.cache_read_input_tokens);
+        if (ctx > 0) firstTurnCtx = ctx;
+      }
+      if (!Array.isArray(msg.content)) continue;
+      for (const b of msg.content) {
+        if (b && b.type === 'tool_use' && typeof b.id === 'string' && !seenUse.has(b.id)) { seenUse.add(b.id); pending.set(b.id, { name: b.name, input: b.input }); }
+        else if (b && b.type === 'text' && typeof b.text === 'string') capture(b.text);
+      }
+    } else if (msg.role === 'user') {
+      if (rec.isMeta === true) {
+        if (before) { const t = contentText(msg.content); addPreload(t.startsWith('Base directory for this skill') ? 'skill_body' : 'meta', t.length); }
+        continue;
+      }
+      if (typedPrompt(rec) != null) { userPrompts++; continue; }
+      if (!Array.isArray(msg.content)) continue;
+      for (const b of msg.content) {
+        if (!b || b.type !== 'tool_result' || typeof b.tool_use_id !== 'string' || seenResult.has(b.tool_use_id)) continue;
+        seenResult.add(b.tool_use_id);
+        const call = pending.get(b.tool_use_id);
+        pending.delete(b.tool_use_id);
+        const out = toolResultText(b);
+        const key = sinkKey(call);
+        const s = sinks.get(key) ?? { key, tool: call ? call.name : 'unknown', calls: 0, chars: 0 };
+        s.calls++; s.chars += out.length; sinks.set(key, s);
+        if (isErrorResult(b)) errors.push({ tool: call ? call.name : 'unknown', message: normalizeError(out) });
+        capture(out);
+      }
+    }
+  }
+  return { preload: [...preload.values()], firstTurnCtx, userPrompts, errors, sinks: [...sinks.values()], outcome };
+}
+
+function skillRun(t, outcomeRe) {
+  const a = analyzeSession(t.file, t.id);
+  let text;
+  try { text = fs.readFileSync(t.file, 'utf8'); } catch { return null; }
+  if (!a) return null;
+  const f = skillSessionFacts(text, outcomeRe);
+  const subs = readSubagentUsage(t.file);
+  const sub = emptyTotals();
+  for (const s of subs) addTotals(sub, s.usage);
+  const main = { input: a.totals.input, cacheCreation: a.totals.cacheCreation, cacheRead: a.totals.cacheRead, output: a.totals.output, billableApprox: a.totals.billableApprox, combined: a.totals.combined };
+  const preload = f.preload.map(p => ({ kind: p.kind, count: p.count, approxTokens: Math.round(p.chars / 4) })).sort((x, y) => y.approxTokens - x.approxTokens || x.kind.localeCompare(y.kind));
+  const sinks = f.sinks.map(s => ({ key: s.key, tool: s.tool, calls: s.calls, approxTokens: Math.round(s.chars / 4) })).sort((x, y) => y.approxTokens - x.approxTokens || x.key.localeCompare(y.key));
+  const row = {
+    id: t.id, project: a.cwd ? path.basename(normCwd(a.cwd)) : null, startedAt: a.startedAt, durationMs: a.durationMs, args: t.args,
+    userPrompts: f.userPrompts, humanContinued: f.userPrompts > 1, models: a.models, turns: a.perTurn.count,
+    tokens: {
+      main, subagents: { count: subs.length, input: sub.input, cacheCreation: sub.cacheCreation, cacheRead: sub.cacheRead, output: sub.output, billableApprox: sub.billableApprox, combined: sub.combined },
+      billableApprox: main.billableApprox + sub.billableApprox, combined: main.combined + sub.combined
+    },
+    firstTurnCtx: f.firstTurnCtx, preload, preloadApproxTokens: preload.reduce((s, p) => s + p.approxTokens, 0),
+    toolCalls: Object.fromEntries(a.byTool.map(x => [x.tool, x.count])), errors: f.errors.length,
+    topSinks: sinks.slice(0, 3).map(s => ({ key: s.key, approxTokens: s.approxTokens }))
+  };
+  if (outcomeRe) row.outcome = f.outcome;
+  return { row, errors: f.errors, sinks };
+}
+
+const medianOrNull = (xs) => { const v = xs.filter(x => typeof x === 'number'); return v.length ? median(v) : null; };
+const tally = (keys) => keys.reduce((m, k) => (m[k] = (m[k] ?? 0) + 1, m), {});
+
+function skillSummary(runs, withOutcome) {
+  const rows = runs.map(r => r.row);
+  const starts = rows.map(r => r.startedAt).filter(Boolean).sort();
+  const sumKinds = (pick) => {
+    const t = { input: 0, cacheCreation: 0, cacheRead: 0, output: 0, billableApprox: 0, combined: 0 };
+    for (const r of rows) for (const k of Object.keys(t)) t[k] += pick(r)[k];
+    return t;
+  };
+  const toolCalls = {};
+  for (const r of rows) for (const [k, n] of Object.entries(r.toolCalls)) toolCalls[k] = (toolCalls[k] ?? 0) + n;
+
+  const preloadKinds = new Map();
+  for (const r of rows) for (const p of r.preload) { if (!preloadKinds.has(p.kind)) preloadKinds.set(p.kind, []); preloadKinds.get(p.kind).push(p.approxTokens); }
+
+  const errors = new Map();
+  for (const { row, errors: es } of runs) for (const e of es) {
+    const key = `${e.tool}\u0000${e.message}`;
+    const g = errors.get(key) ?? { tool: e.tool, message: e.message, count: 0, ids: [] };
+    g.count++;
+    if (!g.ids.includes(row.id)) g.ids.push(row.id);
+    errors.set(key, g);
+  }
+  const sinks = new Map();
+  for (const { sinks: ss } of runs) for (const s of ss) {
+    const g = sinks.get(s.key) ?? { key: s.key, tool: s.tool, calls: 0, approxTokens: 0 };
+    g.calls += s.calls; g.approxTokens += s.approxTokens; sinks.set(s.key, g);
+  }
+
+  const summary = {
+    sessions: rows.length, firstStartedAt: starts[0] ?? null, lastStartedAt: starts.at(-1) ?? null,
+    projects: tally(rows.map(r => r.project ?? '(unknown)')), models: tally(rows.flatMap(r => r.models)),
+    humanContinued: rows.filter(r => r.humanContinued).length,
+    tokens: {
+      main: sumKinds(r => r.tokens.main), subagents: { count: rows.reduce((s, r) => s + r.tokens.subagents.count, 0), ...sumKinds(r => r.tokens.subagents) },
+      billableApprox: rows.reduce((s, r) => s + r.tokens.billableApprox, 0), combined: rows.reduce((s, r) => s + r.tokens.combined, 0)
+    },
+    median: {
+      durationMs: medianOrNull(rows.map(r => r.durationMs)), billableApprox: medianOrNull(rows.map(r => r.tokens.billableApprox)),
+      combined: medianOrNull(rows.map(r => r.tokens.combined)), firstTurnCtx: medianOrNull(rows.map(r => r.firstTurnCtx)),
+      preloadApproxTokens: medianOrNull(rows.map(r => r.preloadApproxTokens)), turns: medianOrNull(rows.map(r => r.turns)),
+      toolCalls: medianOrNull(rows.map(r => Object.values(r.toolCalls).reduce((s, n) => s + n, 0)))
+    },
+    preload: [...preloadKinds].map(([kind, xs]) => ({ kind, sessions: xs.length, medianApproxTokens: median(xs) }))
+      .sort((a, b) => b.medianApproxTokens - a.medianApproxTokens || a.kind.localeCompare(b.kind)),
+    toolCalls,
+    errors: [...errors.values()]
+      .sort((a, b) => b.count - a.count || b.ids.length - a.ids.length || a.tool.localeCompare(b.tool) || a.message.localeCompare(b.message))
+      .slice(0, SKILL_TOP).map(g => ({ tool: g.tool, message: g.message, count: g.count, sessions: g.ids.length, examples: g.ids.slice(0, 3) })),
+    sinks: [...sinks.values()].sort((a, b) => b.approxTokens - a.approxTokens || a.key.localeCompare(b.key)).slice(0, SKILL_TOP)
+  };
+  if (withOutcome) {
+    const key = (r) => r.outcome ?? '(none)';
+    summary.outcomes = tally(rows.map(key));
+    summary.byOutcome = {};
+    for (const k of Object.keys(summary.outcomes)) {
+      const rs = rows.filter(r => key(r) === k);
+      summary.byOutcome[k] = {
+        sessions: rs.length, medianDurationMs: medianOrNull(rs.map(r => r.durationMs)), medianBillable: medianOrNull(rs.map(r => r.tokens.billableApprox)),
+        medianCombined: medianOrNull(rs.map(r => r.tokens.combined)), medianFirstTurnCtx: medianOrNull(rs.map(r => r.firstTurnCtx))
+      };
+    }
+  }
+  return summary;
+}
+
+/**
+ * The newest `limit` finished sessions under `root` whose first typed prompt invokes `skill`, by transcript mtime, newest first. A transcript written in
+ * the last five minutes is left out as possibly live (`skippedActive`). `outcome` is a regex source: each row's `outcome` is its first capture group
+ * (or the whole match) from the first tool result or assistant text that matches, and the summary tallies them.
+ */
+export function reviewSkill({ root, skill, limit = SKILL_DEFAULT_LIMIT, outcome = null, now = Date.now() }) {
+  const outcomeRe = outcome == null ? null : new RegExp(outcome);
+  const cands = listTranscripts(root).sort((a, b) => b.mtimeMs - a.mtimeMs || a.id.localeCompare(b.id));
+  const picked = [];
+  let scanned = 0, skippedActive = 0;
+  for (const t of cands) {
+    if (picked.length >= limit) break;
+    scanned++;
+    const p = firstPrompt(t.file);
+    const inv = p == null ? null : parseInvocation(p);
+    if (!inv || !invokesSkill(inv.command, skill)) continue;
+    if (now - t.mtimeMs < SKILL_ACTIVE_MS) { skippedActive++; continue; }
+    picked.push({ ...t, args: inv.args });
+  }
+  const runs = picked.map(t => skillRun(t, outcomeRe)).filter(Boolean);
+  return {
+    skill, limit, outcome, scanned, skippedActive,
+    summary: skillSummary(runs, outcomeRe != null),
+    sessions: runs.map(r => r.row),
+    notes: [
+      'tokens.billableApprox = input + output + cacheCreation, main plus subagents; combined adds cacheRead. Subagents are every transcript under <session>/subagents/, each summed once per message.id.',
+      'firstTurnCtx is measured (input + cache_creation + cache_read of the first assistant turn). preload[].approxTokens is estimated — the text-bearing fields of each record before that turn at chars ÷ 4 — so firstTurnCtx minus preloadApproxTokens is roughly the tool schemas and any system prompt the transcript did not record.',
+      'durationMs runs from the first to the last record, so a session a person continued (humanContinued) reads long; judge time on the others.',
+      'sinks and topSinks size each tool result at chars ÷ 4; errors fold digits and hex runs to N and key on the first 100 characters.'
+    ]
+  };
+}
+
 /* ------------------------------------------------ CLI (kaizen.ts) */
 
 const ID_RE = /^[A-Za-z0-9._-]+$/;
 const PROJECT_RE = /^(?!\.\.?$)[^/\s\]]+$/;
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const FIELD_PATH_RE = /^[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)*$/;
-const USAGE = 'usage: node kaizen.mjs <session-id | /abs/path.jsonl | --latest | --trend [/abs/log.md] | --compare <project> <since YYYY-MM-DD> <field.path> | --budget [<file>] [<heading>] [<bytes>]>';
+const SKILL_NAME_RE = /^[A-Za-z0-9._-]+(?::[A-Za-z0-9._-]+)?$/;
+const SKILL_USAGE = 'usage: node kaizen.mjs --skill <name | plugin:name> [N 1-9999] [--outcome <regex>]';
+const USAGE = 'usage: node kaizen.mjs <session-id | /abs/path.jsonl | --latest | --trend [/abs/log.md] | --compare <project> <since YYYY-MM-DD> <field.path> | --budget [<file>] [<heading>] [<bytes>] | --skill <name> [N] [--outcome <regex>]>';
 function die(msg) { console.error(msg); process.exit(1); }
 
 function main() {
@@ -745,6 +1046,21 @@ function main() {
     let result;
     try { result = compareSessions({ root: projectsRoot(), project, since, fieldPath }); } catch (e) { die(e.message); }
     process.stdout.write(JSON.stringify(result, null, 2) + '\n');
+    return;
+  }
+
+  if (arg === '--skill') {
+    const rest = process.argv.slice(3);
+    let name, limit = SKILL_DEFAULT_LIMIT, outcome = null, sawLimit = false;
+    for (let i = 0; i < rest.length; i++) {
+      if (rest[i] === '--outcome') { if (i + 1 >= rest.length) die(SKILL_USAGE); outcome = rest[++i]; }
+      else if (name === undefined) name = rest[i];
+      else if (!sawLimit && /^[1-9]\d{0,3}$/.test(rest[i])) { limit = Number(rest[i]); sawLimit = true; }
+      else die(SKILL_USAGE);
+    }
+    if (!name || !SKILL_NAME_RE.test(name)) die(SKILL_USAGE);
+    if (outcome != null) { try { new RegExp(outcome); } catch (e) { die(`invalid --outcome regex: ${e.message}`); } }
+    process.stdout.write(JSON.stringify(reviewSkill({ root: projectsRoot(), skill: name, limit, outcome }), null, 2) + '\n');
     return;
   }
 
