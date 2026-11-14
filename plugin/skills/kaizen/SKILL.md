@@ -1,6 +1,7 @@
 ---
 name: kaizen
-description: Continuous-improvement loop over finished Claude Code sessions — total token usage across the whole session (incl. every subagent), which tools/subagents cost the most, an accuracy read, and concrete suggestions to work better next time. Appends one lesson to ~/.claude/session-analytics-log.md so patterns accumulate across all projects, records what became of each lesson, and flags lessons recurring across 4+ projects for promotion to global config. Use when the user says "/kaizen" (or the legacy "/doctor"), "review this session", "how did that session do", "where did I waste tokens", or wants a retrospective on work just completed. Also use for "/kaizen review" (sweep the whole log: batch promote, prune stale rules), "/kaizen skill <name> [N]" ("review the last N sessions of skill X"), and to bank a lesson mid-session when the user corrects course or says "remember that", "bank that lesson", "note that for next time".
+description: >-
+  Session retrospective: whole-session token cost incl. subagents, priciest tools, an accuracy read, and one lesson appended to ~/.claude/session-analytics-log.md. Use for /kaizen, "review this session", "where did I waste tokens", "/kaizen review" (sweep the log), "/kaizen skill <name> [N]", or to bank a lesson mid-session ("remember that", "bank that lesson").
 ---
 
 > **NOTE — a contract with the dashboard.** This skill ships in the Claude Agents Dashboard plugin (`plugin/skills/kaizen/` in that repo), because the

@@ -7,6 +7,7 @@ description: >
   "do the git chores", or "prune merged branches". Every deletion, push of a branch and stash change is asked first, in one decision round,
   and re-proven right before it runs; anything the user did not choose is kept.
 trigger: /git-sync
+disable-model-invocation: true
 ---
 
 # git-sync
