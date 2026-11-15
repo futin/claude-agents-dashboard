@@ -35,8 +35,8 @@ entries of the fixture map for one test — `scroll-hit.spec.ts` uses all three 
 `gitSessions` override (`fixtures/git-sessions.ts`, the sessions payload plus an idle session on `lumen-cli`, so the session join draws all three agent chips)
 and `pinsWithGone` (`fixtures/pins.ts`, a pin whose folder is gone, for the `Folder gone` chip) ride in the same way, on the Git and Projects shots only.
 The CodeGraph shots pass `managementTab: 'codegraph'` and need no override: `fixtures/codegraph.ts` is the shared `/api/codegraph` answer, seven pins in seven states (two that need you, one worth a look, two all good of which one is mid-rebuild, and two not indexed).
-`fixtures/routines.ts` answers `/api/routines` and `/api/routines/runs`: six job files, one per state the ledger tells apart (a file that does not parse, a
-`claude` fan-out over the pins, a failed single-repo job, a paused `shell` job, one running now, one for the other machine only), and one run in each run
+`fixtures/routines.ts` answers `/api/routines` and `/api/routines/runs`: five job files, one per state the ledger tells apart (a file that does not parse, a
+`claude` fan-out over the pins, a failed single-repo job, a paused `shell` job, one running now), and one run in each run
 state, so both pages draw every chip without a per-test override.
 
 ## How it runs
