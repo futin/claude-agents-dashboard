@@ -1,5 +1,5 @@
 /**
- * `GET /api/routines` and `GET /api/routines/runs` — six job files, one per state the ledger tells apart (drawn sorted by name):
+ * `GET /api/routines` and `GET /api/routines/runs` — five job files, one per state the ledger tells apart (drawn sorted by name):
  * - broken-job: a file that does not parse, so the row draws its error and no routine.
  * - nightly-sync: a `claude` fan-out over the pins, installed, last run ok across both repos.
  * - pr-triage: a single-cwd `claude` job, installed, last run failed.

@@ -75,7 +75,8 @@ via `tsx`, dev and prod alike).
 
 ## HTTP surface
 
-All routes live in `server/index.ts` (dispatch) and `server/api.ts` (handlers). Every POST runs the write gate; a **session write path** also needs the
+All routes live in `server/index.ts` (dispatch) and `server/api.ts` (handlers). Every POST that changes state runs the write gate — `POST /api/routines/validate`, which is read-only, and the hub
+widget action paths, which answer 404, are the two that do not; a **session write path** also needs the
 remote-answer switch on, a **gate-only write** needs the gate alone ([who may write](subsystems/remote-access.md#who-may-write) defines both):
 
 | Route | Purpose |

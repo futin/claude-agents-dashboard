@@ -269,9 +269,12 @@ remote-control set above. The full picture is in [`docs/overview.md`](docs/overv
 - **Dependencies:** the server uses Node built-ins plus two packages, [`lookout-widgets`](docs/subsystems/hub-widgets.md#the-dependency-exception) and
   `release-kit`, each with zero runtime dependencies of its own.
 - **Outbound calls:** exactly two kinds — the ntfy push (only when you configure a topic) and the usage-bar read from Anthropic's API (`SHOW_USAGE=false`
-  turns it off). Besides those, the server runs local programs only when a feature you turned on needs them: `git fetch` on the pinned repos when you turn
-  the Git fetch timer on, the fetch and push behind Pull and Push when you press them, `gh pr view` behind the PR card, and `claude` for spawns and
-  routines.
+  turns it off). Besides those, the server runs local programs, none of them a third kind of call:
+  - always, or as soon as the matching view or card is open: `ps` and `lsof` for session liveness on every scan; `security` for the keychain token and
+    `claude` for a token refresh while the usage bar is on; `git` and `codegraph` behind the Git and CodeGraph views; `gh pr view` behind the PR card; the
+    browser auto-open on `pnpm start`;
+  - only on a setting or a press: `git fetch` on the pinned repos when you turn the Git fetch timer on, the fetch and push behind Pull and Push, `claude`
+    for spawns and routines, and `ffmpeg` plus whisper for dictation.
 - **Writes:** the app never writes to transcripts. Every write endpoint — answers, messages, launches, git actions — is refused unless the request comes
   from this machine, from a tailnet device while **Settings › Shared › Trust tailnet devices** is on (the default), or carries `ANSWER_TOKEN`. A LAN client
   without the token is read-only. Both servers bind all interfaces, and a DNS-rebinding guard answers only known host names (`ALLOWED_HOSTS` adds more).
@@ -313,7 +316,7 @@ remote-answers hook, push-notification and dictation setup, CI and releases) in 
 
 ## Not included (yet)
 
-- Estimated USD cost per session. (Whole-session token totals live in the **Analytics** tab — run `/kaizen` on a session and it appears there.)
+- Estimated USD cost per session. (The chat drawer already shows a session's token total, main agent plus subagents.)
 
 <!-- docs-sync:
   sources:
