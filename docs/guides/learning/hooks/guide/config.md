@@ -28,7 +28,7 @@ flowchart LR
 **Why the server owns the deadline rather than curl:**
 
 ```bash
-# scripts/ask-remote-hook.sh:113-115
+# scripts/ask-remote-hook.sh:119-121
 # 3. Register and wait. The server resolves this itself at the deadline, so
 #    curl's own cap is only a backstop for a hung server. A non-2xx, a reset
 #    (server restarted), or a timeout all mean: use the terminal dialog.
@@ -68,7 +68,7 @@ degrades to the terminal dialog. Even a misconfigured ladder fails safe.
 The UI enforces it from the other end, twice. First the field simply won't go higher:
 
 ```tsx
-// client/src/components/settings/SettingsView.tsx:360-366
+// client/src/components/settings/SettingsView.tsx:343-349
 <NumberField
   value={server.state.answerSecs}
   min={5}

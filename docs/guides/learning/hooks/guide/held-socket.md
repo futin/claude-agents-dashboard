@@ -35,7 +35,7 @@ sequenceDiagram
 The whole mechanism is six lines:
 
 ```ts
-// server/api.ts:785-791
+// server/api.ts:811-817
 let questionId = '';
 res.on('close', () => { if (questionId) cancelPending(sessionId, questionId); });
 questionId = register(sessionId, questions, clampTimeout(body.timeoutMs), (result: WaitResult) => {
@@ -48,7 +48,7 @@ if (res.destroyed) cancelPending(sessionId, questionId);
 **Why the push comes last:**
 
 ```ts
-// server/api.ts:793-794
+// server/api.ts:819-820
 // Last, so a refused registration never pushes. Returns immediately — the
 // response above stays held either way.
 ```
@@ -131,7 +131,7 @@ stateDiagram-v2
 interrupted — shows up only as a closed socket:
 
 ```ts
-// server/api.ts:781-784
+// server/api.ts:807-810
 // The hook's socket closing IS the signal that nobody is waiting any more
 // (session interrupted, hook killed, CLI hook timeout). Listen before
 // registering, and re-check after, so a socket that dies during the body read

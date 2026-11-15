@@ -99,7 +99,7 @@ These are the questions actually raised while this guide was written.
 ### "Which 'hooks' — Claude Code hooks, or the React hooks in `client/src/hooks/`?"
 
 Both exist in this repo and the words collide, so it is worth naming the difference once.
-`client/src/hooks/` holds fifteen React hooks (`useSessions`, `usePendingQuestion`,
+`client/src/hooks/` holds the dashboard's React hooks (`useSessions`, `usePendingQuestion`,
 `useDictation`, …) — browser-side state and polling. This guide is about the **five remote-answer
 shell scripts in `scripts/`** that Claude Code executes at lifecycle events (a sixth, `kill-guard-hook.sh`, is out of scope).
 
