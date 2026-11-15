@@ -27,13 +27,13 @@ built the way it was, contrasting each choice with the naive alternative.
 transcript and estimate "this cost about a million tokens." That hallucinates
 figures and is never reproducible run-to-run. Pushing all arithmetic into
 `kaizen.mjs` makes the numbers exact and deterministic; the skill explicitly
-forbids the model from inventing them (`plugin/skills/kaizen/SKILL.md:17`). The
+forbids the model from inventing them (`plugin/skills/kaizen/SKILL.md`, intro: "Never invent figures"). The
 model only does what math can't — judge whether the work was any good.
 
 The `.mjs` is deliberately zero-dep pure Node (not `tsx`, no repo) so the *global*
 skill runs in **any** project. It is a hand-port of `server/lib/{analyze,agents,
 subagent-usage,scan}.ts`, which the header names as the unit-tested source of truth
-(`plugin/skills/kaizen/kaizen.mjs:13`).
+(`plugin/skills/kaizen/kaizen.mjs`, the header's `PROVENANCE` line).
 
 - **Bad alternative:** `import`-ing the repo's TypeScript directly. Con: the skill
   would only work inside this repo, with `tsx` installed. **Chosen:** duplicate the
@@ -43,10 +43,10 @@ subagent-usage,scan}.ts`, which the header names as the unit-tested source of tr
 
 ## 2. Reading tokens honestly — two totals, not one
 
-`analyzeSession()` (`plugin/skills/kaizen/kaizen.mjs:285`) streams the `.jsonl`
+`analyzeSession()` (`plugin/skills/kaizen/kaizen.mjs`) streams the `.jsonl`
 line by line and, for each **assistant** message, sums
 `usage.{input, output, cache_creation, cache_read}_tokens`. It derives two
-headline totals (`kaizen.mjs:491`):
+headline totals (the `totals` object `analyzeSession` returns):
 
 - `billableApprox` = `input + output + cacheCreation` — **real cost**; lead with it.
 - `combined` = that **plus** `cacheRead`.
@@ -55,7 +55,7 @@ headline totals (`kaizen.mjs:491`):
 only ~10%. Reporting `combined` as "the cost" makes a long session look ~10× more
 expensive than it was. So `combined` is only a *context-pressure* signal, never
 "what this cost." The `notes[]` array bakes this caveat into the payload itself
-(`kaizen.mjs:473`) so no downstream consumer can forget it.
+(`analyzeSession`'s `notes` array) so no downstream consumer can forget it.
 
 - **Bad alternative:** report a single `total = everything`. Con: conflates real
   spend with cheap replayed cache; every retrospective over-reports cost.
@@ -64,20 +64,21 @@ expensive than it was. So `combined` is only a *context-pressure* signal, never
 
 The transcript has **no per-tool token field**. So the analyzer takes each turn's
 total output tokens and splits it *evenly* across the tool calls in that turn
-(`kaizen.mjs:440`). That is why `approxOutputTokens` is labeled "approx"
+(the per-tool split loop in `analyzeSession`). That is why `approxOutputTokens` is labeled "approx"
 everywhere. What *is* exact: `count`, `errors`, and `durationMs` — so firm claims
 lean on those.
 
 - **Bad alternative:** present a precise per-tool token cost. Con: it would be a
   fabrication — the data to compute it does not exist on disk.
 
-### Subagents: counted separately, and exactly
+### Subagents: counted separately, from their own transcripts
 
-`readAgents()` (`kaizen.mjs:145`) is a small event-parser/reducer that pulls exact
-subagent `tokens`/`toolUses`/`durationMs` from two places: the `toolUseResult` on a
-sync result block, and the `<subagent_tokens>` / `<tool_uses>` / `<duration_ms>`
-tags inside async `<task-notification>` blocks. These are kept **out** of `totals`
-and reported in `subagentTotals` instead (`kaizen.mjs:493`).
+`subagentSpend()` (`kaizen.mjs`) sums each subagent's spend from its own transcript, `<sessionId>/subagents/agent-*.jsonl`, counting each
+`message.id` once (`sumSubagentTranscript`). `readAgents()` still pairs launches with completions to list the subagents. The harness figure
+(`toolUseResult.totalTokens`, or the `<subagent_tokens>` tag of an async `<task-notification>`) is the subagent's final context size, not its spend
+(bug-27): it is used only as a lower-bound fallback, when the transcript is missing or sums below it, and counted in `subagentTotals.fallbackCount`; a
+finished launch with neither figure, or one still running, counts in `unknownTokenCount`. These are kept **out** of `totals` and reported in
+`subagentTotals` instead.
 
 **Why separate?** This threads between two bad alternatives. Subagent turns used
 to be replayed into the parent transcript carrying `isSidechain: true` (as of
@@ -89,13 +90,13 @@ and `subagentTotals` is the only path subagent tokens have into this report):
   back into the parent turn).
 - Drop them entirely → **undercount** the session's true work.
 
-So the analyzer skips sidechain lines for the main total (`kaizen.mjs:340`) *and*
-re-adds exact subagent numbers as their own bucket. Hence the rule the skill
-states: whole-session ≈ `combined` + `subagentTotals.tokens` (`kaizen.mjs:480`).
+So the analyzer skips sidechain lines for the main total (the `rec.isSidechain` check in `analyzeSession`) *and*
+re-adds subagent numbers as their own bucket. Hence the rule the skill
+states: whole-session ≈ `combined` + `subagentTotals.tokens` (the subagent line of `analyzeSession`'s `notes`).
 
 ### Error signals are heuristics, and say so
 
-`errorSignals` (`kaizen.mjs:495`) carries `toolErrors` (exact: `is_error` or
+`errorSignals` (in `analyzeSession`'s result) carries `toolErrors` (exact: `is_error` or
 `<tool_use_error>`), `retries` (a tool re-run after it errored — a rework signal),
 and `userCorrections` (a keyword regex like *no/wrong/actually/revert*). The last
 is explicitly a "noisy lower bound, not a score." The skill therefore requires the
@@ -112,10 +113,10 @@ one lesson** → (7) offer to codify it.
 
 Step 6 is the one that feeds Analytics. It appends exactly one line to
 `~/.claude/session-analytics-log.md` in this **contract format**
-(`plugin/skills/kaizen/SKILL.md:128`):
+(`plugin/skills/kaizen/SKILL.md` §6):
 
 ```
-- 2026-07-12 [claude-agents-dashboard] d04e9b52: 1.0M billable (12.1M ctx), top cost 4 subagents (233k)... Lesson: <one concrete takeaway>.
+- 2026-07-12 [<project>] <session-id>: <billableApprox> billable (<combined> ctx), top cost <tool/subagent>. Lesson: <one concrete takeaway>. ‖ cue: <…> · component: <…> · evidence: <…> · confidence: <high|medium|low> (<why>)
 ```
 
 The log is **global** (`~/.claude`, not per-project) on purpose: most habits —
@@ -128,21 +129,29 @@ projects** it flags the lesson for promotion to global `~/.claude/CLAUDE.md` (st
 - **Bad alternative:** write the lesson into each project's `CLAUDE.md`. Con:
   cross-project habits fragment across five files and the recurrence is invisible.
 
-### 3a. Two more line shapes, and why the log is append-only
+### 3a. More line shapes, and why the log is append-only
 
-A lesson alone can't say whether anyone *acted* on it, so step 7 appends a second
-kind of line once the user has decided, and a `/kaizen review` sweep appends a
-third. Three shapes, one grammar:
+A lesson alone can't say whether anyone *acted* on it, so step 7 appends a status
+line once the user has decided, `/kaizen review` appends a verdict on a rule that was acted on, and each review sweep appends a marker. Four shapes, one
+grammar (copied from `plugin/skills/kaizen/SKILL.md` §Log grammar, the contract):
 
 ```
-- 2026-07-12 [dashboard] d04e9b52: … Lesson: <takeaway>.              ← the lesson (step 6)
-- 2026-08-01 [dashboard] d04e9b52: status actioned — project CLAUDE.md ← its fate (step 7)
-- 2026-08-09 review: swept 12 lessons, promoted 1, pruned 2            ← a sweep happened
+- 2026-07-12 [dashboard] d04e9b52: 210k billable (1.4M ctx), top cost Explore. Lesson: <takeaway>. ‖ cue: <…> · component: <…> · evidence: <…> · confidence: high (<why>)
+- 2026-07-12 [dashboard] 7f31c0aa: 95k billable (600k ctx), top cost Edit. Lesson: none — <one-line reason>.
+- 2026-08-09 [dashboard] d04e9b52: status actioned — claude-md: project CLAUDE.md §Subagent rules, added "Explore returns a file:line table"
+- 2026-09-02 [dashboard] d04e9b52: verdict helped — errorSignals.retries median 4 → 1 over 5 sessions (before 5)
+- 2026-08-09 review: swept 12 lessons, promoted 1, pruned 2
 ```
 
-`status` is `actioned` | `promoted` | `dropped`; a lesson with **no** status line
-is still open. Note what step 7 does *not* do: edit the original line to mark it
-done.
+The first two lines are both the lesson shape. A lesson may carry a tail after ` ‖ ` (`cue`, `component`, `evidence`, `confidence`), which lets the
+next run find it again. A `Lesson: none — <reason>.` line records a session that taught nothing new; it is born closed and never gets a status line.
+`docs/subsystems/analytics.md` §Log grammar holds the full grammar.
+
+`status` is `actioned` | `promoted` | `dropped`, and its note starts with the home kind it was routed to (`memory:`, `claude-md:`, …); a lesson with
+**no** status line is still open. Note what step 7 does *not* do: edit the original line to mark it done.
+
+The `verdict` shape is written only by `/kaizen review`, for a lesson whose status is `actioned` or `promoted`: it records whether the rule helped
+(`helped`, `hurt`, `no-effect` or `confounded`), with the before → after medians in its note. It never changes whether a lesson is open.
 
 **Why append a second line instead of updating the first?** This machine runs many
 sessions at once — that is the dashboard's whole reason to exist — and they share
@@ -169,43 +178,42 @@ because `/kaizen` logged it. The pipeline is three small pure functions.
 
 ### 4a. Parse the log → lessons, statuses, review markers
 
-`server/lib/sessionAnalyticsLog.ts` has one regex per line shape: `LINE_RE`
-(`sessionAnalyticsLog.ts:66`) pulls `{date, project, idPrefix, lesson}` out of a
-lesson line, `STATUS_RE` (`:69`) a `{status, date, note}`, `REVIEW_RE` (`:73`) a
-sweep marker. `idPrefix` is a **short prefix** of the transcript UUID (`d04e9b52`),
-not the full id. `recentLessons()` (`:184`) scans entries newest-first, dedupes by
+`server/lib/sessionAnalyticsLog.ts` has one regex per line shape: `LINE_RE` pulls `{date, project, idPrefix, lesson}` out of a lesson line,
+`STATUS_RE` a `{status, date, note}`, `VERDICT_RE` a `{verdict, date, note}`, `REVIEW_RE` a sweep marker. `FIELD_RE`, `CONFIDENCE_RE` and `NONE_RE` then
+read a lesson's tail and its `none` form. `idPrefix` is a **short prefix** of the transcript UUID (`d04e9b52`),
+not the full id. `recentLessons()` scans entries newest-first, dedupes by
 `idPrefix` (a re-analyzed session keeps only its latest line), and caps at N.
 Everything is **fail-open** — an unparseable line is skipped, a missing file yields
 `[]`, it never throws.
 
-`parseLogEvents()` (`:93`) reads all three shapes in one pass, and classifies each
-line by the **first** pattern it matches: status → review → lesson. That ordering
-is load-bearing — a status note that happens to contain the word `Lesson:` would
+`parseLogEvents()` reads all four shapes in one pass, and classifies each
+line by the **first** pattern it matches: verdict → status → review → lesson. That ordering
+is load-bearing — a status or verdict note that happens to contain the word `Lesson:` would
 otherwise be parsed as a lesson and conjure a phantom card.
 
 **Why keep the old single-shape parser too?** `parseSessionAnalyticsLog()` is still
-what `scan.ts` calls, and the two new shapes have no `Lesson:` in them — so they
+what `scan.ts` reaches, through `readSessionAnalyticsLog()`, and the other three shapes have no `Lesson:` in them — so they
 are *invisible* to it. Adding a line shape therefore can't disturb an existing
 consumer, and that property is pinned by a test.
 
-- **Bad alternative:** widen `LINE_RE` into one regex covering all three shapes.
+- **Bad alternative:** widen `LINE_RE` into one regex covering all four shapes.
   Con: every existing caller inherits the new shapes whether it wants them or not,
-  and one regex serving three grammars is where the phantom-lesson bug lives.
+  and one regex serving four grammars is where the phantom-lesson bug lives.
 
-`statusForSession()` (`:132`) then answers "what became of this session's lesson?"
+`statusForSession()` then answers "what became of this session's lesson?"
 — prefix match, newest wins, exactly mirroring `lessonForSession`.
 
 ### 4b. Resolve + re-analyze live
 
-`server/lib/analytics.ts` `listReports()` (`analytics.ts:42`) is the heart. For
+`server/lib/analytics.ts` `listReports()` is the heart. For
 each recent lesson it:
 
 1. Resolves `idPrefix` → a real transcript by **prefix-matching** the enumerated
-   `listTranscripts()` list (`analytics.ts:51`).
+   `listTranscripts()` list (`findTranscriptByPrefix`).
 2. Runs `analyzeSession(ref.file, ref.id)` **live** — the same analyzer, re-run
    fresh on every request.
 3. Assembles an `AnalyticsReport` = `{sessionId, project, cwd, models, loggedAt,
-   analysis, lesson, lessonStatus}` (`analytics.ts:55`).
+   analysis, lesson, lessonStatus, lessonVerdict, …}` (`shared/types.ts` `AnalyticsReport`).
 
 If the transcript is gone, `analysis` is `null` and the card falls back to a
 lesson-only view; `project` then falls back to the log's `[project]` tag.
@@ -216,16 +224,16 @@ still finds its lesson.
 
 ### 4c. The endpoint and the contract type
 
-`serveAnalytics()` (`server/api.ts:2284`) is `GET /api/analytics` →
+`serveAnalytics()` (`server/api.ts`) is `GET /api/analytics` →
 `AnalyticsResponse {generatedAt, keep, reports, lastReviewAt, reviewDue}`. It is
 **fail-open**: any throw logs and returns an empty list with `error: true`. It is
 *not* polled (config changes only when `/kaizen` runs); it is fetched on section
 mount + manual refresh. Config knobs: `ANALYTICS_KEEP=5`, `SHOW_ANALYTICS`
-(`server/lib/config.ts:142`). The whole FE/BE contract is `SessionAnalysis`,
-`AnalyticsReport` and `LessonStatus` in `shared/types.ts:1473` — the single source of
+(`server/lib/config.ts` `DEFAULTS`). The whole FE/BE contract is `SessionAnalysis`,
+`AnalyticsReport` and `LessonStatus` in `shared/types.ts` — the single source of
 truth both sides import as `type`.
 
-`reviewStatus()` (`analytics.ts:77`) computes `reviewDue`: lessons exist **and** no
+`reviewStatus()` (`analytics.ts`) computes `reviewDue`: lessons exist **and** no
 `review:` marker within `REVIEW_INTERVAL_DAYS` (7). Two deliberate asymmetries — an
 empty log is never "due" (nothing to sweep, so nagging a fresh install is noise),
 while a log that has *never* been swept is due immediately. `now` is injectable, so
@@ -252,7 +260,7 @@ correct choice.
 
 ### Prefix-match, never path-join
 
-`idPrefix` is validated against `ID_RE` (`analytics.ts:24`) and used to `.find()`
+`idPrefix` is validated against `ID_RE` (`analytics.ts`) and used to `.find()`
 within an *already-enumerated* transcript list — it is **never joined into a
 filesystem path**. Same philosophy as `serveSessionDetail`.
 
@@ -302,7 +310,7 @@ figures.
 - `plugin/skills/kaizen/SKILL.md` — the LLM instructions: 7-step loop, token-honesty rules, promotion policy, the status/review/capture modes.
 - `plugin/skills/kaizen/kaizen.mjs` — the zero-dep deterministic analyzer (`analyzeSession`, `readAgents`); vendored port of the server libs.
 - `~/.claude/session-analytics-log.md` — the single append-only wire between producer and consumer (global; lesson, status and review lines).
-- `server/lib/sessionAnalyticsLog.ts` — parses the log (`LINE_RE`/`STATUS_RE`/`REVIEW_RE`, `parseLogEvents`, `recentLessons`, `statusForSession`); fail-open.
+- `server/lib/sessionAnalyticsLog.ts` — parses the log (the four line regexes, `parseLogEvents`, `recentLessons`, `statusForSession`); fail-open.
 - `server/lib/analytics.ts` — `listReports`: prefix-resolve transcript, re-analyze live, build `AnalyticsReport`; `reviewStatus`: the 7-day sweep clock.
 - `server/lib/analyze.ts` — the in-repo source of truth for the analyzer (`kaizen.mjs` mirrors it).
 - `server/api.ts` — `serveAnalytics` (`GET /api/analytics`), fail-open.
