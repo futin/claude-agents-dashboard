@@ -12,6 +12,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
+import { writeFileAtomic } from './atomic-write.js';
 import { foldLines } from './jsonl-tail.js';
 import { stateDir } from './paths.js';
 import { listUsageTranscripts, projectsRoot } from './scan.js';
@@ -455,9 +456,11 @@ export function rotateLedgerIfNeeded(dir?: string, maxBytes: number = MAX_LEDGER
     fd = fs.openSync(file, 'r');
     const buf = Buffer.alloc(keep);
     fs.readSync(fd, buf, 0, keep, size - keep);
+    fs.closeSync(fd);
+    fd = undefined; // closed before the rename, so the swap never depends on an open handle to the old file
     const first = buf.indexOf(NEWLINE);
     if (first === -1) return; // one absurd line — leave it alone
-    fs.writeFileSync(file, buf.subarray(first + 1), 'utf8');
+    writeFileAtomic(file, buf.subarray(first + 1));
   } catch {
     /* absent / unreadable / read-only — leave it alone */
   } finally {

@@ -12,8 +12,10 @@ import {
   ledgerStartMs,
   readLedgerSince,
   recordLedgerTick,
-  resetLedgerRecorder
+  resetLedgerRecorder,
+  rotateLedgerIfNeeded
 } from '../../server/lib/usage-ledger.js';
+import { overrideAtomicRename } from '../../server/lib/atomic-write.js';
 
 function test(name: string, fn: () => void): boolean {
   try { fn(); console.log('  ✓ ' + name); return true; }
@@ -415,6 +417,30 @@ export function run(): number {
         assert.strictEqual(fx.ledgerLines().length, 1);
         assert.deepStrictEqual(fs.readdirSync(stateA), [], 'the env var must not pull a seam write away from dir');
       });
+    });
+  })) p++; else f++;
+
+  if (test('rotation keeps the newest half from a whole line; a rotation whose swap fails leaves the ledger unchanged byte for byte', () => {
+    withFixture(fx => {
+      const lines = Array.from({ length: 40 }, (_, i) => JSON.stringify({ t: T0 + i * MIN, prevT: T0 + (i - 1) * MIN, tok: {} }) + '\n');
+      fs.writeFileSync(fx.ledgerPath, lines.join(''), 'utf8');
+      const cap = Math.floor(fs.statSync(fx.ledgerPath).size / 2);
+      const before = fs.readFileSync(fx.ledgerPath);
+
+      overrideAtomicRename(() => { throw new Error('ENOSPC'); });
+      try {
+        rotateLedgerIfNeeded(fx.dir, cap);
+      } finally {
+        overrideAtomicRename(null);
+      }
+      assert.ok(fs.readFileSync(fx.ledgerPath).equals(before), 'the ledger changed');
+      assert.deepStrictEqual(fs.readdirSync(fx.dir).filter(n => n.endsWith('.tmp')), []);
+
+      rotateLedgerIfNeeded(fx.dir, cap);
+      const kept = fs.readFileSync(fx.ledgerPath, 'utf8');
+      assert.ok(kept.length > 0 && kept.length <= Math.floor(cap / 2), 'not trimmed to the newest half');
+      assert.ok(lines.join('').endsWith(kept), 'not the newest lines');
+      assert.ok(lines.includes(kept.split('\n')[0] + '\n'), 'does not start on a whole line');
     });
   })) p++; else f++;
 

@@ -6,6 +6,7 @@ import assert from 'node:assert';
 import fs from 'node:fs';
 import path from 'node:path';
 
+import { overridePinRows } from '../../server/api.js';
 import { testAsync, userRecord, withServer } from '../api-harness.js';
 import type { Harness } from '../api-harness.js';
 import { GitFixture, withGitFixture } from '../git-fixture.js';
@@ -66,6 +67,11 @@ async function withQuickApi(fn: (h: Harness, fx: GitFixture) => Promise<void>): 
   } finally {
     overrideClaudeRoots(null);
   }
+}
+
+/** `p`, or a rejection once `ms` pass: a handler that never answers fails the case instead of hanging the suite. */
+function within<T>(p: Promise<T>, ms = 3000): Promise<T> {
+  return Promise.race([p, new Promise<T>((_, reject) => setTimeout(() => reject(new Error(`no answer within ${ms} ms`)), ms).unref())]);
 }
 
 const post = (h: Harness, body: unknown, headers: Record<string, string> = AUTH) =>
@@ -187,6 +193,22 @@ export async function run(): Promise<number> {
       const reply = await post(h, { dirName, op: 'pull' });
       assert.equal(reply.status, 200, reply.raw);
       assert.ok(s.calls() > 0, 'git should have run');
+    });
+  }));
+
+  check(await testAsync('a pin read that throws is answered 500, not left hanging, and git is never called', async () => {
+    await withQuickApi(async h => {
+      const s = spy();
+      overrideQuickRunner(s.run);
+      overridePinRows(() => { throw new Error('listing blew up'); });
+      try {
+        const reply = await within(post(h, { dirName: 'any', op: 'pull' }));
+        assert.equal(reply.status, 500, reply.raw);
+        assert.equal(reply.json?.error, 'pins read failed');
+        assert.equal(s.calls(), 0);
+      } finally {
+        overridePinRows(null);
+      }
     });
   }));
 
