@@ -164,8 +164,9 @@ export function readTail(filePath: string, tailBytes: number): TailResult | null
     const length = size - start;
     if (length <= 0) return { text: '', truncated: false, start: 0, size };
     const buf = Buffer.alloc(length);
-    fs.readSync(fd, buf, 0, length, start);
-    return { text: buf.toString('utf8'), truncated: start > 0, start, size };
+    // A file truncated between the fstat and the read yields fewer bytes; the rest of `buf` is zeros, never content.
+    const n = fs.readSync(fd, buf, 0, length, start);
+    return { text: buf.toString('utf8', 0, n), truncated: start > 0, start, size: n < length ? start + n : size };
   } catch {
     return null;
   } finally {
@@ -184,8 +185,8 @@ export function readHead(filePath: string, headBytes: number): TailResult | null
     const length = Math.min(size, headBytes);
     if (length <= 0) return { text: '', truncated: false, start: 0, size };
     const buf = Buffer.alloc(length);
-    fs.readSync(fd, buf, 0, length, 0);
-    return { text: buf.toString('utf8'), truncated: length < size, start: 0, size };
+    const n = fs.readSync(fd, buf, 0, length, 0);
+    return { text: buf.toString('utf8', 0, n), truncated: length < size, start: 0, size: n < length ? n : size };
   } catch {
     return null;
   } finally {

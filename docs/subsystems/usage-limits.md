@@ -322,7 +322,8 @@ Consequence for the client: `ratePerHour × 24` overstates the daily figure by
 
 - `.usage-history.jsonl` — append-only samples, write-on-change plus a 15-minute
   heartbeat (which doubles as the liveness marker separating downtime from quiet),
-  trimmed to its newest half past 32 MB.
+  trimmed to its newest half past 32 MB; the trimmed copy replaces the log by rename (`lib/atomic-write.ts`), so an interrupted
+  rotation leaves the old log whole.
 - `.usage-profile.json` — the learned profile, written atomically (tmp + rename) at most
   every 15 minutes. **This is the profile's source of truth, and the log is not a
   replayable substitute for it:** learning happens live at full one-minute resolution

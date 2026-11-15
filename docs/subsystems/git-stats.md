@@ -66,7 +66,8 @@ the reader; unlike the fetch, it writes local refs and the working tree — but 
 
 - **Route.** `POST /api/git-quick {dirName, op: 'pull' | 'push'}`, behind `refuseWrite` like `POST /api/git-fetch`. A body that is not that shape is 400,
   a `dirName` that is not a listed pin with a path is 404, `busy` and `fetch-running` refusals are 409, everything else answers 200 with a
-  `GitQuickResponse` (`refusal` plus `parts`); a throw is 500 `git quick failed`, any other method 405.
+  `GitQuickResponse` (`refusal` plus `parts`); a pin list that cannot be read is 500 `pins read failed`, a throw from the op is 500 `git quick failed`,
+  any other method 405.
 - **One op per repo, never beside fetch-all.** `server/lib/git-locks.ts` holds one lock per git **common dir** (two pins in one repo, a linked worktree
   included, share it). A quick op refuses `fetch-running` while fetch-all is in flight and `busy` while its repo's lock is held; both checks and the lock
   run with no await between them, so two requests cannot both pass and fetch-all cannot start in the gap. Fetch-all waits for every held lock inside its in-flight
@@ -257,7 +258,8 @@ is a link on a Ready card in Branches, from `gitCompareUrl` (`client/src/lib/git
 host gets no key. **Open folder** is on the Inspector pane for an `ok` repo with a path: `useOpenFolder` posts `POST /api/open-folder` `{path}` with the Answer
 token, and the server runs macOS `open` on it only when the path string-equals a listed pin's (`server/lib/open-folder.ts`, argv through `execFile`, no
 shell). The order of its answers is `405` for a non-POST, `403 bad token` or
-`read-only from this network`, `400`, `501 open folder needs macOS`, `403 not a pinned project`, `500 open failed`,
+`read-only from this network`, `400`, `501 open folder needs macOS`, `500 pins read failed` when the pin list cannot be read, `403 not a pinned project`,
+`500 open failed`,
 then `200 {ok: true}`; the hook turns each into a note under the toolbar. It is not a third kind of outbound call: `open` makes none.
 
 **A branch row** is the name (plus a "worktree" badge when `worktreePath` is set and the agent chip when a session sits on it), the divergence bar, `.git-dv`

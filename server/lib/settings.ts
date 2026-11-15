@@ -32,6 +32,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
+import { writeFileAtomic } from './atomic-write.js';
 import { claudeHome, stateDir } from './paths.js';
 import type { EnvOverride, GitFetchSecs, LaunchSurface, NoneMissing, NotifyEvent, NotifyPolicy, ServerSettings, ServerSettingsPatch } from '../../shared/types.js';
 
@@ -345,7 +346,7 @@ export function getGitFetchSecs(): number {
 
 function persist(values: Stored): void {
   try {
-    fs.writeFileSync(statePath(), JSON.stringify(values) + '\n', 'utf8');
+    writeFileAtomic(statePath(), JSON.stringify(values) + '\n');
     persisted = true;
   } catch {
     persisted = false; // read-only fs / container — the values still hold this run

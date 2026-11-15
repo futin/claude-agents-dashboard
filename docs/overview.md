@@ -292,6 +292,7 @@ server/
                   test seam, fail directions; a leaf lib/notify.ts imports, never
                   the reverse
   lib/remoteState.ts  remote-answer switch (env gate + persisted toggle)
+  lib/atomic-write.ts  `writeFileAtomic`: temp file + rename in the same dir — settings, the remote toggle and both log rotations go through it
   lib/settings.ts persisted idle threshold, answer window, push policy + the
                   usage-recording switch
   lib/notify.ts   server-sent ntfy pushes — the layered policy (on idle.ts's `atDesk`

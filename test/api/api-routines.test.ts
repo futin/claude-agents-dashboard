@@ -10,7 +10,7 @@ import path from 'node:path';
 
 import { testAsync, userRecord, withServer } from '../api-harness.js';
 import type { Harness, Reply } from '../api-harness.js';
-import { installedFrom } from '../../server/api.js';
+import { installedFrom, overridePinRows } from '../../server/api.js';
 import { encodeProjectDir } from '../../server/lib/management.js';
 import { overrideClaudeRoots } from '../../server/lib/paths.js';
 import { overrideOpenFolder } from '../../server/lib/open-folder.js';
@@ -84,6 +84,11 @@ async function withRoutines(env: string, owner: boolean, fn: (c: Ctx) => Promise
   } finally {
     overrideClaudeRoots(null);
   }
+}
+
+/** `p`, or a rejection once `ms` pass: a handler that never answers fails the case instead of hanging the suite. */
+function within<T>(p: Promise<T>, ms = 3000): Promise<T> {
+  return Promise.race([p, new Promise<T>((_, reject) => setTimeout(() => reject(new Error(`no answer within ${ms} ms`)), ms).unref())]);
 }
 
 function send(h: Harness, method: string, pathname: string, body?: unknown, headers: Record<string, string> = {}): Promise<Reply> {
@@ -563,6 +568,28 @@ export async function run(): Promise<number> {
       const r = await send(c.h, 'POST', '/api/routines/x', {});
       assert.strictEqual(r.status, 405);
       assert.strictEqual(r.headers.allow, 'GET, PUT, PATCH, DELETE');
+    });
+  }));
+
+  tally(await testAsync('a pin read that throws answers PUT, POST and validate 500, not left hanging, and writes nothing', async () => {
+    await withRoutines('', true, async c => {
+      const file = writeJob(c, 'x', job());
+      overridePinRows(() => { throw new Error('listing blew up'); });
+      try {
+        const replies = [
+          await within(send(c.h, 'PUT', '/api/routines/x', { text: job({ enabled: false }) })),
+          await within(send(c.h, 'POST', '/api/routines', { name: 'y', text: job() })),
+          await within(send(c.h, 'POST', '/api/routines/validate', { text: job() }))
+        ];
+        for (const r of replies) {
+          assert.strictEqual(r.status, 500, r.raw);
+          assert.strictEqual(r.json?.error, 'validate failed');
+        }
+        assert.strictEqual(fs.readFileSync(file, 'utf8'), job(), 'PUT left the file as it was');
+        assert.ok(!fs.existsSync(path.join(c.routines, 'y.md')), 'POST created no file');
+      } finally {
+        overridePinRows(null);
+      }
     });
   }));
 

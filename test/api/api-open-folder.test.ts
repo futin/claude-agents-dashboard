@@ -9,6 +9,7 @@ import assert from 'node:assert';
 import fs from 'node:fs';
 import path from 'node:path';
 
+import { overridePinRows } from '../../server/api.js';
 import { testAsync, userRecord, withServer } from '../api-harness.js';
 import type { Harness } from '../api-harness.js';
 import { encodeProjectDir } from '../../server/lib/management.js';
@@ -31,6 +32,11 @@ function plantProject(h: Harness, name: string, ageDays: number): { dirName: str
   const at = (Date.now() - ageDays * DAY) / 1000;
   fs.utimesSync(file, at, at);
   return { dirName, cwd };
+}
+
+/** `p`, or a rejection once `ms` pass: a handler that never answers fails the case instead of hanging the suite. */
+function within<T>(p: Promise<T>, ms = 3000): Promise<T> {
+  return Promise.race([p, new Promise<T>((_, reject) => setTimeout(() => reject(new Error(`no answer within ${ms} ms`)), ms).unref())]);
 }
 
 function post(h: Harness, body: unknown, headers: Record<string, string> = {}) {
@@ -164,6 +170,20 @@ export async function run(): Promise<number> {
       assert.equal(reply.json?.error, 'open failed');
       assert.deepStrictEqual(calls, [['open', [cwd]]]);
     }, 'darwin', true);
+  }));
+
+  check(await testAsync('a pin read that throws is answered 500, not left hanging, and open never runs', async () => {
+    await withOpen(ENV, async (h, calls) => {
+      overridePinRows(() => { throw new Error('listing blew up'); });
+      try {
+        const reply = await within(post(h, { path: path.join(h.home, 'projs', 'any') }));
+        assert.equal(reply.status, 500, reply.raw);
+        assert.equal(reply.json?.error, 'pins read failed');
+        assert.deepStrictEqual(calls, []);
+      } finally {
+        overridePinRows(null);
+      }
+    });
   }));
 
   console.log(`\nopen-folder endpoint: ${ok}/${total} passed`);

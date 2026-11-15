@@ -49,6 +49,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
+import { writeFileAtomic } from './atomic-write.js';
 import { stateDir } from './paths.js';
 import { getSettings } from './settings.js';
 import { HOURS_PER_WEEK, hourOfWeek, localOffsetMinutes } from './usage-forecast.js';
@@ -614,7 +615,7 @@ export function rotateIfNeeded(dir?: string, maxBytes: number = MAX_HISTORY_BYTE
   try {
     if (fs.statSync(file).size <= maxBytes) return;
     const keep = readRecentSamples(dir, Math.floor(maxBytes / 2));
-    fs.writeFileSync(file, keep.map((x) => JSON.stringify(x) + '\n').join(''), 'utf8');
+    writeFileAtomic(file, keep.map((x) => JSON.stringify(x) + '\n').join(''));
   } catch {
     /* absent / unreadable / read-only — leave it alone */
   }

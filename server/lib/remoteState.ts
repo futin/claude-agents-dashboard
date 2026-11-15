@@ -22,6 +22,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
+import { writeFileAtomic } from './atomic-write.js';
 import type { Config } from './config.js';
 import { stateDir } from './paths.js';
 import type { RemoteAnswerState } from '../../shared/types.js';
@@ -65,7 +66,7 @@ export function setEnabled(config: Config, enabled: boolean): RemoteAnswerState 
   if (!config.remoteAnswer) return null;
   cached = enabled;
   try {
-    fs.writeFileSync(statePath(), JSON.stringify({ enabled }) + '\n', 'utf8');
+    writeFileAtomic(statePath(), JSON.stringify({ enabled }) + '\n');
     persisted = true;
   } catch {
     persisted = false; // read-only fs / container — the toggle still works this run
