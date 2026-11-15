@@ -5,6 +5,7 @@ import MicButton from './MicButton';
 import { MinimisedPanel, PanelHead } from './PanelChrome';
 import { appendTranscript } from '../lib/dictation';
 import { collapsedSummary, fmtLeft } from '../lib/panelCollapse';
+import { MESSAGE_TEXT_CAP } from '../lib/textCaps';
 import { READ_ONLY_TEXT } from '../lib/writeRefusal';
 import type { PendingMessageState } from '../hooks/usePendingMessage';
 
@@ -118,7 +119,7 @@ export default function MessagePanel({ state, suggestion }: {
       <textarea
         ref={boxRef}
         className="qp-feedback"
-        maxLength={4000}
+        maxLength={MESSAGE_TEXT_CAP}
         rows={3}
         placeholder={suggestion ?? 'Follow-up for this session (sent to the model verbatim)'}
         value={text}
@@ -132,7 +133,7 @@ export default function MessagePanel({ state, suggestion }: {
       {suggestion && !text && <SuggestionChip suggestion={suggestion} disabled={busy} onAccept={accept} />}
 
       <div className="qp-actions">
-        <MicButton disabled={busy} onText={t => setText(cur => appendTranscript(cur, t))} />
+        <MicButton disabled={busy} onText={t => setText(cur => appendTranscript(cur, t, MESSAGE_TEXT_CAP))} />
         <button
           type="button"
           className="qp-send"

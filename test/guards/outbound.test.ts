@@ -59,6 +59,20 @@ export function scanOutbound(files: Record<string, string>): Record<string, stri
   return out;
 }
 
+/** The files that import `node:child_process` (or bare `child_process`) at runtime, sorted — the launchers `.claude/CLAUDE.md` must name. */
+export function scanLaunchers(files: Record<string, string>): string[] {
+  const out: string[] = [];
+  for (const [rel, text] of Object.entries(files)) {
+    const src = stripComments(text);
+    const isCp = (spec: string) => spec.replace(/^node:/, '') === 'child_process';
+    let hit = false;
+    for (const m of src.matchAll(/\bimport\s+([^'";]*?)\s*\bfrom\s*['"]([^'"]+)['"]/g)) if (!typeOnly(m[1]) && isCp(m[2])) hit = true;
+    for (const m of src.matchAll(/\b(?:import|require)\s*\(\s*['"]([^'"]+)['"]\s*\)/g)) if (isCp(m[1])) hit = true;
+    if (hit) out.push(rel);
+  }
+  return out.sort();
+}
+
 /**
  * Every entry here is a network surface the docs must name. Adding one means updating README.md (intro + Dictation bullet), `.claude/CLAUDE.md` (the
  * zero-deps rule), `docs/overview.md` (the `lib/` map), `docs/subsystems/dictation.md` and `docs/subsystems/session-surfaces.md` in the same change.
@@ -103,6 +117,31 @@ export function run(): number {
       assert.deepStrictEqual(scanOutbound({ 'a.ts': src }), want);
     })) p++; else f++;
   }
+
+  const launcherCases: [string, string, string[]][] = [
+    ['a runtime import of node:child_process counts', `import { execFileSync } from 'node:child_process';`, ['a.ts']],
+    ['bare child_process counts', `import { spawn } from 'child_process';`, ['a.ts']],
+    ['a type-only import does not count', `import type { ChildProcess } from 'node:child_process';`, []],
+    ['a commented import does not count', `// import { spawn } from 'node:child_process';`, []],
+    ['a dynamic import counts', `const cp = await import('node:child_process');`, ['a.ts']],
+  ];
+  for (const [name, src, want] of launcherCases) {
+    if (test(`launcher scanner: ${name}`, () => {
+      assert.deepStrictEqual(scanLaunchers({ 'a.ts': src }), want);
+    })) p++; else f++;
+  }
+
+  if (test('.claude/CLAUDE.md zero-deps rule names every server/ file that imports node:child_process', () => {
+    const files: Record<string, string> = {};
+    for (const abs of tsFiles(path.join(root, 'server'))) {
+      files[path.relative(root, abs).split(path.sep).join('/')] = fs.readFileSync(abs, 'utf8');
+    }
+    const md = fs.readFileSync(path.join(root, '.claude/CLAUDE.md'), 'utf8').replace(/\s+/g, ' ');
+    const rule = md.slice(md.indexOf('Keep new deps out of'));
+    const head = rule.slice(0, rule.indexOf('`client/dist/`'));
+    const missing = scanLaunchers(files).filter((rel) => !head.includes('`' + rel + '`') && !head.includes('`' + rel.replace(/^server\//, '') + '`'));
+    assert.deepStrictEqual(missing, [], `launchers missing from .claude/CLAUDE.md's zero-deps rule: ${missing.join(', ')}`);
+  })) p++; else f++;
 
   if (test('server/**/*.ts talks to the network only where ALLOWED says', () => {
     const files: Record<string, string> = {};

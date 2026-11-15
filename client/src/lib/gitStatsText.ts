@@ -11,7 +11,10 @@ type OkRepo = Extract<RepoGitStats, { state: 'ok' }>;
 
 /** Branches shown before "+N more" (spec §6). */
 export const GIT_BRANCHES_SHOWN = 5;
-/** The server's per-repo cap on `branches`; `unmergedTotal` above it means some are not listed. */
+/**
+ * The server's per-repo cap on `branches` (`git-stats.ts` `MAX_BRANCHES`); `unmergedTotal` above it means some are not listed. Pinned by
+ * `test/guards/client-server-caps.test.ts`.
+ */
 export const GIT_BRANCH_CAP = 50;
 
 export const GIT_NO_OPEN_BRANCHES = 'no open branches';

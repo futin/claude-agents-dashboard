@@ -17,17 +17,17 @@ export function run(): number {
   const check = (r: boolean): void => { total++; if (r) ok++; };
 
   check(test('appends to existing text with a single space', () => {
-    assert.equal(appendTranscript('first thought', 'second thought'), 'first thought second thought');
+    assert.equal(appendTranscript('first thought', 'second thought', 4000), 'first thought second thought');
   }));
 
   check(test('an empty composer takes the transcript verbatim', () => {
-    assert.equal(appendTranscript('', 'hello'), 'hello');
-    assert.equal(appendTranscript('   ', 'hello'), 'hello');
+    assert.equal(appendTranscript('', 'hello', 4000), 'hello');
+    assert.equal(appendTranscript('   ', 'hello', 4000), 'hello');
   }));
 
   check(test('an empty transcript leaves the composer untouched', () => {
-    assert.equal(appendTranscript('keep me', ''), 'keep me');
-    assert.equal(appendTranscript('keep me', '   '), 'keep me');
+    assert.equal(appendTranscript('keep me', '', 4000), 'keep me');
+    assert.equal(appendTranscript('keep me', '   ', 4000), 'keep me');
   }));
 
   check(test('truncates to the cap rather than overflowing maxLength', () => {

@@ -44,7 +44,7 @@ export const NAME_CAP = 60;
 /** Mirrors server/lib/spawn.ts's NAME_RE: a name outside it is dropped by the server without a word. `test/git/git-sync-client.test.ts` pins the parity. */
 export const NAME_RE = /^[A-Za-z0-9][A-Za-z0-9 ._-]*$/;
 
-/** Mirrors server/lib/spawn.ts's PROMPT_CAP. */
+/** Mirrors server/lib/spawn.ts's PROMPT_CAP; pinned by `test/spawn/spawn-options.test.ts`. Also the resume composer's cap: a resume POSTs `/api/spawn`. */
 export const PROMPT_CAP = 4000;
 
 /**

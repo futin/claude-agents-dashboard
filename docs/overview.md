@@ -75,7 +75,8 @@ via `tsx`, dev and prod alike).
 
 ## HTTP surface
 
-All routes live in `server/index.ts` (dispatch) and `server/api.ts` (handlers). Every POST runs the write gate; a **session write path** also needs the
+All routes live in `server/index.ts` (dispatch) and `server/api.ts` (handlers). Every POST that changes state runs the write gate — `POST /api/routines/validate`, which is read-only, and the hub
+widget action paths, which answer 404, are the two that do not; a **session write path** also needs the
 remote-answer switch on, a **gate-only write** needs the gate alone ([who may write](subsystems/remote-access.md#who-may-write) defines both):
 
 | Route | Purpose |
@@ -374,7 +375,7 @@ client/src/
                   polls share, and `pollFetch`, the 30s bound every guarded poll's request carries),
                   heldBody (which timeline body a pinned panel folds), markdown, configsEntries,
                   format, settings, persistedReset (Settings › Reset's reach into mounted usePersistedState holders),
-                  sections, deepLink, dictation, openFolder (the Open folder key's status → note), spawnOptions, spawnResponse (`parseSpawnResponse`, the `POST /api/spawn` 200 body → its `SpawnResponse` branch; `spawnOutcome`, what `useSpawn` applies for a result), launchSurface (which launch surfaces the form offers, its initial pick, and the desktop copy), pins, resume, pace, usageProfile,
+                  sections, deepLink, dictation, openFolder (the Open folder key's status → note), spawnOptions, textCaps (the composers' length caps, each the server's; pinned by `test/guards/client-server-caps.test.ts`), spawnResponse (`parseSpawnResponse`, the `POST /api/spawn` 200 body → its `SpawnResponse` branch; `spawnOutcome`, what `useSpawn` applies for a result), launchSurface (which launch surfaces the form offers, its initial pick, and the desktop copy), pins, resume, pace, usageProfile,
                   usageRatesFormat, usageHistory (the History tab's step path, ticks and figures), panelCollapse, surface, walkChart (the headroom
                   chart's geometry), walkRows (the same walk as day rows), holds,
                   composer (that keyboard's pure rules and the session's latest `wrap_up` suggestion), modelLabel (`claude-opus-5-5` → `Opus 5.5`),

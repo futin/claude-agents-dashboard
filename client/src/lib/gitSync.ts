@@ -4,7 +4,7 @@
  */
 
 import type { HealthResponse, RepoGitStats, Session, SessionsResponse, SpawnRequest } from '../../../shared/types';
-import type { Settings } from './settings';
+import { LIMITS, type Settings } from './settings';
 import { UNREADABLE_LAUNCH_REPLY } from './spawnResponse';
 import { NAME_CAP } from './spawnOptions';
 
@@ -13,8 +13,11 @@ export type OkRepo = Extract<RepoGitStats, { state: 'ok' }>;
 /** The plugin's skill, by name: the client never imports plugin code. */
 export const GIT_SYNC_PROMPT = '/claude-agents-dashboard:git-sync';
 export const SYNC_RUNS_KEY = 'management.syncRuns';
-/** The server's `SCAN_CAPS.limit`: the gated sessions poll asks for every row it may, so a parked sync rarely falls off the list. */
-export const SYNC_SCAN_LIMIT = 50;
+/**
+ * The server's `SCAN_CAPS.limit`, through the Settings slider's own copy of it: the gated sessions poll asks for every row it may, so a parked sync
+ * rarely falls off the list. Pinned by `test/guards/client-server-caps.test.ts`.
+ */
+export const SYNC_SCAN_LIMIT = LIMITS.maxSessions.max;
 /** A run nobody has seen for this long after launch is taken as over. */
 export const SYNC_UNSEEN_TTL_MS = 24 * 60 * 60 * 1000;
 /**

@@ -86,7 +86,10 @@ config; a public tunnel's hostname needs `ALLOWED_HOSTS` (the DNS-rebinding guar
   `git merge --ff-only` and `git push` for the Sync menu; `lib/codegraph.ts` launches `codegraph` with `CODEGRAPH_NO_UPDATE_CHECK=1` and
   `CODEGRAPH_NO_DOWNLOAD=1` set, which switch off its update check and bundle download; `lib/routine-reconcile.ts` launches `launchctl`, `crontab` and
   `pgrep`; `lib/routine-store.ts` launches `ps` and `sysctl`; `lib/open-folder.ts` launches `open` and `open -R`; `lib/desktop.ts` launches `open` with a `claude://` URL; `lib/routine-run.ts` spawns the
-  plugin's `run-routine.mjs` through `spawn.ts`'s `spawnProcess`. `test/guards/outbound.test.ts` pins the list.
+  plugin's `run-routine.mjs` through `spawn.ts`'s `spawnProcess`; `lib/scan.ts` launches `ps` and `lsof` for session liveness; `lib/git-stats.ts`
+  launches `git` for the Git view; `lib/usage.ts` launches `security` to read the keychain token; `lib/idle.ts` launches `ioreg` for the idle reading;
+  `lib/transcribe.ts` launches the configured `ffmpeg` and whisper binaries; `server/index.ts` launches `open`, `xdg-open` or `cmd /c start` to open the
+  browser on `pnpm start`. `test/guards/outbound.test.ts` pins the list: every `server/` file that imports `node:child_process` must be named here.
   Two npm packages are allowed, by name, each with zero runtime deps of its own and pinned to a git tag: `lookout-widgets`, the Lookout contract producer
   behind `/api/hub/widgets`, and `release-kit`, whose reader is the one reader of the tag-message contract its release workflow writes (spec
   `docs/superpowers/specs/2026-10-15-release-pipeline-design.md` D7) and, as `createReleasesReader`, backs `/api/releases`; it uses Node built-ins only and launches `git`, so it is no

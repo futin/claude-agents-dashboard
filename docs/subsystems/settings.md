@@ -365,7 +365,7 @@ Worth knowing from this page's side:
 `scanOverrides` (in `server/api.ts`) clamps to `limit ≤ 50`, `lookback ≤ 168`, `active ≤ 120`.
 The `limit` cap is the one that matters: unclamped, one typo'd query string would make the
 server tail-read thousands of transcripts on every poll. `LIMITS` in the client mirrors these,
-and a test asserts they haven't drifted — a UI offering a number the server clamps would show
+and `test/guards/client-server-caps.test.ts` asserts they equal `SCAN_CAPS` — a UI offering a number the server clamps would show
 a value the rows never reflect.
 
 ## Related
