@@ -68,6 +68,8 @@ than assumed from its docs:
   (`SessionsView.tsx`) resolves by finding that id in the next `/api/sessions` poll,
   so it opens once the transcript actually exists, not before — there's nothing to
   render before then, but the *id* is known and correct from the first response.
+  A launch into a project the saved filter hides never reaches that poll, so the drawer fetches `GET /api/sessions/:id/row` instead (`lib/chatRow.ts`):
+  a `404` while `launching` still lists the id waits for the next payload, and a `404` once it does not disarms `chatId` (#421).
 - **A prompt on stdin is never parsed as a flag.** `claude -p` reads argv the way
   nearly every CLI does: a value starting with `-`/`--` is a flag, never data,
   regardless of what it follows — a prompt beginning `--` passed *positionally* would be

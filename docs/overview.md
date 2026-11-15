@@ -130,7 +130,7 @@ remote-answer switch on, a **gate-only write** needs the gate alone ([who may wr
 | `POST /api/routines/reveal` | open the routines folder, or one job's file, in Finder with `open` / `open -R`; 501 off macOS (gate-only write) |
 | `POST /api/routines/:name/run` | start the wrapper now (`{only?: [pins]}`), 202 with the run id read back from the log; 409 `already-running` (gate-only write) |
 | `POST /api/routines/:name/stop` | SIGTERM the running wrapper by its lock's pid; 204, or 409 `not-running` (gate-only write) |
-| `GET /api/sessions/:id/row` | one session row for any id a transcript resolves, with no lookback — the Routines page's `session →` link opens it in the ChatDrawer |
+| `GET /api/sessions/:id/row` | one session row for any id a transcript resolves, with no lookback — the Routines page's `session →` link opens it in the ChatDrawer, and the Sessions drawer falls back to it when the project-filtered poll lacks the id |
 | anything else | static files from `client/dist` (production only) |
 
 ⚠️ The static catch-all resolves through `resolveStaticPath` in `index.ts`, which confines
@@ -369,7 +369,7 @@ client/src/
                   auto-hide), useNarrow (the one JS read of the `md` breakpoint),
                   useStuckStrip (when the phone's aside strip pins)
   lib/            routines (the Routines page's pure helpers: pills, run folding, the Repos helper, write-failure text), routineForm (the job drawer's
-                  Form view: one read/write/summary per row over the file text), filterSort, analyticsFilterSort, chatFilter, chatPaging (the chat drawer's byte offsets: one
+                  Form view: one read/write/summary per row over the file text), filterSort, analyticsFilterSort, chatFilter, chatRow (the Sessions drawer's session: the live poll row, else one fetched from `/api/sessions/:id/row` when the filtered poll lacks it), chatPaging (the chat drawer's byte offsets: one
                   tail poll at a time, an epoch per re-tail, a retry after a failed tail), pollSeq (`createPollSeq`, the skip-while-in-flight rule useSessions, usePendingReply and the Routines
                   polls share, and `pollFetch`, the 30s bound every guarded poll's request carries),
                   heldBody (which timeline body a pinned panel folds), markdown, configsEntries,

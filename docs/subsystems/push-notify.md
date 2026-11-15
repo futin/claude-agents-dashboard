@@ -329,7 +329,8 @@ as latin1, so the raw `·` would arrive on the phone as a replacement char.
 `client/src/lib/deepLink.ts` consumes that once on load: force the Sessions section, seed
 `chatId`, then `history.replaceState` the parameter away. You land in the chat drawer, where
 `QuestionPanel`, `PlanPanel`, `MessagePanel` and `PermissionBanner` already render — one tap
-from buzz to answerable. That last one is why the reply-window `stop` push carries a link at
+from buzz to answerable. A session the saved project filter hides, or one older than the poll's lookback, opens too: the drawer fetches its row from
+`GET /api/sessions/:id/row` when the poll lacks it, and a link to a session that does not exist opens nothing and leaves nothing armed (`lib/chatRow.ts`, #421). That last one is why the reply-window `stop` push carries a link at
 all: the panel it lands you in is the composer the hold is waiting on.
 
 The `routine-failed` push carries `/?view=routines&run=<id>` instead and lands on Routines › Runs with that run unfolded (see
