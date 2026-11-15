@@ -4,6 +4,7 @@ import { Markdown } from './Markdown';
 import { parseInline, type Inline } from '../lib/markdown';
 import { MinimisedPanel, PanelHead } from './PanelChrome';
 import { collapsedSummary } from '../lib/panelCollapse';
+import { PLAN_FEEDBACK_CAP } from '../lib/textCaps';
 import { READ_ONLY_TEXT } from '../lib/writeRefusal';
 import type { PendingPlanState } from '../hooks/usePendingPlan';
 import Chevron from './Chevron';
@@ -213,7 +214,7 @@ export default function PlanPanel({ state }: { state: PendingPlanState }) {
 
       <textarea
         className="qp-feedback"
-        maxLength={2000}
+        maxLength={PLAN_FEEDBACK_CAP}
         rows={3}
         placeholder="What should change? (sent to the model verbatim)"
         value={feedback}

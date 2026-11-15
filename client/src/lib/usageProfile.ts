@@ -34,7 +34,7 @@ import { fmtWalkHour } from './walkChart';
  *
  * Mirrors `TRUST_FLOOR_MIN` in `server/lib/usage-history.ts`. Duplicated rather
  * than sent over the wire because it is a constant of the model, not a runtime
- * value — but it does mean the two must move together.
+ * value. Pinned to the server's by `test/guards/client-server-caps.test.ts`.
  */
 export const TRUST_FLOOR_MIN = 60;
 
@@ -61,8 +61,8 @@ export function profileProgress(cells: UsageProfileCell[]): ProfileProgress {
   return { touched, totalMin, atFloor, trusted };
 }
 
-/** Hour-of-week slots. Mirrors `HOURS_PER_WEEK` in `server/lib/usage-forecast.ts`. */
-const HOURS_PER_WEEK = 168;
+/** Hour-of-week slots. Mirrors `HOURS_PER_WEEK` in `server/lib/usage-forecast.ts`; pinned by `test/guards/client-server-caps.test.ts`. */
+export const HOURS_PER_WEEK = 168;
 
 /**
  * Local midnight starting the next ISO week (Monday), as ms epoch.
@@ -199,9 +199,9 @@ export function cellTitle(cell: UsageProfileCell, day: number, hour: number): st
  *
  * Mirrors `TRUSTED_OK` in `server/lib/usage-forecast.ts`. Duplicated rather
  * than sent over the wire because it is a constant of the model, not a runtime
- * value — but it does mean the two must move together.
+ * value. Pinned to the server's by `test/guards/client-server-caps.test.ts`.
  */
-const TRUSTED_OK = 120;
+export const TRUSTED_OK = 120;
 
 /**
  * The three confidence sentences, owned here so the headline and the drawer

@@ -27,10 +27,11 @@ import type { StatTile } from './usageProfile';
  * thing crossing the FE/BE boundary in this repo is the typed JSON in
  * `shared/types.ts`, and a client module importing server code would be a
  * runtime coupling for one integer. If the server ever moves off 7, this
- * constant is the one place the card has to follow.
+ * constant is the one place the card has to follow, and
+ * `test/guards/client-server-caps.test.ts` goes red until it does.
  */
-const BASELINE_DAY_FLOOR = 7;
-const CURRENT_DAY_FLOOR = 2;
+export const BASELINE_DAY_FLOOR = 7;
+export const CURRENT_DAY_FLOOR = 2;
 
 /**
  * The three other constants the day strip mirrors from the server, under the
@@ -43,10 +44,11 @@ const CURRENT_DAY_FLOOR = 2;
  * the server marks a day `thin` — one of four reasons a day is `thin`, the others being
  * separation failures (`ModelThinReason`); the tip names it. `CURRENT_DAYS` is
  * `CURRENT_MS` in days — where the strip draws the current window's start.
+ * All three are pinned by `test/guards/client-server-caps.test.ts`.
  */
 export const DRIFT_BAND_PCT = 20;
 export const DAY_FLOOR_PTS = 5;
-const CURRENT_DAYS = 3;
+export const CURRENT_DAYS = 3;
 const DAY_MS = 86_400_000;
 
 /**

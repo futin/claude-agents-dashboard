@@ -40,7 +40,7 @@ export const HOURS_PER_WEEK = 168;
  * to three weeks of ordinary use. Below it the forecast is real but thin, and
  * the client draws a band rather than leading with a single tick.
  */
-const TRUSTED_OK = 120;
+export const TRUSTED_OK = 120;
 
 /**
  * The learned duty cycle, one weight per hour of the week.

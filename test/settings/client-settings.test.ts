@@ -82,14 +82,6 @@ export function run(): number {
     assert.strictEqual(clampSettings({ lookbackHours: 'soon' }).lookbackHours, DEFAULT_SETTINGS.lookbackHours);
   })) p++; else f++;
 
-  if (test('the client caps match the server caps', () => {
-    // If these drift, the UI offers a number the rows will never reflect —
-    // the server clamps it back and the two disagree silently.
-    assert.strictEqual(LIMITS.maxSessions.max, 50);
-    assert.strictEqual(LIMITS.lookbackHours.max, 168);
-    assert.strictEqual(LIMITS.activeWindowMin.max, 120);
-  })) p++; else f++;
-
   if (test('every advertised theme is a distinct id', () => {
     const ids = THEMES.map(t => t.id);
     assert.strictEqual(new Set(ids).size, ids.length);

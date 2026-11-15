@@ -5,6 +5,7 @@ import MicButton from './MicButton';
 import { appendTranscript } from '../lib/dictation';
 import { useSpawn } from '../hooks/useSpawn';
 import { resumeErrorText } from '../lib/resume';
+import { PROMPT_CAP } from '../lib/spawnOptions';
 import type { Session } from '../../../shared/types';
 
 /**
@@ -88,7 +89,7 @@ export default function ResumePanel({ session, suggestion }: {
       <textarea
         ref={boxRef}
         className="qp-feedback"
-        maxLength={4000}
+        maxLength={PROMPT_CAP}
         rows={3}
         placeholder={suggestion ?? 'Follow-up for this session (resumes it with this as your next message)'}
         value={text}
@@ -102,7 +103,7 @@ export default function ResumePanel({ session, suggestion }: {
       {suggestion && !text && <SuggestionChip suggestion={suggestion} disabled={busy} onAccept={accept} />}
 
       <div className="qp-actions">
-        <MicButton disabled={busy} onText={t => setText(cur => appendTranscript(cur, t))} />
+        <MicButton disabled={busy} onText={t => setText(cur => appendTranscript(cur, t, PROMPT_CAP))} />
         <button
           type="button"
           className="qp-send"
