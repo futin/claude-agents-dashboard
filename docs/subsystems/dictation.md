@@ -112,7 +112,8 @@ tap → MediaRecorder → POST /api/transcribe → ffmpeg (→ 16kHz mono wav) �
 
 `onText` hands the transcript to `MessagePanel`, which folds it in with
 `appendTranscript` — space-joined onto whatever is already typed, truncated to the
-textarea's 4000-char cap rather than silently overflowing it. It never touches **send**.
+textarea's cap rather than silently overflowing it. The cap is a required argument: each composer passes its own box's (`MESSAGE_TEXT_CAP` here,
+`PROMPT_CAP` in `ResumePanel` and `SpawnPanel`), so dictation never overfills a smaller box. It never touches **send**.
 
 Two reasons, and either alone would be enough. First, `base.en` mangles code identifiers
 often enough that unreviewed dictated text reaching the model is a worse outcome than

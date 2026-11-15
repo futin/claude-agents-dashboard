@@ -384,7 +384,7 @@ export default function SpawnPanel({ onClose, onLaunched, spawnMaxPermission, sp
         </div>
 
         <div className="spawn-foot">
-          <MicButton disabled={pending} onText={t => setPrompt(cur => appendTranscript(cur, t))} />
+          <MicButton disabled={pending} onText={t => setPrompt(cur => appendTranscript(cur, t, PROMPT_CAP))} />
           <span className="spacer" />
           <button type="button" className="qp-term" disabled={pending} onClick={close}>
             Cancel

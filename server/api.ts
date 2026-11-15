@@ -97,7 +97,7 @@ const ID_RE = /^[A-Za-z0-9._-]+$/;
  * that matters: unclamped, a single typo'd query string would make the server
  * tail-read thousands of transcripts on every 3-second poll.
  */
-const SCAN_CAPS = { limit: 50, lookback: 168, active: 120 } as const;
+export const SCAN_CAPS = { limit: 50, lookback: 168, active: 120 } as const;
 
 /**
  * Apply the Settings page's scan knobs, which ride along as query params on the

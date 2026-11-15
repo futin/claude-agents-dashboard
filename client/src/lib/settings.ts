@@ -165,7 +165,8 @@ export const DEFAULT_SETTINGS: Settings = {
 /**
  * Allowed ranges. The upper bounds mirror the server's own caps in
  * `api.ts` `SCAN_CAPS` — a value the server would clamp anyway should never be
- * offered here, or the UI would show a number the rows don't reflect.
+ * offered here, or the UI would show a number the rows don't reflect. Pinned to
+ * `SCAN_CAPS` by `test/guards/client-server-caps.test.ts`.
  */
 export const LIMITS = {
   fontScale: { min: 80, max: 130 },

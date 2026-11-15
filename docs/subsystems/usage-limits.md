@@ -1665,7 +1665,8 @@ not coloured. The rate the cells are judged against is printed on the strip's
 own header (`vs baseline …`), because the table's Δ column is the row's, not the
 day's. The strip mirrors three server constants under the same rule as
 `BASELINE_DAY_FLOOR` — `DRIFT_BAND_PCT` (20), `DAY_FLOOR_PTS` (5),
-`CURRENT_DAYS` (3) — each naming the server constant it follows. The legend
+`CURRENT_DAYS` (3) — each naming the server constant it follows, all pinned to it by
+`test/guards/client-server-caps.test.ts`. The legend
 prints once under the table, from those constants, and a seventh glossary entry
 (`daily`) defines the strip; the ⓘ on its label reads the same string.
 

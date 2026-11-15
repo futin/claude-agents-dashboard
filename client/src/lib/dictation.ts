@@ -66,9 +66,10 @@ export function fmtElapsed(secs: number): string {
  *
  * Append, never replace: a second take should extend a thought, not destroy the
  * first one. Truncates to `cap` so the result still fits the textarea's
- * maxLength instead of being silently clipped by the DOM.
+ * maxLength instead of being silently clipped by the DOM. `cap` is required: each
+ * composer passes its own box's cap, so dictation can never overfill a smaller one.
  */
-export function appendTranscript(existing: string, incoming: string, cap = 4000): string {
+export function appendTranscript(existing: string, incoming: string, cap: number): string {
   const head = existing.trim();
   const tail = incoming.trim();
   if (!tail) return existing;
