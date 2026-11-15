@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 
 import { AsideBoard } from './AsideBoard';
 import { AsideStrip } from './sessions/AsideStrip';
@@ -9,7 +9,9 @@ import { ListView } from './sessions/ListView';
 import { SplitView } from './sessions/SplitView';
 import { TilesView } from './sessions/TilesView';
 import { TriageView } from './sessions/TriageView';
+import { chatDrawerSession, chatRowAction } from '../lib/chatRow';
 import { deepLinkSession } from '../lib/deepLink';
+import { pollFetch } from '../lib/pollSeq';
 import { useNarrow } from '../hooks/useNarrow';
 import { usePersistedState } from '../hooks/usePersistedState';
 import { useRemoteAnswer } from '../hooks/useRemoteAnswer';
@@ -19,6 +21,7 @@ import { useWebNotify } from '../hooks/useWebNotify';
 import { applyView, availableProjects, clearFilters, describeEmpty, drawableLayout, pruneProjects, DEFAULT_LAYOUT, DEFAULT_VIEW, type Layout, type View } from '../lib/filterSort';
 import { DESKTOP_LAUNCHED_TEXT } from '../lib/launchSurface';
 import { resolveLayout } from '../lib/settings';
+import type { Session, SessionsResponse } from '../../../shared/types';
 
 /** Own chunk — the drawer only loads the first time a chat is opened. */
 const ChatDrawer = lazy(() => import('./ChatDrawer'));
@@ -85,6 +88,11 @@ export function SessionsView({ onLink }: {
   const [splitId, setSplitId] = useState<string | null>(null);
   // Seeded from a `?session=` deep link, which is consumed once and stripped.
   const [chatId, setChatId] = useState<string | null>(() => deepLinkSession());
+  // The poll is project-filtered, so a deep-linked or launched session outside the filter needs its row fetched for the drawer (`lib/chatRow.ts`).
+  const [fetchedChat, setFetchedChat] = useState<Session | null>(null);
+  const chatIdRef = useRef(chatId);
+  chatIdRef.current = chatId;
+  const chatFetching = useRef(false);
   // Not persisted either: a one-shot form, not a view setting.
   const [spawnOpen, setSpawnOpen] = useState(false);
   // What a desktop launch leaves behind besides the chat drawer: the session is about to move, so this line says where it is going.
@@ -140,7 +148,33 @@ export function SessionsView({ onLink }: {
     });
   }
 
-  const chatSession = chatId && data ? data.sessions.find(s => s.id === chatId) : undefined;
+  // The payload on screen when `chatId` was armed; only a later one may fetch, so a launch is never judged by a poll that predates it.
+  const chatArmedAt = useRef<SessionsResponse | null>(null);
+  useEffect(() => { chatArmedAt.current = data; }, [chatId]);
+  useEffect(() => {
+    const fresh = data !== chatArmedAt.current;
+    if (chatFetching.current || chatRowAction({ chatId, data, fetchedId: fetchedChat?.id ?? null, fresh }) !== 'fetch') return;
+    const id = chatId as string;
+    chatFetching.current = true;
+    void (async () => {
+      let status: number | 'error';
+      let row: Session | null = null;
+      try {
+        const res = await pollFetch(`/api/sessions/${encodeURIComponent(id)}/row`);
+        status = res.status;
+        if (res.ok) row = await res.json() as Session;
+      } catch {
+        status = 'error';
+      }
+      chatFetching.current = false;
+      // Closed, or another session opened, while this was in flight.
+      if (chatIdRef.current !== id) return;
+      if (row) setFetchedChat(row);
+      else if (chatRowAction({ chatId: id, data, fetchedId: null, fresh, status }) === 'clear') setChatId(null);
+    })();
+  }, [chatId, data, fetchedChat]);
+
+  const chatSession = chatDrawerSession(chatId, data, fetchedChat);
 
   let body: React.ReactNode;
   if (shown === null || (!shown.length && !phantoms.length)) {
@@ -206,7 +240,7 @@ export function SessionsView({ onLink }: {
           <ChatDrawer
             key={chatSession.id}
             session={chatSession}
-            onClose={() => setChatId(null)}
+            onClose={() => { setChatId(null); setFetchedChat(null); }}
             spawnAvailable={remoteAnswer.state?.spawnAvailable}
             desktopAvailable={remoteAnswer.state?.desktopAvailable}
           />

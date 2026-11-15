@@ -28,7 +28,8 @@ context) or rejects.
 behave identically in both places. It renders only for a session carrying `Session.stopState` and leaves no gap otherwise. It is in the sidecar and not the
 head on purpose: on a phone the thumb goes to ✕, and a stop beside it gets hit by accident even behind the confirm step (#211). Below `md` it is one line in
 the band. A drawer opened from Routines never shows it: that drawer's session comes from `GET /api/sessions/:id/row`, and `serveSessionRow` builds the row
-without `stopStates`, so it carries no `stopState`.
+without `stopStates`, so it carries no `stopState`. The same holds for a Sessions drawer whose session the project-filtered poll does not carry — a deep
+link or a launch outside the saved filter — which falls back to that fetched row (`lib/chatRow.ts`) until the poll carries the live one (#421).
 
 **A Tasks card sits between the Context card and the facts**, for a session that is executing a plan or has built a task list (the plan's tasks first, else
 `TaskCreate` / `TaskUpdate`; the fold is in [sessions](sessions.md#the-task-list-and-why-it-folds-the-whole-file)). `TasksCard` takes `session.tasks` off the
