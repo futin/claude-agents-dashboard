@@ -1,9 +1,9 @@
 # How the dashboard tracks sessions and subagents
 
-The dashboard never *connects* to the running Claude Code processes. There is no
-socket, IPC, daemon, or hook. It is entirely passive: it reads the files each
-session leaves on disk, plus one OS-level probe to tell which sessions are still
-alive. This doc explains the mechanism end to end.
+The dashboard never *connects* to the running Claude Code processes: there is no daemon and no connection to the CLI. By default it is passive — it reads
+the files each session leaves on disk, plus one OS-level probe to tell which sessions are still alive, and those transcripts stay the source of truth.
+Hooks are the one exception: session status also reads hook-fed state (a held question, plan or reply wait, and the Notification hook's permission flag),
+see [`docs/workflows/hooks-setup.md`](../workflows/hooks-setup.md). This doc explains the mechanism end to end.
 
 ## The data source: transcript files on disk
 
@@ -58,8 +58,9 @@ isn't "missed" — it's irrelevant to a live status view.
 
 Tracking the subagents a session launched cannot use a tail, because a launch and
 its completion can be arbitrarily far apart in the file. So `readAgents` does
-`fs.readFileSync` of the **entire** transcript and runs **on demand** — only when
-a session is selected in the UI, never in the 3s poll loop.
+`fs.readFileSync` of the **entire** transcript and runs **on demand** — when a session is selected in the UI, and also from the 3s poll, through the
+cache's `readAgentsCached`, when the status ladder's `subagentRunning` arm needs it. That arm reads it only for a session whose
+`<sessionId>/subagents/agent-*.jsonl` holds a fresh, mid-turn subagent file, so the walk is cached and gated rather than run on every poll.
 
 A subagent is launched with the `Task` tool (stock Claude Code) or `Agent` tool
 (some harnesses); both carry a `subagent_type` (`isAgentLaunch` also falls back to
@@ -105,7 +106,7 @@ tokens exist nowhere else (see `docs/subsystems/usage-limits.md`).
 `scanSessions` ties it together:
 
 1. `listTranscripts` walks every `.jsonl` under the projects root.
-2. Filter to files touched within `lookbackHours` (default 24h), sort by mtime,
+2. Filter to files touched within `lookbackHours` (default 48h), sort by mtime,
    keep the top `maxSessions` (default 5).
 3. `readTranscript` each survivor; drop any with `hasMessages === false` (a just
    started or just `/clear`ed session holds only meta/queue records and would
@@ -114,8 +115,7 @@ tokens exist nowhere else (see `docs/subsystems/usage-limits.md`).
 
 ## Session status (the left dot)
 
-Computed in `scan.ts` from `transcript.ts` signals. `question` overrides
-everything; otherwise it's a 2×2 of `recent` × `turnComplete`:
+Computed in `scan.ts` from `transcript.ts` signals, plus the hook-fed sets and the liveness gate. The core is a 2×2 of `recent` × `turnComplete`:
 
 |                          | recent (< `activeWindowMin`) | stale           |
 |--------------------------|------------------------------|-----------------|
@@ -123,12 +123,24 @@ everything; otherwise it's a 2×2 of `recent` × `turnComplete`:
 | **finished** (end_turn)  | 🟡 incomplete                | ⚪ idle          |
 
 - **question** (blue) — newest assistant action is an unanswered
-  `AskUserQuestion`. Beats all.
+  `AskUserQuestion`. It beats the table, but not the dead gate below: a dead process with a question on disk reads `idle`.
 - **working** (green) — recent AND the turn is unfinished. Only this counts toward
   `totals.active`.
 - **incomplete** (yellow) — recent + finished (your turn) OR stale + pending
   (stalled).
 - **idle** (gray) — stale AND finished.
+
+Around that table sits a precedence ladder; the first arm that matches wins:
+
+1. A held remote question (`pendingIds`), a held plan (`planIds`) or a held reply window (`messageIds`, the Stop hook) → `question`. These sit above the
+   dead gate: a hook holding a socket open right now is stronger proof of life than the per-cwd `lsof` view.
+2. Dead process (no live cwd matches, see below) → `idle`.
+3. A permission dialog open in the terminal (`permissionWaits`, from the Notification hook), believed only until a newer transcript message → `question`.
+4. `waitingOnQuestion` in the transcript → `question`.
+5. Recent and unfinished → `working`.
+6. Parked on a running subagent (`subagentRunning`) → `working`. A parent waiting on a subagent writes nothing, so its own transcript reads done or stalled.
+7. Finished and stale → `idle`.
+8. Anything else → `incomplete`.
 
 "recent" uses the newest **message** timestamp (`lastMessageTs`), **not** file
 mtime — selecting a session appends timestamp-less mode/last-prompt/custom-title
@@ -140,35 +152,39 @@ Reading files alone has a blind spot: a killed/interrupted session's last record
 often has no `end_turn`, so on disk it looks "recent + pending = working" forever
 even though nothing runs.
 
-`scan.ts` `liveCwds()` shells out to:
+`scan.ts` `liveCwds()` takes the pids of every running `claude` from `ps`, then asks `lsof` for their working directories:
 
 ```
-lsof -c claude -a -d cwd -Fn
+ps -Ao pid=,comm=
+lsof -p <pids> -a -d cwd -Fn
 ```
 
-This asks the OS for the working directory of every running process named
-`claude`. Any session whose transcript `cwd` isn't in that live set is forced to
+`composeLiveCwds` turns both outputs into the live-cwd set. A session is live when either its `originCwd` or its newest transcript `cwd` is in that set
+(bug-7: shell drift moves the transcript's cwd, entering a worktree moves the process's, so neither key alone is reliable). Otherwise it is forced to
 `idle` — the process is gone, so it can't be working.
 
 - Still not a real connection — it inspects the OS process table, never talks to
   the CLI.
-- `-c claude` is case-sensitive → matches the lowercase CLI binary, not the
-  `Claude.app` desktop shell.
+- **Why not `lsof` with `-c claude`:** `-c` matches the binary's file name, and the native installer runs each version as a file named after it (`2.1.250`)
+  behind a `claude` symlink, so every session under it read dead. `ps` reports the launcher path, which ends in `claude` for both install flavours.
 - **Granularity is per-cwd** (claude doesn't hold the `.jsonl` open and exposes no
   session id in argv/env), so two sessions in the same directory can't be told
   apart — a dead one there still reads live.
-- **Fail-open**: `null` (no lsof / timeout / error) skips the gate rather than
-  mislabeling everything dead. Injectable via `ScanOptions.liveCwds` for tests;
-  `skipProcScan` also disables it.
+- **Fail-open**: `composeLiveCwds` returns `null`, which skips the gate, when `ps` failed, `ps` matched no pid, `lsof` produced nothing usable, or pids
+  matched but `lsof` named no cwd. A non-zero `lsof` exit still counts when it printed stdout (`usableLsofStdout`): lsof exits 1 on processes it may not
+  inspect after printing the rest; a timeout or signal kill does not count. Injectable via `ScanOptions.liveCwds` for tests; `skipProcScan` also
+  disables it.
 
-`countClaudeProcesses()` (via `ps`) is a separate informational cross-check number
-in the response, not used for status.
+`liveSessionIds()` is a second, per-session-id probe (`ps -Ao pid=,args=`); it backs the `processLive` flag and the resume guard, not the status dot.
+
+`countClaudeProcs()` (from the same `ps` read) is a separate informational cross-check number in the response, not used for status.
 
 ## Why it's built this way
 
-The design goal is **no daemon, no hooks**. Claude Code exposes no live API or
+The design goal is **no daemon and no connection to the CLI**. Claude Code exposes no live API or
 event stream for external monitors, but it *does* leave a rich append-only
 transcript on disk as a side effect. So the dashboard treats those transcripts as
 the source of truth and reads them passively. The only thing a file can't tell you
-— "is this process still alive?" — it recovers from the OS via `lsof`, without
-ever coupling to the CLI.
+— "is this process still alive?" — it recovers from the OS via `ps` and `lsof`, without
+ever coupling to the CLI. The exception is what a transcript cannot show while it happens — a held question, plan or reply wait and an open permission
+dialog: those reach status through hooks ([`docs/workflows/hooks-setup.md`](../workflows/hooks-setup.md)).
