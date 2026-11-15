@@ -5,7 +5,7 @@
  */
 import { describeCron, isManualCron, parseCron } from '../../../shared/cron';
 import { scalarEnd, writeFrontmatterLine } from '../../../shared/frontmatter';
-import { DEFAULT_TIMEOUT_MS, TIMEOUT_RE, type JobError } from '../../../shared/routine-file';
+import { DEFAULT_TIMEOUT_MS, PERMISSION_MODES, TIMEOUT_RE, type JobError } from '../../../shared/routine-file';
 import { readForeach, setRepos, type ForeachMode } from './routines';
 
 export type FormKind = 'shell' | 'claude' | null;
@@ -305,8 +305,6 @@ const model: FieldDef<ModelEffort> = {
   },
 };
 
-const PERMISSION_MODES = ['plan', 'acceptEdits', 'auto'];
-
 const permission: FieldDef<Permission> = {
   id: 'permission', label: 'Permission', keys: ['permission-mode'], kinds: kindsOf('permission'),
   read(text) {
@@ -321,7 +319,7 @@ const permission: FieldDef<Permission> = {
   summary(v) {
     if (!v) return { text: 'Default', tone: 'dim' };
     // The validator refuses anything else (bypassPermissions included), so the row says it as written, in red.
-    return { text: v, tone: PERMISSION_MODES.includes(v) ? 'set' : 'err' };
+    return { text: v, tone: (PERMISSION_MODES as readonly string[]).includes(v) ? 'set' : 'err' };
   },
 };
 

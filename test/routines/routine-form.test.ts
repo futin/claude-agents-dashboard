@@ -9,7 +9,7 @@ import {
   FIELDS, UNREADABLE, cronFor, fmValue, formKind, frontmatterReadable, routeErrors, scheduleEdit, schedulePick, setKey, switchPreset, timeoutUnitView, timeoutWithUnit, validMinute, validTime, visibleFields
 } from '../../client/src/lib/routineForm.js';
 import { jobTemplate, setRepos } from '../../client/src/lib/routines.js';
-import { parseJob } from '../../shared/routine-file.js';
+import { PERMISSION_MODES, parseJob } from '../../shared/routine-file.js';
 import type { Schedule } from '../../client/src/lib/routineForm.js';
 
 function test(name: string, fn: () => void): boolean {
@@ -267,6 +267,10 @@ export function run(): number {
     assert.strictEqual(pm.read(bypass), 'bypassPermissions');
     assert.deepStrictEqual(pm.summary('bypassPermissions', ctx), { text: 'bypassPermissions', tone: 'err' });
     assert.strictEqual(pm.write(SKILL, null), SKILL.split('\n').filter(l => !l.startsWith('permission-mode:')).join('\n'));
+  });
+
+  t('permission: every mode the validator accepts reads as set', () => {
+    for (const mode of PERMISSION_MODES) assert.deepStrictEqual(FIELDS.permission.summary(mode, ctx), { text: mode, tone: 'set' }, mode);
   });
 
   // --- limits ---

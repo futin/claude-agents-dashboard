@@ -84,6 +84,12 @@ export function run(): number {
     assert.deepStrictEqual(JSON.parse(out), { errors: [], cron: '0 9 * * *' });
   })) p++; else f++;
 
+  if (test('run-routine.mjs takes PERMISSION_MODES from the validator, never a copy of its own', () => {
+    const text = fs.readFileSync(path.join(root, 'plugin', 'lib', 'run-routine.mjs'), 'utf8');
+    assert.ok(!/\b(const|let|var)\s+PERMISSION_MODES\b/.test(text), 'run-routine.mjs declares its own PERMISSION_MODES');
+    assert.match(text, /import\s*\{[^}]*\bPERMISSION_MODES\b[^}]*\}\s*from\s*'\.\/routine-file\.mjs'/);
+  })) p++; else f++;
+
   if (test('no generated module keeps an import of types.js or a .js specifier — types are erased, siblings are .mjs', () => {
     for (const name of LIB_MODULES) {
       const text = fs.readFileSync(path.join(root, 'plugin', 'lib', `${name}.mjs`), 'utf8');
