@@ -26,19 +26,21 @@ const KNOWN = new Set([
   'cron', 'run', 'foreach', 'cwd', 'enabled', 'model', 'effort', 'permission-mode', 'allowed-tools', 'max-turns', 'timeout',
 ]);
 const LIST_KEYS = new Set(['allowed-tools']);
-const PERMISSION_MODES = ['plan', 'acceptEdits', 'auto'] as const;
+/** The modes a routine may run under, lowest to highest: the runner clamps a file's mode to its ceiling by this order. */
+export const PERMISSION_MODES = ['plan', 'acceptEdits', 'auto'] as const;
 /** A job's timeout when its file names none, and the grammar of the `timeout` key. */
 export const DEFAULT_TIMEOUT_MS = 3_600_000;
 export const TIMEOUT_RE = /^(\d+)([smh])$/;
 const UNIT_MS = { s: 1000, m: 60_000, h: 3_600_000 } as const;
 
-function unquote(v: string): string {
+/** Strips one matching pair of outer quotes, as every frontmatter value is read. */
+export function unquote(v: string): string {
   if (v.length >= 2 && ((v[0] === '"' && v[v.length - 1] === '"') || (v[0] === "'" && v[v.length - 1] === "'"))) return v.slice(1, -1);
   return v;
 }
 
 /** `[a, b]` -> items, or null when the value is not the inline form. */
-function inlineList(v: string): string[] | null {
+export function inlineList(v: string): string[] | null {
   if (v.length < 2 || v[0] !== '[' || v[v.length - 1] !== ']') return null;
   const inner = v.slice(1, -1).trim();
   if (inner === '') return [];

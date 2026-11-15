@@ -253,6 +253,30 @@ export function run(): number {
     assert.deepStrictEqual(readForeach(jobTemplate('skill')), { mode: 'all', picks: [] });
   });
 
+  t('readForeach: a quoted value reads like the bare one, as the validator unquotes it; mismatched quotes stay cwd', () => {
+    assert.deepStrictEqual(readForeach('---\nforeach: "pinned"\n---\n'), { mode: 'all', picks: [] });
+    assert.deepStrictEqual(readForeach("---\nforeach: 'pinned'\n---\n"), { mode: 'all', picks: [] });
+    assert.deepStrictEqual(readForeach('---\nforeach: "[a, b]"\n---\n'), { mode: 'pick', picks: ['a', 'b'] });
+    assert.deepStrictEqual(readForeach('---\nforeach: "pinned" # all of them\n---\n'), { mode: 'all', picks: [] });
+    assert.deepStrictEqual(readForeach('---\nforeach: "pinned\'\n---\n'), { mode: 'cwd', picks: [] });
+  });
+
+  t('readForeach agrees with parseJob on every spelling of pinned and of a list', () => {
+    for (const value of ['pinned', '"pinned"', "'pinned'", '[a, b]', '"[a, b]"']) {
+      const text = `---\ncron: "0 9 * * *"\nrun: claude\nforeach: ${value}\n---\n/git-sync\n`;
+      const { job, errors } = parseJob('parity', text, 'mac');
+      assert.deepStrictEqual(errors, [], value);
+      const expected = job!.foreach === 'pinned' ? { mode: 'all', picks: [] } : { mode: 'pick', picks: job!.foreach };
+      assert.deepStrictEqual(readForeach(text), expected, value);
+    }
+  });
+
+  t('setRepos: all on a quoted foreach: "pinned" file rewrites that line, never adds a second', () => {
+    const out = setRepos('---\nrun: shell\nforeach: "pinned"\n---\necho\n', 'all', []);
+    assert.strictEqual(out.split('\n').filter(l => /^foreach\s*:/.test(l)).length, 1);
+    assert.deepStrictEqual(readForeach(out), { mode: 'all', picks: [] });
+  });
+
   t('setRepos: pick rewrites foreach in place and keeps its comment; all writes pinned', () => {
     const src = '---\ncron: "0 7 * * *"\nrun: shell\nforeach: pinned   # keep me\nenabled: true\n---\nbody\n';
     assert.strictEqual(setRepos(src, 'pick', ['a', 'b']), '---\ncron: "0 7 * * *"\nrun: shell\nforeach: [a, b]   # keep me\nenabled: true\n---\nbody\n');

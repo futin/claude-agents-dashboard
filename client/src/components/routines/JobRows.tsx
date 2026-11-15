@@ -1,6 +1,6 @@
 import { useId, useState } from 'react';
 
-import type { JobError } from '../../../../shared/routine-file';
+import { PERMISSION_MODES, type JobError } from '../../../../shared/routine-file';
 import { useDraft } from '../../hooks/useDraft';
 import {
   FIELDS, UNREADABLE, formKind, frontmatterReadable, routeErrors, scheduleEdit, schedulePick, timeoutUnitView, timeoutWithUnit, visibleFields,
@@ -15,7 +15,6 @@ import ScheduleControl from './ScheduleControl';
 
 type Val<K extends FieldId> = (typeof FIELDS)[K] extends FieldDef<infer V> ? V : never;
 
-const PERMISSIONS = ['plan', 'acceptEdits', 'auto'] as const;
 const WHOLE_COUNT = /^\s*([1-9]\d*)?\s*$/;
 
 function Seg<T extends string | null>({ label, options, value, disabled, pick }: {
@@ -121,7 +120,7 @@ function ModelControl({ v, disabled, put }: { v: ModelEffort; disabled: boolean;
 function PermissionControl({ v, disabled, put }: { v: Permission; disabled: boolean; put(v: Permission): void }) {
   return (
     <>
-      <Seg label="Permission" value={v} disabled={disabled} pick={put} options={[[null, 'Default'], ...PERMISSIONS.map((p): [string, string] => [p, p])]} />
+      <Seg label="Permission" value={v} disabled={disabled} pick={put} options={[[null, 'Default'], ...PERMISSION_MODES.map((p): [string, string] => [p, p])]} />
       {v === 'plan' && <div className="rtn-f-hint"><b>plan</b>: reads and plans, edits nothing.</div>}
       {v === 'acceptEdits' && <span className="rtn-vmsg warn">The run can edit files in each repo without asking. bypassPermissions is refused here.</span>}
     </>

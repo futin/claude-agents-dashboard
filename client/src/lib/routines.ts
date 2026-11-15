@@ -7,7 +7,7 @@
  */
 import { isManualCron } from '../../../shared/cron';
 import { scalarEnd, writeFrontmatterLine } from '../../../shared/frontmatter';
-import { LABEL_PREFIX, NAME_RE, RESERVED } from '../../../shared/routine-file';
+import { LABEL_PREFIX, NAME_RE, RESERVED, inlineList, unquote } from '../../../shared/routine-file';
 import type {
   ReconcileChange, RoutineJob, RoutineJobRow, RoutineRun, RoutineRunConflict, RoutineStats, RoutineStep, RoutinesResponse,
 } from '../../../shared/types';
@@ -201,20 +201,19 @@ function frontmatterOf(text: string): string {
 
 /**
  * What the file's frontmatter says about its repos, the inverse of {@link foreachLine}: `foreach: pinned` → all, `foreach: [a, b]` → pick with the names,
- * anything else (a `cwd:` line, or neither) → cwd. Reads the first `foreach:` line only and never looks past the frontmatter, so a prompt that quotes the
- * key does not change the helper's reading.
+ * anything else (a `cwd:` line, or neither) → cwd. A quoted value (`foreach: "pinned"`) reads like the bare one, as the validator reads it. Reads the first
+ * `foreach:` line only and never looks past the frontmatter, so a prompt that quotes the key does not change the helper's reading.
  */
 export function readForeach(text: string): { mode: ForeachMode; picks: string[] } {
   const line = frontmatterOf(text).split(/\r?\n/).find(l => /^foreach\s*:/.test(l));
   if (line === undefined) return { mode: 'cwd', picks: [] };
   // A trailing ` # comment` is not part of the value: the spec's example file carries one on this very line.
   const raw = line.replace(/^foreach\s*:/, '').trim();
-  const value = raw.slice(0, scalarEnd(raw));
+  const value = unquote(raw.slice(0, scalarEnd(raw)));
   if (value === 'pinned') return { mode: 'all', picks: [] };
-  const list = /^\[(.*)\]$/.exec(value);
+  const list = inlineList(value);
   if (!list) return { mode: 'cwd', picks: [] };
-  const picks = list[1].split(',').map(x => x.trim().replace(/^(["'])(.*)\1$/, '$2')).filter(x => x !== '');
-  return { mode: 'pick', picks };
+  return { mode: 'pick', picks: list.filter(x => x !== '') };
 }
 
 /**

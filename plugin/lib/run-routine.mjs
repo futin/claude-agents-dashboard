@@ -23,7 +23,7 @@ import os from 'node:os';
 import path from 'node:path';
 
 import { lastBefore, parseCron } from './cron.mjs';
-import { parseJob } from './routine-file.mjs';
+import { PERMISSION_MODES, parseJob } from './routine-file.mjs';
 
 const NAME_RE = /^[a-z0-9-]+$/;
 const EXIT_USAGE = 64;
@@ -37,8 +37,6 @@ const KILL_GRACE_MS = Number(process.env.RUN_ROUTINE_GRACE_MS) > 0 ? Number(proc
 const MAX_TIMER_MS = 2 ** 31 - 1;
 const GROUP_POLL_MS = 50;
 const LATE_MS = 10 * 60_000;
-// spawn.ts PERMISSION_MODES minus bypassPermissions, which a routine never runs under whatever the file or the baked env says.
-const PERMISSION_MODES = ['plan', 'acceptEdits', 'auto'];
 
 function usage(msg) {
   process.stderr.write(`run-routine: ${msg}\nusage: run-routine <job> [--trigger schedule|manual] [--only <pin>...]\n`);
@@ -101,6 +99,8 @@ function isWrapperFor(pid, job) {
   return tokens.some((t, i) => path.basename(t) === 'run-routine.mjs' && tokens[i + 1] === job);
 }
 
+// PERMISSION_MODES is the validator's own list (spawn.ts's minus bypassPermissions, which a routine never runs under whatever the file or the baked env
+// says), so a mode the validator admits is always one this ranks.
 function clampPermission(requested, ceiling) {
   const idx = (v) => { const i = PERMISSION_MODES.indexOf(v); return i === -1 ? PERMISSION_MODES.indexOf('auto') : i; };
   return PERMISSION_MODES[Math.min(idx(requested), idx(ceiling))];

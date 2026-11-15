@@ -4,13 +4,17 @@
  * is checked against the files people actually start from.
  */
 import assert from 'node:assert';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import {
   FIELDS, UNREADABLE, cronFor, fmValue, formKind, frontmatterReadable, routeErrors, scheduleEdit, schedulePick, setKey, switchPreset, timeoutUnitView, timeoutWithUnit, validMinute, validTime, visibleFields
 } from '../../client/src/lib/routineForm.js';
 import { jobTemplate, setRepos } from '../../client/src/lib/routines.js';
-import { parseJob } from '../../shared/routine-file.js';
+import { PERMISSION_MODES, parseJob } from '../../shared/routine-file.js';
 import type { Schedule } from '../../client/src/lib/routineForm.js';
+import { findRepoRoot } from '../guards/docs-links.test.js';
 
 function test(name: string, fn: () => void): boolean {
   try { fn(); console.log('  ✓ ' + name); return true; }
@@ -267,6 +271,22 @@ export function run(): number {
     assert.strictEqual(pm.read(bypass), 'bypassPermissions');
     assert.deepStrictEqual(pm.summary('bypassPermissions', ctx), { text: 'bypassPermissions', tone: 'err' });
     assert.strictEqual(pm.write(SKILL, null), SKILL.split('\n').filter(l => !l.startsWith('permission-mode:')).join('\n'));
+  });
+
+  t('permission: every mode the validator accepts reads as set', () => {
+    for (const mode of PERMISSION_MODES) assert.deepStrictEqual(FIELDS.permission.summary(mode, ctx), { text: mode, tone: 'set' }, mode);
+  });
+
+  t('permission: no client or plugin file keeps its own copy of the routine mode list — shared/routine-file.ts owns it', () => {
+    const root = findRepoRoot(path.dirname(fileURLToPath(import.meta.url)));
+    const copy = /\[\s*['"]plan['"]\s*,\s*['"]acceptEdits['"]\s*,\s*['"]auto['"]\s*\]/;
+    const walk = (dir: string): string[] => fs.readdirSync(dir, { withFileTypes: true })
+      .flatMap(e => e.isDirectory() ? walk(path.join(dir, e.name)) : /\.(ts|tsx|mjs)$/.test(e.name) ? [path.join(dir, e.name)] : []);
+    const generated = path.join(root, 'plugin', 'lib', 'routine-file.mjs');
+    const hits = [...walk(path.join(root, 'client', 'src')), ...walk(path.join(root, 'plugin', 'lib'))]
+      .filter(f => f !== generated && copy.test(fs.readFileSync(f, 'utf8')))
+      .map(f => path.relative(root, f));
+    assert.deepStrictEqual(hits, []);
   });
 
   // --- limits ---
