@@ -6,8 +6,10 @@ import type { Session, SessionsResponse } from '../../../shared/types';
  * The poll is project-filtered server-side, so a deep-linked or just-launched session in a filtered-out project never shows up in `data.sessions`;
  * the drawer then falls back to a row fetched from `GET /api/sessions/:id/row`, the way Routines opens its drawer.
  *
- * Without `status` this asks whether to fetch: `fetch` when a payload has arrived, it lacks `chatId`, and no fetched row for `chatId` is held;
- * otherwise `none`. With `status` — a failed fetch's HTTP status, or `'error'` for a thrown one — it judges the answer: a `404` for an id not in
+ * Without `status` this asks whether to fetch: `fetch` when a payload has arrived since `chatId` was armed (`fresh`), it lacks `chatId`, and no fetched
+ * row for `chatId` is held; otherwise `none`. `fresh` is what keeps a launch armed: `onLaunched` sets `chatId` while the last payload still predates the
+ * launch, so that payload's `launching` cannot list the id, and a `404` judged against it would disarm a launch whose transcript is simply not written
+ * yet. The next payload lists it, and its `404` is `keep`. With `status` — a failed fetch's HTTP status, or `'error'` for a thrown one — it judges the answer: a `404` for an id not in
  * `data.launching` means the session does not exist, so `clear` disarms `chatId`; a `404` for a launch whose transcript is not on disk yet, and any
  * other failure, is `keep`, and the next payload retries.
  */
@@ -17,14 +19,15 @@ export function chatRowAction(input: {
   chatId: string | null;
   data: Pick<SessionsResponse, 'sessions' | 'launching'> | null;
   fetchedId: string | null;
+  fresh: boolean;
   status?: number | 'error';
 }): ChatRowAction {
-  const { chatId, data, fetchedId, status } = input;
+  const { chatId, data, fetchedId, fresh, status } = input;
   if (status !== undefined) {
     if (status !== 404) return 'keep';
     return (data?.launching ?? []).some(l => l.sessionId === chatId) ? 'keep' : 'clear';
   }
-  if (!chatId || !data) return 'none';
+  if (!chatId || !data || !fresh) return 'none';
   if (data.sessions.some(s => s.id === chatId)) return 'none';
   return fetchedId === chatId ? 'none' : 'fetch';
 }

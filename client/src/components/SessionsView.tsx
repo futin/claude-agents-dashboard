@@ -11,6 +11,7 @@ import { TilesView } from './sessions/TilesView';
 import { TriageView } from './sessions/TriageView';
 import { chatDrawerSession, chatRowAction } from '../lib/chatRow';
 import { deepLinkSession } from '../lib/deepLink';
+import { pollFetch } from '../lib/pollSeq';
 import { useNarrow } from '../hooks/useNarrow';
 import { usePersistedState } from '../hooks/usePersistedState';
 import { useRemoteAnswer } from '../hooks/useRemoteAnswer';
@@ -20,7 +21,7 @@ import { useWebNotify } from '../hooks/useWebNotify';
 import { applyView, availableProjects, clearFilters, describeEmpty, drawableLayout, pruneProjects, DEFAULT_LAYOUT, DEFAULT_VIEW, type Layout, type View } from '../lib/filterSort';
 import { DESKTOP_LAUNCHED_TEXT } from '../lib/launchSurface';
 import { resolveLayout } from '../lib/settings';
-import type { Session } from '../../../shared/types';
+import type { Session, SessionsResponse } from '../../../shared/types';
 
 /** Own chunk — the drawer only loads the first time a chat is opened. */
 const ChatDrawer = lazy(() => import('./ChatDrawer'));
@@ -147,15 +148,19 @@ export function SessionsView({ onLink }: {
     });
   }
 
+  // The payload on screen when `chatId` was armed; only a later one may fetch, so a launch is never judged by a poll that predates it.
+  const chatArmedAt = useRef<SessionsResponse | null>(null);
+  useEffect(() => { chatArmedAt.current = data; }, [chatId]);
   useEffect(() => {
-    if (chatFetching.current || chatRowAction({ chatId, data, fetchedId: fetchedChat?.id ?? null }) !== 'fetch') return;
+    const fresh = data !== chatArmedAt.current;
+    if (chatFetching.current || chatRowAction({ chatId, data, fetchedId: fetchedChat?.id ?? null, fresh }) !== 'fetch') return;
     const id = chatId as string;
     chatFetching.current = true;
     void (async () => {
       let status: number | 'error';
       let row: Session | null = null;
       try {
-        const res = await fetch(`/api/sessions/${encodeURIComponent(id)}/row`);
+        const res = await pollFetch(`/api/sessions/${encodeURIComponent(id)}/row`);
         status = res.status;
         if (res.ok) row = await res.json() as Session;
       } catch {
@@ -165,7 +170,7 @@ export function SessionsView({ onLink }: {
       // Closed, or another session opened, while this was in flight.
       if (chatIdRef.current !== id) return;
       if (row) setFetchedChat(row);
-      else if (chatRowAction({ chatId: id, data, fetchedId: null, status }) === 'clear') setChatId(null);
+      else if (chatRowAction({ chatId: id, data, fetchedId: null, fresh, status }) === 'clear') setChatId(null);
     })();
   }, [chatId, data, fetchedChat]);
 

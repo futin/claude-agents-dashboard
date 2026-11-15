@@ -26,45 +26,56 @@ export function run(): number {
   let p = 0, f = 0;
 
   if (test('no chatId: no fetch and no drawer session', () => {
-    assert.strictEqual(chatRowAction({ chatId: null, data: payload(['a']), fetchedId: null }), 'none');
+    assert.strictEqual(chatRowAction({ chatId: null, data: payload(['a']), fetchedId: null, fresh: true }), 'none');
     assert.strictEqual(chatDrawerSession(null, payload(['a']), row('a')), null);
   })) p++; else f++;
 
   if (test('chatId in the poll: no fetch, and the live row wins over a stale fetched row for the same id', () => {
     const data = payload(['a']);
-    assert.strictEqual(chatRowAction({ chatId: 'a', data, fetchedId: null }), 'none');
+    assert.strictEqual(chatRowAction({ chatId: 'a', data, fetchedId: null, fresh: true }), 'none');
     const fetched = row('a', { status: 'working' });
     assert.strictEqual(chatDrawerSession('a', data, fetched), data.sessions[0]);
   })) p++; else f++;
 
   if (test('chatId missing from the poll and nothing fetched: fetch', () => {
-    assert.strictEqual(chatRowAction({ chatId: 'b', data: payload(['a']), fetchedId: null }), 'fetch');
+    assert.strictEqual(chatRowAction({ chatId: 'b', data: payload(['a']), fetchedId: null, fresh: true }), 'fetch');
   })) p++; else f++;
 
   if (test('fetched row already for chatId: no second fetch, and the drawer shows it', () => {
-    assert.strictEqual(chatRowAction({ chatId: 'b', data: payload(['a']), fetchedId: 'b' }), 'none');
+    assert.strictEqual(chatRowAction({ chatId: 'b', data: payload(['a']), fetchedId: 'b', fresh: true }), 'none');
     const fetched = row('b');
     assert.strictEqual(chatDrawerSession('b', payload(['a']), fetched), fetched);
   })) p++; else f++;
 
   if (test('fetched row for another id: never shown under chatId, and chatId is fetched', () => {
     assert.strictEqual(chatDrawerSession('b', payload(['a']), row('c')), null);
-    assert.strictEqual(chatRowAction({ chatId: 'b', data: payload(['a']), fetchedId: 'c' }), 'fetch');
+    assert.strictEqual(chatRowAction({ chatId: 'b', data: payload(['a']), fetchedId: 'c', fresh: true }), 'fetch');
   })) p++; else f++;
 
   if (test('404 while the id is still launching: keep; 404 with no launch: clear', () => {
-    assert.strictEqual(chatRowAction({ chatId: 'b', data: payload(['a'], ['b']), fetchedId: null, status: 404 }), 'keep');
-    assert.strictEqual(chatRowAction({ chatId: 'b', data: payload(['a'], ['c']), fetchedId: null, status: 404 }), 'clear');
-    assert.strictEqual(chatRowAction({ chatId: 'b', data: { sessions: [] }, fetchedId: null, status: 404 }), 'clear');
+    assert.strictEqual(chatRowAction({ chatId: 'b', data: payload(['a'], ['b']), fetchedId: null, fresh: true, status: 404 }), 'keep');
+    assert.strictEqual(chatRowAction({ chatId: 'b', data: payload(['a'], ['c']), fetchedId: null, fresh: true, status: 404 }), 'clear');
+    assert.strictEqual(chatRowAction({ chatId: 'b', data: { sessions: [] }, fetchedId: null, fresh: true, status: 404 }), 'clear');
   })) p++; else f++;
 
   if (test('500 or a thrown fetch: keep, so the next payload retries', () => {
-    assert.strictEqual(chatRowAction({ chatId: 'b', data: payload(['a']), fetchedId: null, status: 500 }), 'keep');
-    assert.strictEqual(chatRowAction({ chatId: 'b', data: payload(['a']), fetchedId: null, status: 'error' }), 'keep');
+    assert.strictEqual(chatRowAction({ chatId: 'b', data: payload(['a']), fetchedId: null, fresh: true, status: 500 }), 'keep');
+    assert.strictEqual(chatRowAction({ chatId: 'b', data: payload(['a']), fetchedId: null, fresh: true, status: 'error' }), 'keep');
+  })) p++; else f++;
+
+  if (test('payload from before chatId was armed: no fetch, so a launch is never judged against a poll that predates it', () => {
+    assert.strictEqual(chatRowAction({ chatId: 'b', data: payload(['a']), fetchedId: null, fresh: false }), 'none');
+  })) p++; else f++;
+
+  if (test('launch: the pre-launch poll waits, the next lists the launch and fetches, and its 404 keeps chatId', () => {
+    assert.strictEqual(chatRowAction({ chatId: 'new', data: payload(['a']), fetchedId: null, fresh: false }), 'none');
+    const after = payload(['a'], ['new']);
+    assert.strictEqual(chatRowAction({ chatId: 'new', data: after, fetchedId: null, fresh: true }), 'fetch');
+    assert.strictEqual(chatRowAction({ chatId: 'new', data: after, fetchedId: null, fresh: true, status: 404 }), 'keep');
   })) p++; else f++;
 
   if (test('no payload yet: no fetch, and no drawer session', () => {
-    assert.strictEqual(chatRowAction({ chatId: 'b', data: null, fetchedId: null }), 'none');
+    assert.strictEqual(chatRowAction({ chatId: 'b', data: null, fetchedId: null, fresh: true }), 'none');
     assert.strictEqual(chatDrawerSession('b', null, null), null);
   })) p++; else f++;
 
