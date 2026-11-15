@@ -42,7 +42,7 @@ turn-end is by definition a mid-hook-conversation stop.
 So the flag changed jobs. It is no longer control flow; it is data:
 
 ```bash
-# scripts/stop-notify-hook.sh:196-202
+# scripts/stop-notify-hook.sh:202-208
 BODY=$(jq -cn \
   --arg sid "$SESSION_ID" \
   --arg pm "$PERM_MODE" \
@@ -75,7 +75,7 @@ platform is strictly better here.
 `notify_fallback` is a shell function used as a jump target:
 
 ```bash
-# scripts/stop-notify-hook.sh:123-130
+# scripts/stop-notify-hook.sh:129-136
 notify_fallback() {
   [ "$SHA" = "true" ] && exit 0
   BODY=$(jq -cn --arg sid "$SESSION_ID" --arg pm "$PERM_MODE" \
@@ -188,7 +188,7 @@ the module's header names it: every transcript already on disk carries the old w
 ask the same question to decide it:
 
 ```ts
-// server/lib/idle.ts:45-53
+// server/lib/idle.ts:82-90
 export function backAtDesk(): boolean {
   const thresholdSecs = getSettings().idleSecs;
   // Checked before the read, not inside `atDesk`: the reading costs an `ioreg`
@@ -258,7 +258,7 @@ Note the fail direction. It is the *same* as the hook's, never act on a guess. H
 the terminal:
 
 ```ts
-// server/lib/idle.ts:35-40
+// server/lib/idle.ts:72-77
  * Fail directions, both deliberately "stay held":
  *  - unreadable idle (Docker, non-macOS) → false. Never end a wait on a guess;
  *    the deadline timer is the reaper of last resort. Same direction

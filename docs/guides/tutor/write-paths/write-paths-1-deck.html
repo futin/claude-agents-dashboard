@@ -130,7 +130,7 @@
   finally answers the CLI, and the session moves. The dashboard never pushed anything. It
   answered a question that was already waiting.</p>
   <p>Three files implement that trick — <code>pending.ts</code>, <code>plans.ts</code>,
-  <code>messages.ts</code> — and they are near-identical by design. Once you see the shared
+  <code>messages.ts</code> — all built on one shared state machine in <code>wait-store.ts</code>. Once you see the shared
   shape, each one collapses into "the same machine, bent around a different constraint the
   CLI imposed." A fourth path, <code>spawn.ts</code>, inverts the whole thing; it gets its own
   lesson.</p>
@@ -142,12 +142,15 @@
   <div class="card card-concept">
     <p class="eyebrow">Section 1 · The shared shape</p>
     <h2>A store that holds a promise, not a request</h2>
-    <p>Each store keeps one <code>Map</code> of session id to an entry, and the entry's most
-    important field is not data at all — it is a function:</p>
-<pre>// pending.ts:51-58 (compacted here)
-interface Entry {
+    <p>All three stores are built by <code>createWaitStore</code> in <code>wait-store.ts</code>, which keeps one
+    <code>Map</code> of session id to an entry. Every entry extends one shape, and its most important field is not
+    data at all — it is a function:</p>
+<pre>// wait-store.ts:14-19
+export interface WaitEntry&lt;R&gt; {
+  sessionId: string;
   timer: NodeJS.Timeout;
-  resolve: (r: WaitResult) =&gt; void;
+  /** Completes the hook's held response. Called at most once. */
+  resolve: (r: R) =&gt; void;
 }</pre>
     <p>The HTTP handler creates the held response and passes <code>resolve</code> <em>in</em>.
     The store never imports an HTTP type, never sees a socket, never knows a browser exists.
@@ -156,7 +159,7 @@ interface Entry {
     <p>The obvious alternative is to let the store own the response object and call
     <code>res.end()</code> itself. That works, and it is how most people would write it first —
     but then every test of "does a superseded question release its waiter?" needs a fake
-    request, a fake response, and a fake socket. The file's own header says the injection is
+    request, a fake response, and a fake socket. <code>pending.ts</code>'s header says the injection is
     "what makes the whole state machine unit-testable."</p>
     <p>The trade-off they accepted: the store cannot clean up after a dead peer on its own,
     because it cannot see the socket close. Something outside has to notice and call
@@ -167,10 +170,15 @@ interface Entry {
     <h2>One entry per session, and a newer one wins</h2>
     <p>Every store keys by session id and holds at most one entry. A second registration for a
     session that already has one does not error and does not queue — it <em>supersedes</em>:</p>
-<pre>// pending.ts:173-183 (compacted here)
-// An existing entry for the session is superseded — its waiter is
-// released with `superseded` and falls back to the terminal dialog.
-if (prev) settle(prev, { status: 'superseded' });</pre>
+<pre>// wait-store.ts:103-108
+    add(entry) {
+      const prev = entries.get(entry.sessionId);
+      if (prev) settle(prev, opts.superseded);
+      entries.set(entry.sessionId, entry);
+      ensureReaper();
+    },</pre>
+    <p>Each store passes in what its superseded waiter receives — all three pass <code>{ status: 'superseded' }</code> —
+    and the hook behind that waiter falls back to the terminal dialog or the plan card.</p>
     <p>Why not a queue? Because the thing being modelled has no queue. The CLI has exactly one
     question open at a time; a second registration means the first one is already gone — the
     tool call was denied and the model re-asked. Queueing would faithfully preserve a state
@@ -185,18 +193,22 @@ if (prev) settle(prev, { status: 'superseded' });</pre>
 
   <div class="card card-concept">
     <h2>Every exit runs through one funnel</h2>
-    <p>Answered, dismissed, superseded, expired, cancelled — every terminal transition goes
-    through the same four lines:</p>
-<pre>// pending.ts:158-163
-/** Finish an entry: fire `resolve` once, clear its timer, drop it from the map. */
-function settle(entry: Entry, result: WaitResult): void {
-  clearTimeout(entry.timer);
-  if (entries.get(entry.sessionId) === entry) entries.delete(entry.sessionId);
-  entry.resolve(result);
-}</pre>
+    <p>Answered, dismissed, superseded, expired, released — every terminal transition that still has someone to answer
+    goes through one function:</p>
+<pre>// wait-store.ts:90-97
+  const settle = (entry: E, result: R): void =&gt; {
+    if (settled.has(entry)) return;
+    settled.add(entry);
+    clearTimeout(entry.timer);
+    if (entries.get(entry.sessionId) === entry) entries.delete(entry.sessionId);
+    opts.onSettle?.(entry, result);
+    entry.resolve(result);
+  };</pre>
     <p>Note the identity check before the delete. It is not the session id that must match —
     it is the <em>entry object</em>. A late timer firing for an entry that was already replaced
-    must not evict its replacement.</p>
+    must not evict its replacement. The <code>settled</code> set makes a second settle of the same entry a no-op, and
+    <code>onSettle</code> is the one per-store step on the way out: <code>pending.ts</code> and <code>plans.ts</code> use it to
+    record that the terminal took over.</p>
     <svg viewBox="0 0 320 92" role="img" aria-label="Hook registers, browser answers, settle resolves the held response">
       <g fill="none" stroke="currentColor" stroke-width="1.5">
         <rect x="2" y="26" width="74" height="38" rx="6"/>
@@ -217,7 +229,7 @@ function settle(entry: Entry, result: WaitResult): void {
     <p>The naive version — deleting by session id, or letting each call site resolve its own
     promise — leaks waiters: a path that forgets to resolve parks a turn forever, and there is
     no daemon to notice. Funnelling every exit means "fires at most once" is a property of one
-    function you can read in full, not a discipline spread across nine call sites.</p>
+    function you can read in full, not a discipline spread across every call site of three stores.</p>
     <details><summary>More detail: why the timer is called the guaranteed reaper</summary>
       <p>The expiry timer is not a convenience — it is the only thing that bounds a hold. If
       the browser never answers, if the phone loses signal mid-tap, if the tab is closed: the
@@ -262,31 +274,29 @@ function settle(entry: Entry, result: WaitResult): void {
   <div class="card card-qa">
     <p class="eyebrow">Questions you might ask</p>
     <details class="qa-item">
-      <summary>If all three stores are the same state machine, why not one generic module?</summary>
-      <p>Both module headers answer it outright: the <em>shape</em> is shared, nothing else is.
-      <code>plans.ts:20-23</code> calls a plan and a question "the same kind of wait with different
-      payloads", and says they stay separate modules "because their payloads and verdicts share
-      nothing" — a question carries <code>PendingQuestionItem[]</code> and can settle
-      <code>answered</code>; a plan carries markdown and can only settle <code>rejected</code>.
-      <code>messages.ts:13-15</code> repeats the reasoning for the third. A generic store would need
-      a type parameter for the payload, another for the verdict, and an injected validator per
-      caller — three seams bought with the forty lines the duplication actually costs.</p>
+      <summary>If all three stores are the same state machine, why are they still three modules?</summary>
+      <p>They share the machine and nothing else. <code>wait-store.ts:5-6</code> holds only what the three used to
+      keep three copies of: the map, <code>settle</code>, supersede-on-register, the stale-id-safe
+      <code>cancel</code>, the test reset and the idle sweep. Payloads, validation and prose stay put —
+      <code>plans.ts:20-23</code> says a plan and a question are "the same kind of wait with different payloads"
+      whose "payloads and verdicts share nothing". So the generic part takes two type parameters, the entry and the
+      result, and each store passes only what differs: its superseded and released results, an optional
+      <code>releasable</code> filter and an optional <code>onSettle</code> (<code>wait-store.ts:21-30</code>).</p>
     </details>
     <details class="qa-item">
       <summary>The card says every exit runs through <code>settle</code> — but <code>cancel</code> deletes the entry directly. Which is it?</summary>
       <p><code>cancel</code> is the one exit that must <em>not</em> resolve. It fires when the hook's
-      own socket closes — session interrupted, hook killed — and as <code>pending.ts:245-247</code>
+      own socket closes — session interrupted, hook killed — and as <code>pending.ts:243-245</code>
       puts it: "No <code>resolve</code>: there is nobody left to answer to." Firing one would push a
-      verdict into a dead response. So <code>cancel</code> (<code>pending.ts:249-254</code>) clears
-      the timer and deletes by hand, while guarding the same staleness the funnel does — it takes the
-      <code>questionId</code> and returns early unless it matches, "so a late close can't evict a
-      newer entry". The funnel covers every exit that still has someone to answer to.</p>
+      verdict into a dead response. So <code>cancel</code> (<code>wait-store.ts:109-115</code>) clears
+      the timer, marks the entry settled and deletes by hand, while guarding the same staleness the funnel does —
+      <code>pending.ts:247-249</code> passes a check on the <code>questionId</code>, and a mismatch returns early,
+      "so a late close can't evict a newer entry". The funnel covers every exit that still has someone to answer to.</p>
     </details>
     <details class="qa-item">
       <summary>What happens to every open wait when the dashboard server restarts?</summary>
       <p>They vanish, by design. All three stores hold their entries in a plain in-memory
-      <code>Map</code> (<code>pending.ts:61</code>, <code>plans.ts:50</code>,
-      <code>messages.ts:49</code>), and <code>pending.ts:10-11</code> states the consequence:
+      <code>Map</code> (<code>wait-store.ts:86</code>, one per store), and <code>pending.ts:10-11</code> states the consequence:
       "nothing here ever touches disk, so a restart just drops every wait (the hooks fall back to the
       terminal dialog)". No <code>resolve</code> fires, so each hook's held HTTP request dies with the
       process, the CLI sees the hook fail, and the terminal dialog or plan card takes over. That is
@@ -316,10 +326,10 @@ function settle(entry: Entry, result: WaitResult): void {
     choice" channel. What it has is the ability to <em>deny</em> a tool call with a reason
     string.</p>
     <p>So the answer travels as a rejection. The module header states it plainly:</p>
-<pre>// pending.ts:5-8 (compacted here)
-// the answer resolves the held response — the hook then denies the tool
-// call with a reason naming the choice, which is the only supported way
-// to get an answer into a live session.</pre>
+<pre>// pending.ts:6-8
+ * browser reads the entry, the user picks, and the answer resolves the held
+ * response — the hook then denies the tool call with a reason naming the choice,
+ * which is the only supported way to get an answer into a live session.</pre>
     <p>The model asked a question, the tool call was denied, and the denial reason says "the
     user picked <em>Rewrite the parser</em>." The model reads that and proceeds as though it had
     been told — because it has been.</p>
@@ -337,11 +347,14 @@ function settle(entry: Entry, result: WaitResult): void {
     that may be on the open internet. Both are treated as hostile. <code>sanitizeQuestions</code>
     caps the number of questions, the number of options, and the length of every string, and
     drops anything malformed rather than throwing:</p>
-<pre>// pending.ts:80-90 (compacted here)
+<pre>// pending.ts:87-97 (compacted here)
 export function sanitizeQuestions(toolInput: unknown): PendingQuestionItem[] {
+  …
   if (!input || typeof input !== 'object' || !Array.isArray(input.questions)) return [];
+  …
   for (const raw of input.questions) {
     if (out.length &gt;= MAX_QUESTIONS) break;
+    …
     const question = str(q.question, QUESTION_CAP);
     if (!question) continue;</pre>
     <p>Returning an empty array is not a silent failure — it is a signal. The header explains
@@ -406,31 +419,31 @@ export function sanitizeQuestions(toolInput: unknown): PendingQuestionItem[] {
     <details class="qa-item">
       <summary>Why doesn't <code>validateAnswer</code> check the submitted values against the option labels?</summary>
       <p>Because the terminal dialog it mirrors always offers a free-text "Other".
-      <code>pending.ts:115-116</code> says so directly: values are "deliberately NOT checked against
+      <code>pending.ts:122-123</code> says so directly: values are "deliberately NOT checked against
       the option labels". Validation is therefore structural only
-      (<code>pending.ts:118-136</code>) — one answer per question, no duplicate
+      (<code>pending.ts:125-143</code>) — one answer per question, no duplicate
       <code>index</code>, non-empty strings under <code>SELECTED_CAP</code>, and exactly one value
       unless the question is <code>multiSelect</code>. Label-matching would break the single case the
       panel exists to support: typing an answer the model never listed.</p>
     </details>
     <details class="qa-item">
       <summary>The hook <em>denies</em> the tool call — what stops the model from just asking again?</summary>
-      <p>The deny reason does. <code>composeReason</code> (<code>pending.ts:143-156</code>) writes the
-      prose the hook returns as <code>permissionDecisionReason</code>, and <code>:139-141</code> names
+      <p>The deny reason does. <code>composeReason</code> (<code>pending.ts:150-163</code>) writes the
+      prose the hook returns as <code>permissionDecisionReason</code>, and <code>:146-148</code> names
       its two jobs: state the choice, and stop the re-ask, "a denied AskUserQuestion is otherwise an
       invitation to try again". Both the one-question and many-question branches end on the same
       instruction:</p>
-<pre>// pending.ts:150-151
-return `The user answered via the dashboard (not the terminal dialog) — ${lines[0]}. `
-  + 'Treat this as the user\'s selection and continue; do not ask again.';</pre>
+<pre>// pending.ts:157-158
+    return `The user answered via the dashboard (not the terminal dialog) — ${lines[0]}. `
+      + 'Treat this as the user\'s selection and continue; do not ask again.';</pre>
     </details>
     <details class="qa-item">
       <summary>The question text comes from our own CLI, not the network — why cap it at all?</summary>
       <p>"Our own CLI" is not the same as trusted input: the tool input is whatever the <em>model</em>
       wrote, which runs long by accident as easily as by attack. The caps at
-      <code>pending.ts:36-41</code> carry their own reason — "a hostile/runaway tool input must not
+      <code>pending.ts:38-43</code> carry their own reason — "a hostile/runaway tool input must not
       pin memory". Note the shape of the enforcement: <code>str()</code>
-      (<code>pending.ts:63-65</code>) <em>slices</em> rather than rejecting, so an over-long question
+      (<code>pending.ts:70-72</code>) <em>slices</em> rather than rejecting, so an over-long question
       still yields a usable panel instead of collapsing to the terminal. The caps bound memory; the
       empty-array return handles genuinely malformed input.</p>
     </details>
@@ -457,12 +470,12 @@ return `The user answered via the dashboard (not the terminal dialog) — ${line
     as requiring user interaction, and for such tools the CLI discards a hook's bare
     <code>allow</code>. Approval only counts when it happens on the plan card itself.</p>
     <p>So the store's verdict union has exactly two members, and anything else is malformed:</p>
-<pre>// plans.ts:144-148 (compacted here)
-if (req.verdict === 'dismiss') {
-  settle(entry, { status: 'dismissed' });
-  return 'ok';
-}
-if (req.verdict !== 'reject') return 'malformed';</pre>
+<pre>// plans.ts:139-143
+  if (req.verdict === 'dismiss') {
+    store.settle(entry, { status: 'dismissed' });
+    return 'ok';
+  }
+  if (req.verdict !== 'reject') return 'malformed';</pre>
     <p>The alternative — shipping an Approve button that calls <code>allow</code> anyway — would
     have produced the worst possible artifact: a control that looks like it works, returns 200,
     and silently does nothing, leaving the session parked while the user believes they released
@@ -475,11 +488,11 @@ if (req.verdict !== 'reject') return 'malformed';</pre>
     <h2>Feedback is mandatory, and it is the payload</h2>
     <p>A reject with an empty feedback string is rejected as malformed — the store will not let
     you send a bare "no":</p>
-<pre>// plans.ts:151-154 (compacted here)
-// Feedback is the whole point of a remote reject: without it the model has
-// nothing to revise against, and a bare "no" is better said on the card.
-const feedback = typeof req.feedback === 'string' ? req.feedback.slice(0, FEEDBACK_CAP) : '';
-if (!feedback.trim()) return 'malformed';</pre>
+<pre>// plans.ts:145-148
+  // Feedback is the whole point of a remote reject: without it the model has
+  // nothing to revise against, and a bare "no" is better said on the card.
+  const feedback = typeof req.feedback === 'string' ? req.feedback.slice(0, FEEDBACK_CAP) : '';
+  if (!feedback.trim()) return 'malformed';</pre>
     <p>The feedback then becomes the deny message the model reads, wrapped in prose that also
     tells it what to do next: revise, call <code>ExitPlanMode</code> again, stay in plan mode,
     do not start implementing.</p>
@@ -527,21 +540,21 @@ if (!feedback.trim()) return 'malformed';</pre>
     <details class="qa-item">
       <summary>What does the model actually receive when I send a plan back?</summary>
       <p>Feedback wrapped in instructions. <code>composeReason</code>
-      (<code>plans.ts:70-76</code>) exists because a denied <code>ExitPlanMode</code> is otherwise a
-      dead end (<code>plans.ts:64-68</code>):</p>
-<pre>// plans.ts:72-75
-'The user reviewed this plan on the dashboard (not the plan card) and sent it back '
-  + `for revision. Their feedback: ${trimmed}\n`
-  + 'Revise the plan accordingly and call ExitPlanMode again. Stay in plan mode; '
-  + 'do not start implementing.'</pre>
+      (<code>plans.ts:75-81</code>) exists because a denied <code>ExitPlanMode</code> is otherwise a
+      dead end (<code>plans.ts:69-73</code>):</p>
+<pre>// plans.ts:77-80
+  return 'The user reviewed this plan on the dashboard (not the plan card) and sent it back '
+    + `for revision. Their feedback: ${trimmed}\n`
+    + 'Revise the plan accordingly and call ExitPlanMode again. Stay in plan mode; '
+    + 'do not start implementing.';</pre>
       <p>That last sentence is load-bearing: a model reads a bare denial as "stop", and the entire
       point of the path is that it revises and comes back.</p>
     </details>
     <details class="qa-item">
       <summary>If a rejected plan comes straight back as a new <code>ExitPlanMode</code>, doesn't the old wait leak?</summary>
-      <p>No — the new registration evicts it. <code>register</code> (<code>plans.ts:99-100</code>)
-      settles any existing entry for that session as <code>superseded</code> before installing the new
-      one, and the docstring names this exact loop at <code>plans.ts:89-91</code>: it "self-heals the
+      <p>No — the new registration evicts it. <code>register</code> hands the entry to the shared <code>add</code>
+      (<code>wait-store.ts:103-108</code>), which settles any existing entry for that session as <code>superseded</code>
+      before installing the new one, and the docstring names this exact loop at <code>plans.ts:87-89</code>: it "self-heals the
       revise loop: a rejected plan comes straight back as a new <code>ExitPlanMode</code> call". The
       superseded waiter is released rather than orphaned, so its hook falls through to the plan card
       instead of hanging to its deadline. One entry per session is what makes that safe — there is
@@ -550,9 +563,9 @@ if (!feedback.trim()) return 'malformed';</pre>
     <details class="qa-item">
       <summary>Why is the plan capped at 20 000 characters but feedback at only 2 000?</summary>
       <p>They cap opposite directions of travel. <code>PLAN_CAP</code>
-      (<code>plans.ts:32-33</code>) bounds what the <em>model</em> sends in; a plan "is markdown and
+      (<code>plans.ts:34-35</code>) bounds what the <em>model</em> sends in; a plan "is markdown and
       can be long", so the cap is there only so a runaway tool input can't pin memory.
-      <code>FEEDBACK_CAP</code> (<code>plans.ts:34-35</code>) bounds what <em>you</em> send back, and
+      <code>FEEDBACK_CAP</code> (<code>plans.ts:36-37</code>) bounds what <em>you</em> send back, and
       that text reaches the model verbatim inside <code>composeReason</code>. Two thousand characters
       is already far more than a revision note needs — the tighter number reflects a phone composer,
       not a document editor.</p>
@@ -581,45 +594,49 @@ if (!feedback.trim()) return 'malformed';</pre>
     next user message.</p>
     <p>The reason text carries both the message and a set of away-mode instructions, and the
     comment explains why they have to ride along here:</p>
-<pre>// messages.ts:53-55 (compacted here)
-// carry the away-mode instructions — `UserPromptSubmit` hooks (the
-// remote-decision injection) do NOT fire on hook-continued turns, so this
-// is the only place the reminder can ride.</pre>
+<pre>// messages.ts:54-56
+ * text, and carry the away-mode instructions — `UserPromptSubmit` hooks (the
+ * remote-decision injection) do NOT fire on hook-continued turns, so this is
+ * the only place the reminder can ride.</pre>
     <p>The obvious alternative is a second hook on <code>UserPromptSubmit</code> to inject that
     context. It does not fire on a turn continued by a hook, so the instructions would silently
     vanish exactly when they are needed. Bundling them into the one reason string is the only
     delivery that survives.</p>
-    <p>The cost is a piece of prose duplicated in two places: the chat reader mirrors this exact
-    wording to unwrap the record back into a normal-looking drawer message. Edit one without the
-    other and a test fails — which the comment notes is the point, since it fails closed.</p>
+    <p>The cost is that the prose becomes a format with a second reader: the chat reader has to unwrap the record back
+    into a normal-looking drawer message. So the wording lives in <code>remote-message-prose.ts</code>, and the wrap here and
+    the unwrap in <code>chat.ts</code> are both built from the same two constants — they cannot drift apart. What still pins
+    the wording is every transcript already on disk, which would stop unwrapping if it changed.</p>
   </div>
 
   <div class="card card-concept">
-    <h2>The sweep that has to exist here and nowhere else</h2>
-    <p>The other stores get released by the world: a superseding registration, a tool result, a
-    closing socket. A stopped turn produces none of those — nothing further happens in that
-    session by definition, so nothing will arrive to release the hold. Left alone, every
-    finished turn would sit parked until its deadline expired.</p>
-    <p>So this store runs its own reaper, and the release condition is not about the session at
-    all — it is about <em>you</em>:</p>
-<pre>// messages.ts:205-210
-const thresholdSecs = getSettings().idleSecs;
-if (thresholdSecs === 0) return 0;
-const idle = (idleReader ?? readIdleSecs)();
-if (idle === null || idle &gt;= thresholdSecs) return 0;
-for (const entry of releasable) settle(entry, { status: 'released' });
-return releasable.length;</pre>
-    <p>If your machine reports recent input, you are back at the keyboard, and holding a turn open
-    for a phone reply is pointless — so the releasable holds go at once.</p>
-    <p>Read the guard conditions as failure directions. Unreadable idle time, on Docker or
-    non-macOS, returns <code>null</code> and releases nothing, leaving the deadline timer as the
-    reaper of last resort. Never releasing is a delay; releasing wrongly would cut short a window
-    you were about to use.</p>
+    <h2>Released when you come back, by one sweep for all three stores</h2>
+    <p>The other stores also get released by the world: a superseding registration, a transcript that moves on, a
+    closing socket. A stopped turn produces none of those — nothing further happens in that session by definition, so
+    nothing will arrive to release the hold. Left alone, every finished turn would sit parked until its deadline
+    expired.</p>
+    <p>The release condition is not about the session at all — it is about <em>you</em>. It is the same rule for all
+    three stores, so it lives once, in <code>wait-store.ts</code>: every 5 seconds one reaper collects the releasable
+    entries of every store and asks <code>backAtDesk()</code> once for all of them:</p>
+<pre>// wait-store.ts:68-73
+export function reapIdle(): number {
+  const release = [...stores].flatMap(s =&gt; s.releasable());
+  if (release.length === 0 || !backAtDesk()) return 0;
+  for (const r of release) r();
+  return release.length;
+}</pre>
+    <p>If your machine reports recent input, you are back at the keyboard, and holding a wait open
+    for a phone reply is pointless — so the releasable holds go at once, questions and plans included. What only
+    <code>messages.ts</code> adds is a say in which of its holds count as releasable — the next card.</p>
+    <p>Read the guard conditions in <code>backAtDesk</code> (<code>idle.ts:82-90</code>) as failure directions. Unreadable
+    idle time, on Docker or non-macOS, reads as "not at the desk" and releases nothing, leaving the deadline timer as
+    the reaper of last resort. Never releasing is a delay; releasing wrongly would cut short a window you were about
+    to use.</p>
     <details><summary>More detail: the reaper only exists while holds do</summary>
-      <p>The 5-second interval is created on the first hold and cleared when the last one goes
-      (messages.ts:218-224), and it is <code>unref()</code>'d so it cannot keep the process alive.
-      An idle server never spawns the <code>ioreg</code> subprocess that reads idle time — the cost
-      is paid only while someone is actually waiting.</p>
+      <p>The 5-second interval is created on the first hold in any store and cleared once every store is empty
+      (wait-store.ts:59-61 and 76-83), and it is <code>unref()</code>'d so it cannot keep the process alive. With
+      nothing releasable the tick returns before asking <code>backAtDesk</code>, so an idle server never spawns the
+      <code>ioreg</code> subprocess that reads idle time — the cost is paid only while someone is actually waiting, and
+      once per tick however many stores hold entries.</p>
     </details>
   </div>
 
@@ -629,24 +646,28 @@ return releasable.length;</pre>
     keyboard" stops being good news. A session launched headless — <code>claude -p</code>, which is
     what the dashboard's own <code>+ New</code> button starts — has no terminal at all, so the
     entry records that fact:</p>
-<pre>// messages.ts:39-44 (compacted here)
-// The session runs headless (`claude -p`, the dashboard `+ New` path) — no
-// terminal exists, so "back at the keyboard" gives the user no other way to
-// reply. The idle sweep skips these; only the deadline, an answer, a dismiss,
-// or a supersede ends them.
-headless: boolean;</pre>
+<pre>// messages.ts:37-42 (compacted here)
+   * The session runs headless (`claude -p`, the dashboard `+ New` path) — no
+   * terminal exists, so "back at the keyboard" gives the user no other way to
+   * reply. The idle sweep skips these; only the deadline, an answer, a dismiss,
+   * or a supersede ends them.
+  …
+  headless: boolean;</pre>
     <p>Releasing a hold is only safe because the user has somewhere better to answer — the
     terminal they just sat down at. For a headless session that place does not exist: the dashboard
     window <em>is</em> the only channel. Releasing it would close the single door the user has,
     precisely at the moment they came back to use it.</p>
-    <p>So the filter runs first, before anything else the sweep does:</p>
-<pre>// messages.ts:201-204
-export function sweepIdle(): number {
-  if (entries.size === 0) return 0;
-  const releasable = [...entries.values()].filter(e =&gt; !e.headless);
-  if (releasable.length === 0) return 0; // nothing to release — don't spawn ioreg</pre>
+    <p>So this store hands <code>createWaitStore</code> a <code>releasable</code> filter — the headless exemption, the one
+    part of the release that is <code>messages.ts</code>'s own — and the shared reaper applies it before anything else:</p>
+<pre>// messages.ts:45-50
+const store = createWaitStore&lt;Entry, MessageWaitResult&gt;({
+  superseded: { status: 'superseded' },
+  released: { status: 'released' },
+  // The headless exemption — see {@link sweepIdle}: a `claude -p` session has no terminal to come back to, so the dashboard window stays its only channel.
+  releasable: entry =&gt; !entry.headless
+});</pre>
     <p>Checking the flag inside the release loop instead would be equally correct and quietly
-    wasteful: every sweep would still read settings and shell out to <code>ioreg</code> on behalf of
+    wasteful: every tick would still read settings and shell out to <code>ioreg</code> on behalf of
     holds it was never going to release. Filtering first buys an early return.</p>
     <p>What it costs: a headless hold now has exactly one automatic exit, its deadline. Nothing
     else ends it but an answer, a dismiss, or a supersede — so an answer window set too long
@@ -665,8 +686,8 @@ export function sweepIdle(): number {
       </div>
       <div class="quiz-option" data-correct="true">
         <button class="quiz-option-btn">Nothing; the deadline timer eventually reaps it</button>
-        <p class="quiz-feedback">Correct. A <code>null</code> reading makes <code>sweepIdle</code>
-        return without releasing anything, so the hold stands and its expiry timer remains the
+        <p class="quiz-feedback">Correct. A <code>null</code> reading makes <code>backAtDesk</code>
+        return false, so the sweep releases nothing, so the hold stands and its expiry timer remains the
         reaper of last resort — the documented fail direction.</p>
       </div>
       <div class="quiz-option" data-correct="false">
@@ -692,7 +713,7 @@ export function sweepIdle(): number {
         <button class="quiz-option-btn">It is released, like any other hold when you return</button>
         <p class="quiz-feedback">That was the behaviour before an entry carried a
         <code>headless</code> flag. The sweep now filters those entries out of the releasable set
-        before it reads a setting or probes anything (messages.ts:203).</p>
+        before it reads a setting or probes anything (messages.ts:49).</p>
       </div>
       <div class="quiz-option" data-correct="false">
         <button class="quiz-option-btn">It is released only if the idle threshold is zero</button>
@@ -719,29 +740,29 @@ export function sweepIdle(): number {
     <p class="eyebrow">Questions you might ask</p>
     <details class="qa-item">
       <summary>Why does the follow-up text itself carry the away-mode instructions?</summary>
-      <p>Because nothing else can. <code>composeReason</code> (<code>messages.ts:62-69</code>) appends
-      the "user is still away" reminder — put decisions through <code>AskUserQuestion</code>, never
+      <p>Because nothing else can. <code>composeReason</code> (<code>messages.ts:60-62</code>) wraps the text in
+      the "user is still away" reminder (<code>remote-message-prose.ts:12-14</code>) — put decisions through <code>AskUserQuestion</code>, never
       end the turn on a prose question, prefer already-permitted tools — and
-      <code>messages.ts:53-56</code> gives the reason: "<code>UserPromptSubmit</code> hooks (the
+      <code>messages.ts:54-56</code> gives the reason: "<code>UserPromptSubmit</code> hooks (the
       remote-decision injection) do NOT fire on hook-continued turns, so this is the only place the
       reminder can ride." A turn resumed by a Stop hook never passes through the prompt-submit path,
       so instructions that normally ride there have to travel inside the message itself.</p>
     </details>
     <details class="qa-item">
-      <summary>Could I reword <code>composeReason</code> without touching anything else?</summary>
-      <p>No — one other file mirrors the wording. <code>messages.ts:57-60</code> flags it:
-      <code>chat.ts</code>'s <code>REMOTE_MESSAGE_RE</code> matches this exact prose to unwrap the
-      record back into a plain drawer message, and "editing the wording here without editing it there
-      breaks <code>chat.test.ts</code> — which is the point; it fails closed". Without that test the
-      failure would be silent: the follow-up simply stops appearing in the chat drawer, with no error
-      anywhere. The coupling is deliberate, and guarded by a test rather than engineered away.</p>
+      <summary>Could I reword the follow-up wrapper without touching anything else?</summary>
+      <p>In the code, yes. The wording lives in <code>remote-message-prose.ts</code>: the wrap <code>composeReason</code>
+      calls and the unwrap <code>chat.ts</code> runs to turn the record back into a plain drawer message are both built
+      from the same two constants (<code>remote-message-prose.ts:9-14</code>), so the two directions cannot drift. What
+      stops you is data. The module header (<code>remote-message-prose.ts:4-6</code>) says the wording is "frozen by
+      every transcript already on disk: change it and past follow-ups stop unwrapping". The constraint moved from a
+      second copy of the prose to the transcripts themselves.</p>
     </details>
     <details class="qa-item">
       <summary>If the idle threshold is set to 0, does that release every hold instantly, or never?</summary>
-      <p>Never. <code>sweepIdle</code> returns 0 before it even reads idle time when the threshold is
-      zero (<code>messages.ts:205-206</code>), and the fail-direction comment at
-      <code>messages.ts:198-199</code> gives the reason: "<code>idleSecs === 0</code> means the idle
-      gate is disabled everywhere else, so it disables auto-release too." Zero means "no idle gating",
+      <p>Never. <code>backAtDesk</code>, which the shared reaper in <code>wait-store.ts</code> asks for all three stores,
+      returns false before it even reads idle time when the threshold is zero (<code>idle.ts:83-88</code>), and the
+      fail-direction comment at <code>idle.ts:76-77</code> gives the reason: "Zero disables the idle gate everywhere
+      else (the hooks skip the check entirely), so it disables auto-release too." Zero means "no idle gating",
       not "zero seconds of idleness required". Under that setting a hold ends the ordinary ways — you
       answer, you dismiss, a new hook supersedes it, or its own deadline timer fires.</p>
     </details>
@@ -764,7 +785,7 @@ export function sweepIdle(): number {
   <p class="xlink">Next in this series:
   <a href="write-paths-2-spawn-deck.html">the write paths, part 2 — spawn.ts</a>
   (the path the dashboard initiates).</p>
-  <p class="stamp">built at 669d6e2</p>
+  <p class="stamp">built at d26f3c4</p>
 </div>
 
 </main>
@@ -776,14 +797,14 @@ export function sweepIdle(): number {
 
 <script type="application/json" id="provenance">
 {
-  "commit": "669d6e29b27f1cf24033a82ea2bd11845ed6c1f1",
-  "generated": "2026-08-23",
-  "sources": ["server/lib/pending.ts", "server/lib/plans.ts", "server/lib/messages.ts"],
+  "commit": "d26f3c42c418f06611bd255399a2fa839e997dee",
+  "generated": "2026-11-15",
+  "sources": ["server/lib/wait-store.ts", "server/lib/pending.ts", "server/lib/plans.ts", "server/lib/messages.ts", "server/lib/idle.ts", "server/lib/remote-message-prose.ts"],
   "sections": [
-    { "id": "s1", "title": "The shared shape", "sources": ["server/lib/pending.ts", "server/lib/plans.ts", "server/lib/messages.ts"] },
+    { "id": "s1", "title": "The shared shape", "sources": ["server/lib/wait-store.ts", "server/lib/pending.ts", "server/lib/plans.ts", "server/lib/messages.ts"] },
     { "id": "s2", "title": "pending.ts, the answer channel", "sources": ["server/lib/pending.ts"] },
     { "id": "s3", "title": "plans.ts, the refused verdict", "sources": ["server/lib/plans.ts"] },
-    { "id": "s4", "title": "messages.ts, the reply window", "sources": ["server/lib/messages.ts"] }
+    { "id": "s4", "title": "messages.ts, the reply window", "sources": ["server/lib/messages.ts", "server/lib/wait-store.ts", "server/lib/idle.ts", "server/lib/remote-message-prose.ts"] }
   ]
 }
 </script>

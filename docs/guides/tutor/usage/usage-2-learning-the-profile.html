@@ -135,7 +135,7 @@
   overnight — are not a hole in the data. Utilization is cumulative inside a window, so
   identical readings <em>prove</em> nothing was spent between them. That is a measurement
   of seven idle hours, and night is exactly what the profile most needs to learn
-  (<code>usage-history.ts:13-19</code>).</p>
+  (<code>usage-history.ts:13-22</code>).</p>
   <p>Everything else follows from that stream of verdicts: file each one under the hour of
   the week it happened in, fold a week's worth into a standing weight once the week ends,
   and let an hour that has gone quiet fade rather than freeze.</p>
@@ -166,8 +166,10 @@
     this hour was quiet" and "I have no idea what happened in these six hours" would both
     come back as <em>not busy</em>, and the second would then be learned as evidence of
     idleness. Four kinds exist so the two discardable cases can be discarded separately
-    from the two that teach.</p>
-<pre>// usage-history.ts:158-164
+    from the two that teach. (A <code>reset</code> is not always a total loss: section 2
+    shows <code>accumulate</code> salvaging the stretch of it during which no window was
+    open.)</p>
+<pre>// usage-history.ts:187-193
   if (!sameWindow(a.resetsAt, b.resetsAt)) return 'reset';
   const delta = b.utilization - a.utilization;
   if (delta &lt; -MOVE_EPSILON) return 'reset';
@@ -234,8 +236,8 @@
     string is treated as a real change, since a scoped and an unscoped window are not the
     same thing, and an unparseable stamp falls back to strict equality rather than
     pretending to a numeric answer.</p>
-<pre>// usage-history.ts:84-91
-function sameWindow(a: string | null, b: string | null): boolean {
+<pre>// usage-history.ts:97-104
+export function sameWindow(a: string | null, b: string | null): boolean {
   if (a === b) return true;
   if (a === null || b === null) return false; // scoped ⇄ unscoped is a real change
   const ta = Date.parse(a);
@@ -250,7 +252,7 @@ function sameWindow(a: string | null, b: string | null): boolean {
       under a second. Anything a real window transition can produce is at least five hours.
       A threshold anywhere in the middle behaves identically, which is what makes the
       constant safe to hard-code rather than something that needs to adapt. The docstring
-      at <code>usage-history.ts:69-81</code> records the four observed stamps so the next
+      at <code>usage-history.ts:82-93</code> records the four observed stamps so the next
       reader does not have to re-measure them.</p>
     </details>
   </div>
@@ -274,7 +276,7 @@ function sameWindow(a: string | null, b: string | null): boolean {
     unambiguous thing about all six. Invert this — make long flats ambiguous and long rises
     idle — and every hour learns as idle, which is the shape of a profile that looks
     plausible and is wrong everywhere.</p>
-<pre>// usage-history.ts:58-64
+<pre>// usage-history.ts:71-77
 /**
  * Longest rising interval whose activity can still be pinned to it. Comfortably
  * above the one-minute sampling cadence, well below any real gap. A rise across
@@ -333,7 +335,7 @@ export const MAX_ATTRIBUTABLE_MS = 300_000;</pre>
       observed yet — the drop is the earlier, more reliable signal of the roll than the
       stamp is. <code>MOVE_EPSILON</code> keeps rounding noise from tripping it. Lesson 1
       met the same constant in <code>recordAndPace</code>, doing the same job for the pace
-      ring; the comment at <code>usage-history.ts:67</code> says so explicitly.</p>
+      ring; the comment at <code>usage-history.ts:79</code> says so explicitly.</p>
     </details>
     <details class="qa-item">
       <summary>
@@ -349,7 +351,7 @@ export const MAX_ATTRIBUTABLE_MS = 300_000;</pre>
     </details>
     <details class="qa-item">
       <summary>Where does the <code>maxAttributableMs</code> parameter get overridden?</summary>
-      <p>Only by tests. The signature at <code>usage-history.ts:153-157</code> gives it a
+      <p>Only by tests. The signature at <code>usage-history.ts:182-186</code> gives it a
       default of <code>MAX_ATTRIBUTABLE_MS</code>, and every production call site — the
       classifier ring inside <code>recordTick</code>, and <code>accumulate</code>'s first
       line — passes two samples and nothing else. It is a seam for pinning the branch, not
@@ -421,7 +423,7 @@ export function hourOfWeek(ms: number, offsetMinutes: number): number {
     reconciles them, and nothing needs to — an index and a grouping key are different
     questions about the same timestamp. Conflating them is the trap, and the excerpt above
     from <code>usage-forecast.ts</code> exists to flag it from the other side.</p>
-<pre>// usage-history.ts:175-181
+<pre>// usage-history.ts:260-266
 export function isoWeekKey(ms: number, offsetMinutes: number): string {
   const d = new Date(ms + offsetMinutes * 60_000);
   // Move to the Thursday of this ISO week; its calendar year is the ISO year.
@@ -437,9 +439,14 @@ export function isoWeekKey(ms: number, offsetMinutes: number): string {
     walks the span and cuts it at each local hour boundary. Each slice credits its own
     bucket with its own minutes: <code>observedMin</code> and
     <code>lifetimeObservedMin</code> always, plus <code>activeMin</code> when the kind is
-    <code>active</code>. Only <code>active</code> and <code>idle</code> get this far —
-    <code>reset</code> and <code>ambiguous</code> return the state untouched.</p>
-    <p>The load-bearing detail is line 248: <code>weekKey</code> is recomputed
+    <code>active</code>. <code>active</code> and <code>idle</code> credit their whole span.
+    A <code>reset</code> credits only the sub-span <code>provableIdleSpan</code> vouches for
+    — the stretch between the old window's expiry and the new one's opening, when no window
+    was open and so nothing was spent — and credits it as <code>idle</code>. An
+    <code>ambiguous</code> interval, or a <code>reset</code> with no provable span, returns
+    the state untouched. That is why the loop below runs over <code>fromMs</code> /
+    <code>toMs</code> rather than the two samples' own timestamps.</p>
+    <p>The load-bearing detail is line 348: <code>weekKey</code> is recomputed
     <em>per slice</em>, from that slice's own start. Computing it once per interval would be
     the natural simplification, and it breaks precisely at the boundary that matters — an
     interval spanning Sunday 23:30 to Monday 00:30 would file its Sunday minutes under the
@@ -450,12 +457,12 @@ export function isoWeekKey(ms: number, offsetMinutes: number): string {
     earlier states, so in-place mutation would rewrite history under them. The cost is an
     168-element copy per sample, once a minute — irrelevant next to the class of bug it
     removes.</p>
-<pre>// usage-history.ts:242-255
-  let t = a.t;
-  while (t &lt; b.t) {
+<pre>// usage-history.ts:342-355
+  let t = fromMs;
+  while (t &lt; toMs) {
     const shift = offsetMinutes * 60_000;
     const nextHour = Math.floor((t + shift) / HOUR_MS) * HOUR_MS + HOUR_MS - shift;
-    const sliceEnd = Math.min(nextHour, b.t);
+    const sliceEnd = Math.min(nextHour, toMs);
     const mins = (sliceEnd - t) / MINUTE_MS;
     const weekKey = isoWeekKey(t, offsetMinutes);
     const bucket = buckets[hourOfWeek(t, offsetMinutes)];
@@ -464,7 +471,7 @@ export function isoWeekKey(ms: number, offsetMinutes: number): string {
     bucket.weekStamp = weekKey;
     bucket.observedMin += mins;
     bucket.lifetimeObservedMin += mins;
-    if (kind === 'active') bucket.activeMin += mins;</pre>
+    if (creditKind === 'active') bucket.activeMin += mins;</pre>
   </div>
 
   <div class="card card-quiz">
@@ -477,7 +484,7 @@ export function isoWeekKey(ms: number, offsetMinutes: number): string {
         <p class="quiz-feedback">That would be the behaviour without the slicing loop, and
         it is why the loop exists — a single interval can span any number of hours, and an
         interval attributed wholly to its first hour would misfile every minute after the
-        first boundary. The <code>while (t &lt; b.t)</code> loop cuts at
+        first boundary. The <code>while (t &lt; toMs)</code> loop cuts at
         <code>nextHour</code> instead.</p>
       </div>
       <div class="quiz-option" data-correct="false">
@@ -577,7 +584,7 @@ export function isoWeekKey(ms: number, offsetMinutes: number): string {
     <p>Two guards on the way in. A bucket whose stamp is <code>null</code> has never been
     touched, so there is nothing to fold; and a bucket with no pending minutes folds
     nothing and — the part that matters for the next card — <em>decays</em> nothing.</p>
-<pre>// usage-history.ts:207-218
+<pre>// usage-history.ts:292-303
 function foldBucket(bucket: Bucket, weekKey: string, observedWeeks: string[]): void {
   if (bucket.weekStamp === null || bucket.weekStamp === weekKey) return;
   if (bucket.observedMin &lt;= 0) return; // nothing pending: nothing folds, nothing decays
@@ -610,7 +617,7 @@ function foldBucket(bucket: Bucket, weekKey: string, observedWeeks: string[]): v
     while the process was down, and gives a bucket two places it can change. Folding lazily
     on first touch keeps every mutation of a bucket in one function, at the cost of this
     ordering subtlety — which is why the docstring above the function spells it out.</p>
-<pre>// usage-history.ts:191-195
+<pre>// usage-history.ts:276-280
 function skippedWeeks(observedWeeks: string[], from: string, to: string): number {
   let n = 0;
   for (const wk of observedWeeks) if (wk &gt; from &amp;&amp; wk &lt; to) n++;
@@ -635,7 +642,7 @@ function skippedWeeks(observedWeeks: string[], from: string, to: string): number
     comparison is a string range: ISO keys are <code>YYYY-Www</code>, zero-padded precisely
     so that lexical order is chronological order. The pruning bounds the file and the loop;
     26 weeks of decay already drives any weight to a rounding error.</p>
-<pre>// usage-history.ts:256-262
+<pre>// usage-history.ts:356-362
 
     if (!observedWeeks.includes(weekKey)) {
       observedWeeks.push(weekKey);
@@ -650,7 +657,7 @@ function skippedWeeks(observedWeeks: string[], from: string, to: string): number
       keep its old weight indefinitely, while <code>lifetimeObservedMin</code> — which never
       resets — kept it above the trust floor. The forecast would go on projecting spend into
       an hour abandoned months ago, with full confidence. The module docstring at
-      <code>usage-history.ts:28-32</code> states the rule as "a quiet bucket must decay, not
+      <code>usage-history.ts:31-35</code> states the rule as "a quiet bucket must decay, not
       freeze".</p>
     </details>
   </div>
@@ -788,7 +795,7 @@ function skippedWeeks(observedWeeks: string[], from: string, to: string): number
     <p>Notice which counter is which: <code>observedMin</code> is cleared on every fold,
     <code>lifetimeObservedMin</code> never is. That is the only reason the floor can be
     stated as a lifetime quantity at all.</p>
-<pre>// usage-history.ts:55-56
+<pre>// usage-history.ts:68-69
 /** Lifetime observed minutes before a bucket's weight is used at all. */
 export const TRUST_FLOOR_MIN = 60;</pre>
   </div>
@@ -810,7 +817,7 @@ export const TRUST_FLOOR_MIN = 60;</pre>
     <p><code>trustedCount</code> travels alongside as the confidence input: the walk reports
     <code>none</code>, <code>thin</code> or <code>ok</code> from it, so the UI can say how
     much of the projection rests on measurement.</p>
-<pre>// usage-history.ts:277-287
+<pre>// usage-history.ts:377-387
 export function deriveProfile(state: ProfileState): DutyProfile {
   const weights: (number | null)[] = state.buckets.map((b) =&gt;
     b.lifetimeObservedMin &gt;= TRUST_FLOOR_MIN ? b.weight : null
@@ -854,9 +861,10 @@ export function deriveProfile(state: ProfileState): DutyProfile {
       <div class="quiz-option" data-correct="false">
         <button class="quiz-option-btn">Because the weekly counter is reset by the
         <code>reset</code> interval kind, which would drop the trust with it</button>
-        <p class="quiz-feedback">The <code>reset</code> kind causes an interval to be
-        discarded before <code>accumulate</code> touches any bucket — it never clears a
-        counter. The only thing that zeroes <code>observedMin</code> is a fold.</p>
+        <p class="quiz-feedback">The <code>reset</code> kind never clears a counter:
+        <code>accumulate</code> either discards the interval or credits its provably idle
+        stretch, which only adds minutes. The only thing that zeroes <code>observedMin</code>
+        is a fold.</p>
       </div>
     </div>
   </div>
@@ -896,7 +904,7 @@ export function deriveProfile(state: ProfileState): DutyProfile {
     <p>The cost of two files is that they can disagree, and the design accepts it: the log
     is allowed to be lossy, and rotation throws its oldest half away without the forecast
     noticing — which is the same fact from the other side.</p>
-<pre>// usage-history.ts:296-306
+<pre>// usage-history.ts:396-406
 /** Append-only raw samples. Replayable, rotated, never authoritative. */
 export const HISTORY_FILE = '.usage-history.jsonl';
 /** The learned profile — derived state, written atomically, authoritative. */
@@ -923,10 +931,12 @@ export const TAIL_BYTES = 262_144;</pre>
 
   <div class="card card-concept">
     <h2>Write on change, plus a heartbeat</h2>
-    <p><code>shouldWrite</code> is the log's whole policy, and it is four lines of guards.
+    <p><code>shouldWrite</code> is the log's whole policy, and it is five lines of guards.
     No previous sample writes. A utilization that moved by more than 0.01 writes. A
     different window writes — via the same <code>sameWindow</code> from section 1, which is
-    why the reset-stamp jitter would otherwise have appended a line every tick. Otherwise,
+    why the reset-stamp jitter would otherwise have appended a line every tick. A weekly
+    reading that moved writes too: <code>weeklyMoved</code> applies the same two tests to
+    the 7-day window, and counts it appearing or disappearing as a change. Otherwise,
     write only if the last write was at least <code>HEARTBEAT_MS</code> ago: 15 minutes.</p>
     <p>Sampling every minute into the log would be the obvious approach and buys the profile
     nothing, because the gap rule from section 1 already reads sparse records correctly —
@@ -937,15 +947,16 @@ export const TAIL_BYTES = 262_144;</pre>
     same distinction <code>observedWeeks</code> makes for decay.</p>
     <p>The trade-off is that the log's timestamps are irregular, so anything charting it has
     to handle uneven spacing rather than assuming a fixed cadence.</p>
-<pre>// usage-history.ts:346-355
+<pre>// usage-history.ts:482-492
 export function shouldWrite(
   prev: UsageSample | null,
   next: UsageSample,
   heartbeatMs: number = HEARTBEAT_MS
 ): boolean {
   if (prev === null) return true;
-  if (Math.abs(next.utilization - prev.utilization) &gt; 0.01) return true;
+  if (Math.abs(next.utilization - prev.utilization) &gt; WRITE_EPSILON) return true;
   if (!sameWindow(prev.resetsAt, next.resetsAt)) return true;
+  if (weeklyMoved(prev.week, next.week)) return true;
   return next.t - prev.t &gt;= heartbeatMs;
 }</pre>
   </div>
@@ -967,7 +978,7 @@ export function shouldWrite(
     the same rule the repo's guide tooling follows — walk up for a marker, never a fixed
     <code>../..</code> hop count, because a fixed count silently repoints the moment a file
     moves.</p>
-<pre>// usage-history.ts:317-329
+<pre>// usage-history.ts:427-439
 export function repoRoot(startDir: string = import.meta.dirname): string {
   let dir = startDir;
   for (;;) {
@@ -1043,7 +1054,7 @@ export function repoRoot(startDir: string = import.meta.dirname): string {
     the usage refresh, so with no browser open nothing would be sampled and the recorded
     history would describe when the dashboard was <em>watched</em> rather than when work
     happened.</p>
-<pre>// usage-history.ts:660-669
+<pre>// usage-history.ts:848-857
     stopUsageRecording();
     timer = setInterval(() =&gt; {
       // Re-read on every tick: flipping the toggle in Settings takes effect
@@ -1163,7 +1174,7 @@ export function repoRoot(startDir: string = import.meta.dirname): string {
   rather than a walkthrough. A narrative guide would be a reasonable follow-up if one would
   help.</p>
 
-  <p class="stamp">built at fbdc350</p>
+  <p class="stamp">built at d26f3c4</p>
 </div>
 
 </main>
@@ -1175,8 +1186,8 @@ export function repoRoot(startDir: string = import.meta.dirname): string {
 
 <script type="application/json" id="provenance">
 {
-  "commit": "fbdc350f8e6d47c5ddf9db0015ad4659767097fd",
-  "generated": "2026-08-27",
+  "commit": "d26f3c42c418f06611bd255399a2fa839e997dee",
+  "generated": "2026-11-15",
   "sources": [
     "server/lib/usage-history.ts",
     "server/lib/usage-forecast.ts",
