@@ -164,7 +164,7 @@
     <p>So the panel's contract is that the 168 weights <em>are</em> the explanation, shown
     directly rather than summarised. The confidence label still exists — it sits in the
     legend — but as one line beside the evidence, not instead of it. The cost is a
-    non-trivial component: 527 lines of view code plus 370 in pure helpers, for a panel most
+    non-trivial component: hundreds of lines of view code plus the pure helpers behind it, for a panel most
     users open once.</p>
 <pre>// UsageProfile.tsx:25-29
  * **Why this exists.** The forecast silently changes a number the user acts on,
@@ -969,7 +969,7 @@ export function yHead(head: number, s: HeadScale): number {
 
   <div class="card card-concept">
     <h2>168 identical hatched cells is the correct first week</h2>
-    <p>Here is the problem the 76 lines of pure helper exist for. A weight is a weekly
+    <p>Here is the problem <code>profileProgress</code> and <code>nextWeekStartMs</code> exist for. A weight is a weekly
     EWMA fold, so there is genuinely nothing to average until a week completes. For the whole
     first week, every one of the 168 cells is untrusted, so the grid is <em>entirely</em>
     texture — correct by the model, and indistinguishable from a feature that does not
