@@ -30,6 +30,7 @@ import {
 } from '../../server/lib/usage-history.js';
 import type { UsageSample } from '../../server/lib/usage-history.js';
 import { HOURS_PER_WEEK } from '../../server/lib/usage-forecast.js';
+import { overrideAtomicRename } from '../../server/lib/atomic-write.js';
 
 function test(name: string, fn: () => void): boolean {
   try { fn(); console.log('  ✓ ' + name); return true; }
@@ -775,6 +776,22 @@ export function run(): number {
       assert.ok(fs.existsSync(path.join(dir, PROFILE_FILE)));
       assert.deepStrictEqual(fs.readdirSync(stateA), [], 'the env var must not pull a seam write away from dir');
     });
+  })) p++; else f++;
+
+  if (test('a rotation whose swap fails leaves the log unchanged byte for byte', () => {
+    const dir = fs.mkdtempSync(path.join(tmp, 'rotfail-'));
+    const file = path.join(dir, HISTORY_FILE);
+    const line = JSON.stringify({ t: 1, utilization: 1, resetsAt: R1 }) + '\n';
+    fs.writeFileSync(file, line.repeat(Math.ceil(ROT_CAP / line.length) + 10));
+    const before = fs.readFileSync(file);
+    overrideAtomicRename(() => { throw new Error('ENOSPC'); });
+    try {
+      rotateIfNeeded(dir, ROT_CAP);
+    } finally {
+      overrideAtomicRename(null);
+    }
+    assert.ok(fs.readFileSync(file).equals(before), 'the log changed');
+    assert.deepStrictEqual(fs.readdirSync(dir).filter(n => n.endsWith('.tmp')), []);
   })) p++; else f++;
 
   resetRecorder();

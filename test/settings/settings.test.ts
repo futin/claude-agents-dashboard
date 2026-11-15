@@ -10,6 +10,7 @@ import {
   getGitFetchSecs, getPinnedProjects, getSettings, parseGitFetchSecs, resetSettings, setPinned, setPinOrder, setSettings
 } from '../../server/lib/settings.js';
 import { projectParams, scanOverrides } from '../../server/api.js';
+import { overrideAtomicRename } from '../../server/lib/atomic-write.js';
 import type { Config } from '../../server/lib/config.js';
 
 function test(name: string, fn: () => void): boolean {
@@ -679,6 +680,26 @@ export function run(): number {
       inTmpCwd(cwdB => {
         setSettings({ idleSecs: 42 });
         assert.ok(fs.existsSync(path.join(cwdB, SETTINGS_FILE)));
+      });
+    });
+  })) p++; else f++;
+
+  if (test('a write that fails before the swap keeps the previous settings file whole: it still parses and holds the old pins', () => {
+    inTmpCwd(dir => {
+      withStateDir(undefined, () => {
+        assert.ok(setPinned('-a', true));
+        const file = path.join(dir, SETTINGS_FILE);
+        const before = fs.readFileSync(file, 'utf8');
+        overrideAtomicRename(() => { throw new Error('ENOSPC'); });
+        try {
+          setPinned('-b', true);
+        } finally {
+          overrideAtomicRename(null);
+        }
+        assert.strictEqual(fs.readFileSync(file, 'utf8'), before);
+        assert.deepStrictEqual(JSON.parse(before).pinnedProjects, ['-a']);
+        assert.strictEqual(getSettings().persisted, false, 'the failed write is reported');
+        assert.deepStrictEqual(fs.readdirSync(dir).filter(n => n.endsWith('.tmp')), []);
       });
     });
   })) p++; else f++;

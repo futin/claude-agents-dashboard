@@ -633,6 +633,38 @@ export function run(): number {
   })) p++; else f++;
 
   cw.setCompactWindowHome(null);
+  /** Run `fn` with `fs.readSync` returning at most `max` bytes per call, as it does for a file truncated between `fstat` and the read. */
+  const withShortReads = (max: number, fn: () => void): void => {
+    const real = fs.readSync;
+    (fs as { readSync: unknown }).readSync = (fd: number, buf: Buffer, offset: number, length: number, position: number | null) =>
+      real(fd, buf, offset, Math.min(length, max), position);
+    try { fn(); } finally { (fs as { readSync: unknown }).readSync = real; }
+  };
+
+  if (test('readTail on a short read decodes only the bytes read: no NUL, and size is start + n', () => {
+    const text = 'x'.repeat(50) + '{"a":1}\n' + 'y'.repeat(42) + '\n';
+    const file = rawFixture(text);
+    withShortReads(30, () => {
+      const tail = tr.readTail(file, 80)!;
+      assert.strictEqual(tail.text.includes('\u0000'), false, 'decoded zero bytes as content');
+      assert.strictEqual(tail.start, text.length - 80);
+      assert.strictEqual(tail.text, text.slice(tail.start, tail.start + 30));
+      assert.strictEqual(tail.size, tail.start + 30);
+      assert.strictEqual(tail.truncated, true);
+    });
+  })) p++; else f++;
+
+  if (test('readHead on a short read decodes only the bytes read: no NUL, and size is n', () => {
+    const text = '{"a":1}\n'.repeat(20);
+    const file = rawFixture(text);
+    withShortReads(25, () => {
+      const head = tr.readHead(file, 100)!;
+      assert.strictEqual(head.text.includes('\u0000'), false, 'decoded zero bytes as content');
+      assert.strictEqual(head.text, text.slice(0, 25));
+      assert.strictEqual(head.size, 25);
+    });
+  })) p++; else f++;
+
   cw.setManagedSettingsPath(null);
   cw.resetCompactWindowCache();
 

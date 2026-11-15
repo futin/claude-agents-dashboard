@@ -1506,6 +1506,19 @@ export function overridePinsPayload(fn: ((config: Config) => PinsResponse) | nul
   pinsPayloadOverride = fn;
 }
 
+let pinRowsOverride: ((config: Config) => ReturnType<typeof listPinRows>) | null = null;
+
+/** Test seam: replace the pin-row read the POST handlers make (git quick, open folder, routine validation), null to restore. */
+export function overridePinRows(fn: ((config: Config) => ReturnType<typeof listPinRows>) | null): void {
+  pinRowsOverride = fn;
+}
+
+/** The stored pins as rows, the same read `GET /api/pins` makes for `pinned`. Throws when the listing does; every caller answers that as a 500. */
+function readPinRows(config: Config): ReturnType<typeof listPinRows> {
+  if (pinRowsOverride) return pinRowsOverride(config);
+  return listPinRows(config, getPinnedProjects(), { archivedIds: archivedSessionIds(), ...pinOptions() });
+}
+
 /**
  * A project Claude made for itself (a scratch workspace, a dir under `~/.claude`) is on no list at all (`pinOptions`). A pin stored there before that
  * rule still shows under `pinned`, unlisted — that is where it can be removed.
@@ -1574,7 +1587,13 @@ export async function serveGitQuick(config: Config, req: IncomingMessage, res: S
     return sendBadBody(res, { error: "expected {dirName: string, op: 'pull' | 'push'}" });
   }
   const { dirName, op } = body as GitQuickRequest;
-  const rows = listPinRows(config, getPinnedProjects(), { archivedIds: archivedSessionIds(), ...pinOptions() });
+  let rows: ReturnType<typeof readPinRows>;
+  try {
+    rows = readPinRows(config);
+  } catch (e) {
+    console.error('[dashboard] git quick failed:', (e as Error).message);
+    return sendJson(res, 500, { error: 'pins read failed' });
+  }
   // Not `listed`: git-stats draws every pin with a path, a linked worktree's included, so the menu it feeds must reach git for the same set.
   const pin = rows.find(r => r.dirName === dirName && r.path !== null);
   if (!pin || pin.path === null) return sendJson(res, 404, { error: 'not a pinned project' });
@@ -1718,7 +1737,13 @@ export async function serveOpenFolder(config: Config, req: IncomingMessage, res:
   if (openFolderPlatform() !== 'darwin') return sendJson(res, 501, { error: 'open folder needs macOS' });
   // A pin's path is absolute; a relative or `-`-prefixed value never names one, so it is refused before the pin list is even read.
   if (!nodePath.isAbsolute(path)) return sendJson(res, 403, { error: 'not a pinned project' });
-  const rows = listPinRows(config, getPinnedProjects(), { archivedIds: archivedSessionIds(), ...pinOptions() });
+  let rows: ReturnType<typeof readPinRows>;
+  try {
+    rows = readPinRows(config);
+  } catch (e) {
+    console.error(`[dashboard] open folder failed: ${(e as Error).message}`);
+    return sendJson(res, 500, { error: 'pins read failed' });
+  }
   if (!rows.some(r => r.listed === true && r.path === path)) return sendJson(res, 403, { error: 'not a pinned project' });
   try {
     await openFolder(path);
@@ -1750,16 +1775,30 @@ function refuseRoutineWrite(res: ServerResponse, name?: string): boolean {
 
 /** The pins as the wrapper will see them in `pins.json`, for `checkPins`: the same rows `GET /api/pins` lists. */
 function pinSnapshot(config: Config): PinSnapshot[] {
-  return listPinRows(config, getPinnedProjects(), { archivedIds: archivedSessionIds(), ...pinOptions() })
+  return readPinRows(config)
     .map(r => ({ dirName: r.dirName, name: r.name, path: r.path, listed: r.listed }));
 }
 
-/** `parseJob` plus the ambiguous-pin check against the pins of this machine now — what PUT, POST and `/validate` all run. */
+/**
+ * `parseJob` plus the ambiguous-pin check against the pins of this machine now — what PUT, POST and `/validate` all run. A pin read that throws is not
+ * caught here: a validation that cannot see the pins must not report "no pin errors", so each caller answers it as a 500 through {@link validateOr500}.
+ */
 function validateRoutineText(config: Config, name: string, text: string): { job: RoutineJob | null; errors: JobError[] } {
   const parsed = parseJob(name, text, machineName(config).name);
   if (!parsed.job) return parsed;
   const pinErrors = checkPins(parsed.job, pinSnapshot(config));
   return pinErrors.length > 0 ? { job: null, errors: pinErrors } : parsed;
+}
+
+/** {@link validateRoutineText}, or null once a throw has been answered `500 {error: 'validate failed'}`. */
+function validateOr500(config: Config, name: string, text: string, res: ServerResponse): ReturnType<typeof validateRoutineText> | null {
+  try {
+    return validateRoutineText(config, name, text);
+  } catch (e) {
+    console.error('[dashboard] routine validate failed:', (e as Error).message);
+    sendJson(res, 500, { error: 'validate failed' });
+    return null;
+  }
 }
 
 /** The drawer's one-line reading of a valid job: when, how, where. */
@@ -1864,7 +1903,9 @@ export async function serveRoutineWrite(config: Config, name: string, req: Incom
   if (!body || typeof body !== 'object' || typeof body.text !== 'string') return sendBadBody(res, { error: 'expected {text: string}' });
   const dir = routineDirs(config).routines;
   if (!readJobs(dir, machineName(config).name).some(s => s.name === name)) return sendJson(res, 404, { error: 'no such job' });
-  const { job, errors } = validateRoutineText(config, name, body.text);
+  const checked = validateOr500(config, name, body.text, res);
+  if (!checked) return;
+  const { job, errors } = checked;
   if (!job) return sendJson(res, 422, { errors } satisfies RoutineErrorsResponse);
   try {
     writeJob(dir, name, body.text, 'replace');
@@ -1886,7 +1927,9 @@ export async function serveRoutineCreate(config: Config, req: IncomingMessage, r
   if (refuseRoutineWrite(res, name)) return;
   const dir = routineDirs(config).routines;
   if (readJobs(dir, machineName(config).name).some(s => s.name === name)) return sendJson(res, 409, { error: 'exists' });
-  const { job, errors } = validateRoutineText(config, name, text);
+  const checked = validateOr500(config, name, text, res);
+  if (!checked) return;
+  const { job, errors } = checked;
   if (!job) return sendJson(res, 422, { errors } satisfies RoutineErrorsResponse);
   try {
     writeJob(dir, name, text, 'create');
@@ -2019,7 +2062,9 @@ export async function serveRoutineValidate(config: Config, req: IncomingMessage,
   const body = await readJsonBody(req) as { text?: unknown; name?: unknown } | null;
   if (!body || typeof body !== 'object' || typeof body.text !== 'string') return sendBadBody(res, { error: 'expected {text: string}' });
   const name = typeof body.name === 'string' ? body.name : 'untitled';
-  const { job, errors } = validateRoutineText(config, name, body.text);
+  const checked = validateOr500(config, name, body.text, res);
+  if (!checked) return;
+  const { job, errors } = checked;
   sendJson(res, 200, { errors, summary: job ? routineSummary(job) : null } satisfies RoutineValidateResponse);
 }
 

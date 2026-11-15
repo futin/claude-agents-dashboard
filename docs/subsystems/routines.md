@@ -297,11 +297,11 @@ Write routes are gate-only writes ([who may write](remote-access.md#who-may-writ
 | `GET /api/routines` | `{machine, dir, owner, reconcile: {state, drift, error, at}, jobs}` | |
 | `GET /api/routines/runs?days=&job=&outcome=&runner=` | folded runs, newest first, plus `stats` for the window and the one before; `days` outside 7/30/90 reads as 30, stats ignore `outcome` | `400 bad outcome` |
 | `GET /api/routines/:name` | the raw text and the parsed job | `404 no such job` |
-| `PUT /api/routines/:name` | `{text}`: validate, write atomically, reconcile; `200 {job, reconcile}` | `422 {errors}`, `404`, `500 write failed` |
-| `POST /api/routines` | `{name, text}`, as PUT | `409 exists`, `422`, `500 write failed` |
+| `PUT /api/routines/:name` | `{text}`: validate, write atomically, reconcile; `200 {job, reconcile}` | `422 {errors}`, `404`, `500 validate failed` (pins unreadable), `500 write failed` |
+| `POST /api/routines` | `{name, text}`, as PUT | `409 exists`, `422`, `500 validate failed`, `500 write failed` |
 | `PATCH /api/routines/:name` | `{enabled: boolean}`: rewrite only the `enabled:` line, reconcile; `200 {job, reconcile}` | `422` on an unparseable file, `404` |
 | `DELETE /api/routines/:name` | remove the file, reconcile, `200 {reconcile}`; the log stays | `404`, `500 delete failed` |
-| `POST /api/routines/validate` | `{text, name?}` → `{errors, summary}`; read-only, outside the write gate | |
+| `POST /api/routines/validate` | `{text, name?}` → `{errors, summary}`; read-only, outside the write gate | `500 validate failed` (pins unreadable) |
 | `POST /api/routines/reconcile` | `{apply?}` → the plan; applies when `apply` | |
 | `POST /api/routines/reveal` | `{name?}`: open the folder, or reveal that job's file, with `open` / `open -R`; macOS only | `501 reveal needs macOS`, `404 no routines folder` or `no such job`, `500 open failed` |
 | `POST /api/routines/:name/run` | see above | `400 bad body`, `bad-only`; `404`; `409 already-running`, `no-plugin`, `invalid`, `not-owner`; `500 spawn-failed` |
