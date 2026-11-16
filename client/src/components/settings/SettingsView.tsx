@@ -3,7 +3,6 @@ import { useEffect, useState } from 'react';
 import { NumberField, Segmented, Select, SettingsBand, SettingsGroup, SettingsRow } from './SettingsRow';
 import { useNarrow } from '../../hooks/useNarrow';
 import { useAnswerToken } from '../../hooks/useAnswerToken';
-import { authHeaders } from '../../lib/answerToken';
 import { useRemoteAnswer } from '../../hooks/useRemoteAnswer';
 import { useServerSettings } from '../../hooks/useServerSettings';
 import { NOTIFY_EVENT_ROWS, afkStillGatesRemote, notifyRowState } from '../../lib/notifyRows';
@@ -20,10 +19,13 @@ import {
 } from '../../lib/settings';
 import { GIT_FETCH_OPTIONS } from '../../lib/gitClock';
 import { READ_ONLY_TEXT } from '../../lib/writeRefusal';
+import { postWrite } from '../../lib/postWrite';
+import { pushTestText } from '../../lib/pushTest';
+import { ANSWER_SECS_MAX, ANSWER_SECS_MIN, IDLE_SECS_MAX } from '../../lib/settingsBounds';
 import { writeStatusLine } from '../../lib/writeStatus';
 import { EFFORTS, MODELS, PERMISSION_MODE_LABEL } from '../../lib/spawnOptions';
 import { LAUNCH_DEFAULT_DESKTOP_MISSING, LAUNCH_DEFAULT_DESKTOP_NOTE, LAUNCH_DEFAULT_HINT } from '../../lib/launchSurface';
-import type { LaunchSurface, NotifyTestResponse } from '../../../../shared/types';
+import type { LaunchSurface } from '../../../../shared/types';
 
 /**
  * Preview colors per theme — board / strip / accent, in that order. A mirror of
@@ -133,15 +135,7 @@ export default function SettingsView() {
    */
   async function sendTestPush(): Promise<void> {
     setPushTestResult('sending…');
-    const headers = authHeaders(token);
-    try {
-      const res = await fetch('/api/notify/test', { method: 'POST', headers });
-      // A refused write (403) carries `error` and no `outcome`.
-      const body = (await res.json()) as Partial<NotifyTestResponse> & { error?: string };
-      setPushTestResult(body.outcome ?? body.error ?? 'no response');
-    } catch {
-      setPushTestResult('the dashboard did not answer');
-    }
+    setPushTestResult(pushTestText(await postWrite('/api/notify/test', { token })));
   }
 
 
@@ -318,7 +312,7 @@ export default function SettingsView() {
                     <NumberField
                       value={server.state.idleSecs}
                       min={0}
-                      max={3600}
+                      max={IDLE_SECS_MAX}
                       unit="sec"
                       onCommit={idleSecs => void server.save({ idleSecs })}
                     />
@@ -342,8 +336,8 @@ export default function SettingsView() {
                   >
                     <NumberField
                       value={server.state.answerSecs}
-                      min={5}
-                      max={600}
+                      min={ANSWER_SECS_MIN}
+                      max={ANSWER_SECS_MAX}
                       unit="sec"
                       onCommit={answerSecs => void server.save({ answerSecs })}
                     />

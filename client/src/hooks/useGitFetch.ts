@@ -1,13 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-import { fetchFailureOf } from '../lib/gitClock';
+import { fetchFailureOf, fetchStartBlocked } from '../lib/gitClock';
 import type { FetchFailure } from '../lib/gitClock';
 import type { WriteAccess } from '../../../shared/types';
 import { useAnswerToken } from './useAnswerToken';
 import { postWrite } from '../lib/postWrite';
 
 export interface GitFetchControl {
-  /** Fetch all now: `POST /api/git-fetch`. A no-op while this tab's own POST is out, while a token the server wants is not stored, and on a read-only network. */
+  /** Fetch all now: `POST /api/git-fetch`. A no-op while this tab's own POST is out, while a token the server wants is not stored, on a read-only network, and after a refusal (`fetchStartBlocked`). */
   start(): void;
   /** This tab's own POST is out; a fetch another tab or the timer started is the payload's `runningSinceMs`, not this. */
   pending: boolean;
@@ -34,7 +34,7 @@ export function useGitFetch(tokenRequired: boolean | undefined, writeAccess: Wri
   useEffect(() => setFailure(f => (f === 'refused' ? null : f)), [token]);
 
   const start = useCallback((): void => {
-    if (pendingRef.current || writeAccess === 'none' || (tokenRequired === true && !tokenStored)) return;
+    if (fetchStartBlocked({ pending: pendingRef.current, writeAccess, tokenRequired, tokenStored, failure })) return;
     pendingRef.current = true;
     setPending(true);
     postWrite('/api/git-fetch', { token })
@@ -44,7 +44,7 @@ export function useGitFetch(tokenRequired: boolean | undefined, writeAccess: Wri
         setPending(false);
         onDoneRef.current();
       });
-  }, [tokenRequired, writeAccess, tokenStored, token]);
+  }, [tokenRequired, writeAccess, tokenStored, token, failure]);
 
   return { start, pending, failure, tokenStored };
 }

@@ -3,7 +3,7 @@ import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import type { FetchClock, WriteAccess } from '../../../../shared/types';
 import type { GitFetchControl } from '../../hooks/useGitFetch';
 import type { GitStatsState } from '../../hooks/useGitStats';
-import { createFollowTracker, fetchKeyState, fetchReading, followUp, syncReading, type MeterReading } from '../../lib/gitClock';
+import { createFollowTracker, fetchKeyStateOf, fetchReading, followUp, syncReading, type MeterReading } from '../../lib/gitClock';
 import {
   GIT_CLOCK_NAME, GIT_POP_LABEL, KEY_NOW, METER_FETCH, METER_NEXT, METER_SYNC, ROW_FETCH_ALL, ROW_LOCAL_SYNC, SYNC_ROW_FAILED_SUB, SYNC_ROW_SUB, gitTroubleLines,
 } from '../../lib/gitStatsText';
@@ -74,10 +74,7 @@ export default function GitClockChip({ stats, fetchCtl, tokenRequired, writeAcce
   const now = Date.now();
   const sync = syncReading({ polling: stats.polling, error: stats.error, nextPollAtMs: stats.nextPollAtMs, now });
   const fetched = fetchReading({ clock, ownPost: fetchCtl.pending, skewMs: stats.skewMs, now });
-  const key = fetchKeyState({
-    tokenRequired, writeAccess, tokenStored: fetchCtl.tokenStored, failure: fetchCtl.failure, pending: fetchCtl.pending,
-    running: clock?.runningSinceMs != null, intervalSecs: clock?.intervalSecs,
-  });
+  const key = fetchKeyStateOf(fetchCtl, tokenRequired, writeAccess, clock);
   const trouble = gitTroubleLines(stats.data?.repos ?? [], clock);
 
   return (

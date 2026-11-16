@@ -40,7 +40,7 @@ you don't have one; keep any existing entry — hooks under one matcher run in p
 > `CLAUDE_DASHBOARD_ANSWER_TIMEOUT`; default 600s), or the CLI kills the hook first and the
 > window silently shrinks. The hooks and the Settings warning both state the floor as
 > `window + 15`; `630` is that floor for the 600s default with room to spare, which is why
-> the Settings field stops at 600s and warns above it.
+> Settings warns above 600s.
 
 **4. Verify the chain** without waiting for a real question:
 

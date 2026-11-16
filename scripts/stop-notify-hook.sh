@@ -25,7 +25,7 @@
 # then in ~/.claude/settings.json under Stop:
 #   { "type": "command", "command": "bash \"$HOME/.claude/hooks/stop-notify.sh\"",
 #     "timeout": 630 }
-# The timeout MUST exceed the wait window (Settings → Answer window, ≤600s) or
+# The timeout MUST exceed the wait window (Settings → Answer window, 600s default) or
 # the CLI kills the hook mid-hold — which only degrades to a normal stop.
 #
 # Requires: curl, jq.
