@@ -91,6 +91,11 @@ const DENIED: string[] = [
   'pkill -f "$PWD/x|vite"',
   'pkill -f "$PWD/x(|vite)"',
   `pkill -f "${CWD}/x|vite"`,
+  // The same `|` reached through a backslash leaves every quote count even, so
+  // the odd-quote check alone lets it through; pkill still gets "<cwd>/x|vite".
+  'pkill -f $PWD/x\\|vite',
+  'pkill -f "$PWD/x"\\|vite',
+  'pkill -f "$PWD/x\\"|vite"',
   // `$PWD` after a `cd` in the same command expands under the new directory,
   // not the session's cwd: this one is `pkill -f "/Users/"`.
   'cd /Users && pkill -f "$PWD/"',

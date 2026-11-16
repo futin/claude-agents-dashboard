@@ -148,7 +148,10 @@ operands_of() {
 # above tore at a `|`, `(`, `)`, `;` or `&` inside it — `"$PWD/x|vite"` arrives
 # as `"$PWD/x` — so the text judged here is not the regex pkill would get. That
 # is never anchored. A pattern with a space was already refused (its second
-# word is not `/…`), so the count costs no allowed case.
+# word is not `/…`), so the count costs no allowed case. An operand with a
+# backslash is refused for the same reason: `\|` and `\"` reach the same
+# alternation with every quote count even, and an absolute path under the cwd
+# has no reason to carry one.
 #
 # `$PWD` stands for the session's cwd only while nothing earlier in the same
 # command moved directory: `cd /Users && pkill -f "$PWD/"` is `pkill -f
@@ -158,6 +161,7 @@ anchored_to_cwd() {
     dq=$(printf '%s' "$tok" | tr -cd '"' | wc -c)
     sq=$(printf '%s' "$tok" | tr -cd "'" | wc -c)
     [ $((dq % 2)) -eq 0 ] && [ $((sq % 2)) -eq 0 ] || return 1
+    case "$tok" in *\\*) return 1 ;; esac
     clean=$(printf '%s' "$tok" | tr -d '"'\''')
     case "$clean" in
       '$PWD'/*|'${PWD}'/*) [ -z "$MOVED" ] || return 1 ;;
