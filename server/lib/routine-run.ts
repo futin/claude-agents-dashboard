@@ -7,7 +7,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-import type { RoutineRunConflict } from '../../shared/types.js';
+import type { RoutineRunConflict, RoutineWriteError } from '../../shared/types.js';
 import type { Config } from './config.js';
 import { foldLines } from './jsonl-tail.js';
 import { machineName, routineDirs, routineEnv } from './routine-config.js';
@@ -18,15 +18,15 @@ import { spawnProcess } from './spawn.js';
 
 export type RunResult =
   | { status: 202; run: string | null }
-  | { status: 400; error: 'bad-only' }
+  | { status: 400; error: Extract<RoutineWriteError, 'bad-only'> }
   | { status: 404 }
   | { status: 409; error: RoutineRunConflict }
-  | { status: 500; error: 'spawn-failed' };
+  | { status: 500; error: Extract<RoutineWriteError, 'spawn-failed'> };
 
 /** What the run log can answer for one spawned wrapper. */
 type ReadBack = Extract<RunResult, { status: 202 | 409 }>;
 
-export type StopResult = { status: 204 } | { status: 409; error: 'not-running' };
+export type StopResult = { status: 204 } | { status: 409; error: Extract<RoutineWriteError, 'not-running'> };
 
 /** How long Run now waits for the wrapper's `start` record before answering without a run id. */
 export const READBACK_MS = 2000;

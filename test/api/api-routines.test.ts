@@ -23,6 +23,7 @@ import type { Probe } from '../../server/lib/routine-store.js';
 import { resetSettings, setPinned } from '../../server/lib/settings.js';
 import { setSpawner } from '../../server/lib/spawn.js';
 import { parseJob } from '../../shared/routine-file.js';
+import { runsQueryString } from '../../client/src/lib/routines.js';
 import type { ReconcileChange, ReconcileReport, RoutineFile, RoutineRunsResponse, RoutinesResponse, Session } from '../../shared/types.js';
 
 const ENV = 'SHOW_USAGE=false\nSKIP_PROC_SCAN=true\nROUTINES_DIR=~/routines\nROUTINE_MACHINE=mac\nNTFY_TOPIC=\n';
@@ -242,6 +243,19 @@ export async function run(): Promise<number> {
       assert.deepStrictEqual([bad.status, bad.json], [400, { error: 'bad outcome' }], 'an unknown outcome is refused, never read as no filter');
       const del = await send(c.h, 'DELETE', '/api/routines/runs');
       assert.deepStrictEqual([del.status, del.headers.allow], [405, 'GET']);
+    });
+  }));
+
+  tally(await testAsync('GET /api/routines/runs answers the query the client builds: runsQueryString round-trips through serveRoutineRuns', async () => {
+    await withRoutines('', true, async c => {
+      writeJob(c, 'x', job());
+      writeJob(c, 'y', job({ run: 'shell' }));
+      logRun(c, 'x-ok', 'x', 2 * DAY);
+      logRun(c, 'x-fail', 'x', DAY, 1);
+      logRun(c, 'y-fail', 'y', DAY / 2, 1);
+      const r = await send(c.h, 'GET', `/api/routines/runs${runsQueryString({ days: 7, job: 'x', outcome: 'failed', runner: 'claude' })}`);
+      assert.strictEqual(r.status, 200);
+      assert.deepStrictEqual((r.json as unknown as RoutineRunsResponse).runs.map(x => x.id), ['x-fail']);
     });
   }));
 

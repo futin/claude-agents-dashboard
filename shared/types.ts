@@ -82,8 +82,8 @@ export interface Session {
    */
   effort: string | null;
   tokens: number;
+  /** Tokens; the client formats it for display (`fmtWindow`, `client/src/lib/format.ts`). */
   contextWindow: number;
-  contextWindowLabel: string;
   contextPct: number;
   status: 'working' | 'idle' | 'question' | 'incomplete';
   /**
@@ -911,6 +911,8 @@ export interface ReleaseItem {
 /**
  * `GET /api/releases` — the dashboard's own release history, read from the local checkout's tags. `current` is `git describe` against those tags: on a
  * tag `ahead` is 0, three commits past one it is 3. Not a checkout, no git, or no tags → `{ current: null, releases: [] }`, never an error status.
+ * ui-kit's own `ReleasesResponse` is the client's view of this same payload (its `useWhatsNew` fetches the route itself); `test/guards/contract-types.test.ts`
+ * checks this type is assignable to that one, so `pnpm typecheck` fails when they part.
  */
 export interface ReleasesResponse {
   current: { version: string; ahead: number } | null;
@@ -1126,18 +1128,30 @@ export type NotifyPatch =
   Partial<Omit<NotifyPolicy, 'events'>> & { events?: Partial<Record<NotifyEvent, boolean>> };
 
 /**
- * `POST /api/notify/event` — the `stop` hook's path into the notifier. The other
- * three events notify from the endpoint they were already POSTing to.
+ * The {@link NotifyEvent}s a hook can raise, and so the ones `POST /api/notify/event` accepts. The rest (`routine-failed`, `tick-capped`,
+ * `usage-limit`, `usage-reset`) are raised server-side and refused there with 400 `bad event`.
+ */
+export type HookNotifyEvent = Extract<NotifyEvent, 'question' | 'stop' | 'permission' | 'plan'>;
+
+/**
+ * `POST /api/notify/event` — the `stop` hook's path into the notifier. It takes the four hook-driven events ({@link HookNotifyEvent}); `question`,
+ * `permission` and `plan` mostly notify from the endpoint their hook already POSTs to, and the server-side events never come through here.
  */
 export interface NotifyEventRequest {
   sessionId: string;
-  event: NotifyEvent;
+  event: HookNotifyEvent;
   /** From the hook payload; omitted where the event does not carry it. */
   permissionMode?: string;
 }
 
 /** A write that answers nothing but its success: the answer, plan-answer and message-answer routes, the notify hooks, a codegraph run, a reveal. */
 export interface OkResponse { ok: true }
+
+/** A JSON request body the server has parsed but not yet validated: every key of `T` optional and `unknown`, so each read names a field `T` declares. */
+export type Unvalidated<T> = { [K in keyof T]?: unknown };
+
+/** The `error` of the 403 every write route answers through `refuseWrite` (`server/api.ts`): a token could help, or nothing the caller sends can. */
+export type WriteRefusalError = 'bad token' | 'read-only from this network';
 
 /** `POST /api/spawn/:id/stop` and `POST /api/sessions/:id/stop`: killed outright, or a graceful stop still landing. */
 export type StopResponse = { stopped: true } | { stopping: true };
@@ -1887,6 +1901,9 @@ export interface OpenFolderRequest {
   path: string;
 }
 
+/** The `error` of a refused `POST /api/open-folder` or `POST /api/routines/reveal`: 403 for a path no listed pin has, 500 when `open` itself failed. */
+export type OpenFolderError = 'not a pinned project' | 'open failed';
+
 /** Payload of a successful `POST /api/open-folder`: macOS `open` launched on the server host. */
 export interface OpenFolderResponse {
   ok: true;
@@ -2125,6 +2142,9 @@ export interface CodegraphRunRequest {
   kind: CodegraphRunKind;
 }
 
+/** The `error` of a store refusal from `POST /api/codegraph/run`: 403, 404 and 409 in that order (`CODEGRAPH_RUN_REFUSALS`, `server/api.ts`). */
+export type CodegraphRunRefusal = 'not a pinned project' | 'not indexed' | 'already running';
+
 /** Payload of `GET /api/configs`. */
 export interface ManagementIndex {
   generatedAt: string;
@@ -2240,6 +2260,12 @@ export interface SpawnRequest {
  */
 export type SpawnResponse = { surface: 'dashboard'; sessionId: string } | { surface: 'desktop'; sessionId?: string };
 
+/**
+ * The `POST /api/spawn` errors the client words itself (`client/src/lib/resume.ts`): the 409 for a resume or hand-over of a session whose process is
+ * still alive, and the 500 when the desktop app's URL never opened. Every other error text passes through to the user as sent.
+ */
+export type SpawnError = 'session is still running' | 'open failed';
+
 /** Full payload of `GET /api/sessions`. */
 export interface SessionsResponse {
   generatedAt: string;
@@ -2331,6 +2357,9 @@ export interface RoutineStep {
   sessionId: string | null;
 }
 
+/** Where a {@link RoutineRun} stands; also the `outcome` filter {@link RoutineRunsQuery} takes. */
+export type RoutineRunState = 'running' | 'ok' | 'failed' | 'lost' | 'refused';
+
 /** One run of a routine, or a refusal, as the server folds them from `~/.claude/routines/runs/*.jsonl`. */
 export interface RoutineRun {
   /** The wrapper's uuid; a refusal has none in the log, so its id is `refused-<machine>-<job>-<epoch ms>`. */
@@ -2343,7 +2372,7 @@ export interface RoutineRun {
   ms: number | null;
   late: boolean;
   /** `lost` is derived at read time, never logged: a start with no end whose wrapper is gone or past the age rule. */
-  state: 'running' | 'ok' | 'failed' | 'lost' | 'refused';
+  state: RoutineRunState;
   /** Step counts: the `end` record's, or counted from the step records so far when the run has none. */
   ok: number;
   failed: number;
@@ -2378,6 +2407,13 @@ export interface RoutineStats {
  * error in the client's `writeFailureText` rather than a bare "failed (HTTP 409)".
  */
 export type RoutineRunConflict = 'already-running' | 'no-plugin' | 'invalid';
+
+/**
+ * The `error` codes of the routine write routes (create, run, stop, delete, patch, reconcile) that the client words in `writeFailureText`: 409
+ * `not-owner` from any write on a server that does not own the routines, 409 `not-running` from Stop, 409 `exists` from create, 400 `bad-only` and
+ * 500 `spawn-failed` from Run now, plus Run now's {@link RoutineRunConflict}s.
+ */
+export type RoutineWriteError = 'not-owner' | 'not-running' | 'exists' | 'bad-only' | 'spawn-failed' | RoutineRunConflict;
 
 /** Reconcile's verdict, as the toolbar chip reads it; `not-owner` is what every server but the owner reports (spec §Owning server). */
 export type ReconcileState = 'in-sync' | 'drift' | 'failed' | 'pending' | 'not-owner' | 'no-plugin' | 'cron-down' | 'bad-machine' | 'no-claude';
@@ -2414,6 +2450,20 @@ export interface RoutinesResponse {
   reconcile: ReconcileReport;
   /** Sorted by name. */
   jobs: RoutineJobRow[];
+}
+
+/** The windows `GET /api/routines/runs` takes as `days`, in whole local days ending today; any other value reads as 30. */
+export type RoutineRunsWindow = 7 | 30 | 90;
+
+/**
+ * The query of `GET /api/routines/runs`, one search param per key; an empty string is "no filter" and is left out of the query string
+ * (`runsQueryString`, `client/src/lib/routines.ts`). The server reads each param by a key of this type, so renaming one fails the typecheck there.
+ */
+export interface RoutineRunsQuery {
+  days: RoutineRunsWindow;
+  job: string;
+  outcome: '' | RoutineRunState;
+  runner: '' | RoutineJob['run'];
 }
 
 /** `GET /api/routines/runs`: the filtered runs of the window, newest first, and the stats for the window (job and runner filters applied, outcome not). */

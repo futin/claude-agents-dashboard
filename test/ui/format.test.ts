@@ -1,6 +1,6 @@
 import assert from 'node:assert';
 
-import { ageAt, fmtBytes, fmtDuration, fmtTok, formatAgo, formatResetTime } from '../../client/src/lib/format.js';
+import { ageAt, fmtBytes, fmtDuration, fmtTok, fmtWindow, formatAgo, formatResetTime } from '../../client/src/lib/format.js';
 
 function test(name: string, fn: () => void): boolean {
   try { fn(); console.log('  ✓ ' + name); return true; }
@@ -27,6 +27,14 @@ export function run(): number {
   if (test('fmtBytes: a value that rounds up to 1024 KB moves to MB', () => {
     assert.strictEqual(fmtBytes(1024 * 1024 - 1), '1.0 MB');
     assert.strictEqual(fmtBytes(1024 * 1024 - 52), '1023.9 KB');
+  })) p++; else f++;
+
+  if (test('fmtWindow: rounded k, M without a forced decimal, whole under 1k', () => {
+    assert.strictEqual(fmtWindow(200_000), '200k');
+    assert.strictEqual(fmtWindow(300_000), '300k');
+    assert.strictEqual(fmtWindow(1_000_000), '1M');
+    assert.strictEqual(fmtWindow(1_500_000), '1.5M');
+    assert.strictEqual(fmtWindow(999), '999');
   })) p++; else f++;
 
   if (test('fmtTok: whole under 1k, one decimal k, two decimal M', () => {

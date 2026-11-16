@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-import type { RoutineRunsResponse } from '../../../shared/types';
+import type { RoutineRunsQuery, RoutineRunsResponse } from '../../../shared/types';
 import { pollFetch } from '../lib/pollSeq';
-import { createPollSeq, runsQueryString, type RoutineRunsQuery } from '../lib/routines';
+import { createPollSeq, runsQueryString } from '../lib/routines';
 import { useSettings } from './useSettings';
 
 export interface RoutineRunsState {

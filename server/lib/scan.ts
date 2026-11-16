@@ -695,7 +695,6 @@ export function sessionFromRef(ref: TranscriptRef, opts: RowOptions): Session | 
     effort: parsed.effort,
     tokens: parsed.tokens,
     contextWindow: parsed.contextWindow,
-    contextWindowLabel: parsed.contextWindowLabel,
     contextPct: parsed.contextPct,
     status,
     surface,

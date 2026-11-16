@@ -3,13 +3,19 @@
  * `read-only from this network` when no token is set, so nothing the caller types can unlock the write — a token prompt would be a dead end there.
  */
 
+import type { WriteRefusalError } from '../../../shared/types';
+
+/** The two 403 bodies, typed by the shared union so a reworded refusal fails the typecheck here as well as in `refuseWrite`. */
+export const BAD_TOKEN: WriteRefusalError = 'bad token';
+const READ_ONLY_ERROR: WriteRefusalError = 'read-only from this network';
+
 /** Shown wherever a token prompt would be, when the network is read-only. */
 export const READ_ONLY_TEXT = 'Read-only from this network: open the dashboard through Tailscale, or set ANSWER_TOKEN.';
 
 /** `null` for anything but a 403; `'read-only'` only for the server's exact read-only body; every other 403 is a token refusal, as before. */
 export function refusalKind(status: number, body: unknown): 'token' | 'read-only' | null {
   if (status !== 403) return null;
-  if (body !== null && typeof body === 'object' && (body as { error?: unknown }).error === 'read-only from this network') return 'read-only';
+  if (body !== null && typeof body === 'object' && (body as { error?: unknown }).error === READ_ONLY_ERROR) return 'read-only';
   return 'token';
 }
 

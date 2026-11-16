@@ -86,7 +86,9 @@ import type {
   UsageHistoryResponse, UsageProfileResponse, WaitResult, ConnectionOrigin, WriteAccess,
   ReconcileReport, RoutineFile, RoutineJob, RoutineJobRow, RoutineRunsResponse, RoutinesResponse, RoutineValidateResponse, Session,
   AccountResponse, GitFetchResponse, HealthResponse, NotifyTestResponse, OkResponse, RemoteAnswerToggleResponse, RoutineErrorsResponse,
-  RoutineWriteResponse, StopResponse, TranscribeResponse
+  RoutineWriteResponse, StopResponse, TranscribeResponse,
+  CodegraphRunRefusal, CodegraphRunRequest, HookNotifyEvent, NotifyEventRequest, OpenFolderError, OpenFolderRequest, RoutineRunState, RoutineRunsQuery,
+  RoutineRunsWindow, RoutineWriteError, SpawnError, Unvalidated, WriteRefusalError
 } from '../shared/types.js';
 
 /** Session ids are transcript filenames (UUIDs) — restrict to safe chars. */
@@ -528,7 +530,7 @@ export function refuseWrite(config: Config, req: IncomingMessage, res: ServerRes
   if (access === 'token' && bearerMatches(req.headers.authorization, config.answerToken)) return false;
   const kind = access === 'token' ? 'token' : 'read-only';
   logRejectedWrite(req, peer, kind);
-  sendJson(res, 403, { error: kind === 'token' ? 'bad token' : 'read-only from this network' });
+  sendJson(res, 403, { error: (kind === 'token' ? 'bad token' : 'read-only from this network') satisfies WriteRefusalError });
   return true;
 }
 
@@ -1073,13 +1075,17 @@ export async function servePermissionNotify(
   sendJson(res, 200, { ok: true } satisfies OkResponse);
 }
 
+/** The events `POST /api/notify/event` accepts, keyed by the shared union so the server's set and the type cannot part. */
+const HOOK_EVENTS: Record<HookNotifyEvent, true> = { question: true, stop: true, permission: true, plan: true };
+const isHookEvent = (v: unknown): v is HookNotifyEvent => typeof v === 'string' && Object.hasOwn(HOOK_EVENTS, v);
+
 /**
  * `POST /api/notify/event` — the `stop` hook's path in. Fire-and-forget like
  * `/api/permissions/notify`: the hook does not care what happens next, and a
  * push must never delay the end of a turn.
  *
- * The three other events do not use this route — they are already registering
- * something here, so they notify inline.
+ * It takes the four hook-driven events, {@link HookNotifyEvent} (`HOOK_EVENTS`); `question`, `permission` and `plan`
+ * normally notify inline from the route their hook already registers through, and the server-side events never come here.
  *
  * Unlike the wait endpoints this does NOT call `sessionExists`: a `stop` hook
  * fires as the turn ends, which is exactly when the transcript may not yet be
@@ -1091,17 +1097,14 @@ export async function serveNotifyEvent(
 ): Promise<void> {
   if (refuseWrite(config, req, res)) return;
 
-  const body = await readJsonBody(req) as
-    { sessionId?: unknown; event?: unknown; permissionMode?: unknown } | null;
+  const body = await readJsonBody(req) as Unvalidated<NotifyEventRequest> | null;
   if (!body || typeof body !== 'object') return sendBadBody(res, { error: 'bad body' });
 
   const sessionId = typeof body.sessionId === 'string' ? body.sessionId : '';
   if (!sessionId || !ID_RE.test(sessionId)) return sendJson(res, 400, { error: 'bad sessionId' });
 
   const event = body.event;
-  if (event !== 'question' && event !== 'stop' && event !== 'permission' && event !== 'plan') {
-    return sendJson(res, 400, { error: 'bad event' });
-  }
+  if (!isHookEvent(event)) return sendJson(res, 400, { error: 'bad event' });
   // The token-renewal turn is plumbing nobody started — no event from it is worth a push (#178). Same backstop as `serveMessageWait`.
   if (isRefreshSession(sessionId)) return sendJson(res, 200, { ok: true } satisfies OkResponse);
 
@@ -1255,7 +1258,7 @@ async function spawnDesktop(
     // A launch that never reached the app holds neither a slot nor the mark, so the retry the failure line invites is not refused.
     releaseDesktopLaunch(rid, slot.at);
     console.error('[dashboard] desktop open failed:', (e as Error).message);
-    return sendJson(res, 500, { error: 'open failed' });
+    return sendJson(res, 500, { error: 'open failed' satisfies SpawnError });
   }
   clearHandOverFailed(rid);
   sendJson(res, 200, { surface: 'desktop' } satisfies SpawnResponse);
@@ -1291,6 +1294,9 @@ function resolveSpawnProject(config: Config, body: Partial<SpawnRequest>): Proje
   return ref ?? { refuse: `unknown project: ${projectName.slice(0, 60)}` };
 }
 
+/** The 409 every live-process check below answers; the client words it (`resumeErrorText`). */
+const STILL_RUNNING: SpawnError = 'session is still running';
+
 /**
  * The checks a headless resume and a hand-over share, in order, ending at the first refusal; otherwise the transcript to resume. `requireCwd` is the
  * headless resume's: its child runs in the session's cwd, while a hand-over's link carries no folder.
@@ -1311,21 +1317,21 @@ function resumeTarget(rid: string, requireCwd: boolean):
   if (requireCwd && !tr.cwd) return refuse(400, 'session has no working directory');
   // A held question, plan, or reply window means the process is alive —
   // resuming now would put a second writer on the same session.
-  if (getPending(rid) || getPendingPlan(rid) || getPendingMessage(rid)) return refuse(409, 'session is still running');
+  if (getPending(rid) || getPendingPlan(rid) || getPendingMessage(rid)) return refuse(409, STILL_RUNNING);
   // A held socket is only *one* way to be alive. A session this server
   // spawned can be mid-tool-call, or lingering after its turn (measured at
   // 90s+), holding nothing at all — and the row shows `incomplete`, which
   // the resume composer offers. Launching then would put a second `claude`
   // on one transcript AND replace the live entry in the store, dropping the
   // first child's kill handle. The store knows, so ask it.
-  if (hasLiveChild(rid)) return refuse(409, 'session is still running');
+  if (hasLiveChild(rid)) return refuse(409, STILL_RUNNING);
   // And the store can only answer for children *this* process spawned. A
   // session started from a terminal, by a second dashboard, or before the
   // last restart still reads `dashboard` and still offers resume, so the
   // fallback is the argv itself: `--session-id` / `--resume` carry the id.
   // Ordered second because the store is free and exact while this costs a
   // `ps`. A `null` probe means "could not answer" — never a refusal.
-  if (liveSessionIds()?.has(rid)) return refuse(409, 'session is still running');
+  if (liveSessionIds()?.has(rid)) return refuse(409, STILL_RUNNING);
   // `'launching'` only, as at the cap: a `failed` row for this id lingers
   // FAIL_TTL_MS for display, holds no process, and must not refuse a retry.
   if (listLaunching().some(e => e.sessionId === rid && e.state === 'launching')) return refuse(409, 'already resuming');
@@ -1590,7 +1596,7 @@ export async function serveGitFetch(config: Config, req: IncomingMessage, res: S
  */
 export async function serveGitQuick(config: Config, req: IncomingMessage, res: ServerResponse): Promise<void> {
   if (refuseWrite(config, req, res)) return;
-  const body = await readJsonBody(req) as { dirName?: unknown; op?: unknown } | null;
+  const body = await readJsonBody(req) as Unvalidated<GitQuickRequest> | null;
   if (!body || typeof body !== 'object' || typeof body.dirName !== 'string' || (body.op !== 'pull' && body.op !== 'push')) {
     return sendBadBody(res, { error: "expected {dirName: string, op: 'pull' | 'push'}" });
   }
@@ -1633,7 +1639,7 @@ const CODEGRAPH_RUN_REFUSALS = {
   'not-pinned': [403, 'not a pinned project'],
   'not-indexed': [404, 'not indexed'],
   busy: [409, 'already running'],
-} as const;
+} as const satisfies Record<string, readonly [number, CodegraphRunRefusal]>;
 
 /**
  * `POST /api/codegraph/run` `{dirName, kind}` — start a Sync or Reindex on one pinned repo and answer at once (codegraph-view spec §API). The method check
@@ -1642,7 +1648,7 @@ const CODEGRAPH_RUN_REFUSALS = {
  */
 export async function serveCodegraphRun(config: Config, req: IncomingMessage, res: ServerResponse): Promise<void> {
   if (refuseWrite(config, req, res)) return;
-  const body = await readJsonBody(req) as { dirName?: unknown; kind?: unknown } | null;
+  const body = await readJsonBody(req) as Unvalidated<CodegraphRunRequest> | null;
   if (!body || typeof body !== 'object' || typeof body.dirName !== 'string' || body.dirName === '' || (body.kind !== 'sync' && body.kind !== 'reindex')) {
     return sendBadBody(res, { error: "expected {dirName: string, kind: 'sync' | 'reindex'}" });
   }
@@ -1737,14 +1743,14 @@ export async function servePinsOrder(config: Config, req: IncomingMessage, res: 
  */
 export async function serveOpenFolder(config: Config, req: IncomingMessage, res: ServerResponse): Promise<void> {
   if (refuseWrite(config, req, res)) return;
-  const body = await readJsonBody(req) as { path?: unknown } | null;
+  const body = await readJsonBody(req) as Unvalidated<OpenFolderRequest> | null;
   if (!body || typeof body !== 'object' || typeof body.path !== 'string' || body.path === '') {
     return sendBadBody(res, { error: 'expected {path: string}' });
   }
   const { path } = body;
   if (openFolderPlatform() !== 'darwin') return sendJson(res, 501, { error: 'open folder needs macOS' });
   // A pin's path is absolute; a relative or `-`-prefixed value never names one, so it is refused before the pin list is even read.
-  if (!nodePath.isAbsolute(path)) return sendJson(res, 403, { error: 'not a pinned project' });
+  if (!nodePath.isAbsolute(path)) return sendJson(res, 403, { error: 'not a pinned project' satisfies OpenFolderError });
   let rows: ReturnType<typeof readPinRows>;
   try {
     rows = readPinRows(config);
@@ -1752,12 +1758,12 @@ export async function serveOpenFolder(config: Config, req: IncomingMessage, res:
     console.error(`[dashboard] open folder failed: ${(e as Error).message}`);
     return sendJson(res, 500, { error: 'pins read failed' });
   }
-  if (!rows.some(r => r.listed === true && r.path === path)) return sendJson(res, 403, { error: 'not a pinned project' });
+  if (!rows.some(r => r.listed === true && r.path === path)) return sendJson(res, 403, { error: 'not a pinned project' satisfies OpenFolderError });
   try {
     await openFolder(path);
   } catch (e) {
     console.error(`[dashboard] open folder failed: ${(e as Error).message}`);
-    return sendJson(res, 500, { error: 'open failed' });
+    return sendJson(res, 500, { error: 'open failed' satisfies OpenFolderError });
   }
   sendJson(res, 200, { ok: true } satisfies OpenFolderResponse);
 }
@@ -1768,8 +1774,11 @@ export async function serveOpenFolder(config: Config, req: IncomingMessage, res:
 const JOB_NAME_RE = /^[a-z0-9-]+$/;
 /** The wrapper takes `--only` as argv; a list longer than any pin set is refused rather than handed to a spawn. */
 const ONLY_MAX = 200;
-const ROUTINE_WINDOWS = [7, 30, 90] as const;
-const RUN_OUTCOMES: ReadonlySet<string> = new Set(['running', 'ok', 'failed', 'lost', 'refused']);
+const ROUTINE_WINDOWS: readonly RoutineRunsWindow[] = [7, 30, 90];
+/** Keyed by the shared union, so a state added to `RoutineRunState` is a type error here until the filter accepts it. */
+const RUN_OUTCOMES: Record<RoutineRunState, true> = { running: true, ok: true, failed: true, lost: true, refused: true };
+/** The search params of `GET /api/routines/runs`, each name checked against `RoutineRunsQuery`'s keys. */
+const RUNS_PARAM: { [K in keyof RoutineRunsQuery]: K } = { days: 'days', job: 'job', outcome: 'outcome', runner: 'runner' };
 
 /**
  * The checks every job-scoped routine write makes after the write gate: the name (400, nothing touched) and ownership (409 — only the owning server
@@ -1777,7 +1786,7 @@ const RUN_OUTCOMES: ReadonlySet<string> = new Set(['running', 'ok', 'failed', 'l
  */
 function refuseRoutineWrite(res: ServerResponse, name?: string): boolean {
   if (name !== undefined && !JOB_NAME_RE.test(name)) { sendJson(res, 400, { error: 'bad name' }); return true; }
-  if (!isOwner()) { sendJson(res, 409, { error: 'not-owner' }); return true; }
+  if (!isOwner()) { sendJson(res, 409, { error: 'not-owner' satisfies RoutineWriteError }); return true; }
   return false;
 }
 
@@ -1872,12 +1881,12 @@ export async function serveRoutines(config: Config, res: ServerResponse): Promis
  */
 export function serveRoutineRuns(config: Config, params: URLSearchParams, res: ServerResponse): void {
   try {
-    const rawDays = Number(params.get('days'));
+    const rawDays = Number(params.get(RUNS_PARAM.days));
     const days = ROUTINE_WINDOWS.find(d => d === rawDays) ?? 30;
-    const job = params.get('job') || null;
-    const outcome = params.get('outcome') || null;
-    if (outcome !== null && !RUN_OUTCOMES.has(outcome)) return sendJson(res, 400, { error: 'bad outcome' });
-    const runner = params.get('runner') || null;
+    const job = params.get(RUNS_PARAM.job) || null;
+    const outcome = params.get(RUNS_PARAM.outcome) || null;
+    if (outcome !== null && !Object.hasOwn(RUN_OUTCOMES, outcome)) return sendJson(res, 400, { error: 'bad outcome' });
+    const runner = params.get(RUNS_PARAM.runner) || null;
     const all = runsReader(config).read();
     foldForPush(config, all);
     const runnerOf = new Map(readJobs(routineDirs(config).routines, machineName(config).name).map(s => [s.name, s.job?.run ?? null]));
@@ -1934,7 +1943,7 @@ export async function serveRoutineCreate(config: Config, req: IncomingMessage, r
   const { name, text } = body;
   if (refuseRoutineWrite(res, name)) return;
   const dir = routineDirs(config).routines;
-  if (readJobs(dir, machineName(config).name).some(s => s.name === name)) return sendJson(res, 409, { error: 'exists' });
+  if (readJobs(dir, machineName(config).name).some(s => s.name === name)) return sendJson(res, 409, { error: 'exists' satisfies RoutineWriteError });
   const checked = validateOr500(config, name, text, res);
   if (!checked) return;
   const { job, errors } = checked;
@@ -1942,7 +1951,7 @@ export async function serveRoutineCreate(config: Config, req: IncomingMessage, r
   try {
     writeJob(dir, name, text, 'create');
   } catch (e) {
-    if (e instanceof RoutineStoreError && e.code === 'exists') return sendJson(res, 409, { error: 'exists' });
+    if (e instanceof RoutineStoreError && e.code === 'exists') return sendJson(res, 409, { error: 'exists' satisfies RoutineWriteError });
     console.error('[dashboard] routine create failed:', (e as Error).message);
     return sendJson(res, 500, { error: 'write failed' });
   }
@@ -2014,7 +2023,7 @@ export async function serveRoutineRun(config: Config, name: string, req: Incomin
     only = 'only' in body ? (body as { only?: unknown }).only : undefined;
   }
   // `runJob` reads `[]` as every pin; over HTTP an empty selection is a caller bug, not a request for a whole run.
-  if (Array.isArray(only) && (only.length === 0 || only.length > ONLY_MAX)) return sendJson(res, 400, { error: 'bad-only' });
+  if (Array.isArray(only) && (only.length === 0 || only.length > ONLY_MAX)) return sendJson(res, 400, { error: 'bad-only' satisfies RoutineWriteError });
   try {
     const result = await runJob(config, name, only);
     if (result.status === 202) return sendJson(res, 202, { run: result.run });
@@ -2022,7 +2031,7 @@ export async function serveRoutineRun(config: Config, name: string, req: Incomin
     sendJson(res, result.status, { error: result.error });
   } catch (e) {
     console.error('[dashboard] routine run failed:', (e as Error).message);
-    sendJson(res, 500, { error: 'spawn-failed' });
+    sendJson(res, 500, { error: 'spawn-failed' satisfies RoutineWriteError });
   }
 }
 
@@ -2057,7 +2066,7 @@ export async function serveRoutineReveal(config: Config, req: IncomingMessage, r
     await (file === null ? openFolder(dir) : revealFile(file));
   } catch (e) {
     console.error(`[dashboard] routines reveal failed: ${(e as Error).message}`);
-    return sendJson(res, 500, { error: 'open failed' });
+    return sendJson(res, 500, { error: 'open failed' satisfies OpenFolderError });
   }
   sendJson(res, 200, { ok: true } satisfies OkResponse);
 }
