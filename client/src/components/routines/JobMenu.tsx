@@ -11,7 +11,7 @@ export default function JobMenu({ row, ctl, onClose, onRunOne }: { row: RoutineJ
   const job = row.job;
   const runnable = ctl.owner && job !== null;
   const fanOut = job !== null && (job.foreach !== null || (row.last !== null && isFanOut(row.last)));
-  const busy = ctl.busy === `run:${row.name}`;
+  const busy = ctl.busy.has(`run:${row.name}`);
   const pick = (fn: () => void) => () => { onClose(); fn(); };
   const mac = ctl.machine === 'mac';
 
@@ -25,7 +25,7 @@ export default function JobMenu({ row, ctl, onClose, onRunOne }: { row: RoutineJ
         <button type="button" role="menuitem" disabled={ctl.locked || busy} onClick={onRunOne}>Run now on one repo…</button>
       )}
       {ctl.owner && job && !isManualCron(job.cron) && (
-        <button type="button" role="menuitem" disabled={ctl.locked || ctl.busy === `toggle:${row.name}`} onClick={pick(() => ctl.toggle(row.name, !job.enabled))}>{job.enabled ? 'Pause' : 'Resume'}</button>
+        <button type="button" role="menuitem" disabled={ctl.locked || ctl.busy.has(`toggle:${row.name}`)} onClick={pick(() => ctl.toggle(row.name, !job.enabled))}>{job.enabled ? 'Pause' : 'Resume'}</button>
       )}
       {ctl.owner && mac && <button type="button" role="menuitem" disabled={ctl.locked} onClick={pick(() => ctl.reveal(row.name))}>Reveal in Finder</button>}
       {mac && <button type="button" role="menuitem" onClick={pick(() => ctl.copyLabel(row.name))}>Copy launchd label</button>}

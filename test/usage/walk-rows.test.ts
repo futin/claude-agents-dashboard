@@ -22,7 +22,7 @@ function walkOf(flags: boolean[], opts: { startMs: number; gain?: number; from?:
     cum += gain;
     return {
       t: new Date(opts.startMs + i * H).toISOString(),
-      gain, cum, weight: learned ? 0.8 : 0.31, learned
+      gain, cum, weight: learned ? 0.8 : 0.31, learned, hourOfWeek: 0
     };
   });
 }
@@ -124,7 +124,8 @@ export function run(): number {
       gain,
       cum: gains.slice(0, i + 1).reduce((n, g) => n + g, 0),
       weight: 0.8,
-      learned: true
+      learned: true,
+      hourOfWeek: 0
     }));
     const t = walkRows(walk, { resetsAt: new Date(NOON + 5 * H).toISOString(), startHead: 80 });
     assert.strictEqual(t.totals.endHead, -5, 'five points past empty');

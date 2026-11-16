@@ -2,6 +2,7 @@ import { useId, useState, type ReactNode, type SyntheticEvent } from 'react';
 
 import { parseFrontmatter } from '../../../../shared/frontmatter';
 import { useFileContent } from '../../hooks/useConfigs';
+import { useConfigsScope } from '../../hooks/useConfigsScope';
 import { fmtTok } from '../../lib/format';
 import { Markdown } from '../Markdown';
 import type { FileKind } from '../../lib/configsEntries';
@@ -52,7 +53,9 @@ export function FileBlock({ path, kind }: Props) {
   const [open, setOpen] = useState(false);
   const [preview, setPreview] = useState(kind === 'markdown');
   const boxId = useId();
-  const { file, loading, error } = useFileContent(path);
+  // ↻ bumps `refreshKey`; reading it here rather than as a prop reaches every FileBlock, keyed by its path or not.
+  const { refreshKey } = useConfigsScope();
+  const { file, loading, error } = useFileContent(path, refreshKey);
 
   // Every block is preceded by the path of the file it shows, so the path line
   // lives here rather than being repeated at each call site. It is a label plus
@@ -76,7 +79,7 @@ export function FileBlock({ path, kind }: Props) {
     </div>
   );
 
-  if (loading) return shell(<div className="mgmt-empty">loading…</div>);
+  if (loading && file === null) return shell(<div className="mgmt-empty">loading…</div>);
   if (error) return shell(<div className="mgmt-empty off">couldn't load this file</div>);
   if (file === null) return frame(null);
 

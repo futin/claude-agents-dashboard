@@ -315,7 +315,7 @@ The owner's pin routes rewrite `pins.json` after every pin change, so a fan-out 
 
 The Routines section, second in the rail, `client/src/components/routines/`; its two pages, Jobs and Runs, are the rail's sub-items (`routinesTab`). `RoutinesView` owns the `/api/routines` poll (`useRoutines`, on
 `settings.refreshMs`, through `createPollSeq` so a stale answer never lands over a newer one), the single write helper (`useRoutineWrite`: one status
-line under the toolbar, one `busy` key so only the clicked control greys out, and a re-poll after every success), the drawer and the ChatDrawer.
+line under the toolbar, a `busy` set of in-flight write keys so only the clicked controls grey out, and a re-poll after every success), the drawer and the ChatDrawer.
 The drawer guards unsaved edits: while it is dirty, Escape, the backdrop and the browser's Back all leave it open, with no prompt, and only Save, Delete or
 Cancel leave. A New job drawer counts as dirty from the start. Back re-arms after a refusal (`useBackClose`'s `rearm`), since that press spent the history entry.
 
@@ -337,9 +337,15 @@ Cancel leave. A New job drawer counts as dirty from the start. Back re-arms afte
 - **Run now:** `RunNowPopover` lists the job's pins with each one's last outcome (a sheet on a phone); a step's `run again` is `/run` with `only: [repo]`.
 
 Write controls render only for the owner. They stay drawn but disabled when the network is read-only or the Answer token is missing, with the reason in
-`.git-sync-note`. `routineWindow` (7, 30 or 90, default 30) is a device setting ([settings](settings.md)), and so is `routinesTab`. A deep link
-`?view=routines&run=<id>` lands on Runs with that run's fold open, and `?view=routines` alone on Jobs ([view-persistence](view-persistence.md)).
+`.git-sync-note`. `routineWindow` (7, 30 or 90, default 30) is a device setting ([settings](settings.md)), and so are `routinesTab` and the Runs filters
+(`routineRunFilters`), so a reload keeps all three. A deep link
+`?view=routines&run=<id>` lands on Runs with that run's fold open, and `?view=routines` alone on Jobs ([view-persistence](view-persistence.md)). The
+scroll to that run waits until it is in the list, so widening the window or clearing a filter still reaches it; until then a muted note says
+`The linked run is not in the last <n>d[ that match the filters].` (`focusRunNote`), with a `Clear filters` link when a filter is set.
 A job fold's `all runs →` link (`JobFold`) switches the rail to Runs, filtered to that job.
+Writes in flight are a set of keys (`run:<name>`, `toggle:<name>` …; `busyAdd` / `busyRemove`), so each control stays disabled until its own write settles,
+however many overlap, and `send` refuses a key already in flight without fetching. A step's `session →` stays a button after a failed open, with the
+failure text beside it; the next click clears it and retries.
 All class names are `.rtn-` prefixed and colours are theme tokens.
 
 ## Security

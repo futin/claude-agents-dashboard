@@ -10,7 +10,6 @@ import {
 } from '../../lib/usageProfile';
 import {
   absentText, crossingX, dayTicks, fmtWalkHour, headroomScale, headSegments, hitRect,
-  hourOfWeekLocal,
   joinPoints, pctX, pctY, pointsAttr, segAreaPath, stepTitle, VIEW_H, walkWidth, yHead, zeroY,
   type HeadScale
 } from '../../lib/walkChart';
@@ -188,7 +187,7 @@ function HeadroomChart({ walk, exhaustAt, startHead, cells, scale, tipHandlers }
           ))}
           {walk.map((step, i) => {
             const rect = hitRect(i, n);
-            const text = stepTitle(step, cells[hourOfWeekLocal(step.t)]);
+            const text = stepTitle(step, cells[step.hourOfWeek]);
             return (
               <rect
                 key={step.t}

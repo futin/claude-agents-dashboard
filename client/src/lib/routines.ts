@@ -36,6 +36,26 @@ export function runsQueryString(q: RoutineRunsQuery): string {
 
 export { createPollSeq } from './pollSeq';
 
+/** The routine writes in flight, plus `key` — a new set, so React sees the change. */
+export function busyAdd(busy: ReadonlySet<string>, key: string): ReadonlySet<string> {
+  return new Set(busy).add(key);
+}
+
+/** The routine writes in flight, less `key`. An absent key returns `busy` itself, so a stale settle re-renders nothing. */
+export function busyRemove(busy: ReadonlySet<string>, key: string): ReadonlySet<string> {
+  if (!busy.has(key)) return busy;
+  const next = new Set(busy);
+  next.delete(key);
+  return next;
+}
+
+/** The Runs page's note when a deep link's run is not in the list it loaded (outside the window, or filtered out); null when there is nothing to say. */
+export function focusRunNote(focusRun: string | null, runs: readonly Pick<RoutineRun, 'id'>[], q: RoutineRunsQuery): string | null {
+  if (!focusRun || runs.some(r => r.id === focusRun)) return null;
+  const filtered = q.outcome !== '' || q.runner !== '' || q.job !== '';
+  return `The linked run is not in the last ${q.days}d${filtered ? ' that match the filters' : ''}.`;
+}
+
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 

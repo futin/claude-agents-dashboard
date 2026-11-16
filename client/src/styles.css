@@ -3382,6 +3382,7 @@ button.chip[aria-pressed="true"]{color:var(--ink);background:var(--strip-hi)}
 .rtn-err{display:block;font-size:11px;color:var(--ink3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
 .rtn-spacer{flex:1}
 .rtn-legend{display:flex;flex-wrap:wrap;gap:10px 14px;align-items:center;font-size:12px;color:var(--ink2);padding:0 6px}
+.rtn-focus-note{font-size:12px;padding:0 6px 8px;overflow-wrap:anywhere}
 .rtn-kick{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink3);margin:0 0 6px}
 .rtn-kick.rtn-gap{margin-top:12px}
 .rtn-wide{grid-column:1/-1;justify-self:start}

@@ -256,6 +256,11 @@ export interface ForecastStep {
    * in the browser.
    */
   learned: boolean;
+  /**
+   * The bucket this hour was walked with: host-local, the same index as {@link UsageProfileCell.hourOfWeek}. The client looks the hour's cell up by it,
+   * because recomputing it from {@link t} in the browser's zone picks the wrong cell whenever that zone differs from the host's.
+   */
+  hourOfWeek: number;
 }
 
 /** `GET /api/usage/profile` — read-only. Never includes raw samples. */

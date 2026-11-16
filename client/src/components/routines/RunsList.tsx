@@ -3,7 +3,7 @@ import { useEffect, useRef, useState, type RefObject } from 'react';
 import type { RoutineJobRow, RoutineRun, RoutineStep } from '../../../../shared/types';
 import { useRoutineRuns } from '../../hooks/useRoutineRuns';
 import {
-  chipClass, dotTone, formatStat, groupRunsByDay, isFanOut, runClock, runPill, splitSteps, stepErrLine, stepPill, type RoutineRunsQuery
+  chipClass, dotTone, focusRunNote, formatStat, groupRunsByDay, isFanOut, runClock, runPill, splitSteps, stepErrLine, stepPill, type RoutineRunsQuery
 } from '../../lib/routines';
 import Chevron from '../Chevron';
 import type { RoutineCtl } from './ctl';
@@ -11,9 +11,12 @@ import SessionLink from './SessionLink';
 
 /**
  * The Runs page (spec §UI, screen 3): every run of the window, newest first, grouped by day. A fan-out run is one row with its steps folded; a run with a
- * failed step starts open with only the failures listed and the ok ones counted. `focusRun` (a deep link's `&run=`) starts open and is scrolled to once.
+ * failed step starts open with only the failures listed and the ok ones counted. `focusRun` (a deep link's `&run=`) starts open and is scrolled to once —
+ * the first time it is in the list, so widening the window or clearing a filter still reaches it; until then a note says it is not in the list.
  */
-export default function RunsList({ query, rows, ctl, focusRun }: { query: RoutineRunsQuery; rows: RoutineJobRow[]; ctl: RoutineCtl; focusRun: string | null }) {
+export default function RunsList({ query, rows, ctl, focusRun, onClearFilters }: {
+  query: RoutineRunsQuery; rows: RoutineJobRow[]; ctl: RoutineCtl; focusRun: string | null; onClearFilters: () => void;
+}) {
   const { data, error } = useRoutineRuns(query);
   const [flip, setFlip] = useState<Record<string, boolean>>({});
   const focusRef = useRef<HTMLDivElement>(null);
@@ -21,17 +24,30 @@ export default function RunsList({ query, rows, ctl, focusRun }: { query: Routin
   const byName = new Map(rows.map(r => [r.name, r]));
 
   useEffect(() => {
-    if (scrolled.current || !focusRun || !data) return;
+    // Latched only once the row is mounted: a first answer without the run must leave a later, wider one free to scroll.
+    if (scrolled.current || !focusRun || !data || !focusRef.current) return;
+    focusRef.current.scrollIntoView({ block: 'center' });
     scrolled.current = true;
-    focusRef.current?.scrollIntoView({ block: 'center' });
   }, [data, focusRun]);
 
   if (data === null) return <div className="git-empty">{error ? 'Couldn’t load the runs.' : 'Loading runs…'}</div>;
-  if (data.runs.length === 0) return <div className="git-empty">No runs in the last {query.days}d{query.outcome || query.runner || query.job ? ' that match' : ''}.</div>;
+
+  const filtered = query.outcome !== '' || query.runner !== '' || query.job !== '';
+  const note = focusRunNote(focusRun, data.runs, query);
+  const noteRow = note && (
+    <div className="rtn-muted rtn-focus-note" role="status">
+      {note}
+      {filtered && <> <button type="button" className="git-link" onClick={onClearFilters}>Clear filters</button></>}
+    </div>
+  );
+  if (data.runs.length === 0) {
+    return <>{noteRow}<div className="git-empty">No runs in the last {query.days}d{filtered ? ' that match' : ''}.</div></>;
+  }
 
   const failedRuns = data.stats.failed + data.stats.lost;
   return (
     <>
+      {noteRow}
       <div className="rtn-card rtn-clip">
         <div className="rtn-runrow rtn-head" aria-hidden="true">
           <span /><span>When</span><span>Job</span><span>Outcome</span><span>Took</span><span>Cost</span><span>Trigger</span><span />
@@ -129,7 +145,7 @@ function StepRow({ step, run, row, ctl }: { step: RoutineStep; run: RoutineRun; 
       <span className="rtn-hide">{step.costUsd !== null ? formatStat(step.costUsd, 'usd') : ''}</span>
       <span className="rtn-hide" />
       <span className="rtn-links">
-        {again && <button type="button" className="git-link" disabled={ctl.locked || ctl.busy === `run:${run.job}`} onClick={() => ctl.runNow(run.job, [step.repo!])}>run again</button>}
+        {again && <button type="button" className="git-link" disabled={ctl.locked || ctl.busy.has(`run:${run.job}`)} onClick={() => ctl.runNow(run.job, [step.repo!])}>run again</button>}
         {step.sessionId && <SessionLink id={step.sessionId} ctl={ctl} />}
       </span>
     </div>

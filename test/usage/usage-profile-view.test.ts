@@ -35,7 +35,7 @@ function grid(over: Record<number, Partial<UsageProfileCell>> = {}): UsageProfil
 
 const step = (over: Partial<ForecastStep> = {}): ForecastStep =>
   ({ t: new Date(2026, 8, 7, 9, 0, 0).toISOString(), gain: 1, cum: 10, weight: 0.5,
-    learned: true, ...over });
+    learned: true, hourOfWeek: 0, ...over });
 
 /** `n` steps — `forecastTiming` only reads the walk's length. */
 const walkOf = (n: number): ForecastStep[] => Array.from({ length: n }, () => step());

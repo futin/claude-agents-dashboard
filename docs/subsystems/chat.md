@@ -225,7 +225,10 @@ request for it and `/api/sessions/:id/chat` knows nothing of it. Three behaviour
   syntax stays literal text, so the worst case is the raw text we showed before.
   Deliberately omitted: `_underscore_` emphasis (would fire inside `snake_case` /
   `__init__`), nested blockquotes, reference links, inline HTML. Emphasis honours
-  CommonMark flanking, so `2 * 3 * 4` stays literal. Paragraphs keep hard line breaks via
+  CommonMark flanking, so `2 * 3 * 4` stays literal. A fence closes the CommonMark way — the
+  opener's character, at least its length, nothing but whitespace after, at any indent (a list-nested fence) — so a four-backtick
+  fence can wrap an inner ```` ``` ```` block. A table row splits only on a `|` that is not
+  escaped (`\|` is a literal pipe) and not inside a code span. Paragraphs keep hard line breaks via
   `white-space:pre-wrap` on `.md-p`; wide tables and code blocks scroll inside their own
   box so the drawer never scrolls sideways.
 - **Client:** `ChatDrawer` is a `React.lazy` default export (own chunk; the sessions

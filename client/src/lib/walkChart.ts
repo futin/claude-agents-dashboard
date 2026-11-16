@@ -316,12 +316,6 @@ function dayKey(d: Date): string {
   return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
 }
 
-/** Hour-of-week index for a step's timestamp, in the browser's local time. */
-export function hourOfWeekLocal(iso: string): number {
-  const d = new Date(iso);
-  return d.getDay() * 24 + d.getHours();
-}
-
 /** `Thu 14:00` — the walk's own hour label, local time. */
 export function fmtWalkHour(iso: string): string {
   const d = new Date(iso);

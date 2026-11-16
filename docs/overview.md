@@ -376,7 +376,7 @@ client/src/
                   useStuckStrip (when the phone's aside strip pins)
   lib/            routines (the Routines page's pure helpers: pills, run folding, the Repos helper, write-failure text), routineForm (the job drawer's
                   Form view: one read/write/summary per row over the file text), filterSort, analyticsFilterSort, chatFilter, chatRow (the Sessions drawer's session: the live poll row, else one fetched from `/api/sessions/:id/row` when the filtered poll lacks it), chatPaging (the chat drawer's byte offsets: one
-                  tail poll at a time, an epoch per re-tail, a retry after a failed tail), pollSeq (`createPollSeq`, the skip-while-in-flight rule useSessions, usePendingReply and the Routines
+                  tail poll at a time, an epoch per re-tail, a retry after a failed tail), pollSeq (`createPollSeq`, the skip-while-in-flight rule useSessions, usePendingReply, useSessionDetail and the Routines
                   polls share, and `pollFetch`, the 30s bound every guarded poll's request carries),
                   heldBody (which timeline body a pinned panel folds), markdown, configsEntries,
                   format, settings, persistedReset (Settings › Reset's reach into mounted usePersistedState holders),
@@ -387,7 +387,7 @@ client/src/
                   notifyRows (Settings' push-event rows), writeRefusal (a 403's token vs read-only-network kind, and the flags each kind sets), postWrite (every write hook's POST and its one read of the reply), pinWrite (what a pin write's reply means to `usePins`),
                   pendingReply (the reply panels' phase machine), writeStatus (Settings › Local ›
                   Connection's write-access line), serverSettingsSave (the line a failed `POST /api/settings` leaves on the Settings page),
-                  pr (the PR card's rows, tones and copy, and `acceptPrAnswer`), sessionSpend (the drawer's Tokens spent card and `acceptSpend`),
+                  pr (the PR card's rows, tones and copy, and `acceptPrAnswer`), sessionSpend (the drawer's Tokens spent card and `acceptSpend`), sessionDetail (`nextDetail`, which subagent-detail answers replace the panel),
                   webNotify, backClose, clipboard (copyText with the execCommand fallback), stopControl, apiError (the row's badge text for an API-error turn end), triage (the board/triage piles), answerToken (the token store + authHeaders),
                   stickyStrip, agentLabel (a subagent's type only when informative),
                   tasks (taskProgress — the one count the row pill and the Tasks card share),

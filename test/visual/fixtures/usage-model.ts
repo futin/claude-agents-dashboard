@@ -33,7 +33,7 @@ export const GLOBAL_MEAN = 0.3;
 const iso = (ms: number): string => new Date(ms).toISOString();
 
 /** The forward walk from EPOCH to the weekly reset, one step per hour. */
-export function forecastWalk(): { walk: { t: string; gain: number; cum: number; weight: number; learned: boolean }[]; dutyCycle: number } {
+export function forecastWalk(): { walk: { t: string; gain: number; cum: number; weight: number; learned: boolean; hourOfWeek: number }[]; dutyCycle: number } {
   const walk = [];
   let cum = WEEK_UTIL;
   let weightSum = 0;
@@ -43,7 +43,7 @@ export function forecastWalk(): { walk: { t: string; gain: number; cum: number; 
     const gain = Math.round(weight * WEEK_RATE * 100) / 100;
     cum = Math.round((cum + gain) * 100) / 100;
     weightSum += weight;
-    walk.push({ t: iso(t), gain, cum, weight, learned: learned !== null });
+    walk.push({ t: iso(t), gain, cum, weight, learned: learned !== null, hourOfWeek: hourOfWeekAt(t) });
   }
   return { walk, dutyCycle: Math.round((weightSum / walk.length) * 1000) / 1000 };
 }

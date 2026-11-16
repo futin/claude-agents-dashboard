@@ -114,7 +114,8 @@ export function shapeUsageProfile(opts: {
       gain: x.gain,
       cum: x.cum,
       weight: x.weight,
-      learned: x.learned
+      learned: x.learned,
+      hourOfWeek: x.hw
     })),
     exhaustAt: walked.exhaustAtMs == null ? null : new Date(walked.exhaustAtMs).toISOString(),
     // A walked window has nothing absent to report; the field is the negative

@@ -145,6 +145,31 @@ export function run(): number {
     assert.strictEqual(clampSettings(clampSettings({ routinesTab: 'runs' })).routinesTab, 'runs');
   })) p++; else f++;
 
+  if (test('the Runs filters default to all empty, and a missing key reads as the default', () => {
+    const empty = { outcome: '', runner: '', job: '' };
+    assert.deepStrictEqual(DEFAULT_SETTINGS.routineRunFilters, empty);
+    assert.deepStrictEqual(clampSettings({}).routineRunFilters, empty);
+    assert.deepStrictEqual(clampSettings({ routinesTab: 'runs' }).routineRunFilters, empty, 'settings stored before the key existed');
+  })) p++; else f++;
+
+  if (test('a stored valid Runs filter round-trips, a deleted job name included', () => {
+    const v = { outcome: 'failed', runner: 'shell', job: 'gone-since' };
+    assert.deepStrictEqual(clampSettings({ routineRunFilters: v }).routineRunFilters, v);
+    assert.deepStrictEqual(clampSettings(clampSettings({ routineRunFilters: v })).routineRunFilters, v);
+    assert.deepStrictEqual(clampSettings({ routineRunFilters: { outcome: 'lost', runner: 'claude', job: '' } }).routineRunFilters,
+      { outcome: 'lost', runner: 'claude', job: '' });
+  })) p++; else f++;
+
+  if (test('an unknown outcome or runner, or a non-string field, clamps to empty on its own', () => {
+    assert.deepStrictEqual(clampSettings({ routineRunFilters: { outcome: 'nope', runner: 'shell', job: 'a' } }).routineRunFilters,
+      { outcome: '', runner: 'shell', job: 'a' });
+    assert.deepStrictEqual(clampSettings({ routineRunFilters: { outcome: 'failed', runner: 'bash', job: 7 } }).routineRunFilters,
+      { outcome: 'failed', runner: '', job: '' });
+    for (const bad of [null, 'failed', 3, []]) {
+      assert.deepStrictEqual(clampSettings({ routineRunFilters: bad }).routineRunFilters, { outcome: '', runner: '', job: '' }, String(bad));
+    }
+  })) p++; else f++;
+
   if (test('settings saved before the rename keep their place: schedulesTab, scheduleWindow, landing schedules', () => {
     const s = clampSettings({ schedulesTab: 'runs', scheduleWindow: 90, landing: 'schedules' });
     assert.deepStrictEqual([s.routinesTab, s.routineWindow, s.landing], ['runs', 90, 'routines']);

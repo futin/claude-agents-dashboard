@@ -10,7 +10,8 @@ import { useRoutineWrite } from '../../hooks/useRoutineWrite';
 import { useRoutines } from '../../hooks/useRoutines';
 import { useSettings } from '../../hooks/useSettings';
 import { deepLinkRun } from '../../lib/deepLink';
-import { chipClass, jobsSubtitle, launchdLabel, reconcileChip, reconcilePreview, type ReconcilePreview, type RoutineRunsQuery } from '../../lib/routines';
+import { chipClass, jobsSubtitle, launchdLabel, reconcileChip, reconcilePreview, type ReconcilePreview } from '../../lib/routines';
+import type { RoutineRunFilters } from '../../lib/settings';
 import { READ_ONLY_TEXT } from '../../lib/writeRefusal';
 import type { RoutineCtl } from './ctl';
 import JobDrawer from './JobDrawer';
@@ -24,7 +25,6 @@ const WINDOWS = [7, 30, 90] as const;
 const NEEDS_TOKEN = 'Routine changes need the Answer token — set it under Settings › Local › Connection.';
 
 type Drawer = { mode: 'new' } | { mode: 'edit'; name: string; confirmDelete: boolean };
-type RunFilters = Pick<RoutineRunsQuery, 'outcome' | 'runner' | 'job'>;
 
 /**
  * The Routines section: the job ledger (Jobs) and the run log (Runs) of the routines folder (spec §UI). Owns the `/api/routines` poll, the write helper every
@@ -37,7 +37,9 @@ export default function RoutinesView() {
   const [focusRun] = useState(() => deepLinkRun());
   // Jobs or Runs is picked in the rail's tree (`routinesTab`); `AppShell` puts a `&run=` link on Runs.
   const page = settings.routinesTab;
-  const [filters, setFilters] = useState<RunFilters>({ outcome: '', runner: '', job: '' });
+  // Per device in settings, beside the window, so a reload keeps them.
+  const filters = settings.routineRunFilters;
+  const setFilters = (next: Partial<RoutineRunFilters>): void => update({ routineRunFilters: { ...filters, ...next } });
   const [drawer, setDrawer] = useState<Drawer | null>(null);
   const [chat, setChat] = useState<Session | null>(null);
   const [plan, setPlan] = useState<ReconcilePreview | null>(null);
@@ -92,7 +94,7 @@ export default function RoutinesView() {
         .then(() => setNote({ text: `Copied ${label}`, tone: 'ok' }))
         .catch(() => setNote({ text: `Could not copy; the label is ${label}`, tone: 'warn' }));
     },
-    allRuns: name => { setFilters({ outcome: '', runner: '', job: name }); update({ routinesTab: 'runs' }); }
+    allRuns: name => { update({ routineRunFilters: { outcome: '', runner: '', job: name }, routinesTab: 'runs' }); }
   };
 
   // Reconcile can boot jobs out, so the first click only plans (no `apply`) and shows the diff; Apply re-plans on the server and applies (spec §Reconcile).
@@ -139,20 +141,22 @@ export default function RoutinesView() {
           <>
             <div className="seg rtn-sm" role="group" aria-label="Outcome">
               {([['', 'All'], ['failed', 'Failed'], ['lost', 'Lost']] as const).map(([v, label]) => (
-                <button key={v} type="button" aria-pressed={filters.outcome === v} className={filters.outcome === v ? 'on' : ''} onClick={() => setFilters(f => ({ ...f, outcome: v }))}>
+                <button key={v} type="button" aria-pressed={filters.outcome === v} className={filters.outcome === v ? 'on' : ''} onClick={() => setFilters({ outcome: v })}>
                   {label}
                 </button>
               ))}
             </div>
             <div className="seg rtn-sm" role="group" aria-label="Runner">
               {([['', 'Any'], ['claude', 'claude'], ['shell', 'shell']] as const).map(([v, label]) => (
-                <button key={v} type="button" aria-pressed={filters.runner === v} className={filters.runner === v ? 'on' : ''} onClick={() => setFilters(f => ({ ...f, runner: v }))}>
+                <button key={v} type="button" aria-pressed={filters.runner === v} className={filters.runner === v ? 'on' : ''} onClick={() => setFilters({ runner: v })}>
                   {label}
                 </button>
               ))}
             </div>
-            <select className="rtn-select" aria-label="Job" value={filters.job} onChange={e => setFilters(f => ({ ...f, job: e.target.value }))}>
+            <select className="rtn-select" aria-label="Job" value={filters.job} onChange={e => setFilters({ job: e.target.value })}>
               <option value="">job: any</option>
+              {/* A persisted job whose file is gone still filters; without its own option the select would read "job: any" over a filtered list. */}
+              {filters.job !== '' && !names.includes(filters.job) && <option value={filters.job}>{filters.job} (no job file)</option>}
               {names.map(n => <option key={n} value={n}>{n}</option>)}
             </select>
           </>
@@ -160,7 +164,7 @@ export default function RoutinesView() {
         {page === 'jobs' && chip && <span className={chipClass(chip.tone)}>{chip.text}</span>}
         {page === 'jobs' && owner && (
           <span className="rtn-tools">
-            <button type="button" className="rtn-btn" disabled={ctl.locked || write.busy === 'reconcile'}
+            <button type="button" className="rtn-btn" disabled={ctl.locked || write.busy.has('reconcile')}
               onClick={() => { void previewReconcile(); }}>
               Reconcile
             </button>
@@ -186,7 +190,7 @@ export default function RoutinesView() {
           )}
           {plan.error && <div className="rtn-plan-err">{plan.error}</div>}
           <div className="rtn-plan-btns">
-            <button type="button" className="rtn-btn rtn-sm rtn-primary" disabled={ctl.locked || !plan.canApply || write.busy === 'reconcile'}
+            <button type="button" className="rtn-btn rtn-sm rtn-primary" disabled={ctl.locked || !plan.canApply || write.busy.has('reconcile')}
               onClick={() => { void applyPlan(); }}>
               Apply
             </button>
@@ -207,7 +211,8 @@ export default function RoutinesView() {
           <JobLedger rows={data.jobs} ctl={ctl} />
         </>
       ) : (
-        <RunsList query={{ days, ...filters }} rows={data.jobs} ctl={ctl} focusRun={focusRun} />
+        <RunsList query={{ days, ...filters }} rows={data.jobs} ctl={ctl} focusRun={focusRun}
+          onClearFilters={() => update({ routineRunFilters: { outcome: '', runner: '', job: '' } })} />
       )}
       {drawer && data && (drawer.mode === 'new' || editRow) && (
         <JobDrawer
