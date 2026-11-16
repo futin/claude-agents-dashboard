@@ -6,7 +6,7 @@ import path from 'node:path';
 
 import {
   AUTO_MODES, maybeSend, ntfyHeaders, resetNotify, resolveLabel, routineClickUrl, sendRoutineEvent, sendTest, sendTickCappedEvent, sendUsageEvent,
-  setIdleSource, setLabelResolver, setRequest, setSender, shouldNotify, tickCanSend, tickCappedClickUrl, usageCanSend, usageClickUrl
+  notifySettled, setIdleSource, setLabelResolver, setRequest, setSender, shouldNotify, tickCanSend, tickCappedClickUrl, usageCanSend, usageClickUrl
 } from '../../server/lib/notify.js';
 import { atDesk } from '../../server/lib/idle.js';
 import { DEFAULT_NOTIFY, NOTIFY_EVENTS, resetSettings, setSettings } from '../../server/lib/settings.js';
@@ -140,83 +140,83 @@ export async function run(): Promise<number> {
   console.log('\n=== notify.ts ===\n');
   let p = 0, f = 0;
 
-  if (test('sends when every gate passes', () => {
-    assert.strictEqual(shouldNotify('question', policy(), ctx()), true);
+  if (await testAsync('sends when every gate passes', async () => {
+    assert.strictEqual(await shouldNotify('question', policy(), ctx()), true);
   })) p++; else f++;
 
-  if (test('master off blocks everything', () => {
-    assert.strictEqual(shouldNotify('question', policy({ enabled: false }), ctx()), false);
+  if (await testAsync('master off blocks everything', async () => {
+    assert.strictEqual(await shouldNotify('question', policy({ enabled: false }), ctx()), false);
   })) p++; else f++;
 
-  if (test('an unselected event is never sent', () => {
-    assert.strictEqual(shouldNotify('stop', policy(), ctx()), false);
-    assert.strictEqual(shouldNotify('plan', policy(), ctx()), false);
-    assert.strictEqual(shouldNotify('permission', policy(), ctx()), false);
+  if (await testAsync('an unselected event is never sent', async () => {
+    assert.strictEqual(await shouldNotify('stop', policy(), ctx()), false);
+    assert.strictEqual(await shouldNotify('plan', policy(), ctx()), false);
+    assert.strictEqual(await shouldNotify('permission', policy(), ctx()), false);
   })) p++; else f++;
 
-  if (test('requireRemoteAnswer honours the toggle', () => {
+  if (await testAsync('requireRemoteAnswer honours the toggle', async () => {
     const pol = policy({ requireRemoteAnswer: true });
-    assert.strictEqual(shouldNotify('question', pol, ctx({ remoteAnswer: true })), true);
-    assert.strictEqual(shouldNotify('question', pol, ctx({ remoteAnswer: false })), false);
+    assert.strictEqual(await shouldNotify('question', pol, ctx({ remoteAnswer: true })), true);
+    assert.strictEqual(await shouldNotify('question', pol, ctx({ remoteAnswer: false })), false);
   })) p++; else f++;
 
-  if (test('requireRemoteAnswer off ignores the toggle', () => {
-    assert.strictEqual(shouldNotify('question', policy(), ctx({ remoteAnswer: false })), true);
+  if (await testAsync('requireRemoteAnswer off ignores the toggle', async () => {
+    assert.strictEqual(await shouldNotify('question', policy(), ctx({ remoteAnswer: false })), true);
   })) p++; else f++;
 
-  if (test('requireAfk compares idle against the threshold', () => {
+  if (await testAsync('requireAfk compares idle against the threshold', async () => {
     const pol = policy({ requireAfk: true });
-    assert.strictEqual(shouldNotify('question', pol, ctx({ readIdle: () => 61 })), true);
-    assert.strictEqual(shouldNotify('question', pol, ctx({ readIdle: () => 60 })), true, 'equal counts as away');
-    assert.strictEqual(shouldNotify('question', pol, ctx({ readIdle: () => 59 })), false);
+    assert.strictEqual(await shouldNotify('question', pol, ctx({ readIdle: () => 61 })), true);
+    assert.strictEqual(await shouldNotify('question', pol, ctx({ readIdle: () => 60 })), true, 'equal counts as away');
+    assert.strictEqual(await shouldNotify('question', pol, ctx({ readIdle: () => 59 })), false);
   })) p++; else f++;
 
-  if (test('unreadable idle pushes anyway', () => {
+  if (await testAsync('unreadable idle pushes anyway', async () => {
     const pol = policy({ requireAfk: true });
-    assert.strictEqual(shouldNotify('question', pol, ctx({ readIdle: () => null })), true);
+    assert.strictEqual(await shouldNotify('question', pol, ctx({ readIdle: () => null })), true);
   })) p++; else f++;
 
-  if (test('requireAfk off never reads idle', () => {
+  if (await testAsync('requireAfk off never reads idle', async () => {
     let calls = 0;
-    shouldNotify('question', policy(), ctx({ readIdle: () => { calls++; return 0; } }));
+    await shouldNotify('question', policy(), ctx({ readIdle: () => { calls++; return 0; } }));
     assert.strictEqual(calls, 0, 'the ioreg spawn must be skipped entirely');
   })) p++; else f++;
 
-  if (test('a failing cheap gate short-circuits before idle', () => {
+  if (await testAsync('a failing cheap gate short-circuits before idle', async () => {
     let calls = 0;
     const pol = policy({ enabled: false, requireAfk: true });
-    shouldNotify('question', pol, ctx({ readIdle: () => { calls++; return 0; } }));
+    await shouldNotify('question', pol, ctx({ readIdle: () => { calls++; return 0; } }));
     assert.strictEqual(calls, 0);
   })) p++; else f++;
 
-  if (test('requireAutoMode accepts only auto-ish modes', () => {
+  if (await testAsync('requireAutoMode accepts only auto-ish modes', async () => {
     const pol = policy({ requireAutoMode: true });
     for (const mode of AUTO_MODES) {
-      assert.strictEqual(shouldNotify('question', pol, ctx({ permissionMode: mode })), true, mode);
+      assert.strictEqual(await shouldNotify('question', pol, ctx({ permissionMode: mode })), true, mode);
     }
-    assert.strictEqual(shouldNotify('question', pol, ctx({ permissionMode: 'default' })), false);
-    assert.strictEqual(shouldNotify('question', pol, ctx({ permissionMode: 'plan' })), false);
+    assert.strictEqual(await shouldNotify('question', pol, ctx({ permissionMode: 'default' })), false);
+    assert.strictEqual(await shouldNotify('question', pol, ctx({ permissionMode: 'plan' })), false);
   })) p++; else f++;
 
-  if (test('a missing permission mode is not auto-ish', () => {
+  if (await testAsync('a missing permission mode is not auto-ish', async () => {
     const pol = policy({ requireAutoMode: true });
-    assert.strictEqual(shouldNotify('question', pol, ctx({ permissionMode: undefined })), false);
+    assert.strictEqual(await shouldNotify('question', pol, ctx({ permissionMode: undefined })), false);
   })) p++; else f++;
 
-  if (test('requireAutoMode off ignores the mode', () => {
-    assert.strictEqual(shouldNotify('question', policy(), ctx({ permissionMode: undefined })), true);
+  if (await testAsync('requireAutoMode off ignores the mode', async () => {
+    assert.strictEqual(await shouldNotify('question', policy(), ctx({ permissionMode: undefined })), true);
   })) p++; else f++;
 
-  if (test('all three layers on, all satisfied', () => {
+  if (await testAsync('all three layers on, all satisfied', async () => {
     const pol = policy({ requireRemoteAnswer: true, requireAfk: true, requireAutoMode: true });
-    assert.strictEqual(shouldNotify('question', pol, ctx()), true);
+    assert.strictEqual(await shouldNotify('question', pol, ctx()), true);
   })) p++; else f++;
 
-  if (test('all three layers on, any one violated blocks', () => {
+  if (await testAsync('all three layers on, any one violated blocks', async () => {
     const pol = policy({ requireRemoteAnswer: true, requireAfk: true, requireAutoMode: true });
-    assert.strictEqual(shouldNotify('question', pol, ctx({ remoteAnswer: false })), false);
-    assert.strictEqual(shouldNotify('question', pol, ctx({ readIdle: () => 5 })), false);
-    assert.strictEqual(shouldNotify('question', pol, ctx({ permissionMode: 'default' })), false);
+    assert.strictEqual(await shouldNotify('question', pol, ctx({ remoteAnswer: false })), false);
+    assert.strictEqual(await shouldNotify('question', pol, ctx({ readIdle: () => 5 })), false);
+    assert.strictEqual(await shouldNotify('question', pol, ctx({ permissionMode: 'default' })), false);
   })) p++; else f++;
 
   const SID = 'abc12345-0000-0000-0000-000000000000';
@@ -455,7 +455,7 @@ export async function run(): Promise<number> {
     assert.strictEqual(calls, 0, 'requireAfk off and no desk topic must cost no ioreg spawn');
   }))) p++; else f++;
 
-  if (await testAsync('maybeSend reads idle exactly once for requireAfk', () => inTmpCwd(() => {
+  if (await testAsync('maybeSend reads idle exactly once for requireAfk', () => inTmpCwd(async () => {
     let calls = 0;
     setSettings({
       idleSecs: 60,
@@ -463,6 +463,7 @@ export async function run(): Promise<number> {
     });
     setIdleSource(() => { calls++; return 300; });
     maybeSend(conf(), 'stop', { sessionId: SID });
+    await notifySettled();
     assert.strictEqual(calls, 1);
   }))) p++; else f++;
 
@@ -476,10 +477,11 @@ export async function run(): Promise<number> {
   } as Partial<Config>);
 
   if (await testAsync('at the desk, a push goes to the desk topic and taps only dismiss', () =>
-    inTmpCwd(sent => {
+    inTmpCwd(async sent => {
       setSettings({ idleSecs: 60, notify: { enabled: true, events: { stop: true } } });
       setIdleSource(() => 10);
       maybeSend(twoTopic(), 'stop', { sessionId: SID });
+      await notifySettled();
       assert.strictEqual(sent.length, 1, 'exclusive — never both topics');
       assert.strictEqual(sent[0].topic, 'desk-topic');
       assert.strictEqual(sent[0].click, 'http://localhost:4173/api/dismiss',
@@ -487,26 +489,29 @@ export async function run(): Promise<number> {
     }))) p++; else f++;
 
   if (await testAsync('away from the desk, a push goes to the phone topic and the public URL', () =>
-    inTmpCwd(sent => {
+    inTmpCwd(async sent => {
       setSettings({ idleSecs: 60, notify: { enabled: true, events: { stop: true } } });
       setIdleSource(() => 120);
       maybeSend(twoTopic(), 'stop', { sessionId: SID });
+      await notifySettled();
       assert.strictEqual(sent.length, 1);
       assert.strictEqual(sent[0].topic, 'test-topic');
       assert.strictEqual(sent[0].click, `https://dash.example/?session=${SID}`);
     }))) p++; else f++;
 
-  if (await testAsync('an unreadable idle routes to the phone', () => inTmpCwd(sent => {
+  if (await testAsync('an unreadable idle routes to the phone', () => inTmpCwd(async sent => {
     setSettings({ idleSecs: 60, notify: { enabled: true, events: { stop: true } } });
     setIdleSource(() => null);
     maybeSend(twoTopic(), 'stop', { sessionId: SID });
+    await notifySettled();
     assert.strictEqual(sent[0].topic, 'test-topic', 'cannot tell → the channel that always works');
   }))) p++; else f++;
 
-  if (await testAsync('a zero idle threshold routes to the phone', () => inTmpCwd(sent => {
+  if (await testAsync('a zero idle threshold routes to the phone', () => inTmpCwd(async sent => {
     setSettings({ idleSecs: 0, notify: { enabled: true, events: { stop: true } } });
     setIdleSource(() => 0);
     maybeSend(twoTopic(), 'stop', { sessionId: SID });
+    await notifySettled();
     assert.strictEqual(sent[0].topic, 'test-topic', 'zero disables the idle gate everywhere');
   }))) p++; else f++;
 
@@ -525,7 +530,7 @@ export async function run(): Promise<number> {
 
   // Delete the memoisation in `maybeSend` and this goes to 2 — the requireAfk
   // clause reads once, then `routePush` reads again.
-  if (await testAsync('routing and requireAfk share one idle reading', () => inTmpCwd(() => {
+  if (await testAsync('routing and requireAfk share one idle reading', () => inTmpCwd(async () => {
     let calls = 0;
     setSettings({
       idleSecs: 60,
@@ -533,7 +538,72 @@ export async function run(): Promise<number> {
     });
     setIdleSource(() => { calls++; return 300; });
     maybeSend(twoTopic(), 'stop', { sessionId: SID });
+    await notifySettled();
     assert.strictEqual(calls, 1, 'two consumers, one ioreg spawn');
+  }))) p++; else f++;
+
+  // --- the idle reading is async (spec 2026-11-14-poll-path-probes A1): a send that needs it defers, one that does not stays in the caller's tick.
+
+  /** A reader whose answer the test releases by hand, counting its calls. */
+  const heldReader = () => {
+    let release: (v: number | null) => void = () => {};
+    const reader = { calls: 0, release: (v: number | null) => release(v), fn: () => { reader.calls++; return new Promise<number | null>(r => { release = r; }); } };
+    return reader;
+  };
+
+  if (await testAsync('maybeSend returns before the idle reading resolves, and sends once it does', () => inTmpCwd(async sent => {
+    setSettings({ idleSecs: 300, notify: { enabled: true, events: { stop: true }, requireAfk: true } });
+    const r = heldReader();
+    setIdleSource(r.fn);
+    maybeSend(conf(), 'stop', { sessionId: SID });
+    assert.strictEqual(sent.length, 0, 'nothing sent while the reading is pending');
+    r.release(600);
+    await notifySettled();
+    assert.strictEqual(sent.length, 1);
+  }))) p++; else f++;
+
+  if (await testAsync('fast path: no requireAfk and no desk topic sends before maybeSend returns', () => inTmpCwd(sent => {
+    setSettings({ idleSecs: 300, notify: { enabled: true, events: { stop: true } } });
+    const r = heldReader();
+    setIdleSource(r.fn);
+    maybeSend(conf(), 'stop', { sessionId: SID });
+    assert.strictEqual(sent.length, 1);
+    assert.strictEqual(r.calls, 0);
+  }))) p++; else f++;
+
+  if (await testAsync('requireAfk with an async reading: at the desk sends nothing, unreadable sends', () => inTmpCwd(async sent => {
+    setSettings({ idleSecs: 300, notify: { enabled: true, events: { stop: true }, requireAfk: true } });
+    setIdleSource(async () => 10);
+    maybeSend(conf(), 'stop', { sessionId: SID });
+    await notifySettled();
+    assert.strictEqual(sent.length, 0);
+    setIdleSource(async () => null);
+    maybeSend(conf(), 'stop', { sessionId: SID });
+    await notifySettled();
+    assert.strictEqual(sent.length, 1, 'unreadable → push anyway, as before');
+  }))) p++; else f++;
+
+  if (await testAsync('usageCanSend and tickCanSend answer a plain boolean with requireAfk on, and never read idle', () => inTmpCwd(() => {
+    setSettings({ idleSecs: 300, notify: { enabled: true, events: { 'usage-limit': true, 'tick-capped': true }, requireAfk: true } });
+    let calls = 0;
+    setIdleSource(async () => { calls++; return 10; });
+    assert.strictEqual(usageCanSend('reached', conf()), true);
+    assert.strictEqual(tickCanSend(conf()), true);
+    assert.strictEqual(calls, 0);
+  }))) p++; else f++;
+
+  if (await testAsync('sendUsageEvent with a desk topic decides synchronously and routes once the reading lands', () => inTmpCwd(async sent => {
+    setSettings({ idleSecs: 300, notify: { enabled: true, events: { 'usage-limit': true } } });
+    const usage = { kind: 'usage-limit' as const, title: '5-hour limit reached', body: 'Resets at 14:30.' };
+    setIdleSource(async () => 5);
+    assert.strictEqual(sendUsageEvent(usage, twoTopic()), true);
+    await notifySettled();
+    assert.strictEqual(sent[0].topic, 'desk-topic');
+    setIdleSource(async () => 600);
+    assert.strictEqual(sendUsageEvent(usage, twoTopic()), true);
+    await notifySettled();
+    assert.strictEqual(sent[1].topic, 'test-topic');
+    assert.strictEqual(sent.length, 2);
   }))) p++; else f++;
 
   // The test button's whole claim is that it routes as a real push does, so the
@@ -568,11 +638,11 @@ export async function run(): Promise<number> {
       assert.match(outcome, /no NTFY_TOPIC set/);
     }))) p++; else f++;
 
-  if (test('routine-failed is the fifth event, and only it passes a policy that selects only it', () => {
+  if (await testAsync('routine-failed is the fifth event, and only it passes a policy that selects only it', async () => {
     assert.strictEqual(NOTIFY_EVENTS[4], 'routine-failed');
     const pol = policy({ events: { ...DEFAULT_NOTIFY.events, 'routine-failed': true } });
-    assert.strictEqual(shouldNotify('routine-failed', pol, ctx()), true);
-    assert.strictEqual(shouldNotify('question', pol, ctx()), false);
+    assert.strictEqual(await shouldNotify('routine-failed', pol, ctx()), true);
+    assert.strictEqual(await shouldNotify('question', pol, ctx()), false);
   })) p++; else f++;
 
   if (await testAsync('sendRoutineEvent: master off sends nothing, even with the event ticked', () => inTmpCwd(sent => {
@@ -691,12 +761,14 @@ export async function run(): Promise<number> {
     assert.strictEqual(usageClickUrl(conf({ publicUrl: '' } as Partial<Config>)), '');
   })) p++; else f++;
 
-  if (await testAsync('sendRoutineEvent honours desk routing like a session push', () => inTmpCwd(sent => {
+  if (await testAsync('sendRoutineEvent honours desk routing like a session push', () => inTmpCwd(async sent => {
     setSettings({ idleSecs: 60, notify: { enabled: true, events: { 'routine-failed': true } } });
     setIdleSource(() => 10);
     sendRoutineEvent(SCHED, twoTopic());
+    await notifySettled();
     setIdleSource(() => 300);
     sendRoutineEvent(SCHED, twoTopic());
+    await notifySettled();
     assert.strictEqual(sent[0].topic, 'desk-topic');
     assert.strictEqual(sent[0].click, 'http://localhost:4173/api/dismiss');
     assert.strictEqual(sent[1].topic, 'test-topic');

@@ -7,7 +7,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-import { setIdleReader } from '../../server/lib/idle.js';
+import { backAtDesk, setIdleReader, type IdleReading } from '../../server/lib/idle.js';
 import { resetSettings, setSettings } from '../../server/lib/settings.js';
 import { createWaitStore, reapIdle, type WaitEntry } from '../../server/lib/wait-store.js';
 
@@ -22,7 +22,7 @@ async function testAsync(name: string, fn: () => Promise<void>): Promise<boolean
 }
 
 /** `backAtDesk` reads `idleSecs` from the cwd's settings file, so each idle case runs in a tmpdir with a known threshold. */
-function atDeskWith(idle: () => number | null, fn: () => void): void {
+async function atDeskWith(idle: () => IdleReading, fn: () => void | Promise<void>): Promise<void> {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cad-wait-store-'));
   const prev = process.cwd();
   try {
@@ -30,7 +30,7 @@ function atDeskWith(idle: () => number | null, fn: () => void): void {
     resetSettings();
     setSettings({ idleSecs: 60 });
     setIdleReader(idle);
-    fn();
+    await fn();
   } finally {
     setIdleReader(null);
     process.chdir(prev);
@@ -105,13 +105,13 @@ export async function run(): Promise<number> {
     reset();
   })) p++; else f++;
 
-  if (test('sweepIdle at the desk releases every releasable entry and returns their count; a headless one stays', () => {
-    atDeskWith(() => 3, () => {
+  if (await testAsync('sweepIdle at the desk releases every releasable entry and returns their count; a headless one stays', async () => {
+    await atDeskWith(() => 3, async () => {
       reset();
       const t = entry(ms, 's1', 't'), h = entry(ms, 's2', 'h', 60_000, true);
       ms.add(t.e);
       ms.add(h.e);
-      assert.strictEqual(ms.sweepIdle(), 1);
+      assert.strictEqual(await ms.sweepIdle(), 1);
       assert.deepStrictEqual(t.results, [{ status: 'released' }]);
       assert.deepStrictEqual(h.results, []);
       assert.strictEqual(ms.get('s2'), h.e);
@@ -119,28 +119,28 @@ export async function run(): Promise<number> {
     });
   })) p++; else f++;
 
-  if (test('sweepIdle with nothing releasable never reads idle', () => {
+  if (await testAsync('sweepIdle with nothing releasable never reads idle', async () => {
     let reads = 0;
-    atDeskWith(() => { reads++; return 3; }, () => {
+    await atDeskWith(() => { reads++; return 3; }, async () => {
       reset();
-      assert.strictEqual(ms.sweepIdle(), 0, 'empty store');
+      assert.strictEqual(await ms.sweepIdle(), 0, 'empty store');
       ms.add(entry(ms, 's1', 'h', 60_000, true).e);
-      assert.strictEqual(ms.sweepIdle(), 0, 'headless only');
-      assert.strictEqual(reapIdle(), 0, 'the shared tick, headless only');
+      assert.strictEqual(await ms.sweepIdle(), 0, 'headless only');
+      assert.strictEqual(await reapIdle(), 0, 'the shared tick, headless only');
       reset();
     });
     assert.strictEqual(reads, 0);
   })) p++; else f++;
 
-  if (test('one shared reaper tick reads idle exactly once and releases the releasable entries of both stores', () => {
+  if (await testAsync('one shared reaper tick reads idle exactly once and releases the releasable entries of both stores', async () => {
     let reads = 0;
-    atDeskWith(() => { reads++; return 3; }, () => {
+    await atDeskWith(() => { reads++; return 3; }, async () => {
       reset();
       const q = entry(qs, 's1', 'q'), m = entry(ms, 's2', 'm'), h = entry(ms, 's3', 'h', 60_000, true);
       qs.add(q.e);
       ms.add(m.e);
       ms.add(h.e);
-      assert.strictEqual(reapIdle(), 2);
+      assert.strictEqual(await reapIdle(), 2);
       assert.strictEqual(reads, 1);
       assert.deepStrictEqual(q.results, [{ status: 'released' }]);
       assert.deepStrictEqual(m.results, [{ status: 'released' }]);
@@ -149,14 +149,99 @@ export async function run(): Promise<number> {
     });
   })) p++; else f++;
 
-  if (test('the shared reaper tick releases nothing while the user is away', () => {
-    atDeskWith(() => 9999, () => {
+  if (await testAsync('the shared reaper tick releases nothing while the user is away', async () => {
+    await atDeskWith(() => 9999, async () => {
       reset();
       const q = entry(qs, 's1', 'q');
       qs.add(q.e);
-      assert.strictEqual(reapIdle(), 0);
+      assert.strictEqual(await reapIdle(), 0);
       assert.deepStrictEqual(q.results, []);
       reset();
+    });
+  })) p++; else f++;
+
+  // --- the reading is async (spec 2026-11-14-poll-path-probes A1): what may change while it is in flight.
+
+  /** A reader whose answer the test releases by hand, counting its calls. */
+  const held = () => {
+    let release: (v: number | null) => void = () => {};
+    const r = { calls: 0, release: (v: number | null) => release(v), fn: () => { r.calls++; return new Promise<number | null>(res => { release = res; }); } };
+    return r;
+  };
+
+  if (await testAsync('reapIdle at the desk resolves 1 for one releasable entry, settled released', async () => {
+    const r = held();
+    await atDeskWith(r.fn, async () => {
+      reset();
+      const q = entry(qs, 's1', 'q');
+      qs.add(q.e);
+      const tick = reapIdle();
+      r.release(5);
+      assert.strictEqual(await tick, 1);
+      assert.deepStrictEqual(q.results, [{ status: 'released' }]);
+      reset();
+    });
+  })) p++; else f++;
+
+  if (await testAsync('an entry answered while the reading is pending keeps its answer and is not counted', async () => {
+    const r = held();
+    await atDeskWith(r.fn, async () => {
+      reset();
+      const q = entry(qs, 's1', 'q');
+      qs.add(q.e);
+      const tick = reapIdle();
+      qs.settle(q.e, { status: 'answered' });
+      r.release(5);
+      assert.strictEqual(await tick, 0);
+      assert.deepStrictEqual(q.results, [{ status: 'answered' }]);
+      reset();
+    });
+  })) p++; else f++;
+
+  if (await testAsync('an entry added while the reading is pending waits for the next tick', async () => {
+    const r = held();
+    await atDeskWith(r.fn, async () => {
+      reset();
+      const a = entry(qs, 's1', 'a'), b = entry(qs, 's2', 'b');
+      qs.add(a.e);
+      const tick = reapIdle();
+      qs.add(b.e);
+      r.release(5);
+      assert.strictEqual(await tick, 1);
+      assert.deepStrictEqual(a.results, [{ status: 'released' }]);
+      assert.deepStrictEqual(b.results, [], 'not in the first collection');
+      assert.strictEqual(qs.get('s2'), b.e);
+      const next = reapIdle();
+      r.release(5);
+      assert.strictEqual(await next, 1);
+      assert.deepStrictEqual(b.results, [{ status: 'released' }]);
+      reset();
+    });
+  })) p++; else f++;
+
+  if (await testAsync('ticks never overlap: a second reapIdle during the read resolves 0 without reading', async () => {
+    const r = held();
+    await atDeskWith(r.fn, async () => {
+      reset();
+      const q = entry(qs, 's1', 'q'), m = entry(ms, 's2', 'm');
+      qs.add(q.e);
+      ms.add(m.e);
+      const first = reapIdle();
+      const second = reapIdle();
+      assert.strictEqual(await second, 0);
+      r.release(5);
+      assert.strictEqual(await first, 2);
+      assert.strictEqual(r.calls, 1);
+      reset();
+    });
+  })) p++; else f++;
+
+  if (await testAsync('idleSecs 0: backAtDesk resolves false and never reads', async () => {
+    const r = held();
+    await atDeskWith(r.fn, async () => {
+      setSettings({ idleSecs: 0 });
+      assert.strictEqual(await backAtDesk(), false);
+      assert.strictEqual(r.calls, 0);
     });
   })) p++; else f++;
 
@@ -177,11 +262,11 @@ export async function run(): Promise<number> {
     const cancelled = entry(qs, 'c', 'cancelled');
     qs.add(cancelled.e);
     qs.cancel('c', () => true);
-    atDeskWith(() => 3, () => {
+    await atDeskWith(() => 3, async () => {
       qs.cancel('s', () => true); // leave only the releasable one we mean
       const released = entry(qs, 'r', 'released');
       qs.add(released.e);
-      assert.strictEqual(qs.sweepIdle(), 1);
+      assert.strictEqual(await qs.sweepIdle(), 1);
     });
     assert.deepStrictEqual(settles, [
       ['answered', 'answered'], ['timeout', 'timeout'], ['superseded', 'superseded'], ['dismissed', 'dismissed'], ['released', 'released']

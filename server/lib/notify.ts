@@ -35,7 +35,7 @@ import type { ClientRequest, IncomingMessage } from 'node:http';
 
 import { getState } from './remoteState.js';
 import { findTranscript, projectsRoot, sessionFromRef } from './scan.js';
-import { atDesk, readIdleSecs } from './idle.js';
+import { atDesk, readIdleSecs, type IdleReading } from './idle.js';
 import { getSettings } from './settings.js';
 import { staleEnvKeys } from './config.js';
 import type { Config } from './config.js';
@@ -62,30 +62,47 @@ export interface PredicateContext {
   /**
    * Seconds since the last HID event, or null when unreadable. A thunk, not a
    * value: reading it spawns `ioreg`, and the whole point of the clause order
-   * below is that a policy without `requireAfk` never pays for that.
+   * below is that a policy without `requireAfk` never pays for that. The real
+   * reader answers a promise; a synchronous test fake is accepted as is.
    */
-  readIdle: () => number | null;
+  readIdle: () => IdleReading;
 }
 
 /**
- * The whole policy. Clauses are ordered cheapest-first and short-circuit, so
- * `readIdle` is called only when every free check has already passed.
+ * The policy's four free clauses, in order: master switch, event checkbox,
+ * `requireRemoteAnswer`, `requireAutoMode`. Synchronous and never reads idle, so
+ * the unattended pushes — which force `requireAfk` off — decide without waiting.
  */
-export function shouldNotify(event: NotifyEvent, policy: NotifyPolicy, ctx: PredicateContext): boolean {
+export function notifyGateOpen(
+  event: NotifyEvent,
+  policy: NotifyPolicy,
+  ctx: Pick<PredicateContext, 'remoteAnswer' | 'permissionMode'>
+): boolean {
   if (!policy.enabled) return false;
   if (!policy.events[event]) return false;
   if (policy.requireRemoteAnswer && !ctx.remoteAnswer) return false;
   if (policy.requireAutoMode && !AUTO_MODES.has(ctx.permissionMode ?? '')) return false;
-
-  if (policy.requireAfk) {
-    const idle = ctx.readIdle();
-    // Unreadable (Docker, non-macOS) → push anyway. Failing silent here would
-    // reintroduce the missed-notification bug this feature exists to fix, and a
-    // wrong guess costs one extra push rather than a hidden dialog — which is
-    // why this fails the opposite way to `ask-remote-hook.sh`.
-    if (idle !== null && idle < ctx.thresholdSecs) return false;
-  }
   return true;
+}
+
+/** The `requireAfk` clause alone — the one clause that reads idle. */
+async function afkClausePasses(policy: NotifyPolicy, ctx: PredicateContext): Promise<boolean> {
+  if (!policy.requireAfk) return true;
+  const idle = await ctx.readIdle();
+  // Unreadable (Docker, non-macOS) → push anyway. Failing silent here would
+  // reintroduce the missed-notification bug this feature exists to fix, and a
+  // wrong guess costs one extra push rather than a hidden dialog — which is
+  // why this fails the opposite way to `ask-remote-hook.sh`.
+  return !(idle !== null && idle < ctx.thresholdSecs);
+}
+
+/**
+ * The whole policy: {@link notifyGateOpen}, then the `requireAfk` clause. The
+ * clauses short-circuit, so `readIdle` is called only when every free check has
+ * already passed.
+ */
+export async function shouldNotify(event: NotifyEvent, policy: NotifyPolicy, ctx: PredicateContext): Promise<boolean> {
+  return notifyGateOpen(event, policy, ctx) && afkClausePasses(policy, ctx);
 }
 
 /* -------------------------------------------------- delivery */
@@ -160,7 +177,9 @@ type RequestFn = (url: URL, options: https.RequestOptions, callback: (res: Incom
 let sender: Sender | null = null;
 let request: RequestFn = https.request;
 let labelResolver: ((config: Config, sessionId: string) => string) | null = null;
-let idleSource: (() => number | null) | null = null;
+let idleSource: (() => IdleReading) | null = null;
+/** Sends that had to await an idle reading and have not yet delivered or given up — what {@link notifySettled} waits on. */
+const deferred = new Set<Promise<void>>();
 
 /** Test seam: swap the transport so no test opens a socket. `null` restores https. */
 export function setSender(fn: Sender | null): void {
@@ -193,8 +212,13 @@ export function setLabelResolver(fn: ((config: Config, sessionId: string) => str
  * overrides the push path's. They are separate module state on purpose — a test
  * that fixes one must not silently move the other.
  */
-export function setIdleSource(fn: (() => number | null) | null): void {
+export function setIdleSource(fn: (() => IdleReading) | null): void {
   idleSource = fn;
+}
+
+/** Test seam: resolves once every deferred send started so far has delivered or given up. A send on the synchronous fast path is never deferred. */
+export async function notifySettled(): Promise<void> {
+  await Promise.all([...deferred]);
 }
 
 export function resetNotify(): void {
@@ -294,19 +318,16 @@ export function routePush(
   config: Config,
   sessionId: string,
   thresholdSecs: number,
-  readIdle: () => number | null
-): { topic: string; click: string; desk: boolean } {
+  readIdle: () => IdleReading
+): Promise<Route> {
   return routeTo(config, clickUrl(config, sessionId), thresholdSecs, readIdle);
 }
 
+interface Route { topic: string; click: string; desk: boolean }
+
 /** `routePush` with the phone's tap-through already chosen, so a push that has no session id (a routine run) shares the desk decision. */
-function routeTo(
-  config: Config,
-  phoneClick: string,
-  thresholdSecs: number,
-  readIdle: () => number | null
-): { topic: string; click: string; desk: boolean } {
-  if (config.ntfyTopicDesk && atDesk(readIdle(), thresholdSecs)) {
+async function routeTo(config: Config, phoneClick: string, thresholdSecs: number, readIdle: () => IdleReading): Promise<Route> {
+  if (config.ntfyTopicDesk && atDesk(await readIdle(), thresholdSecs)) {
     return { topic: config.ntfyTopicDesk, click: deskClickUrl(config), desk: true };
   }
   return { topic: config.ntfyTopic, click: phoneClick, desk: false };
@@ -367,10 +388,45 @@ function deliver(payload: NotifyPayload, config: Config): void | Promise<SendRes
   return (sender ?? httpsSend)(payload, config);
 }
 
+/** Run a send that must await an idle reading off the caller's tick. Its rejection is caught: a notification never fails anything. */
+function defer(send: () => Promise<void>): void {
+  const p: Promise<void> = send()
+    .then(() => undefined, () => undefined)
+    .finally(() => { deferred.delete(p); });
+  deferred.add(p);
+}
+
+/**
+ * Route one push and deliver it, fire-and-forget. Without a desk topic there is no routing to read idle for, so the phone push is delivered in the
+ * caller's tick, exactly as before idle went async (spec A1's fast path); with one, routing and delivery run deferred. Throws only on that fast path,
+ * when the transport itself throws.
+ */
+function routeAndDeliver(
+  config: Config,
+  phoneClick: string,
+  thresholdSecs: number,
+  readIdle: () => IdleReading,
+  payload: () => Omit<NotifyPayload, 'click' | 'topic'>
+): void {
+  if (!config.ntfyTopicDesk) {
+    const result = deliver({ ...payload(), click: phoneClick, topic: config.ntfyTopic }, config);
+    // The outcome interests only `sendTest`. Swallowed here rather than ignored:
+    // an un-awaited rejection escapes the try/catch and would crash the process.
+    void Promise.resolve(result).catch(() => { /* fire-and-forget stays that way */ });
+    return;
+  }
+  defer(async () => {
+    const route = await routeTo(config, phoneClick, thresholdSecs, readIdle);
+    await deliver({ ...payload(), click: route.click, topic: route.topic }, config);
+  });
+}
+
 /**
  * Evaluate the policy and, if it passes, send. Returns immediately and never
  * throws: every caller is a request handler that must not be delayed or failed
- * by a notification.
+ * by a notification. A send that needs the idle reading (`requireAfk`, or a desk
+ * topic to route between) finishes in a caught async continuation; one that does
+ * not is delivered before this returns.
  */
 export function maybeSend(
   config: Config,
@@ -386,38 +442,28 @@ export function maybeSend(
     // `requireAfk` and a run without a desk topic never spawn at all. That last
     // property is the whole reason `shouldNotify` takes a thunk rather than a
     // value, and `test/notify/notify.test.ts` counts the calls to hold it.
-    let idleRead = false;
-    let idleValue: number | null = null;
-    const readIdle = (): number | null => {
-      if (!idleRead) {
-        idleRead = true;
-        idleValue = (idleSource ?? readIdleSecs)();
-      }
-      return idleValue;
-    };
-    const passes = shouldNotify(event, settings.notify, {
+    let idleValue: Promise<number | null> | null = null;
+    const readIdle = (): Promise<number | null> => (idleValue ??= Promise.resolve((idleSource ?? readIdleSecs)()));
+    const pctx: PredicateContext = {
       remoteAnswer: getState(config).remoteAnswer,
       thresholdSecs: settings.idleSecs,
       permissionMode: ctx.permissionMode,
       readIdle
-    });
-    if (!passes) return;
+    };
+    if (!notifyGateOpen(event, settings.notify, pctx)) return;
 
     // Exactly one publish, to exactly one topic — see `routePush`.
-    const route = routePush(config, ctx.sessionId, settings.idleSecs, readIdle);
-    const result = deliver(
-      {
-        title: 'Claude Code',
-        body: `${resolveLabel(config, ctx.sessionId)} — ${ctx.phrase ?? PHRASE[event]}`,
-        tags: TAGS[event],
-        click: route.click,
-        topic: route.topic
-      },
-      config
-    );
-    // The outcome interests only `sendTest`. Swallowed here rather than ignored:
-    // an un-awaited rejection escapes the try/catch and would crash the process.
-    void Promise.resolve(result).catch(() => { /* fire-and-forget stays that way */ });
+    const phoneClick = clickUrl(config, ctx.sessionId);
+    const payload = () => ({ title: 'Claude Code', body: `${resolveLabel(config, ctx.sessionId)} — ${ctx.phrase ?? PHRASE[event]}`, tags: TAGS[event] });
+    if (!settings.notify.requireAfk) {
+      routeAndDeliver(config, phoneClick, settings.idleSecs, readIdle, payload);
+      return;
+    }
+    defer(async () => {
+      if (!(await afkClausePasses(settings.notify, pctx))) return;
+      const route = await routeTo(config, phoneClick, settings.idleSecs, readIdle);
+      await deliver({ ...payload(), click: route.click, topic: route.topic }, config);
+    });
   } catch {
     /* a notification must never break the request that triggered it */
   }
@@ -433,12 +479,11 @@ export function sendRoutineEvent(event: { run: RoutineRun; title: string; body: 
     if (!config.ntfyTopic) return false;
     const settings = getSettings();
     const open = { ...settings.notify, requireRemoteAnswer: false, requireAfk: false, requireAutoMode: false };
-    const idle = (): number | null => (idleSource ?? readIdleSecs)();
-    if (!shouldNotify('routine-failed', open, { remoteAnswer: false, thresholdSecs: settings.idleSecs, readIdle: idle })) return false;
+    if (!notifyGateOpen('routine-failed', open, { remoteAnswer: false })) return false;
 
-    const route = routeTo(config, routineClickUrl(config, event.run.id), settings.idleSecs, idle);
-    const result = deliver({ title: event.title, body: event.body, tags: TAGS['routine-failed'], click: route.click, topic: route.topic }, config);
-    void Promise.resolve(result).catch(() => { /* fire-and-forget stays that way */ });
+    const idle = (): IdleReading => (idleSource ?? readIdleSecs)();
+    routeAndDeliver(config, routineClickUrl(config, event.run.id), settings.idleSecs, idle,
+      () => ({ title: event.title, body: event.body, tags: TAGS['routine-failed'] }));
     return true;
   } catch {
     return false;
@@ -448,13 +493,12 @@ export function sendRoutineEvent(event: { run: RoutineRun; title: string; body: 
 const USAGE_EVENT: Record<UsageAlertKind, 'usage-limit' | 'usage-reset'> = { reached: 'usage-limit', reset: 'usage-reset' };
 
 /** The gate of a push with no session behind it: topic, master switch and the event's checkbox — the session-only `require*` clauses do not apply. */
-function unattendedOpen(event: NotifyEvent, config: Config): { idleSecs: number; idle: () => number | null } | null {
+function unattendedOpen(event: NotifyEvent, config: Config): { idleSecs: number; idle: () => IdleReading } | null {
   if (!config.ntfyTopic) return null;
   const settings = getSettings();
   const open = { ...settings.notify, requireRemoteAnswer: false, requireAfk: false, requireAutoMode: false };
-  const idle = (): number | null => (idleSource ?? readIdleSecs)();
-  if (!shouldNotify(event, open, { remoteAnswer: false, thresholdSecs: settings.idleSecs, readIdle: idle })) return null;
-  return { idleSecs: settings.idleSecs, idle };
+  if (!notifyGateOpen(event, open, { remoteAnswer: false })) return null;
+  return { idleSecs: settings.idleSecs, idle: () => (idleSource ?? readIdleSecs)() };
 }
 
 /** Would a usage alert of this kind go out now? The detector records the answer, so a hit seen with the checkbox off never earns a reset. */
@@ -474,9 +518,7 @@ export function sendUsageEvent(event: { kind: 'usage-limit' | 'usage-reset'; tit
   try {
     const gate = unattendedOpen(event.kind, config);
     if (!gate) return false;
-    const route = routeTo(config, usageClickUrl(config), gate.idleSecs, gate.idle);
-    const result = deliver({ title: event.title, body: event.body, tags: TAGS[event.kind], click: route.click, topic: route.topic }, config);
-    void Promise.resolve(result).catch(() => { /* fire-and-forget stays that way */ });
+    routeAndDeliver(config, usageClickUrl(config), gate.idleSecs, gate.idle, () => ({ title: event.title, body: event.body, tags: TAGS[event.kind] }));
     return true;
   } catch {
     return false;
@@ -500,9 +542,7 @@ export function sendTickCappedEvent(event: { title: string; body: string }, conf
   try {
     const gate = unattendedOpen('tick-capped', config);
     if (!gate) return false;
-    const route = routeTo(config, tickCappedClickUrl(config), gate.idleSecs, gate.idle);
-    const result = deliver({ title: event.title, body: event.body, tags: TAGS['tick-capped'], click: route.click, topic: route.topic }, config);
-    void Promise.resolve(result).catch(() => { /* fire-and-forget stays that way */ });
+    routeAndDeliver(config, tickCappedClickUrl(config), gate.idleSecs, gate.idle, () => ({ title: event.title, body: event.body, tags: TAGS['tick-capped'] }));
     return true;
   } catch {
     return false;
@@ -546,7 +586,7 @@ export async function sendTest(config: Config): Promise<string> {
     // real pushes do not use. `''` as the session id: this is not a real
     // session, and the phone branch's `?session=` is then empty, which
     // `client/src/lib/deepLink.ts` reads as "no deep link" and ignores.
-    const route = routePush(config, '', getSettings().idleSecs, idleSource ?? readIdleSecs);
+    const route = await routePush(config, '', getSettings().idleSecs, idleSource ?? readIdleSecs);
     const result = await deliver(
       {
         title: 'Claude Code',

@@ -170,7 +170,7 @@ export function resetStore(): void {
  *
  * The same release runs every 5 s from the one reaper `wait-store.ts` keeps for all three stores, which asks {@link backAtDesk} once per tick, not once per store.
  */
-export function sweepIdle(): number {
+export function sweepIdle(): Promise<number> {
   return store.sweepIdle();
 }
 
