@@ -316,8 +316,8 @@ notification. A narrowed version of it is back directly above — see **Notify t
 below — for the one case that argument never covered. The reasoning, and what that trade
 costs, is in [push-notify](push-notify.md).
 
-Twelve rows — a master switch, one per event (question / permission dialog / plan / task
-finished / routine failed / usage limit reached / usage limit reset), three optional AND-layers (only-while-accepting-remote-answers, only-when-away,
+Thirteen rows — a master switch, one per event (question / permission dialog / plan / task finished / routine failed /
+backlog tick blocked / usage limit reached / usage limit reset), three optional AND-layers (only-while-accepting-remote-answers, only-when-away,
 only-in-auto-modes), and a test button. The server sends them, so nothing here depends on a
 tab being open. Full mechanism, fail directions and the topic's secrecy rules:
 [push-notify](push-notify.md).
@@ -388,5 +388,5 @@ a value the rows never reflect.
     - server/lib/settings.ts
     - client/index.html
   kind: subsystem
-  verified: 24f8d773dd459e02b1e4ef4a093aed285939555c
+  verified: 96b0f64a8c117ae160ba90bfdd34ef357890a8a1
 -->

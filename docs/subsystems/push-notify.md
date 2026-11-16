@@ -192,7 +192,7 @@ ends the turn is handled as a first stop, so it still reaches the phone ([remote
 Not a bug in the layering: remote answering *is* an away-feature, and a question answered at
 the terminal has no remote counterpart to notify about. But the Settings switch reads as
 "always push" and cannot mean that for two of the four events, so `SettingsView` renders a
-callout in exactly that state, and `Away after` says so in its hint. Setting `idleSecs` to 0
+callout in exactly that state (`afkStillGatesRemote` in `client/src/lib/notifyRows.ts`), and `Away after` says so in its hint. Setting `idleSecs` to 0
 removes the hook gate too — at the cost of the terminal dialog, which then never appears.
 
 `AUTO_MODES` is `auto`, `bypassPermissions`, `dontAsk` — deliberately duplicated from
@@ -500,5 +500,5 @@ server write path. ntfy makes it unnecessary for now.
     - client/src/lib/deepLink.ts
     - client/src/components/settings/SettingsView.tsx
   kind: subsystem
-  verified: 24f8d773dd459e02b1e4ef4a093aed285939555c
+  verified: 96b0f64a8c117ae160ba90bfdd34ef357890a8a1
 -->

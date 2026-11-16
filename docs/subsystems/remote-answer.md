@@ -104,7 +104,7 @@ Handlers `serveHealth` / `serveQuestionWait` / `serveSessionQuestion` /
 
 | Method | Path | Codes |
 |---|---|---|
-| `GET` | `/api/health` | 200 `HealthResponse` = `{ok, ...RemoteAnswerState, origin?, writeAccess?, idleSecs?, answerSecs?, tokenRequired?, transcribe?, spawnAvailable?, spawnMaxPermission?, syncPermissionMode?}` (`transcribe` is [dictation](dictation.md)'s engine-availability flag and the `spawn*`/`sync*` fields are [spawn](spawn.md)'s, all unrelated to the gates) — the hook's probe (all three gates *and* the wait window off one round trip), the pill's read, and the origin badge's source |
+| `GET` | `/api/health` | 200 `HealthResponse` = `{ok, ...RemoteAnswerState, origin?, writeAccess?, idleSecs?, answerSecs?, tokenRequired?, desktopAvailable?, launchSurfaceDefault?, transcribe?, spawnAvailable?, spawnMaxPermission?, syncPermissionMode?}` (`transcribe` is [dictation](dictation.md)'s engine-availability flag, `desktopAvailable` and the `spawn*`/`sync*` fields are [spawn](spawn.md)'s and `launchSurfaceDefault` is a [settings](settings.md) value, all unrelated to the gates) — the hook's probe (all three gates *and* the wait window off one round trip), the pill's read, and the origin badge's source |
 | `POST` | `/api/remote-answer` | `{enabled}` → 200 `{...state, released}`; 400 non-boolean; 403 refused by the write gate (`bad token`, or `read-only from this network`); 409 `REMOTE_ANSWER=false`; 405 non-POST |
 | `POST` | `/api/questions/wait` | held → 200 `WaitResult`; 400 malformed / no usable questions; 403 refused by the write gate (`bad token`, or `read-only from this network`); 404 unknown session or feature off; 405 non-POST |
 | `GET` | `/api/sessions/:id/question` | 200 `SessionQuestion` (`pending: null` when idle); 400 bad id |
@@ -189,7 +189,8 @@ already decide this?" versus "is the user back?".
 
 - **`sanitizeQuestions` / `validateAnswer` are tolerant like `parseChatRecord`:** ≤4
   questions × ≤4 options, length caps (question 2000 / label 200 / description 500 / one
-  answer 500), malformed parts dropped, empty result → 400 → terminal dialog. Selected
+  answer 500), malformed parts dropped, empty result → 400 → terminal dialog. The "Other…" box's `maxLength` is `QUESTION_OTHER_CAP`
+  (`client/src/lib/textCaps.ts`), pinned to `SELECTED_CAP` by `test/guards/client-server-caps.test.ts`, so it never takes an answer the server refuses. Selected
   values are deliberately **not** matched against option labels — that is what makes the
   free-text "Other…" work, mirroring the terminal dialog's always-present Other.
 - **⚠️ Route order:** the detail regex `/^\/api\/sessions\/([^/?]+)/` in `index.ts`
@@ -208,7 +209,8 @@ already decide this?" versus "is the user back?".
   repo-root, cwd-relative) — needed because `tsx watch` restarts on every edit and a
   switch flipped before walking away must survive that. Deliberately **not** under
   `~/.claude` (read-only in Docker). Fails open: an unwritable path keeps the in-memory
-  value and reports `persisted: false`, which the pill shows as `*`. A malformed/absent
+  value and reports `persisted: false`, which the pill shows as `*`. The write is atomic (`writeFileAtomic`, `lib/atomic-write.ts`: a temp file in the same
+  directory, then `rename`), so a crash mid-write leaves the previous file whole rather than truncated. A malformed/absent
   file falls back to the env default. The file is read **once per process** (`cached`),
   so hand-editing it while the server runs does nothing until a restart — flip it through
   the pill or `POST /api/remote-answer`, which updates both. It is cwd-relative, so a
@@ -339,5 +341,5 @@ then turn tailnet trust off and use the token; behind a *public* tunnel it is th
     - client/src/components/sessions/atoms.tsx
     - client/src/lib/holds.ts
   kind: subsystem
-  verified: 24f8d773dd459e02b1e4ef4a093aed285939555c
+  verified: 96b0f64a8c117ae160ba90bfdd34ef357890a8a1
 -->

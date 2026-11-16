@@ -328,7 +328,9 @@ at all.
 `listRecentProjects`'s enumerated list (`server/lib/management.ts`) — never
 joined into a filesystem path. That list includes every pinned project whatever its age (#161),
 so a pin is what makes a project past `LOOKBACK_HOURS` launchable; the sheet's `Not listed? Show
-older projects` disclosure pins one and selects it. An unknown name is a 400, not a lookup that might escape
+older projects` disclosure pins one and selects it. A pin does not reach past the list's other filters, though: a cwd Claude made for itself (a
+scratchpad, a scratch workspace, a dir under `~/.claude`; `pinOptions` passes `defaultClaudeRoots()`) or one inside a `worktrees` / `.worktrees` dir
+(`isListedProjectPath`) is on no list, pinned or not, so it cannot be launched into. An unknown name is a 400, not a lookup that might escape
 somewhere unexpected. The project's `cwd` (read off its own most-recent transcript, not
 user input — its launch cwd, not whatever that session later chdir'd into) becomes the
 child's working directory; there is no free-text cwd field, on
@@ -598,7 +600,7 @@ app, through its `claude://resume` link, and `SpawnResponse` is the union `{surf
     the marker, and one started with the snapshot off answered `NONE`. Without `off`, every turn in the app would carry the "stop early" instruction. A CLI
     older than the snapshot flag refuses the unknown option, and the launch then fails like any other bad launch.
   - **The settle poll** is there for a Stop hook that blocks the stop: that starts another turn right after the `end_turn` record, and the link fired then
-    would put the app's writer on a transcript mid-turn, which forks it ([§Two writers](#two-writers-on-one-transcript-2259)). After the settle, the child
+    would put the app's writer on a transcript mid-turn, which forks it ([§Two writers](#two-writers-on-one-transcript-21259)). After the settle, the child
     is in its post-turn linger, where the second writer is benign; the watch never signals it.
   - **It gives up**, leaving an ordinary dashboard session the drawer can hand over by hand, when: the launch entry is `failed`; the entry has left the
     store with no finished turn (stopped from the dashboard, or crashed — the store is read *before* the transcript, so a child that finished and exited
@@ -862,5 +864,5 @@ new reason:
     - client/src/lib/spawnOptions.ts
     - client/src/lib/surface.ts
   kind: subsystem
-  verified: 24f8d773dd459e02b1e4ef4a093aed285939555c
+  verified: 96b0f64a8c117ae160ba90bfdd34ef357890a8a1
 -->

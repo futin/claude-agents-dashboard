@@ -224,7 +224,7 @@ through `refusalKind`) and shows the same `READ_ONLY_TEXT`, never the bad-token 
 (`client/src/lib/gitLayouts.ts`). GitView hands every layout one `GitLayoutProps` (`gitLayoutProps.ts`: the repos in pin order, the sessions, the clock, the
 Sync / Fetch / Quick pull and push /
 Unpin / Open folder controls), so none fetches for itself, and they share `GitParts.tsx` (level dot, agent chip, `GitDv`, `GitDvBar`, `GitKeys`,
-`gitTracked`, `GitInBranchRow`):
+`gitTracked` re-exported from `client/src/lib/gitMatrixCells.ts`, `GitInBranchRow`):
 
 | Layout    | Shape |
 | --------- | ----- |
@@ -300,7 +300,8 @@ forgotten (`reconcileRuns` in `client/src/lib/gitSyncRuns.ts`), and each payload
 payload is not an end, since the scan caps rows by recency and a sync parked on its question writes nothing, so absence ends a run only 24h after launch
 once its row has shown, or 10 min after launch if it never has: a launch that failed while no tab watched leaves no trace once the server drops it.
 That sessions poll runs only while a run is remembered or the drawer is open, and asks for the server's maximum of 50 rows. A refused launch (no Answer
-token), a launch error, or a launch the server reports failed leaves one amber line under the band. One launch at a time: every pill disables while one is
+token), a launch error, or a launch the server reports failed leaves one amber line under the band; a reply that cannot be read (`UNREADABLE_LAUNCH_REPLY`)
+drops that line's "couldn't start", since the sync may be running (`syncLaunchErrorText`). One launch at a time: every pill disables while one is
 in flight, and only the clicked one reads "Starting…". The runs key is not a setting, so Settings › Reset leaves it alone.
 
 <!-- docs-sync:
@@ -331,5 +332,5 @@ in flight, and only the clicked one reads "Starting…". The runs key is not a s
     - client/src/hooks/useOpenFolder.ts
     - server/lib/open-folder.ts
   kind: subsystem
-  verified: 24f8d773dd459e02b1e4ef4a093aed285939555c
+  verified: 96b0f64a8c117ae160ba90bfdd34ef357890a8a1
 -->

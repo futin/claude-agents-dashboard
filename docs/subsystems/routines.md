@@ -248,7 +248,8 @@ prompt that needs an answer must say what to do instead. The marker is covered i
 written**: a `start` with no `end` whose pid is dead, or alive but not running `run-routine <job>`, is lost. The age rule (older than the job's timeout
 times its steps plus 5 minutes) applies only where the pid cannot be checked, so a laptop that slept mid-run shows `running` until the wrapper ends it, and
 an `end` that arrives later supersedes the lost reading. A refusal gets the id `refused-<machine>-<job>-<epoch ms>`. The reader is incremental, keeping an
-inode and byte offset per file and re-reading from 0 when either changes. Stats are over 7, 30 or 90 whole local days (`ROUTINE_WINDOWS`), built from
+inode and byte offset per file: a file rotation renamed keeps its offset under the new name, a file that vanished or shrank in place rebuilds the whole
+fold from 0, and a torn last line stays unread until its newline arrives. Stats are over 7, 30 or 90 whole local days (`ROUTINE_WINDOWS`), built from
 calendar arithmetic so a DST change cannot shift a run across a day, with the previous window of the same length beside it; refusals are not runs.
 
 ## Notifications
@@ -338,7 +339,7 @@ Cancel leave. A New job drawer counts as dirty from the start. Back re-arms afte
 Write controls render only for the owner. They stay drawn but disabled when the network is read-only or the Answer token is missing, with the reason in
 `.git-sync-note`. `routineWindow` (7, 30 or 90, default 30) is a device setting ([settings](settings.md)), and so is `routinesTab`. A deep link
 `?view=routines&run=<id>` lands on Runs with that run's fold open, and `?view=routines` alone on Jobs ([view-persistence](view-persistence.md)).
-A job menu's All runs switches the rail to Runs, filtered to that job.
+A job fold's `all runs →` link (`JobFold`) switches the rail to Runs, filtered to that job.
 All class names are `.rtn-` prefixed and colours are theme tokens.
 
 ## Security
@@ -388,5 +389,5 @@ All class names are `.rtn-` prefixed and colours are theme tokens.
     - client/src/lib/routines.ts
     - client/src/lib/deepLink.ts
   kind: subsystem
-  verified: 5bceec2050b282bc8b2562ded093d8ce6ea00e7f
+  verified: 96b0f64a8c117ae160ba90bfdd34ef357890a8a1
 -->
