@@ -18,7 +18,7 @@
  *
  * Subagent turns are NOT in this file: the CLI writes them to the session's own
  * `<sessionId>/subagents/agent-*.jsonl`. `subagentTotals` sums those files
- * (`subagent-usage.ts`), matched to the launches the agents reducer (`agents.ts`) pairs out of
+ * (`readSubagentUsage`, through `session-spend.ts`'s incremental cache), matched to the launches the agents reducer (`agents.ts`) pairs out of
  * this transcript, folded into the same line loop so the file is read and parsed once; the harness's own figure in the Task result is only a fallback,
  * because it is the subagent's final context size, not its spend (bug-27).
  * Whole-session total = totals.combined + subagentTotals.tokens. An
@@ -43,7 +43,8 @@
 import fs from 'node:fs';
 
 import { applyEvent, createScanState, parseRecordEvents, toAgentJobs } from './agents.js';
-import { addTotals, emptyTotals, readSubagentUsage } from './subagent-usage.js';
+import { readSubagentUsage } from './session-spend.js';
+import { addTotals, emptyTotals } from './subagent-usage.js';
 import { isConversationRecord } from './transcript.js';
 import { assistantUsage } from './usage-line.js';
 import type {

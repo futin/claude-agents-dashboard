@@ -82,13 +82,16 @@ one of them at random — the same two-state rule the Sessions board follows.
   strip of one value each — the subagent count and the retry count ride in their
   **labels**, because the inspector is narrower than a full-width card and a two-part
   value wraps there and drops its label out of line with the other four.
-- **The subagent figure is summed from the subagents' own transcripts** (`server/lib/subagent-usage.ts`): every
+- **The subagent figure is summed from the subagents' own transcripts** (`readSubagentUsage`, `server/lib/session-spend.ts`): every
   `<sessionId>/subagents/agent-<agentId>.jsonl`, once per `message.id`, paired to its launch by `agentId` or the
   `.meta.json` sidecar's `toolUseId`. The harness's own number (`toolUseResult.totalTokens` / `<subagent_tokens>`) is the
   subagent's *final context size*, not its spend — 5–130x low on many-turn subagents (bug-27) — so it is only the fallback
   for a finished subagent whose transcript is missing or sums below it, counted in `subagentTotals.fallbackCount`. The
   metric's tooltip carries `subagentTotals.usage`'s billable / cache-read split. `/kaizen`'s `kaizen.mjs` does the
   same, and `test/analytics/analyze.test.ts` runs it against `analyzeSession` to keep the two in step.
+  Each file is folded incrementally by byte offset through the cache the drawer's spend poll keeps ([chat](chat.md) §Tokens spent; LRU over 32
+  sessions), so a repeat read with no new bytes reads nothing from `subagents/` and a grown file costs only its appended bytes. Like that poll, it assumes
+  the transcripts are append-only: a shrunk file is re-read from the start, a same-size rewrite is not seen.
   A `resumed` row (a SendMessage resume, which `lib/agents.ts` lists as its own row) is left out of the sum: its runs write into the transcript the
   original launch already claims. `kaizen.mjs` lists only `Task`/`Agent` launches, so it has no such row to skip.
   A compaction replays earlier records verbatim; both sides count each `tool_use` id, `tool_result`, Agent launch and SendMessage once and add each
@@ -298,6 +301,7 @@ The live session meter (status line, `/compact` nudge, tool and subagent pane) u
     - server/lib/analytics.ts
     - server/lib/analyze.ts
     - server/lib/subagent-usage.ts
+    - server/lib/session-spend.ts
     - server/lib/sessionAnalyticsLog.ts
     - server/api.ts
     - client/src/components/analytics/

@@ -333,7 +333,9 @@ The drawer's second card under Context is the session's running spend (`useSessi
 this figure does not, because transcripts are append-only, a replayed turn dedupes by `message.id` and the summary record is skipped.
 
 - **Figure:** `billableApprox` (input + output + cache writes; cache reads are out), by the same rules as the session analysis: main like `analyzeSession`,
-  subagents like `sumTranscript`. Tests pin the two equal once every subagent has finished.
+  subagents once per `message.id`. Tests pin the two equal once every subagent has finished.
+- **The cache is shared with Analytics.** `readSubagentUsage` in the same file folds every subagent transcript for `analyzeSession` through the same
+  per-session entry (LRU over 32 sessions), so a file this poll has followed is not read again when Analytics opens, and the reverse.
 - **`≥` means a minimum.** It shows when `compactions > 0`, because the compaction call itself is recorded nowhere (no usage near the boundary in 3 transcripts,
   0 `agent-*compact*` files in 74 subagent dirs, 2026-11-05), or when `uncountedSubagents > 0`: a finished launch with no readable transcript, or one summing below the
   harness figure.
