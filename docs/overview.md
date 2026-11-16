@@ -444,7 +444,8 @@ scripts/          install-hooks.sh (`pnpm hooks:install`), ask-remote-hook.sh,
                   regenerates and compares,
                   session-analytics.ts (`pnpm session-analytics`) — prints one
                   session's SessionAnalysis as JSON without the server running,
-                  which is how `/kaizen` gets exact numbers,
+                  which is how `/kaizen` gets exact numbers; its `--latest` resolver is
+                  lib/latest-session.ts (head reads, full parse only as a fallback),
                   tool-output-replay.ts (`pnpm replay:tool-output`) — replays the last
                   N days of transcripts (main + subagents) and prints, per threshold,
                   what a read-guard and a bash-trim hook would have kept out of context,

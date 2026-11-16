@@ -14,6 +14,7 @@
 
 import { analyzeSession } from '../server/lib/analyze.js';
 import { listTranscripts, projectsRoot } from '../server/lib/scan.js';
+import { normCwd, resolveLatest } from './lib/latest-session.js';
 
 /** Same guard as api.ts ID_RE, duplicated so the CLI doesn't import the HTTP layer. */
 const ID_RE = /^[A-Za-z0-9._-]+$/;
@@ -21,10 +22,6 @@ const ID_RE = /^[A-Za-z0-9._-]+$/;
 function die(msg: string): never {
   console.error(msg);
   process.exit(1);
-}
-
-function normCwd(p: string): string {
-  return p.length > 1 && p.endsWith('/') ? p.slice(0, -1) : p;
 }
 
 function main(): void {
@@ -37,14 +34,9 @@ function main(): void {
   let id: string | undefined;
 
   if (arg === '--latest') {
-    const here = normCwd(process.cwd());
-    // Newest transcript whose recorded cwd equals this process's cwd.
-    const cands = listTranscripts(projectsRoot()).sort((a, b) => b.mtimeMs - a.mtimeMs);
-    const match = cands.find(t => {
-      const a = analyzeSession(t.file, t.id);
-      return a && a.cwd && normCwd(a.cwd) === here;
-    });
-    if (!match) die(`no transcript found for cwd ${here}`);
+    // Newest transcript whose recorded cwd equals this process's cwd, decided from head reads (scripts/lib/latest-session.ts).
+    const { match } = resolveLatest({ root: projectsRoot(), cwd: process.cwd() });
+    if (!match) die(`no transcript found for cwd ${normCwd(process.cwd())}`);
     file = match.file;
     id = match.id;
     console.error(`[session-analytics] --latest resolved to session ${id}`);

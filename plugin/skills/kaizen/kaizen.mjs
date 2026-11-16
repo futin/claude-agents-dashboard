@@ -18,7 +18,8 @@
  * PROVENANCE: ported from claude-agents-dashboard server/lib/{analyze,agents,subagent-usage,scan}.ts.
  * That repo holds the unit-tested source of truth; keep this in sync if it changes.
  * Exception: `--trend` is kaizen-only, has no TS twin, and is tested by spawning this file (test/analytics/kaizen-trend.test.ts); so are `--compare`, tested in
- * test/compare.test.mjs, `--budget`, tested in test/budget.test.mjs, and `--skill`, tested in test/skill-review.test.mjs.
+ * test/compare.test.mjs, `--budget`, tested in test/budget.test.mjs, and `--skill`, tested in test/skill-review.test.mjs. `--latest`'s resolver,
+ * `resolveLatest`, has a TS twin in scripts/lib/latest-session.ts; it and the CLI's path, session-id and usage errors are tested in test/latest.test.mjs.
  * Counting compaction replays once (#174), skipping compact summaries and reading compact_boundary for neverCompacted are in that
  * source too (#226), pinned by its parity tests. Kaizen-only by decision: the `compactions` block — a lesson input with no dashboard
  * consumer — tested in test/compactions.test.mjs (`node --test test/*.test.mjs`).
@@ -51,7 +52,7 @@ function listTranscripts(root) {
       let stat;
       try { stat = fs.statSync(full); } catch { continue; }
       if (!stat.isFile()) continue;
-      out.push({ file: full, id: name.replace(/\.jsonl$/, ''), mtimeMs: stat.mtimeMs });
+      out.push({ file: full, id: name.replace(/\.jsonl$/, ''), mtimeMs: stat.mtimeMs, size: stat.size });
     }
   }
   return out;
@@ -598,13 +599,21 @@ const HEAD_BYTES = 64 * 1024;
 // the prefilter from depending on exactly which characters it replaces. It only narrows the candidates — the cwd basename still decides.
 const dirKey = (s) => s.replace(/[^A-Za-z0-9]/g, '-');
 
-/** First timestamp and first cwd from the head of a transcript, without reading the rest; null when the head has neither. */
-function sessionHead(file) {
+/** The leading HEAD_BYTES of a file as UTF-8 (the whole file when it is smaller); null when it cannot be read. */
+function readHeadText(file) {
   let fd;
   try {
     fd = fs.openSync(file, 'r');
     const buf = Buffer.alloc(HEAD_BYTES);
-    const text = buf.toString('utf8', 0, fs.readSync(fd, buf, 0, HEAD_BYTES, 0));
+    return buf.toString('utf8', 0, fs.readSync(fd, buf, 0, HEAD_BYTES, 0));
+  } catch { return null; } finally { if (fd !== undefined) fs.closeSync(fd); }
+}
+
+/** First timestamp and first cwd from the head of a transcript, without reading the rest; null when the head has neither. */
+function sessionHead(file) {
+  const text = readHeadText(file);
+  if (text == null) return null;
+  try {
     let ts = null, cwd = null;
     for (const line of text.split('\n')) {
       let rec;
@@ -614,7 +623,40 @@ function sessionHead(file) {
       if (ts && cwd) break;
     }
     return ts && cwd ? { ts, cwd } : null;
-  } catch { return null; } finally { if (fd !== undefined) fs.closeSync(fd); }
+  } catch { return null; }
+}
+
+/* ------------------------------------------------ --latest */
+
+/**
+ * The transcript `--latest` analyzes: the newest whose first `cwd` equals `cwd` (both through normCwd), which is the `cwd` analyzeSession reports.
+ * Each candidate's first `cwd` comes from its head window — a prefix of the file, so a `cwd` found there is the file's first. Only a file larger than
+ * the window whose complete head lines carry no `cwd` is parsed in full; `fullParses` counts those, so a no-match run costs head reads, not the corpus.
+ */
+export function resolveLatest({ root, cwd }) {
+  const here = normCwd(cwd);
+  let fullParses = 0;
+  for (const t of listTranscripts(root).sort((a, b) => b.mtimeMs - a.mtimeMs)) {
+    const text = readHeadText(t.file);
+    if (text == null) continue;
+    let first = headCwd(text);
+    if (first == null && t.size > HEAD_BYTES) {
+      fullParses++;
+      first = analyzeSession(t.file, t.id)?.cwd ?? null;
+    }
+    if (first && normCwd(first) === here) return { match: { file: t.file, id: t.id }, fullParses };
+  }
+  return { match: null, fullParses };
+}
+
+/** The first non-empty string `cwd` among the window's parseable lines — analyzeSession's own rule — or null. A cut final line never parses. */
+function headCwd(text) {
+  for (const line of text.split('\n')) {
+    let rec;
+    try { rec = JSON.parse(line); } catch { continue; }
+    if (rec && typeof rec.cwd === 'string' && rec.cwd) return rec.cwd;
+  }
+  return null;
 }
 
 /**
@@ -1088,10 +1130,8 @@ function main() {
 
   let file, id;
   if (arg === '--latest') {
-    const here = normCwd(process.cwd());
-    const cands = listTranscripts(projectsRoot()).sort((a, b) => b.mtimeMs - a.mtimeMs);
-    const match = cands.find(t => { const a = analyzeSession(t.file, t.id); return a && a.cwd && normCwd(a.cwd) === here; });
-    if (!match) die(`no transcript found for cwd ${here}`);
+    const { match } = resolveLatest({ root: projectsRoot(), cwd: process.cwd() });
+    if (!match) die(`no transcript found for cwd ${normCwd(process.cwd())}`);
     file = match.file; id = match.id;
     console.error(`[kaizen] --latest resolved to session ${id}`);
   } else if (arg.startsWith('/')) {
