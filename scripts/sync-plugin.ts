@@ -46,30 +46,64 @@ export interface InstallRecord {
  */
 const GENERATED_DIRS = [path.join('.claude-plugin', 'types')];
 
-/** sha256 over every file's relative path and bytes, so a rename or deletion moves it too. '' for a root that does not exist. */
-export function hashTree(root: string): string {
+/**
+ * sha256 over every file's relative path and bytes, so a rename or deletion moves it too. '' for a root that does not exist, and for an empty `files` list.
+ *
+ * `files` (paths relative to `root`, `/`-separated) replaces the walk: the repo side passes what git tracks, because the install is a clone of GitHub main
+ * and can never hold a gitignored file — a `.DS_Store` in the walk used to read as drift forever. A listed file that is missing throws rather than being
+ * skipped, so a bug in the lister is loud.
+ */
+export function hashTree(root: string, files?: string[]): string {
   if (!fs.existsSync(root)) return '';
-  const files: string[] = [];
-  const walk = (dir: string): void => {
-    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-      const full = path.join(dir, entry.name);
-      if (entry.isDirectory()) { if (!GENERATED_DIRS.some((g) => full.endsWith(path.sep + g))) walk(full); }
-      else if (entry.isFile()) files.push(full);
-    }
-  };
-  walk(root);
+  let rels: string[];
+  if (files) {
+    if (files.length === 0) return '';
+    rels = [...files].sort();
+  } else {
+    rels = [];
+    const walk = (dir: string): void => {
+      for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+        const full = path.join(dir, entry.name);
+        if (entry.isDirectory()) { if (!GENERATED_DIRS.some((g) => full.endsWith(path.sep + g))) walk(full); }
+        else if (entry.isFile()) rels.push(path.relative(root, full).split(path.sep).join('/'));
+      }
+    };
+    walk(root);
+    rels.sort();
+  }
   const digest = createHash('sha256');
-  for (const file of files.sort()) {
-    digest.update(path.relative(root, file).split(path.sep).join('/'));
+  for (const rel of rels) {
+    digest.update(rel);
     digest.update('\0');
-    digest.update(fs.readFileSync(file));
+    digest.update(fs.readFileSync(path.join(root, ...rel.split('/'))));
     digest.update('\0');
   }
   return digest.digest('hex');
 }
 
-export function publishedDigests(pluginRoot: string): Record<string, string> {
-  return Object.fromEntries(PUBLISHED_PATHS.map((p) => [p, hashTree(path.join(pluginRoot, p))]));
+/**
+ * The files git tracks under `dir` (inside the repo at `repoRoot`), relative to `dir`, `/`-separated and sorted the way `hashTree` sorts. Symlinks (mode
+ * 120000) are left out, as the walk's `isFile()` leaves them out on the install side.
+ */
+export function trackedFiles(repoRoot: string, dir: string): string[] {
+  const out = execFileSync('git', ['ls-files', '-z', '--stage', '--', path.relative(repoRoot, dir) || '.'], {
+    cwd: repoRoot, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  const prefix = path.relative(repoRoot, dir).split(path.sep).join('/');
+  return out.split('\0').filter(Boolean)
+    .filter((entry) => !entry.startsWith('120000 '))
+    .map((entry) => entry.slice(entry.indexOf('\t') + 1))
+    .map((f) => (prefix ? f.slice(prefix.length + 1) : f))
+    .filter((f) => !GENERATED_DIRS.some((g) => f.startsWith(g.split(path.sep).join('/') + '/')))
+    .sort();
+}
+
+/** One digest per published path. `listFiles` names what to hash under each path's directory; without it, every file there is walked (the install side). */
+export function publishedDigests(pluginRoot: string, listFiles?: (dir: string) => string[]): Record<string, string> {
+  return Object.fromEntries(PUBLISHED_PATHS.map((p) => {
+    const dir = path.join(pluginRoot, p);
+    return [p, hashTree(dir, listFiles ? listFiles(dir) : undefined)];
+  }));
 }
 
 export function driftedPaths(repo: Record<string, string>, installed: Record<string, string>): string[] {
@@ -185,7 +219,8 @@ async function main(): Promise<void> {
   }
   if (checkout.fastForwarded > 0) console.log(`fast-forwarded main ${checkout.fastForwarded} commit(s) to origin/main @ ${short(checkout.head)}`);
 
-  const repo = publishedDigests(PLUGIN_ROOT);
+  // Tracked files only on the repo side: the install is a clone and has no gitignored file to compare against.
+  const repo = publishedDigests(PLUGIN_ROOT, (dir) => trackedFiles(REPO_ROOT, dir));
   const drifted = driftedPaths(repo, publishedDigests(install.installPath));
   // Digests only, not the install's commit: most commits never touch plugin/, and reinstalling identical bytes after each would be noise. So the install's
   // sha is the last commit a reinstall ran at, routinely older than HEAD — name both, or the mismatch reads as a stale install.
