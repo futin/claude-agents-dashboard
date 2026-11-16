@@ -59,6 +59,7 @@ function seededSettings(opts: StageOpts): Settings {
     managementTab: opts.managementTab ?? 'git',
     routinesTab: opts.routinesTab ?? 'jobs',
     routineWindow: 30,
+    routineRunFilters: { outcome: '', runner: '', job: '' },
     // Not the default 'last', which defers to `dashboard.layout` (SessionsView.tsx).
     defaultLayout: opts.layout ?? 'board',
     contentWidth: opts.contentWidth

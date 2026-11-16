@@ -194,6 +194,18 @@ export function run(): number {
     assert.ok(at < Date.parse(r.walk[first].t) + H, 'exhaustAt is inside that same step');
   })) p++; else f++;
 
+  if (test('each shaped walk step carries its host-local hourOfWeek, the index the cells use', () => {
+    const r = shapeUsageProfile({
+      recording: true,
+      state: emptyState(),
+      weekly: { utilization: 10, resetsAt: new Date(SUN_00 + 3 * H).toISOString(), ratePerHour: 1 },
+      nowMs: SUN_00,
+      offsetMinutes: -300
+    });
+    // Sunday 00:00 UTC is Saturday 19:00 at -05:00: buckets 163, 164, 165.
+    assert.deepStrictEqual(r.walk.map(s => s.hourOfWeek), [163, 164, 165]);
+  })) p++; else f++;
+
   if (test('learned: true only for a bucket past the trust floor that has folded', () => {
     const state = emptyState();
     state.buckets[3] = bucket({ weight: 0.5, weekStamp: '2026-W36', lifetimeObservedMin: 600 });

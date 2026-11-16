@@ -6,7 +6,7 @@ import assert from 'node:assert';
 import fs from 'node:fs';
 
 import {
-  chipClass, costDelta, createPollSeq, editsWithoutAsking, foreachLine, formatStat, groupRunsByDay, isFanOut, jobTemplate, jobsSubtitle, launchdLabel, medianMs, nameProblem,
+  busyAdd, busyRemove, chipClass, costDelta, createPollSeq, focusRunNote, editsWithoutAsking, foreachLine, formatStat, groupRunsByDay, isFanOut, jobTemplate, jobsSubtitle, launchdLabel, medianMs, nameProblem,
   readForeach, reconcileChip, reconcilePreview, rowText, runClock, dotTone, topFailure, jobPins, pinOutcome, stepErrLine, runKicker, runPill, runsQueryString, setRepos,
   pausedLook, splitNext, splitSteps, stepPill, successRate, topTokenShare, withLate, writeFailureText
 } from '../../client/src/lib/routines.js';
@@ -548,6 +548,33 @@ export function run(): number {
     assert.strictEqual(jobsSubtitle('/h/.claude/routines/jobs', 'wsl'), base.replace('launchd', 'cron'));
     assert.ok(!jobsSubtitle('/d', 'mac').includes('sync through git'));
   });
+
+  if (test('busy writes: two overlapping keys are both busy, settling one leaves the other, settling an absent key is a no-op', () => {
+    const none: ReadonlySet<string> = new Set();
+    const a = busyAdd(none, 'toggle:a');
+    const both = busyAdd(a, 'run:b');
+    assert.deepStrictEqual([both.has('toggle:a'), both.has('run:b')], [true, true]);
+    assert.strictEqual(none.size, 0, 'the input set is not mutated');
+    const afterB = busyRemove(both, 'run:b');
+    assert.deepStrictEqual([afterB.has('toggle:a'), afterB.has('run:b')], [true, false]);
+    assert.strictEqual(busyRemove(afterB, 'run:zzz'), afterB, 'an absent key returns the same set, so React sees no change');
+    assert.strictEqual(busyRemove(busyRemove(afterB, 'toggle:a'), 'toggle:a').size, 0);
+  })) p++; else f++;
+
+  if (test('focusRunNote: null without a linked run, or when the run is in the list', () => {
+    const q = { days: 30 as const, job: '', outcome: '' as const, runner: '' as const };
+    assert.strictEqual(focusRunNote(null, [mkRun({ id: 'x' })], q), null);
+    assert.strictEqual(focusRunNote('x', [mkRun({ id: 'a' }), mkRun({ id: 'x' })], q), null);
+  })) p++; else f++;
+
+  if (test('focusRunNote: a linked run outside the list names the window, and the filters when one is set', () => {
+    const q = { days: 7 as const, job: '', outcome: '' as const, runner: '' as const };
+    assert.strictEqual(focusRunNote('x', [mkRun({ id: 'a' })], q), 'The linked run is not in the last 7d.');
+    assert.strictEqual(focusRunNote('x', [], q), 'The linked run is not in the last 7d.');
+    assert.strictEqual(focusRunNote('x', [mkRun({ id: 'a' })], { ...q, outcome: 'failed' }), 'The linked run is not in the last 7d that match the filters.');
+    assert.strictEqual(focusRunNote('x', [], { ...q, days: 90, job: 'nightly' }), 'The linked run is not in the last 90d that match the filters.');
+    assert.strictEqual(focusRunNote('x', [], { ...q, runner: 'shell' }), 'The linked run is not in the last 7d that match the filters.');
+  })) p++; else f++;
 
   console.log(`\n  ${p} passed, ${f} failed`);
   return f;

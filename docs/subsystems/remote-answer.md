@@ -55,7 +55,7 @@ take one away. If the dashboard isn't running, the probe gives up in under a sec
   as the threshold (`${CLAUDE_DASHBOARD_ANSWER_TIMEOUT:-<answerSecs from /api/health>}`, then
   600), so it is Settings → **Answer window**, and it drives `curl --max-time` *and* the
   `timeoutMs` the server arms its own deadline with. See [settings](settings.md) for the hook
-  `timeout` ceiling that caps the UI at 600s.
+  `timeout` ceiling the UI warns about above 600s.
 - The POST body also carries **`permissionMode`**, which this feature never reads. It exists
   for the [push notifier](push-notify.md)'s auto-mode layer — the mode is visible only inside
   a hook payload, and a registered question is exactly where a push may be worth sending.
@@ -203,8 +203,8 @@ already decide this?" versus "is the user back?".
 - **⚠️ Hook timeout:** the CLI kills a hook at its `timeout`, so `settings.json` needs
   `"timeout": 630` ≥ curl's `--max-time` (window + 15) ≥ the server clamp (600s default,
   range 5s–30min). Each layer fails inward; a mis-set timeout degrades to the terminal
-  dialog. Because the window is now editable from Settings, that ceiling is enforced in the
-  UI too: the field offers 5–600s and warns above it (see [settings](settings.md)).
+  dialog. Because the window is now editable from Settings, that ceiling is surfaced in the
+  UI too: the field offers the server's 5–1800s and warns above 600 (see [settings](settings.md)).
 - **The toggle persists to `.remote-answer.json`** (gitignored,
   repo-root, cwd-relative) — needed because `tsx watch` restarts on every edit and a
   switch flipped before walking away must survive that. Deliberately **not** under

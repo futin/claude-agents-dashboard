@@ -1,7 +1,7 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 
 import { authHeaders } from '../lib/answerToken';
-import { writeFailureText } from '../lib/routines';
+import { busyAdd, busyRemove, writeFailureText } from '../lib/routines';
 import { useAnswerToken } from './useAnswerToken';
 
 export interface RoutineWriteResult {
@@ -19,11 +19,12 @@ export interface RoutineWriteControl {
   /** The page's one status line under the toolbar. */
   note: RoutineNote | null;
   setNote(note: RoutineNote | null): void;
-  /** The key of the write in flight (`run:<name>`, `toggle:<name>` …), so only its control greys out. */
-  busy: string | null;
+  /** The keys of the writes in flight (`run:<name>`, `toggle:<name>` …), so only their controls grey out — each one until its own POST settles. */
+  busy: ReadonlySet<string>;
   /**
    * One write to the routines API with the Answer token. A refusal lands in `note` unless `inline` is set — the drawer shows its own, over the page that
-   * would otherwise hide it. Every success re-polls the ledger so the change shows before the next tick.
+   * would otherwise hide it. Every success re-polls the ledger so the change shows before the next tick. A key already in flight is refused without a fetch
+   * (`ok: false`, `status: 0`, `failure: null`, `note` untouched), so a double click cannot write twice.
    */
   send(what: string, key: string, method: string, url: string, body?: unknown, inline?: boolean): Promise<RoutineWriteResult>;
 }
@@ -31,10 +32,14 @@ export interface RoutineWriteControl {
 export function useRoutineWrite(refresh: () => void): RoutineWriteControl {
   const [token] = useAnswerToken();
   const [note, setNote] = useState<RoutineNote | null>(null);
-  const [busy, setBusy] = useState<string | null>(null);
+  const [busy, setBusy] = useState<ReadonlySet<string>>(() => new Set());
+  // The refusal reads this, not `busy`: a second click can land before React re-renders with the first one's key.
+  const inFlight = useRef(new Set<string>());
 
   const send = useCallback(async (what: string, key: string, method: string, url: string, body?: unknown, inline = false): Promise<RoutineWriteResult> => {
-    setBusy(key);
+    if (inFlight.current.has(key)) return { ok: false, status: 0, body: null, failure: null };
+    inFlight.current.add(key);
+    setBusy(cur => busyAdd(cur, key));
     if (!inline) setNote(null);
     let status = 0;
     let parsed: unknown = null;
@@ -49,7 +54,8 @@ export function useRoutineWrite(refresh: () => void): RoutineWriteControl {
     } catch {
       status = 0;
     }
-    setBusy(cur => (cur === key ? null : cur));
+    inFlight.current.delete(key);
+    setBusy(cur => busyRemove(cur, key));
     const ok = status >= 200 && status < 300;
     const failure = ok ? null : writeFailureText(what, status, parsed);
     if (failure && !inline) setNote({ text: failure, tone: 'warn' });

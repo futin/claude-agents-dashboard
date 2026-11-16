@@ -9,6 +9,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { ANSWER_SECS_MAX, ANSWER_SECS_MIN, IDLE_SECS_MAX } from '../../client/src/lib/settingsBounds.js';
 import { SYNC_SCAN_LIMIT } from '../../client/src/lib/gitSync.js';
 import { GIT_BRANCH_CAP } from '../../client/src/lib/gitStatsText.js';
 import { LIMITS } from '../../client/src/lib/settings.js';
@@ -21,6 +22,7 @@ import { SCAN_CAPS } from '../../server/api.js';
 import { MAX_BRANCHES } from '../../server/lib/git-stats.js';
 import { TEXT_CAP } from '../../server/lib/messages.js';
 import { SELECTED_CAP } from '../../server/lib/pending.js';
+import { MAX_ANSWER_SECS, MAX_IDLE_SECS, MIN_ANSWER_SECS } from '../../server/lib/settings.js';
 import { FEEDBACK_CAP } from '../../server/lib/plans.js';
 import {
   HOURS_PER_WEEK as SERVER_HOURS_PER_WEEK, TRUSTED_OK as SERVER_TRUSTED_OK
@@ -91,6 +93,17 @@ export function run(): number {
   pin(['CURRENT_DAY_FLOOR', RATES, CURRENT_DAY_FLOOR], ['CURRENT_FLOORS.minDays', RATE, CURRENT_FLOORS.minDays]);
   pin(['CURRENT_DAYS', RATES, CURRENT_DAYS], ['CURRENT_MS / 86_400_000', RATE, CURRENT_MS / DAY_MS]);
   pin(['GIT_BRANCH_CAP', 'client/src/lib/gitStatsText.ts', GIT_BRANCH_CAP], ['MAX_BRANCHES', 'server/lib/git-stats.ts', MAX_BRANCHES]);
+
+  const BOUNDS = 'client/src/lib/settingsBounds.ts';
+  const SERVER_SETTINGS = 'server/lib/settings.ts';
+  pin(['ANSWER_SECS_MIN', BOUNDS, ANSWER_SECS_MIN], ['MIN_ANSWER_SECS', SERVER_SETTINGS, MIN_ANSWER_SECS]);
+  pin(['ANSWER_SECS_MAX', BOUNDS, ANSWER_SECS_MAX], ['MAX_ANSWER_SECS', SERVER_SETTINGS, MAX_ANSWER_SECS]);
+  pin(['IDLE_SECS_MAX', BOUNDS, IDLE_SECS_MAX], ['MAX_IDLE_SECS', SERVER_SETTINGS, MAX_IDLE_SECS]);
+
+  r(test('SettingsView.tsx: the Answer window and idle fields take their bounds from settingsBounds.ts, not literals', () => {
+    const src = fs.readFileSync(path.join(ROOT, 'client/src/components/settings/SettingsView.tsx'), 'utf8');
+    for (const prop of ['min={ANSWER_SECS_MIN}', 'max={ANSWER_SECS_MAX}', 'max={IDLE_SECS_MAX}']) assert.ok(src.includes(prop), `missing ${prop}`);
+  }));
 
   r(test('no client .tsx gives maxLength a bare number — a composer cap is a named constant pinned above', () => {
     // The matcher first, so a guard that matches nothing cannot pass vacuously.

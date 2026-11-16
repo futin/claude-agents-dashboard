@@ -71,6 +71,8 @@ export interface ForecastStepMs {
   weight: number;
   /** True when {@link weight} came from the bucket rather than the fallback. */
   learned: boolean;
+  /** The host-local hour-of-week bucket this slice was walked with — the index into the profile's cells. */
+  hw: number;
 }
 
 export interface ForecastResult {
@@ -182,7 +184,8 @@ export function walkForward(opts: WalkOpts): ForecastResult {
       gain,
       cum: utilization + accumulated + gain,
       weight,
-      learned: isLearnedAt(profile, hw)
+      learned: isLearnedAt(profile, hw),
+      hw
     });
     weightedMs += weight * sliceMs;
     totalMs += sliceMs;

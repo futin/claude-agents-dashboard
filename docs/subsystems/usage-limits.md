@@ -428,7 +428,10 @@ Two things the grid alone cannot do:
     gained `cum`, `weight` and `learned` — `learned` separately from `weight` because a
     measured `1.0` and a fallback `1.0` are the same number and different statements, and
     `cum` server-side because the response has no `utilization` to seed a client
-    running-sum from and `exhaustAt` comes off the same partial sums. With
+    running-sum from and `exhaustAt` comes off the same partial sums. It also carries
+    `hourOfWeek`, the host-local bucket the step was walked with: the walk tooltip looks
+    its cell up by that index, because recomputing it from `t` in the browser's zone picks
+    the wrong cell whenever the browser and the host disagree on the zone. With
     `confidence: none` the whole line is dashed, which is the honest picture. Below the
     rule the same split colours the *fill*: red under a measured run, amber under one
     walked at the mean — the deficit you can predict and the deficit that is a guess.

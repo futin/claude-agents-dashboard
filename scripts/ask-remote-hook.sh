@@ -20,7 +20,7 @@
 #   { "type": "command", "command": "bash \"$HOME/.claude/hooks/ask-remote.sh\"",
 #     "timeout": 630 }
 # The timeout MUST exceed the wait window, or the CLI kills the hook first. The
-# window is Settings → "Answer window" (max 600s there for exactly this reason);
+# window is Settings → "Answer window" (600s default; it warns above 600 for this);
 # raising it past ~615s means raising this number too.
 #
 # Requires: curl, jq. See docs/subsystems/remote-answer.md in the dashboard repo.

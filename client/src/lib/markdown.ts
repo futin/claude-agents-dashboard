@@ -102,9 +102,36 @@ const ITEM_RE = /^(\s*)([-*+]|\d+[.)])\s+(.*)$/;
 const QUOTE_RE = /^\s*>\s?(.*)$/;
 const TABLE_SEP_RE = /^\s*\|?\s*:?-{1,}:?\s*(\|\s*:?-{1,}:?\s*)+\|?\s*$/;
 
-/** Split a table row on unescaped pipes, dropping the leading/trailing ones. */
+/** Split a table row on unescaped pipes outside code spans, dropping the leading/trailing ones. `\|` becomes a literal `|`. */
 function splitRow(line: string): string[] {
-  const cells = line.trim().replace(/^\|/, '').replace(/\|$/, '').split('|');
+  const s = line.trim();
+  const cells: string[] = [];
+  let cur = '';
+  let endedOnPipe = false;
+  for (let i = 0; i < s.length; i++) {
+    const ch = s[i];
+    endedOnPipe = false;
+    if (ch === '\\' && s[i + 1] === '|') { cur += '|'; i++; continue; }
+    if (ch === '`') {
+      let n = 1;
+      while (s[i + n] === '`') n++;
+      const run = '`'.repeat(n);
+      // a code span closes on a run of exactly the same length; an unclosed run stays literal text
+      let close = -1;
+      for (let j = s.indexOf(run, i + n); j !== -1; j = s.indexOf(run, j + 1)) {
+        if (s[j - 1] !== '`' && s[j + n] !== '`') { close = j; break; }
+      }
+      const end = close === -1 ? i + n : close + n;
+      cur += s.slice(i, end);
+      i = end - 1;
+      continue;
+    }
+    if (ch === '|') { cells.push(cur); cur = ''; endedOnPipe = true; continue; }
+    cur += ch;
+  }
+  cells.push(cur);
+  if (s.startsWith('|')) cells.shift();
+  if (endedOnPipe && cells.length) cells.pop();
   return cells.map(c => c.trim());
 }
 
@@ -137,11 +164,13 @@ export function parseMarkdown(src: string): Block[] {
     const fence = FENCE_RE.exec(line);
     if (fence) {
       flushPara();
-      const marker = fence[1][0].repeat(3);
+      // Closer: the opener's character, at least its length, nothing after it but whitespace. Any indent, as FENCE_RE allows any on the opener — a fence
+      // nested in a list sits 4+ spaces in, and CommonMark's 0–3 would leave it open to the end of the message.
+      const closer = new RegExp(`^\\s*${fence[1][0]}{${fence[1].length},}\\s*$`);
       const body: string[] = [];
       i++;
       for (; i < lines.length; i++) {
-        if (lines[i].trimStart().startsWith(marker)) break;
+        if (closer.test(lines[i])) break;
         body.push(lines[i]);
       }
       blocks.push({ t: 'code', lang: fence[2] || '', text: body.join('\n') });

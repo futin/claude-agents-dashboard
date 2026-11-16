@@ -2,6 +2,7 @@ import { useRef, useState } from 'react';
 
 import type { GitBranch, RepoGitStats, Session } from '../../../../shared/types';
 import { formatAgo } from '../../lib/format';
+import { fetchKeyStateOf } from '../../lib/gitClock';
 import { gitBarWidth } from '../../lib/gitBar';
 import { gitBranchChipText, gitBranchCounts } from '../../lib/gitStatsText';
 import type { GitQuickControl } from '../../hooks/useGitQuick';
@@ -239,7 +240,7 @@ export function GitKeys({ a, ctx, bare = false, compact = false, work = false }:
         <button
           type="button"
           className={`git-key${retryPrimary ? ' primary' : ''}`}
-          disabled={ctx.fetchCtl.pending || ctx.clock?.runningSinceMs != null || ctx.sync.writeAccess === 'none' || (ctx.sync.tokenRequired === true && !ctx.fetchCtl.tokenStored)}
+          disabled={fetchKeyStateOf(ctx.fetchCtl, ctx.sync.tokenRequired, ctx.sync.writeAccess, ctx.clock).disabled}
           onClick={e => {
             e.stopPropagation();
             ctx.fetchCtl.start();

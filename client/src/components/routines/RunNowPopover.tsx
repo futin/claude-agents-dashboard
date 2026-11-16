@@ -13,7 +13,7 @@ export default function RunNowPopover({ row, pins, ctl, onClose }: { row: Routin
   const [picked, setPicked] = useState<string[]>([]);
   const outcomes = pins.map(name => ({ name, pill: pinOutcome(row.last, name) }));
   const failed = outcomes.filter(o => o.pill?.tone === 'red').map(o => o.name);
-  const disabled = ctl.locked || ctl.busy === `run:${row.name}`;
+  const disabled = ctl.locked || ctl.busy.has(`run:${row.name}`);
   const run = (only?: string[]) => { onClose(); ctl.runNow(row.name, only); };
 
   if (ctl.phone) {

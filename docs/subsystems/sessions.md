@@ -565,7 +565,9 @@ Without it the launch row reads `done`, so a parent parked on round 2 fell throu
 `useSessionDetail` keeps polling that endpoint **every 3s for as long as the row stays
 open** — not once on expand — because the panel is watching live work. It clears its state
 when the selected id changes, so switching rows never flashes the previous session's
-agents, and it keeps the last snapshot when a fetch fails rather than blanking the panel.
+agents, and it keeps the last snapshot when a fetch fails rather than blanking the panel — a non-2xx answer and the server's `{ error: true }` body
+included (`nextDetail`, `lib/sessionDetail.ts`). `Couldn't read this session.` shows only when the id's *first* answer failed. Like the other poll hooks
+it skips a tick while a fetch is out (`createPollSeq`), applies only the newest answer, and bounds each fetch (`pollFetch`).
 
 **The timeline.** Each agent gets a start→finish bar on **one shared time axis**: the
 range runs from the earliest launch to the latest end, with `now` standing in for agents

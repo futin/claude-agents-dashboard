@@ -152,6 +152,17 @@ export function run(): number {
     assert.ok(Math.abs(total - 105) < 1e-9, 'expected 105, got ' + total);
   })) p++; else f++;
 
+  if (test('steps carry the host-local bucket index they were walked with (hw), not the UTC one', () => {
+    const r = walkForward({
+      nowMs: FRI_18, utilization: 10, activeRatePerHour: 1,
+      profile: officeHours(), resetsAtMs: FRI_18 + 3 * H, offsetMinutes: 120
+    });
+    assert.strictEqual(r.steps.length, 3);
+    for (const s of r.steps) assert.strictEqual(s.hw, hourOfWeek(s.tMs, 120));
+    assert.ok(r.steps.some(s => s.hw !== hourOfWeek(s.tMs, 0)), 'differs from the UTC index for at least one step');
+    assert.deepStrictEqual(r.steps.map(s => s.hw), [140, 141, 142]); // Fri 20:00, 21:00, 22:00 at +02:00
+  })) p++; else f++;
+
   if (test('weightAt falls back to globalMean for an untrusted bucket', () => {
     const weights: (number | null)[] = new Array(HOURS_PER_WEEK).fill(null);
     weights[33] = 0.9;

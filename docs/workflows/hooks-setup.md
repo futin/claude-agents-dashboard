@@ -81,7 +81,7 @@ something a session can arrange for itself and forget to undo. Without `jq` it e
 silently and allows the call, like every other hook here.
 
 The 630s timeouts are load-bearing, not padding: a held hook must outlive the dashboard's
-answer window (≤600s) or the CLI kills it mid-hold.
+answer window (600s by default; Settings warns above 600) or the CLI kills it mid-hold.
 
 ## Why an installer and not a checked-in `.claude/settings.json`
 

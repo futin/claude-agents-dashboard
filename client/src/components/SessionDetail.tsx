@@ -40,13 +40,11 @@ function agentMeta(a: AgentJob, now: number): string {
 /** Expanded panel under a selected row: subagent counts + per-agent rows, each
  *  with its start→finish bar on the session's shared time axis. */
 export function SessionDetail({ id }: { id: string }) {
-  const detail = useSessionDetail(id);
+  const { detail, failed } = useSessionDetail(id);
 
+  // `failed` only when the first answer for this id failed: a later failure keeps the last good list on screen.
   if (!detail) {
-    return <div className="detail"><div className="detail-empty">Loading agents…</div></div>;
-  }
-  if (detail.error) {
-    return <div className="detail"><div className="detail-empty">Couldn’t read this session.</div></div>;
+    return <div className="detail"><div className="detail-empty">{failed ? 'Couldn’t read this session.' : 'Loading agents…'}</div></div>;
   }
 
   const now = Date.now();
