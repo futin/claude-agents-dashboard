@@ -146,6 +146,35 @@ export function run(): number {
     assert.ok(out.includes('nothing to check'), out);
   })) p++; else f++;
 
+  // `Number('7d')` is NaN, and every `x < NaN` window test is false, so a typo
+  // used to scan the whole history under a "last NaN day(s)" header, exit 0.
+  const withDays = (...days: string[]): { status: number; stdout: string; stderr: string } => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ctw-days-'));
+    const r = spawnSync('npx', ['tsx', SCRIPT, '--root', root, '--days', ...days], { cwd: REPO, encoding: 'utf8' });
+    return { status: r.status ?? -1, stdout: r.stdout ?? '', stderr: r.stderr ?? '' };
+  };
+
+  if (test('--days 7d is refused with exit 2, names the value, and prints no table', () => {
+    const { status, stdout, stderr } = withDays('7d');
+    assert.strictEqual(status, 2, stdout + stderr);
+    assert.ok(stderr.includes('"7d"'), stderr);
+    assert.strictEqual(stdout, '');
+  })) p++; else f++;
+
+  if (test('--days 0 and --days -3 are refused with exit 2', () => {
+    assert.strictEqual(withDays('0').status, 2);
+    assert.strictEqual(withDays('-3').status, 2);
+  })) p++; else f++;
+
+  if (test('--days with no value after it is refused with exit 2, not defaulted to 7', () => {
+    const { status, stderr } = withDays();
+    assert.strictEqual(status, 2, stderr);
+    assert.ok(stderr.includes('got nothing'), stderr);
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ctw-days-'));
+    const r = spawnSync('npx', ['tsx', SCRIPT, '--days', '--root', root], { cwd: REPO, encoding: 'utf8' });
+    assert.strictEqual(r.status, 2, 'a flag where the value should be is no value: ' + r.stderr);
+  })) p++; else f++;
+
   console.log(`\n  ${p} passed, ${f} failed`);
   return f;
 }

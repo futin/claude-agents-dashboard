@@ -84,7 +84,29 @@ const DENIED: string[] = [
   // A glob in the pattern must be judged as itself, not expanded against the
   // hook's own cwd — where it could resolve to paths that read as anchored.
   'pkill -f *',
-  'pkill -f "*.js"'
+  'pkill -f "*.js"',
+  // A `|` inside a quoted pattern: pkill -f reads an extended regex, so this is
+  // "$PWD/x" OR "vite" — every vite on the machine. The segment splitter tears
+  // the quotes apart, and the torn half must not read as anchored.
+  'pkill -f "$PWD/x|vite"',
+  'pkill -f "$PWD/x(|vite)"',
+  `pkill -f "${CWD}/x|vite"`,
+  // The same `|` reached through a backslash leaves every quote count even, so
+  // the odd-quote check alone lets it through; pkill still gets "<cwd>/x|vite".
+  'pkill -f $PWD/x\\|vite',
+  'pkill -f "$PWD/x"\\|vite',
+  'pkill -f "$PWD/x\\"|vite"',
+  // `$PWD` after a `cd` in the same command expands under the new directory,
+  // not the session's cwd: this one is `pkill -f "/Users/"`.
+  'cd /Users && pkill -f "$PWD/"',
+  'cd / ; pkill -f "${PWD}/Users"',
+  'pushd /tmp && pkill -f "$PWD/vite"',
+  // A `cd` written as a condition is still a `cd`: the keyword in front of it
+  // must not hide the verb, and neither may it hide a `pkill` written the same way.
+  'if cd /Users; then pkill -f "$PWD/"; fi',
+  'while cd /Users; do pkill -f "$PWD/"; done',
+  'until cd /Users; do sleep 1; done; pkill -f "$PWD/"',
+  'if pkill -f vite; then echo ok; fi'
 ];
 
 const ALLOWED: string[] = [
@@ -96,6 +118,11 @@ const ALLOWED: string[] = [
   'pkill -f "$PWD/node_modules/.bin/vite"',
   'pkill -f "${PWD}/node_modules/.bin/vite"',
   `pkill -f "${CWD}/node_modules/.bin/vite"`,
+  // A literal path under the cwd means the same thing after a `cd`, so it stays
+  // the way out when `$PWD` is refused.
+  `cd /tmp && pkill -f "${CWD}/vite"`,
+  // `cd` as an argument changes no directory: the flag is set by the verb only.
+  'echo cd && pkill -f "$PWD/x"',
   // `pkill` as an argument is not a kill.
   'grep -rn pkill scripts/ | head',
   'echo "never pkill by pattern"',
@@ -152,6 +179,13 @@ export function run(): number {
     assert.ok(/kill "\$MYPID"/.test(reason), `no pid idiom in reason:\n${reason}`);
     assert.ok(/pkill -f "\$PWD\//.test(reason), `no anchored form in reason:\n${reason}`);
     assert.ok(reason.includes('pkill -f vite'), `reason does not quote the command:\n${reason}`);
+  })) p++; else f++;
+
+  // A `$PWD` pattern refused only because of an earlier `cd` has to say so, or
+  // the refusal reads as contradicting the escape hatch it advertises.
+  if (ok('the refusal after a cd says $PWD is not accepted after one', () => {
+    const { reason } = decide('cd /Users && pkill -f "$PWD/"');
+    assert.ok(/\$PWD is not accepted after a `cd`/.test(reason), `no cd note in reason:\n${reason}`);
   })) p++; else f++;
 
   // The off switch is an env var so that turning it off is something a human
