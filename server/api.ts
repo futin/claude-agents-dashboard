@@ -11,7 +11,7 @@ import nodePath from 'node:path';
 
 import type { HubHandler } from 'lookout-widgets';
 
-import { listTranscripts, findTranscript, liveSessionIds, projectsRoot, sessionFromRef, sessionSurface } from './lib/scan.js';
+import { listTranscripts, findTranscript, launchRowIds, liveSessionIds, projectsRoot, sessionFromRef, sessionSurface } from './lib/scan.js';
 import { scanSnapshot } from './lib/scan-snapshot.js';
 import { readSessionAnalyticsLog } from './lib/sessionAnalyticsLog.js';
 import { archivedSessionIds, desktopLiveSessionIds } from './lib/archived.js';
@@ -148,7 +148,15 @@ export function serveSessions(baseConfig: Config, res: ServerResponse, params?: 
   // not also be reported as still `launching` in the same poll. Attached on
   // the error snapshot too — a failed scan is exactly when "did my launch
   // work?" matters most (see server/lib/spawn.ts).
-  adoptLaunched(data.sessions.map(s => s.id));
+  const adopt = data.sessions.map(s => s.id);
+  // The rows above passed the `?project=` filter, so a launch into a filtered-out project is never among them: ask its transcript directly (#471).
+  // Not on the error snapshot, which has no rows to compare with.
+  if (!data.error) {
+    const shown = new Set(adopt);
+    const unseen = listLaunching().filter(e => e.state === 'launching' && !e.resume && !shown.has(e.sessionId)).map(e => e.sessionId);
+    if (unseen.length) adopt.push(...launchRowIds(unseen, { root: projectsRoot() }));
+  }
+  adoptLaunched(adopt);
   data.launching = listLaunching();
   // Account usage (5h + weekly). Synchronous cache read; refresh happens in the
   // background. Fails open to null so it never blocks or breaks the response.

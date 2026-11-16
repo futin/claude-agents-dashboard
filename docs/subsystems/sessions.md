@@ -224,7 +224,9 @@ Three properties keep them from complicating the rest of this document:
 - **They disappear by themselves, with no client-side reconciliation.** `serveSessions`
   calls `adoptLaunched(ids)` with the freshly-scanned session ids *before* it calls
   `listLaunching()`, so the poll that first sees the real transcript is the same poll that
-  stops sending the phantom. The row is never rendered twice, and the client never has to
+  stops sending the phantom. Those ids have passed the `?project=` filter, so a launch into a
+  project the filter hides is asked about directly — `launchRowIds` (`scan.ts`) reads its
+  transcript under the list's own skips — or it would sit `launching` until the 60s TTL (#471). The row is never rendered twice, and the client never has to
   match one against the other. **One exception, and it is why `LaunchingSession.resume`
   exists:** a [resume](spawn.md#resuming-an-ended-session-resume) launch reuses an existing
   session id, so its transcript is already on disk and seeing it in a scan proves nothing —
