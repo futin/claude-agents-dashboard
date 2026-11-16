@@ -21,7 +21,9 @@ import {
 import type { StatusRead } from './codegraph.js';
 import type { Config } from './config.js';
 import { listPinRows } from './management.js';
+import { projectsRoot } from './scan.js';
 import { getPinnedProjects } from './settings.js';
+import { sharedListing } from './transcript-listing.js';
 import type {
   CodegraphLastRun,
   CodegraphRepo,
@@ -132,7 +134,7 @@ function startRead(root: string, pin: PinRow): Promise<StatusRead> {
 function pinRows(config: Partial<Config>): PinRow[] {
   // The same options `GET /api/pins` and `readGitStats` build their rows with, so a pin resolves to the same path everywhere.
   const pins = getPinnedProjects();
-  return listPinRows(config, pins, { archivedIds: archivedSessionIds(), pinnedDirs: new Set(pins) });
+  return listPinRows(config, pins, { archivedIds: archivedSessionIds(), pinnedDirs: new Set(pins), transcripts: sharedListing(projectsRoot()) });
 }
 
 interface RootLive {

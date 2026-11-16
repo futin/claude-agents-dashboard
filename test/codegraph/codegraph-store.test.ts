@@ -27,6 +27,7 @@ import {
 import { encodeProjectDir } from '../../server/lib/management.js';
 import { overrideClaudeRoots } from '../../server/lib/paths.js';
 import { resetSettings, setPinned } from '../../server/lib/settings.js';
+import { resetListingCache } from '../../server/lib/transcript-listing.js';
 import type { CodegraphRepo, CodegraphResponse } from '../../shared/types.js';
 
 function test(name: string, fn: () => Promise<void>): Promise<boolean> {
@@ -91,6 +92,8 @@ function pinned(dir: string, indexed: boolean): Pinned {
   const proj = path.join(home, '.claude', 'projects', dirName);
   fs.mkdirSync(proj, { recursive: true });
   fs.writeFileSync(path.join(proj, 'a.jsonl'), JSON.stringify(userRecord('u1', 'hi', dir)) + '\n');
+  // A folder planted mid-case must be on the next read, not behind the held transcript listing.
+  resetListingCache();
   setPinned(dirName, true);
   return { dir, dirName };
 }

@@ -178,7 +178,7 @@ same permission ladder and ceiling, prompt still stdin-only — with these diffe
   the cosmetic fields' drop-don't-reject rule: silently ignoring it would start a fresh
   session somewhere the user never asked for.
 - **Membership check against enumerated transcripts, never a path.** The id is matched
-  through `findTranscript(projectsRoot(), rid)` (`server/lib/scan.ts` — the enumerated file names
+  through `resolveTranscript(projectsRoot(), rid)` (`server/lib/transcript-listing.ts` over the held listing, else `scan.ts` `findTranscript` — the enumerated file names
   compared with that id, newest file winning, so a session split across two project dirs
   resolves to the half it is actually writing); `unknown session` otherwise. The child's
   cwd is the *transcript's own* `cwd` — `body.project` is ignored.
