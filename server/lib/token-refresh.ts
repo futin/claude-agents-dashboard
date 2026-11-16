@@ -132,8 +132,9 @@ export interface RefreshOptions {
    * Re-read the credential store: `true` once the stored token is usable.
    * Required, not defaulted, so this module never imports usage.ts back —
    * the dependency runs one way, and there is no import cycle to reason about.
+   * The real probe is async (the keychain read); every call site awaits it.
    */
-  probe: () => boolean;
+  probe: () => boolean | Promise<boolean>;
   /** How often to re-probe while a spawn runs. Tests shorten it. */
   probePollMs?: number;
 }
@@ -188,7 +189,7 @@ function sleep(ms: number): Promise<void> {
  */
 async function spawnWatching(
   start: () => Promise<SpawnResult>,
-  probe: () => boolean,
+  probe: () => boolean | Promise<boolean>,
   pollMs: number
 ): Promise<SpawnResult | 'renewed'> {
   // Settled into a value rather than assigned to a captured `let`: the promise
@@ -202,7 +203,7 @@ async function spawnWatching(
   let done = false;
   void running.then(() => { done = true; });
   while (!done) {
-    if (probe()) return 'renewed';
+    if (await probe()) return 'renewed';
     // Races the spawn so a fast, well-behaved CLI costs no extra wait.
     await Promise.race([running, sleep(pollMs)]);
   }
@@ -225,7 +226,7 @@ export async function runTokenRefresh(opts: RefreshOptions): Promise<RefreshOutc
   const cwd = opts.cwd || refreshCwd();
   try {
     // Another cycle may have renewed it while we waited to be called.
-    if (opts.probe()) return { ok: true, step: 'already-ok' };
+    if (await opts.probe()) return { ok: true, step: 'already-ok' };
     fs.mkdirSync(cwd, { recursive: true });
 
     let lastError = '';
@@ -245,7 +246,7 @@ export async function runTokenRefresh(opts: RefreshOptions): Promise<RefreshOutc
     );
     if (status === 'renewed') return { ok: true, step: 'auth-status' };
     note(status);
-    if (opts.probe()) return { ok: true, step: 'auth-status' };
+    if (await opts.probe()) return { ok: true, step: 'auth-status' };
 
     // 2. Cheapest real turn.
     const turn = await spawnWatching(
@@ -255,7 +256,7 @@ export async function runTokenRefresh(opts: RefreshOptions): Promise<RefreshOutc
     );
     if (turn === 'renewed') return { ok: true, step: 'spawn-turn' };
     note(turn);
-    if (opts.probe()) return { ok: true, step: 'spawn-turn' };
+    if (await opts.probe()) return { ok: true, step: 'spawn-turn' };
 
     return {
       ok: false,
@@ -291,7 +292,7 @@ export function resetAutoRenew(): void {
 
 export interface AutoRenewOptions {
   /** Re-read the credential store: `true` once the stored token is usable. */
-  probe: () => boolean;
+  probe: () => boolean | Promise<boolean>;
   /** Injectable clock (tests). */
   now?: number;
   /** Injectable runner (tests). Defaults to {@link runTokenRefresh}. */

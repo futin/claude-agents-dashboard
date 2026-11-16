@@ -148,6 +148,41 @@ export async function run(): Promise<number> {
 
   // ---- runner: failure modes ----
 
+  // ---- runner: an async probe (the real one reads the keychain with async `execFile`, spec 2026-11-14-poll-path-probes A2) ----
+
+  if (await test('async probe resolving true → already-ok, no spawn', async () => {
+    const calls: string[][] = [];
+    const spawner: tr.Spawner = (_c, args) => { calls.push(args); return Promise.resolve({ code: 0 }); };
+    const out = await tr.runTokenRefresh({ spawner, cwd: tmpCwd(), probe: async () => true });
+    assert.deepStrictEqual(out, { ok: true, step: 'already-ok' });
+    assert.strictEqual(calls.length, 0);
+  })) p++; else f++;
+
+  if (await test('async probe turning true after the first spawn → auth-status', async () => {
+    const calls: string[][] = [];
+    const spawner: tr.Spawner = (_c, args) => { calls.push(args); return Promise.resolve({ code: 0 }); };
+    const out = await tr.runTokenRefresh({ spawner, cwd: tmpCwd(), probe: async () => calls.length >= 1 });
+    assert.deepStrictEqual(out, { ok: true, step: 'auth-status' });
+    assert.strictEqual(calls.length, 1);
+  })) p++; else f++;
+
+  if (await test('async probe turning true only after the second spawn → spawn-turn', async () => {
+    const calls: string[][] = [];
+    const spawner: tr.Spawner = (_c, args) => { calls.push(args); return Promise.resolve({ code: 0 }); };
+    const out = await tr.runTokenRefresh({ spawner, cwd: tmpCwd(), probe: async () => calls.length >= 2 });
+    assert.deepStrictEqual(out, { ok: true, step: 'spawn-turn' });
+    assert.strictEqual(calls.length, 2);
+  })) p++; else f++;
+
+  // The case a missed `await` fails: an un-awaited promise is truthy and would report a renewal.
+  if (await test('async probe always resolving false → not ok, and both steps spawned', async () => {
+    const calls: string[][] = [];
+    const spawner: tr.Spawner = (_c, args) => { calls.push(args); return Promise.resolve({ code: 0 }); };
+    const out = await tr.runTokenRefresh({ spawner, cwd: tmpCwd(), probe: async () => false });
+    assert.strictEqual(out.ok, false);
+    assert.deepStrictEqual(calls, [['auth', 'status'], ['-p', 'ok', '--model', 'haiku']]);
+  })) p++; else f++;
+
   if (await test('exit 0 but the token is STILL expired → 502, not a false success', async () => {
     const out = await tr.runTokenRefresh({ spawner: ok0, cwd: tmpCwd(), probe: () => false });
     assert.strictEqual(out.ok, false);

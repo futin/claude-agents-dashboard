@@ -153,6 +153,27 @@ export async function run(): Promise<number> {
       assert.strictEqual(held.length, 0, 'no request goes out without a usable token');
     })) p++; else f++;
 
+    // The real `readToken` is async (spec 2026-11-14-poll-path-probes A2); the cycle awaits whatever its source answers.
+    if (await test('refreshNow: an async token source — ok fetches with its token, expired reports token-expired and renews once', async () => {
+      usage.resetUsageCache();
+      held.length = 0;
+      renewals = [];
+      onRequest = (h) => { held.push(h); reply(h.res, 200, body(7)); };
+      usage.setUsageCycleDeps({ readToken: async () => ({ state: 'ok', token: 'tok-async' }), autoRenew: async (o) => { renewals.push(o); } });
+      await within(usage.refreshNow(true), 2000, 'ok cycle');
+      assert.strictEqual(held[0]?.token, 'tok-async');
+      assert.strictEqual(usage.getCachedUsageState().status, 'ok');
+
+      usage.resetUsageCache();
+      held.length = 0;
+      usage.setUsageCycleDeps({ readToken: async () => ({ state: 'expired' }), autoRenew: async (o) => { renewals.push(o); } });
+      await within(usage.refreshNow(true), 2000, 'expired cycle');
+      assert.strictEqual(usage.getCachedUsageState().status, 'token-expired');
+      assert.strictEqual(renewals.length, 1);
+      assert.strictEqual(held.length, 0);
+      assert.strictEqual(await renewals[0].probe(), false, 'the renewal probe awaits the async source');
+    })) p++; else f++;
+
     if (await test('refreshNow: no renewal for a valid, missing or signed-out token, nor with auto-refresh off', async () => {
       setup(() => ({ state: 'ok', token: 'tok' }));
       onRequest = (h) => reply(h.res, 200, body(5));
