@@ -63,7 +63,9 @@ dashboard alive. It refuses a Bash call that runs `pkill` or `killall` — unles
 directory, the one shape that cannot match a process outside this working tree. The
 exemption is `pkill`-only; `killall` is refused in every form, since it kills every
 process of that name by definition. Its refusal names the two shapes that are allowed
-instead — a pid you recorded, or `pkill -f "$PWD/…"`.
+instead — a pid you recorded, or `pkill -f "$PWD/…"`. `$PWD` counts as the session's directory only when no `cd`, `pushd` or `popd` comes earlier in the
+same command (a literal path under it is allowed either way), and a pattern with a `|` inside it is refused, since `-f` reads an extended regex and
+`"$PWD/x|vite"` matches every vite on the machine.
 
 It is in this installer because of 2026-09-06. An unattended session in a sibling repo
 tore down two preview servers it had started itself, by pattern rather than by pid. The

@@ -19,6 +19,7 @@
  *   stdout   one table per model, plus warnings
  *   exit 0   the configured weights still follow from the data
  *   exit 1   some model with real evidence disagrees with the configured `cc`
+ *   exit 2   usage: `--days` is not a positive whole number, or has no value
  */
 
 import fs from 'node:fs';
@@ -61,8 +62,21 @@ function arg(name: string): string | undefined {
   return i === -1 ? undefined : process.argv[i + 1];
 }
 
+/**
+ * `--days` as a positive whole number, 7 when the flag is absent. Anything else exits 2 before a transcript is read: `Number('7d')` is NaN, every window
+ * test against NaN is false, and the run used to scan the whole history under a "last NaN day(s)" header with an unchanged exit code.
+ */
+function parseDays(): number {
+  if (!process.argv.includes('--days')) return 7;
+  const raw = arg('days');
+  if (raw !== undefined && !raw.startsWith('--') && /^[1-9]\d*$/.test(raw)) return Number(raw);
+  const got = raw === undefined || raw.startsWith('--') ? 'got nothing' : `got "${raw}"`;
+  console.error(`--days must be a positive whole number, ${got}`);
+  process.exit(2);
+}
+
 const ROOT = arg('root') ?? projectsRoot();
-const DAYS = Number(arg('days') ?? 7);
+const DAYS = parseDays();
 
 function emptyStats(): ModelStats {
   return { requests: 0, flatCC: 0, cc5m: 0, cc1h: 0, cr: 0 };

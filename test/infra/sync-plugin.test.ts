@@ -17,7 +17,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import {
-  bringCheckoutCurrent, checkoutGate, driftedPaths, hashTree, PLUGIN_ID, PUBLISHED_PATHS, postReconcile, publishedDigests, readInstall,
+  bringCheckoutCurrent, checkoutGate, driftedPaths, hashTree, PLUGIN_ID, PUBLISHED_PATHS, postReconcile, publishedDigests, readInstall, trackedFiles,
 } from '../../scripts/sync-plugin.js';
 import { findRepoRoot } from '../guards/docs-links.test.js';
 
@@ -132,6 +132,62 @@ export async function run(): Promise<number> {
     assert.deepStrictEqual(typed, clean);
   })) p++; else f++;
 
+  // The install is a clone of GitHub main, so it can only hold tracked files. A gitignored .DS_Store or node_modules under plugin/ used to sit in the
+  // repo-side digest forever: reinstall every run, still differ, exit 1 blaming the version.
+  const ignoredRepo = (): string => {
+    const repo = fs.mkdtempSync(path.join(os.tmpdir(), 'sync-plugin-ignored-'));
+    git(repo, 'init', '-q', '-b', 'main');
+    commitFile(repo, '.gitignore', '.DS_Store\nnode_modules/\n');
+    commitFile(repo, 'plugin/skills/a/SKILL.md', 'a');
+    fs.writeFileSync(path.join(repo, 'plugin/skills/.DS_Store'), 'finder');
+    fs.mkdirSync(path.join(repo, 'plugin/skills/a/node_modules'), { recursive: true });
+    fs.writeFileSync(path.join(repo, 'plugin/skills/a/node_modules/x.js'), 'x');
+    return repo;
+  };
+
+  if (test('publishedDigests with the tracked lister leaves gitignored files out — no drift against a clone', () => {
+    const repo = ignoredRepo();
+    const tracked = publishedDigests(path.join(repo, 'plugin'), (dir) => trackedFiles(repo, dir));
+    const clone = publishedDigests(tree({ 'skills/a/SKILL.md': 'a' }));
+    assert.strictEqual(tracked.skills, clone.skills);
+    assert.notStrictEqual(publishedDigests(path.join(repo, 'plugin')).skills, clone.skills, 'the plain walk still sees the ignored files');
+  })) p++; else f++;
+
+  if (test('publishedDigests with the tracked lister: a committed edit still moves the digest', () => {
+    const repo = ignoredRepo();
+    const lister = (dir: string): string[] => trackedFiles(repo, dir);
+    const before = publishedDigests(path.join(repo, 'plugin'), lister).skills;
+    commitFile(repo, 'plugin/skills/a/SKILL.md', 'A');
+    assert.notStrictEqual(publishedDigests(path.join(repo, 'plugin'), lister).skills, before);
+  })) p++; else f++;
+
+  if (test('trackedFiles: paths relative to dir, /-separated, sorted as hashTree sorts, symlinks left out', () => {
+    const repo = ignoredRepo();
+    commitFile(repo, 'plugin/skills/b/tools/b.mjs', 'b');
+    commitFile(repo, 'plugin/skills/B.md', 'B');
+    fs.symlinkSync('a/SKILL.md', path.join(repo, 'plugin/skills/link.md'));
+    git(repo, 'add', '--', 'plugin/skills/link.md');
+    git(repo, 'commit', '-q', '-m', 'link');
+    const files = trackedFiles(repo, path.join(repo, 'plugin', 'skills'));
+    assert.deepStrictEqual(files, ['B.md', 'a/SKILL.md', 'b/tools/b.mjs'], 'a tracked symlink is left out, as the walk leaves it out');
+  })) p++; else f++;
+
+  if (test('a dir with no tracked files hashes to the empty string through the tracked lister, like a missing root', () => {
+    const repo = ignoredRepo();
+    // lib/ exists on disk but holds only an ignored file; hooks/ does not exist at all. A clone has neither.
+    fs.mkdirSync(path.join(repo, 'plugin/lib/node_modules'), { recursive: true });
+    fs.writeFileSync(path.join(repo, 'plugin/lib/node_modules/a.js'), 'a');
+    const digests = publishedDigests(path.join(repo, 'plugin'), (dir) => trackedFiles(repo, dir));
+    assert.strictEqual(digests.hooks, '');
+    assert.strictEqual(digests.lib, '');
+    assert.deepStrictEqual(driftedPaths(digests, publishedDigests(tree({ 'skills/a/SKILL.md': 'a' }))), []);
+  })) p++; else f++;
+
+  if (test('hashTree: a listed file that is missing throws rather than being skipped', () => {
+    const root = tree({ 'a.md': 'a' });
+    assert.throws(() => hashTree(root, ['a.md', 'gone.md']));
+  })) p++; else f++;
+
   if (test('driftedPaths names only the differing paths, in PUBLISHED_PATHS order, and an absent path is drift', () => {
     const repo = { '.claude-plugin': 'm', hooks: 'h', skills: 's' };
     assert.deepStrictEqual(driftedPaths(repo, { '.claude-plugin': 'm', hooks: 'h', skills: 's' }), []);
@@ -223,7 +279,7 @@ export async function run(): Promise<number> {
     const source = fs.readFileSync(path.join(root, 'scripts', 'sync-plugin.ts'), 'utf8');
     const body = source.slice(source.indexOf('function main('));
     const current = body.indexOf('bringCheckoutCurrent(REPO_ROOT)');
-    const digests = body.indexOf('publishedDigests(PLUGIN_ROOT)');
+    const digests = body.indexOf('publishedDigests(PLUGIN_ROOT');
     assert.ok(current > 0 && digests > 0, 'both calls are in main');
     assert.ok(current < digests, 'bringCheckoutCurrent runs first');
   })) p++; else f++;
