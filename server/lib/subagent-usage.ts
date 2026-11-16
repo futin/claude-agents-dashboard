@@ -64,12 +64,17 @@ function sumTranscript(text: string): TokenTotals {
   return t;
 }
 
+/** The `subagents/` dir beside the session transcript at `mainPath`: `<transcript without .jsonl>/subagents`. */
+export function subagentDirOf(mainPath: string): string {
+  return path.join(mainPath.replace(/\.jsonl$/, ''), SUBAGENT_DIR);
+}
+
 /**
  * Every subagent transcript beside the session transcript at `mainPath`. Empty when the
  * session has no `subagents/` dir. Unreadable files are skipped, never thrown.
  */
 export function readSubagentUsage(mainPath: string): SubagentFileUsage[] {
-  const dir = path.join(mainPath.replace(/\.jsonl$/, ''), SUBAGENT_DIR);
+  const dir = subagentDirOf(mainPath);
   let names: string[];
   try { names = fs.readdirSync(dir); } catch { return []; }
   const out: SubagentFileUsage[] = [];

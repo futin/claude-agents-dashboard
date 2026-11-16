@@ -12,7 +12,9 @@ import { archivedSessionIds } from './archived.js';
 import type { Config } from './config.js';
 import { anyRepoLockHeld, heldRepoLocks, resetRepoLocks } from './git-locks.js';
 import { listPinRows } from './management.js';
+import { projectsRoot } from './scan.js';
 import { getGitFetchSecs, getPinnedProjects } from './settings.js';
+import { sharedListing } from './transcript-listing.js';
 
 /**
  * Exit code and output of one git call. `env` is an overlay the runner spreads over `process.env`. Resolves on any exit, `timedOut` when the group was killed;
@@ -260,7 +262,7 @@ interface Resolved { toplevel: string; commonDir: string }
 /** The same pin rows `readGitStats` builds, so a pin resolves to the same path in both (git-stats.ts `readAll`). */
 async function resolvePins(config: Partial<Config>, run: FetchRunner): Promise<Resolved[]> {
   const pinned = getPinnedProjects();
-  const pins = listPinRows(config, pinned, { archivedIds: archivedSessionIds(), pinnedDirs: new Set(pinned) });
+  const pins = listPinRows(config, pinned, { archivedIds: archivedSessionIds(), pinnedDirs: new Set(pinned), transcripts: sharedListing(projectsRoot()) });
   const found = await Promise.all(pins.map(async (pin): Promise<Resolved | null> => {
     if (pin.path === null) return null;
     try {

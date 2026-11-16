@@ -18,8 +18,8 @@
  *
  * Subagent turns are NOT in this file: the CLI writes them to the session's own
  * `<sessionId>/subagents/agent-*.jsonl`. `subagentTotals` sums those files
- * (`subagent-usage.ts`), matched to the launches readAgents pairs out of this
- * transcript; the harness's own figure in the Task result is only a fallback,
+ * (`subagent-usage.ts`), matched to the launches the agents reducer (`agents.ts`) pairs out of
+ * this transcript, folded into the same line loop so the file is read and parsed once; the harness's own figure in the Task result is only a fallback,
  * because it is the subagent's final context size, not its spend (bug-27).
  * Whole-session total = totals.combined + subagentTotals.tokens. An
  * `isSidechain:true` record is still skipped below, for the older transcripts
@@ -42,7 +42,7 @@
 
 import fs from 'node:fs';
 
-import { readAgents } from './agents.js';
+import { applyEvent, createScanState, parseRecordEvents, toAgentJobs } from './agents.js';
 import { addTotals, emptyTotals, readSubagentUsage } from './subagent-usage.js';
 import { isConversationRecord } from './transcript.js';
 import { assistantUsage } from './usage-line.js';
@@ -145,12 +145,16 @@ export function analyzeSession(filePath: string, id?: string): SessionAnalysis |
   };
   const countedTurns = new Set<string>();
   let anonTurnSeq = 0;
+  // readAgents' reducer, fed here so the transcript is read once. It must see every parsed record — sidechain, compaction and queue-operation
+  // ones included — so it runs before any of the skips below; skipping one changes bySubagent.
+  const agentScan = createScanState();
 
   for (const line of text.split('\n')) {
     const trimmed = line.trim();
     if (!trimmed) continue;
     let rec: any;
     try { rec = JSON.parse(trimmed); } catch { continue; }
+    for (const ev of parseRecordEvents(rec)) applyEvent(agentScan, ev);
 
     const ts = typeof rec.timestamp === 'string' ? rec.timestamp : null;
     if (ts) {
@@ -160,7 +164,7 @@ export function analyzeSession(filePath: string, id?: string): SessionAnalysis |
     if (!cwd && typeof rec.cwd === 'string') cwd = rec.cwd;
 
     // Only older transcripts replay a subagent turn here; counting one would
-    // double against bySubagent (readAgents). Skip for main-agent facts.
+    // double against bySubagent (the agent scan above). Skip for main-agent facts.
     if (rec.isSidechain === true) continue;
 
     // Same predicate kaizen.mjs uses, so the two cannot disagree on what a boundary is.
@@ -261,7 +265,7 @@ export function analyzeSession(filePath: string, id?: string): SessionAnalysis |
     // context every later turn replays. approxOutputTokens is a split estimate.
     .sort((a, b) => b.resultTokens - a.resultTokens || b.approxOutputTokens - a.approxOutputTokens || b.count - a.count);
 
-  const { agents, subagentTotals } = subagentSpend(filePath);
+  const { agents, subagentTotals } = subagentSpend(filePath, toAgentJobs(agentScan));
 
   const errorSignals: ErrorSignals = { toolErrors, retries, userCorrections };
 
@@ -320,14 +324,14 @@ export function analyzeSession(filePath: string, id?: string): SessionAnalysis |
  * write into the transcript the original launch already claims. Two rows can still claim one
  * transcript — a sync result naming an agentId already claimed — so a file joins `usage` once.
  */
-function subagentSpend(filePath: string): { agents: AgentJob[]; subagentTotals: SubagentTotals } {
+function subagentSpend(filePath: string, launches: AgentJob[]): { agents: AgentJob[]; subagentTotals: SubagentTotals } {
   const files = readSubagentUsage(filePath);
   const byAgentId = new Map(files.map(f => [f.agentId, f]));
   const byToolUseId = new Map(files.filter(f => f.toolUseId).map(f => [f.toolUseId as string, f]));
   const usage = emptyTotals();
   const added = new Set<string>();
   let tokens = 0, fallbackCount = 0, unknownTokenCount = 0;
-  const agents = (readAgents(filePath) || []).filter(a => !a.resumed).map(a => {
+  const agents = launches.filter(a => !a.resumed).map(a => {
     const file = (a.agentId && byAgentId.get(a.agentId)) || byToolUseId.get(a.id);
     let figure: number | null = null;
     if (a.status === 'done') {

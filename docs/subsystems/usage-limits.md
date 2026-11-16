@@ -786,6 +786,11 @@ Seven things are deliberate:
 - **Seeding stats, it never reads.** Each offset starts at the transcript's current size, so a restart costs one `stat` per file. Reading to the end
   instead — which the seeding tick then discarded — blocked the event loop for ~4.5 min on every `tsx watch` restart (2026-10-15: 4,158 transcripts,
   2.7 GB). A file caught mid-line loses only that record, which predates the seed.
+- **A file first seen after the seed is read from at most its last 8 MiB** (`NEW_FILE_READ_CAP`, eight `FOLD_CHUNK_BYTES`). A transcript that big on
+  arrival is a fork or a restore, whose old records `sumWindow` drops anyway; a real new session writes far less in its first minute. The start lands
+  mid-line, and that fragment fails to parse like any junk line.
+- **A transcript gone from the listing loses its cursor** on the same tick: `collectEvents` already holds the listing, so the prune costs no walk, and
+  the cursor map no longer grows with every session the server has ever seen.
 - **`req` is a parallel map, and absent is not zero.** One assistant message is
   one request, so the count is free — it is what `sumWindow` already discards
   after summing. It lives beside `tok` rather than as a fifth key inside it

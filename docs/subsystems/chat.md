@@ -352,8 +352,9 @@ this figure does not, because transcripts are append-only, a replayed turn dedup
   record and is consumed; if it doesn't parse, `cursor` stops before it and the next poll
   re-reads it. Same rules — and same oracle-equivalence test style — as `agents-cache.ts`.
 - **⚠️ Path safety:** the id is validated with `ID_RE` and resolved through
-  `findTranscript(projectsRoot(), id)` — a walk of the directory names that stats only the ones matching the id, so the
-  file path only ever comes from the walk and is **never joined into a path** (same philosophy as
+  `resolveTranscript(projectsRoot(), id)` — the held transcript listing's refs for that id ([sessions](sessions.md)), or failing that `findTranscript`'s
+  walk of the directory names that stats only the ones matching the id, so the
+  file path only ever comes from an enumeration and is **never joined into a path** (same philosophy as
   `serveSessionDetail` / the configs file endpoint, `serveConfigsFile`).
 - **⚠️ Route order:** the detail regex `/^\/api\/sessions\/([^/?]+)/` in `index.ts` also
   matches `/api/sessions/:id/chat` and `/api/sessions/:id/spend` and would answer them with agents — both matches

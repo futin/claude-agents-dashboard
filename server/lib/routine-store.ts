@@ -16,7 +16,9 @@ import { archivedSessionIds } from './archived.js';
 import type { Config } from './config.js';
 import { listPinRows } from './management.js';
 import { routineDirs, routineStateRoot } from './routine-config.js';
+import { projectsRoot } from './scan.js';
 import { getPinnedProjects } from './settings.js';
+import { sharedListing } from './transcript-listing.js';
 
 export class RoutineStoreError extends Error {
   constructor(readonly code: 'exists' | 'bad-name', message: string) {
@@ -103,7 +105,7 @@ function writeAtomic(file: string, text: string): void {
  */
 export function writePinsSnapshot(config: Config, rows?: readonly PinRow[]): void {
   const pins = getPinnedProjects();
-  const list = rows ?? listPinRows(config, pins, { archivedIds: archivedSessionIds(), pinnedDirs: new Set(pins) });
+  const list = rows ?? listPinRows(config, pins, { archivedIds: archivedSessionIds(), pinnedDirs: new Set(pins), transcripts: sharedListing(projectsRoot()) });
   const snapshot: PinSnapshot[] = list.map(r => ({ dirName: r.dirName, name: r.name, path: r.path, listed: r.listed }));
   writeAtomic(path.join(routineStateRoot(config), 'pins.json'), JSON.stringify(snapshot, null, 2) + '\n');
 }

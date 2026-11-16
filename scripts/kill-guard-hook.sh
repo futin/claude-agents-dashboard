@@ -35,7 +35,13 @@
 #   kill <pid>            — never matched here; killing a pid you hold is right
 #   pkill -f "$PWD/…"     — a pattern anchored to an absolute path under the
 #                           session's cwd can only match this session's own
-#                           processes, which is the safe shape of the idiom
+#                           processes, which is the safe shape of the idiom.
+#                           `$PWD/…` only when no `cd`, `pushd` or `popd` comes
+#                           earlier in the same command (it would expand under
+#                           that directory instead); a literal path under the
+#                           cwd is allowed either way. Never with a `|` inside
+#                           the pattern: `-f` reads an extended regex, so
+#                           "$PWD/x|vite" also matches every vite on the machine
 #
 # Known false positive: a `pkill <pattern>` written at the start of a line
 # inside a heredoc — documenting the thing rather than doing it — parses here as
@@ -98,6 +104,8 @@ SEGMENTS=$(printf '%s\n' "$CMD" | sed -e 's/&&/\
 /g')
 
 # Words that can precede the real command without changing which command it is.
+# The control keywords are on the list because `if cd /Users; then …` and
+# `if pkill …; then …` are a `cd` and a `pkill` all the same.
 # `env` is handled by the VAR=value case below it, since `env FOO=1 pkill …` and
 # `FOO=1 pkill …` are the same command wearing different clothes.
 strip_wrappers() {
@@ -105,7 +113,7 @@ strip_wrappers() {
   while :; do
     first=$(printf '%s' "$seg" | awk '{print $1}')
     case "$first" in
-      sudo|exec|nohup|time|command|builtin|env|xargs|then|do|else|!|'{')
+      sudo|exec|nohup|time|command|builtin|env|xargs|if|elif|while|until|then|do|else|!|'{')
         seg=$(printf '%s' "$seg" | sed -E 's/^[[:space:]]*[^[:space:]]+[[:space:]]*//') ;;
       *=*)
         seg=$(printf '%s' "$seg" | sed -E 's/^[[:space:]]*[^[:space:]]+[[:space:]]*//') ;;
@@ -137,11 +145,28 @@ operands_of() {
 # last operand (an unterminated line runs zero iterations, which read as "every
 # operand is anchored" — every deny case passed) and swallow the verdict in a
 # pipeline subshell.
+#
+# An operand with an odd count of `"` or of `'` is a quoted pattern the splitter
+# above tore at a `|`, `(`, `)`, `;` or `&` inside it — `"$PWD/x|vite"` arrives
+# as `"$PWD/x` — so the text judged here is not the regex pkill would get. That
+# is never anchored. A pattern with a space was already refused (its second
+# word is not `/…`), so the count costs no allowed case. An operand with a
+# backslash is refused for the same reason: `\|` and `\"` reach the same
+# alternation with every quote count even, and an absolute path under the cwd
+# has no reason to carry one.
+#
+# `$PWD` stands for the session's cwd only while nothing earlier in the same
+# command moved directory: `cd /Users && pkill -f "$PWD/"` is `pkill -f
+# "/Users/"`. MOVED is set by the main loop on a `cd`/`pushd`/`popd` segment.
 anchored_to_cwd() {
   for tok in $1; do
+    dq=$(printf '%s' "$tok" | tr -cd '"' | wc -c)
+    sq=$(printf '%s' "$tok" | tr -cd "'" | wc -c)
+    [ $((dq % 2)) -eq 0 ] && [ $((sq % 2)) -eq 0 ] || return 1
+    case "$tok" in *\\*) return 1 ;; esac
     clean=$(printf '%s' "$tok" | tr -d '"'\''')
     case "$clean" in
-      '$PWD'/*|'${PWD}'/*) ;;
+      '$PWD'/*|'${PWD}'/*) [ -z "$MOVED" ] || return 1 ;;
       /*)
         [ -n "$CWD" ] && [ "${clean#"$CWD"/}" != "$clean" ] || return 1 ;;
       *) return 1 ;;
@@ -160,12 +185,14 @@ deny() {
   exit 0
 }
 
+MOVED=
 while IFS= read -r segment; do
   [ -n "$segment" ] || continue
   segment=$(strip_wrappers "$segment")
   verb=$(printf '%s' "$segment" | awk '{print $1}')
   case "$verb" in
     pkill|killall) ;;
+    cd|pushd|popd) MOVED=1; continue ;;
     *) continue ;;
   esac
 
@@ -198,7 +225,9 @@ Kill only what you started, by the pid you recorded:
 
 If a pattern is genuinely the only way, anchor it to an absolute path inside
 this session's own directory and it will be allowed through:
-  pkill -f \"\$PWD/node_modules/.bin/vite\""
+  pkill -f \"\$PWD/node_modules/.bin/vite\"
+\$PWD is not accepted after a \`cd\` (or \`pushd\`/\`popd\`) earlier in the same command —
+write the literal path under $CWD instead — and the pattern must not contain a \`|\`."
 done <<EOF
 $SEGMENTS
 EOF
