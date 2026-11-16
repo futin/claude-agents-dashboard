@@ -73,6 +73,11 @@ export function createLogReader(
   let refusals = new Map<string, RoutineRun>();
   let files = new Map<string, FileState>();
   const live = new Map<string, { alive: boolean | null; at: number }>();
+  // Built runs of finished folds, reused until a record for that run arrives; unfinished runs are built on every read, since their state is a live probe.
+  const built = new Map<string, RoutineRun>();
+  // The run ids in display order, and whether a record, a rebuild or a prune may have changed the set since it was sorted.
+  let order: string[] = [];
+  let dirty = true;
 
   const aliveOf = (id: string, pid: number, job: string): boolean | null => {
     const memo = live.get(id);
@@ -98,6 +103,7 @@ export function createLogReader(
       // A refusal because a live wrapper holds the lock is the lock working, not a run that failed to happen.
       if (!job || !at || !why || why === 'running') return;
       const id = `refused-${machine}-${job}-${Date.parse(at)}`;
+      dirty = true;
       refusals.set(id, {
         id, job, machine, trigger: rec.trigger === 'manual' ? 'manual' : 'schedule', startedAt: at, endedAt: at, ms: null, late: false, state: 'refused',
         ok: 0, failed: 0, skipped: 0, total: 0, stopped: false, error: null, why, steps: [],
@@ -106,6 +112,8 @@ export function createLogReader(
     }
     const id = str(rec.run);
     if (!id) return;
+    built.delete(id);
+    dirty = true;
     const f = foldOf(id);
     if (kind === 'start') f.start = rec;
     else if (kind === 'end') { f.end = rec; live.delete(id); }
@@ -187,6 +195,8 @@ export function createLogReader(
     if (rebuild) {
       folds = new Map();
       refusals = new Map();
+      built.clear();
+      dirty = true;
       next.clear();
     }
     // An archive whose stamp is past retention is not read — unless it is tracked already: dropping a tracked file would read as "vanished" and rebuild.
@@ -200,6 +210,28 @@ export function createLogReader(
       next.set(n, state);
     }
     files = next;
+  }
+
+  /**
+   * Forget runs that started before the retention cutoff, so the fold does not grow for ever — except each job's newest run that is not running, which
+   * is what `GET /api/routines` shows as its `last` (spec 2026-11-14-poll-path-probes A7). `runs` is newest first; the kept ones come back in that order.
+   */
+  function prune(runs: RoutineRun[]): RoutineRun[] {
+    const cutoff = retainCutoff(now()).getTime();
+    const hasLast = new Set<string>();
+    const kept: RoutineRun[] = [];
+    for (const r of runs) {
+      if (r.state !== 'running' && !hasLast.has(r.job)) {
+        hasLast.add(r.job);
+        kept.push(r);
+      } else if (Date.parse(r.startedAt) < cutoff) {
+        folds.delete(r.id);
+        refusals.delete(r.id);
+        built.delete(r.id);
+        live.delete(r.id);
+      } else kept.push(r);
+    }
+    return kept;
   }
 
   function build(id: string, f: Fold): RoutineRun | null {
@@ -246,13 +278,35 @@ export function createLogReader(
   return {
     read() {
       sync();
-      const runs: RoutineRun[] = [...refusals.values()];
-      for (const [id, f] of folds) {
-        const r = build(id, f);
-        if (r) runs.push(r);
+      const runOf = (id: string): RoutineRun | null => {
+        const refusal = refusals.get(id);
+        if (refusal) return refusal;
+        const cached = built.get(id);
+        if (cached) return cached;
+        const f = folds.get(id);
+        const r = f ? build(id, f) : null;
+        if (r && f?.end) built.set(id, r);
+        return r;
+      };
+      let runs: RoutineRun[];
+      if (dirty) {
+        runs = [...refusals.values()];
+        for (const id of folds.keys()) {
+          const r = runOf(id);
+          if (r) runs.push(r);
+        }
+        // ISO timestamps from toISOString() are UTC and fixed-width, so string order is time order. A state change never moves a run, so only a
+        // change to the set re-sorts.
+        runs.sort((a, b) => (a.startedAt < b.startedAt ? 1 : a.startedAt > b.startedAt ? -1 : a.id < b.id ? -1 : 1));
+        runs = prune(runs);
+        order = runs.map((r) => r.id);
+        dirty = false;
+      } else {
+        runs = order.map(runOf).filter((r): r is RoutineRun => r !== null);
+        const kept = prune(runs);
+        if (kept.length !== runs.length) { runs = kept; order = runs.map((r) => r.id); }
       }
-      // ISO timestamps from toISOString() are UTC and fixed-width, so string order is time order.
-      return runs.sort((a, b) => (a.startedAt < b.startedAt ? 1 : a.startedAt > b.startedAt ? -1 : a.id < b.id ? -1 : 1));
+      return runs;
     },
 
     watch(onChange) {

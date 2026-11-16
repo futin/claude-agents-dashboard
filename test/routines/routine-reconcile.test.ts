@@ -814,6 +814,23 @@ export async function run(): Promise<number> {
     });
   }));
 
+  check(await test('cached plan: a drop during an apply keeps the apply\'s own plan out of the cache', async () => {
+    await withWorld({}, async (w) => {
+      orphans(w, ['a', 'b', 'c']);
+      let release!: () => void;
+      w.fake.printGate = new Promise<void>((r) => { release = r; });
+      w.fake.heldPrints = 3;
+      const applying = applyReconcile(w.cfg);
+      await untilPrints(w, 3);
+      setReconcileHost({ uid: UID, nodePath: NODE, probe: fakeProbe({}) });
+      release();
+      const applied = await applying;
+      assert.strictEqual(applied.state, 'in-sync');
+      // The apply removed every plist, so a fresh plan makes no print either: what tells them apart is that it is a new report.
+      assert.notStrictEqual(await planReconcileCached(w.cfg), applied, 'the next poll plans afresh');
+    });
+  }));
+
   check(await test('cached plan: a plan that throws rejects, is not cached, and the next call plans again', async () => {
     await withWorld({}, async (w) => {
       orphans(w, ['a', 'b', 'c']);

@@ -390,7 +390,9 @@ function dropPlanCache(): void {
   planInFlight = null;
 }
 
-function seedPlanCache(report: ReconcileReport): void {
+/** Cache an apply's own plan — unless a drop since the apply started (`since`) says the files moved under it, in which case it stays dropped. */
+function seedPlanCache(report: ReconcileReport, since: number): void {
+  if (planGeneration !== since) return;
   planGeneration++;
   cachedPlan = { report, at: planClock() };
   planInFlight = null;
@@ -477,13 +479,14 @@ async function applyWsl(ctx: PlanContext, errors: string[]): Promise<void> {
 }
 
 async function applyOnce(config: Config): Promise<ReconcileReport> {
+  const generation = planGeneration;
   const p = await plan(config);
-  if (isReport(p)) { lastReport = p; seedPlanCache(p); return p; }
+  if (isReport(p)) { lastReport = p; seedPlanCache(p, generation); return p; }
   const errors: string[] = [];
   if (p.machine === 'mac') await applyMac(p, errors);
   else await applyWsl(p, errors);
   const after = await planReconcile(config);
-  seedPlanCache(after);
+  seedPlanCache(after, generation);
   lastReport = errors.length > 0 ? { ...after, state: 'failed', error: errors.join('; ') } : after;
   return lastReport;
 }
