@@ -11,8 +11,8 @@ export interface RoutineCtl {
   dir: string;
   owner: boolean;
   locked: boolean;
-  /** The key of the write in flight. */
-  busy: string | null;
+  /** The keys of the writes in flight. */
+  busy: ReadonlySet<string>;
   days: 7 | 30 | 90;
   /** Under 640 px: the Run-now popover becomes a sheet and labels shorten. The row layouts swap in CSS, at 1024. */
   phone: boolean;

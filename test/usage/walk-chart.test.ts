@@ -22,7 +22,7 @@ function walkOf(flags: boolean[], opts: { startMs?: number; gain?: number; from?
   let cum = opts.from ?? 0;
   return flags.map((learned, i) => {
     cum += gain;
-    return { t: new Date(start + i * H).toISOString(), gain, cum, weight: 1, learned };
+    return { t: new Date(start + i * H).toISOString(), gain, cum, weight: 1, learned, hourOfWeek: i % 168 };
   });
 }
 
@@ -159,7 +159,7 @@ export function run(): number {
   })) p++; else f++;
 
   if (test('headroomOf / maxDebt read the walk the way the curve draws it', () => {
-    assert.strictEqual(headroomOf({ t: '', gain: 1, cum: 61, weight: 1, learned: true }), 39);
+    assert.strictEqual(headroomOf({ t: '', gain: 1, cum: 61, weight: 1, learned: true, hourOfWeek: 0 }), 39);
     assert.strictEqual(maxDebt(walkOf([true, true], { gain: 1, from: 0 })), 0);
     const over = walkOf(new Array(30).fill(true), { gain: 5, from: 0 });
     assert.strictEqual(Math.round(maxDebt(over)), 50);
@@ -238,8 +238,8 @@ export function run(): number {
 
   if (test('crossingX: a zero-gain crossing hour does not divide by zero', () => {
     const w: ForecastStep[] = [
-      { t: '2026-08-30T00:00:00Z', gain: 0, cum: 100, weight: 0, learned: true },
-      { t: '2026-08-30T01:00:00Z', gain: 0, cum: 100, weight: 0, learned: true }
+      { t: '2026-08-30T00:00:00Z', gain: 0, cum: 100, weight: 0, learned: true, hourOfWeek: 0 },
+      { t: '2026-08-30T01:00:00Z', gain: 0, cum: 100, weight: 0, learned: true, hourOfWeek: 0 }
     ];
     const x = crossingX(w);
     assert.ok(x !== null && Number.isFinite(x), String(x));
@@ -293,7 +293,7 @@ export function run(): number {
 
   if (test('stepTitle: an assumed hour says assumed, and never claims evidence', () => {
     const s: ForecastStep = {
-      t: '2026-08-30T14:00:00Z', gain: 2.146, cum: 70.4, weight: 1, learned: false
+      t: '2026-08-30T14:00:00Z', gain: 2.146, cum: 70.4, weight: 1, learned: false, hourOfWeek: 0
     };
     const text = stepTitle(s, cell({ observedMin: 0 }));
     assert.ok(text.includes('−2.1 pts this hour'), text);
@@ -304,7 +304,7 @@ export function run(): number {
 
   if (test('stepTitle: a measured hour reports its weeks, from observedMin / 60', () => {
     const s: ForecastStep = {
-      t: '2026-08-30T09:00:00Z', gain: 1.33, cum: 52.1, weight: 0.62, learned: true
+      t: '2026-08-30T09:00:00Z', gain: 1.33, cum: 52.1, weight: 0.62, learned: true, hourOfWeek: 0
     };
     assert.ok(stepTitle(s, cell({ observedMin: 300 })).includes('weight 62% — measured, 5 weeks'));
     assert.ok(stepTitle(s, cell({ observedMin: 60 })).includes('measured, 1 week'), 'singular');
@@ -312,7 +312,7 @@ export function run(): number {
 
   if (test('stepTitle: an hour past empty counts what is owed, not what is left', () => {
     const s: ForecastStep = {
-      t: '2026-08-30T09:00:00Z', gain: 2, cum: 148.2, weight: 1, learned: false
+      t: '2026-08-30T09:00:00Z', gain: 2, cum: 148.2, weight: 1, learned: false, hourOfWeek: 0
     };
     const text = stepTitle(s, undefined);
     assert.ok(text.includes('48.2 pts past empty'), text);
@@ -321,7 +321,7 @@ export function run(): number {
 
   if (test('stepTitle: the flip happens exactly at empty, not just past it', () => {
     const at100: ForecastStep = {
-      t: '2026-08-30T09:00:00Z', gain: 1, cum: 100, weight: 1, learned: false
+      t: '2026-08-30T09:00:00Z', gain: 1, cum: 100, weight: 1, learned: false, hourOfWeek: 0
     };
     assert.ok(stepTitle(at100, undefined).includes('0.0 pts left'), 'zero is still "left"');
     assert.ok(stepTitle({ ...at100, cum: 100.4 }, undefined).includes('0.4 pts past empty'));
@@ -329,7 +329,7 @@ export function run(): number {
 
   if (test('stepTitle: a missing cell degrades to zero weeks instead of throwing', () => {
     const s: ForecastStep = {
-      t: '2026-08-30T09:00:00Z', gain: 1, cum: 10, weight: 0.5, learned: true
+      t: '2026-08-30T09:00:00Z', gain: 1, cum: 10, weight: 0.5, learned: true, hourOfWeek: 0
     };
     assert.ok(stepTitle(s, undefined).includes('measured, 0 weeks'));
   })) p++; else f++;

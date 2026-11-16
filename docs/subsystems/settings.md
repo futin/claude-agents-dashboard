@@ -47,7 +47,9 @@ the `claude` CLI choose; either way a launch can still override it), the Git Syn
 model and effort (`syncModel` / `syncEffort`, default `''` each; the button never asks, so these are its whole say — its permission mode is the host's
 `SYNC_PERMISSION_MODE` and its remote control follows Remote answers, both shown read-only in the same card), the Routines page's day window
 (`routineWindow`: `7` | `30` | `90`, default `30` — the stats band and the Runs list read it; a hand-edited value outside the three reads back as `30`, and
-the server's `ROUTINE_WINDOWS` is the same list; see [routines](routines.md#the-routines-page)), which Usage sub-tab
+the server's `ROUTINE_WINDOWS` is the same list; see [routines](routines.md#the-routines-page)), the Runs page's filters beside it (`routineRunFilters`:
+`{ outcome: '' | 'failed' | 'lost', runner: '' | 'claude' | 'shell', job }`, default all `''`; each field falls back to `''` on its own, and `job` takes any
+string, so a filter on a job deleted since still reads "no runs that match"), which Usage sub-tab
 opens (`forecast` | `rates` | `history`), which Management sub-view is showing (`managementTab`: `git` |
 `projects` | `codegraph`, default `git`, which is also where a main-row click on Management lands: `items[0]` of its tree), which Routines sub-view
 is showing (`routinesTab`: `jobs` | `runs`, default `jobs`, the same way), and which Settings page is showing (`settingsTab`: `local` |

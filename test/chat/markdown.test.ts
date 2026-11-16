@@ -96,6 +96,54 @@ export function run(): number {
     assert.deepStrictEqual(bs, [{ t: 'code', lang: '', text: 'still going' }]);
   })) p++; else f++;
 
+  if (test('a four-backtick fence keeps an inner ``` pair as its own text', () => {
+    const bs = parseMarkdown('````md\nouter\n```ts\nconst a = 1;\n```\nstill outer\n````\nafter');
+    assert.deepStrictEqual(bs[0], { t: 'code', lang: 'md', text: 'outer\n```ts\nconst a = 1;\n```\nstill outer' });
+    assert.deepStrictEqual(bs.map(b => b.t), ['code', 'p']);
+  })) p++; else f++;
+
+  if (test('```ts does not close a ``` fence — a closer carries nothing but whitespace', () => {
+    const bs = parseMarkdown('```\na\n```ts\nb\n```  \nafter');
+    assert.deepStrictEqual(bs[0], { t: 'code', lang: '', text: 'a\n```ts\nb' });
+    assert.deepStrictEqual(bs.map(b => b.t), ['code', 'p']);
+  })) p++; else f++;
+
+  if (test('a ~~~ fence is not closed by ```', () => {
+    const bs = parseMarkdown('~~~\na\n```\nb\n~~~\nafter');
+    assert.deepStrictEqual(bs[0], { t: 'code', lang: '', text: 'a\n```\nb' });
+  })) p++; else f++;
+
+  if (test('a closer longer than the opener closes it; a shorter one does not', () => {
+    const bs = parseMarkdown('````\na\n```\nb\n`````\nafter');
+    assert.deepStrictEqual(bs[0], { t: 'code', lang: '', text: 'a\n```\nb' });
+    assert.deepStrictEqual(bs.map(b => b.t), ['code', 'p']);
+  })) p++; else f++;
+
+  if (test('a fence indented under a nested list closes at its indented closer', () => {
+    const bs = parseMarkdown('1. run it\n\n    ```bash\n    ls\n    ```\n\nafter text');
+    assert.deepStrictEqual(bs.map(b => b.t), ['list', 'code', 'p']);
+    assert.strictEqual(flat((bs[2] as Extract<Block, { t: 'p' }>).spans), 'after text');
+  })) p++; else f++;
+
+  if (test('table cells: an escaped \\| is a literal pipe, not a split', () => {
+    const bs = parseMarkdown('| h1 | h2 |\n|---|---|\n| a \\| b | c |');
+    const t = bs[0] as Extract<Block, { t: 'table' }>;
+    assert.deepStrictEqual(t.rows[0].map(flat), ['a | b', 'c']);
+  })) p++; else f++;
+
+  if (test('table cells: a | inside a code span does not split', () => {
+    const bs = parseMarkdown('| h1 | h2 |\n|---|---|\n| `x|y` | z |');
+    const t = bs[0] as Extract<Block, { t: 'table' }>;
+    assert.deepStrictEqual(t.rows[0].map(flat), ['x|y', 'z']);
+    assert.deepStrictEqual(t.rows[0][0], [{ t: 'code', v: 'x|y' }]);
+  })) p++; else f++;
+
+  if (test('table cells: an unclosed backtick does not swallow the later splits', () => {
+    const bs = parseMarkdown('| h1 | h2 | h3 |\n|---|---|---|\n| a ` b | c | d |');
+    const t = bs[0] as Extract<Block, { t: 'table' }>;
+    assert.deepStrictEqual(t.rows[0].map(flat), ['a ` b', 'c', 'd']);
+  })) p++; else f++;
+
   if (test('GFM table with alignment', () => {
     const bs = parseMarkdown('| Check | Result |\n|---|---:|\n| `pnpm test` | ALL PASS |\n| build | ok |\n\nafter');
     const t = bs[0] as Extract<Block, { t: 'table' }>;

@@ -132,7 +132,9 @@ control (the type is a column now, not a collapsible header) and the
   file bodies are read during the scan; the rail fetches one on click through the same
   `/api/configs/file`. Caps: depth 4 rel-segments, 200 files per skill.
 - **No polling:** config changes over days. Index fetched on entering the section / manual
-  ↻; project scopes + file bodies fetched lazily on click and cached in ref-held Maps.
+  ↻; project scopes + file bodies fetched lazily on click and cached in ref-held Maps, both keyed by ↻'s `refreshKey`, so ↻ also refetches
+  the file that is open (`FileBlock` reads the key from `useConfigsScope`); the old text stays on screen while the refetch is out, and so does the old
+  project scope (`useProjectScope` returns the last one read for that dir), or the list and the open file would unmount on every ↻.
   Switching to Claude Configs unmounts SessionsView → the 3s poll stops.
 - **Client:** ConfigsView is a `React.lazy` default export (own chunk; sessions bundle
   unchanged). Entry normalization is pure (`lib/configsEntries.ts`, unit-tested).

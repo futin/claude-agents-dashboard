@@ -85,7 +85,7 @@ function StepLine({ step, run, row, ctl }: { step: RoutineStep; run: RoutineRun;
       <span className="rtn-hide">{step.model ?? ''}</span>
       <span className="rtn-links">
         {again && (
-          <button type="button" className="git-link" disabled={ctl.locked || ctl.busy === `run:${run.job}`} onClick={() => ctl.runNow(run.job, [step.repo!])}>run again</button>
+          <button type="button" className="git-link" disabled={ctl.locked || ctl.busy.has(`run:${run.job}`)} onClick={() => ctl.runNow(run.job, [step.repo!])}>run again</button>
         )}
         {step.sessionId && <SessionLink id={step.sessionId} ctl={ctl} />}
       </span>

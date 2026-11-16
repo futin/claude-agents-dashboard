@@ -50,6 +50,12 @@ export type ManagementTab = 'git' | 'projects' | 'codegraph';
 export type RoutinesTab = 'jobs' | 'runs';
 /** The day windows the Routines stats band and Runs list read: the server's `ROUTINE_WINDOWS`. */
 export type RoutineWindow = 7 | 30 | 90;
+/** The Runs page's filters; an empty string is "no filter". The same three fields as `RoutineRunsQuery` (`lib/routines.ts`). */
+export interface RoutineRunFilters {
+  outcome: '' | 'failed' | 'lost';
+  runner: '' | 'claude' | 'shell';
+  job: string;
+}
 /** Which section opens on load. `last` restores whatever you were on. */
 export type Landing = Section | 'last';
 /**
@@ -116,6 +122,8 @@ export interface Settings {
   routinesTab: RoutinesTab;
   /** The Routines page's day window (stats band, Runs list). Per device, like the other view picks. */
   routineWindow: RoutineWindow;
+  /** The Runs page's outcome, runner and job filters. Per device, kept across a reload like the window beside them. */
+  routineRunFilters: RoutineRunFilters;
   /**
    * Which of the five shapes the sessions list opens in, or `last` to reopen
    * whichever one the switcher was left on. A concrete shape pins every load
@@ -158,6 +166,7 @@ export const DEFAULT_SETTINGS: Settings = {
   managementTab: 'git',
   routinesTab: 'jobs',
   routineWindow: 30,
+  routineRunFilters: { outcome: '', runner: '', job: '' },
   defaultLayout: 'last',
   contentWidth: 'fixed'
 };
@@ -247,6 +256,18 @@ const USAGE_TABS: UsageTab[] = ['forecast', 'rates', 'history'];
 const SETTINGS_TABS: SettingsTab[] = ['local', 'shared'];
 const MANAGEMENT_TABS: ManagementTab[] = ['git', 'projects', 'codegraph'];
 const ROUTINES_TABS: RoutinesTab[] = ['jobs', 'runs'];
+const RUN_OUTCOMES: RoutineRunFilters['outcome'][] = ['', 'failed', 'lost'];
+const RUN_RUNNERS: RoutineRunFilters['runner'][] = ['', 'claude', 'shell'];
+
+/** Each field falls back to `''` on its own. `job` stays any string: a filter on a job deleted since still reads "no runs that match". */
+function pickRunFilters(value: unknown): RoutineRunFilters {
+  const v = (value && typeof value === 'object' ? value : {}) as Partial<Record<keyof RoutineRunFilters, unknown>>;
+  return {
+    outcome: pickOne(v.outcome, RUN_OUTCOMES, ''),
+    runner: pickOne(v.runner, RUN_RUNNERS, ''),
+    job: typeof v.job === 'string' ? v.job : ''
+  };
+}
 export const ROUTINE_WINDOWS: readonly RoutineWindow[] = [7, 30, 90];
 /** Derived from the picker, so the offered set and the accepted set cannot drift. */
 const LAYOUT_IDS: DefaultLayout[] = LAYOUT_OPTIONS.map(o => o.value);
@@ -284,6 +305,7 @@ export function clampSettings(raw: unknown): Settings {
     routinesTab: pickOne(s.routinesTab ?? legacy.schedulesTab, ROUTINES_TABS, DEFAULT_SETTINGS.routinesTab),
     // Strict like `pickBool`: a stored "7" from a hand-edit is not a window, so it reads as the default.
     routineWindow: ROUTINE_WINDOWS.find(w => w === (s.routineWindow ?? legacy.scheduleWindow)) ?? DEFAULT_SETTINGS.routineWindow,
+    routineRunFilters: pickRunFilters(s.routineRunFilters),
     defaultLayout: pickOne(s.defaultLayout, LAYOUT_IDS, DEFAULT_SETTINGS.defaultLayout),
     contentWidth: pickOne(s.contentWidth, CONTENT_WIDTHS, DEFAULT_SETTINGS.contentWidth)
   };

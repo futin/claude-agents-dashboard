@@ -61,7 +61,7 @@ function Row({ row, ctl, folded, onFold, menu, setMenu }: {
   const [day, clock] = splitNext(nextLine);
   const dot = dotTone(pill, !pausedLook(job));
   const runnable = ctl.owner && job !== null;
-  const busy = ctl.busy === `run:${row.name}`;
+  const busy = ctl.busy.has(`run:${row.name}`);
   const actRef = useRef<HTMLSpanElement>(null);
   const closeRef = useRef(setMenu);
   closeRef.current = setMenu;
@@ -86,7 +86,7 @@ function Row({ row, ctl, folded, onFold, menu, setMenu }: {
   // A manual job is never installed, so an on/off switch would promise something the file cannot do.
   const toggle = ctl.owner && job && !isManualCron(job.cron) && (
     <button type="button" role="switch" aria-checked={job.enabled} aria-label={job.enabled ? `Pause ${row.name}` : `Resume ${row.name}`}
-      className={`rtn-tog${job.enabled ? ' on' : ''}`} disabled={ctl.locked || ctl.busy === `toggle:${row.name}`}
+      className={`rtn-tog${job.enabled ? ' on' : ''}`} disabled={ctl.locked || ctl.busy.has(`toggle:${row.name}`)}
       onClick={() => ctl.toggle(row.name, !job.enabled)} />
   );
 
