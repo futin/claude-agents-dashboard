@@ -11,8 +11,8 @@ import { messageSessionIds } from './messages.js';
 import { pendingSessionIds, sweepDecided as sweepDecidedPending } from './pending.js';
 import { permissionWaits } from './permissions.js';
 import { planSessionIds, sweepDecided as sweepDecidedPlans } from './plans.js';
-import { lastMessageMs, listTranscripts, projectsRoot, scanSessions } from './scan.js';
-import type { TranscriptRef } from './scan.js';
+import { lastMessageMs, listTranscripts, probeProcesses, projectsRoot, scanSessions } from './scan.js';
+import type { ProcProbe, TranscriptRef } from './scan.js';
 import { stopStates } from './spawn.js';
 import { publishListing } from './transcript-listing.js';
 import type { SessionsResponse } from '../../shared/types.js';
@@ -40,9 +40,42 @@ function sweepTerminalDecisions(root: string, transcripts: readonly TranscriptRe
   sweepDecidedPlans(movedOn);
 }
 
+/**
+ * How long a finished process probe answers every reader. Under the 3 s client poll, so one tab still gets a fresh probe on each poll, while a second
+ * tab and the hub tile inside the same second share it. Serving a stale probe instead would show a just-launched session `idle` for a whole poll.
+ */
+export const PROBE_TTL_MS = 1000;
+
+let probeInFlight: Promise<ProcProbe> | null = null;
+let lastProbe: { probe: ProcProbe; doneAt: number } | null = null;
+let probeClock: () => number = Date.now;
+
+/** Test seam: forget the cached and in-flight probe, and optionally swap the clock the TTL reads. */
+export function resetProcProbeCache(clock: () => number = Date.now): void {
+  probeInFlight = null;
+  lastProbe = null;
+  probeClock = clock;
+}
+
+/**
+ * The process probe every `/api/sessions` reader shares: a call while one runs joins it, and one within {@link PROBE_TTL_MS} of its completion reuses
+ * its answer. null when the config switches the probe off (Docker, where `ps` sees only the container).
+ */
+export function sharedProcProbe(config: Config): Promise<ProcProbe | null> {
+  if (config.skipProcScan) return Promise.resolve(null);
+  if (probeInFlight) return probeInFlight;
+  if (lastProbe && probeClock() - lastProbe.doneAt < PROBE_TTL_MS) return Promise.resolve(lastProbe.probe);
+  const run = probeProcesses()
+    .then(probe => { lastProbe = { probe, doneAt: probeClock() }; return probe; })
+    .finally(() => { probeInFlight = null; });
+  probeInFlight = run;
+  return run;
+}
+
 /** One scan of the session rows with every RAM-store injection applied — what `/api/sessions` serves before launches and usage are attached. */
-export function scanSnapshot(config: Config, projects?: ReadonlySet<string> | null): SessionsResponse {
-  // One listing per request, shared by the sweep and the scan.
+export async function scanSnapshot(config: Config, projects?: ReadonlySet<string> | null): Promise<SessionsResponse> {
+  const proc = await sharedProcProbe(config);
+  // One listing per request, shared by the sweep and the scan, taken after the probe so the transcripts are as fresh as it is.
   const root = projectsRoot();
   const transcripts = listTranscripts(root);
   // The other request paths read this walk instead of taking their own (`transcript-listing.ts`).
@@ -63,7 +96,7 @@ export function scanSnapshot(config: Config, projects?: ReadonlySet<string> | nu
   // showing until it ages out of the lookback window. Read here, not in
   // scan.ts, so the scan stays free of the app's store (see archived.ts).
   return scanSessions(config, {
-    skipProcScan: config.skipProcScan,
+    proc,
     pendingIds: pendingSessionIds(),
     planIds: planSessionIds(),
     messageIds: messageSessionIds(),

@@ -129,11 +129,11 @@ export function projectParams(params?: URLSearchParams): Set<string> | null {
   return names.length ? new Set(names) : null;
 }
 
-export function serveSessions(baseConfig: Config, res: ServerResponse, params?: URLSearchParams): void {
+export async function serveSessions(baseConfig: Config, res: ServerResponse, params?: URLSearchParams): Promise<void> {
   const config = scanOverrides(baseConfig, params);
   let data: SessionsResponse;
   try {
-    data = scanSnapshot(config, projectParams(params));
+    data = await scanSnapshot(config, projectParams(params));
   } catch (e) {
     console.error('[dashboard] scan failed:', (e as Error).message);
     data = {
@@ -1326,7 +1326,8 @@ function resumeTarget(rid: string, requireCwd: boolean):
   // last restart still reads `dashboard` and still offers resume, so the
   // fallback is the argv itself: `--session-id` / `--resume` carry the id.
   // Ordered second because the store is free and exact while this costs a
-  // `ps`. A `null` probe means "could not answer" — never a refusal.
+  // `ps`. A `null` probe means "could not answer" — never a refusal. Synchronous and fresh, not the poll's shared probe: up to 1 s old, that one
+  // could miss a session launched inside that second.
   if (liveSessionIds()?.has(rid)) return refuse(409, 'session is still running');
   // `'launching'` only, as at the cap: a `failed` row for this id lingers
   // FAIL_TTL_MS for display, holds no process, and must not refuse a retry.

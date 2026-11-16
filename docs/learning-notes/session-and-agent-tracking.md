@@ -152,7 +152,7 @@ Reading files alone has a blind spot: a killed/interrupted session's last record
 often has no `end_turn`, so on disk it looks "recent + pending = working" forever
 even though nothing runs.
 
-`scan.ts` `liveCwds()` takes the pids of every running `claude` from `ps`, then asks `lsof` for their working directories:
+`scan.ts` `probeProcesses()` takes the pids of every running `claude` from `ps`, then asks `lsof` for their working directories:
 
 ```
 ps -Ao pid=,comm=

@@ -88,6 +88,17 @@ export async function run(): Promise<number> {
     }));
   }
 
+  check(await testAsync('a sessions source returning a promise renders the same rows as a sync one', async () => {
+    const rows = [session({}), session({ id: 'b', sessionName: 'Fix', gitBranch: 'main', status: 'working' })];
+    const read = (sessions: () => Session[] | Promise<Session[]>) =>
+      createDashboardHub(cfg(false), { sessions, git: async () => [], watchGit: () => {} })
+        .handle({ method: 'GET', path: '/api/hub/widgets/sessions', query: new URLSearchParams() });
+    const sync = await read(() => rows);
+    const async_ = await read(async () => rows);
+    assert.equal(async_?.status, 200);
+    assert.deepStrictEqual(async_?.json, sync?.json);
+  }));
+
   check(await testAsync('showUsage false serves only sessions; usage is 404', async () => {
     const g = get(OK, [session({})], false);
     assert.deepStrictEqual(((await g('/api/hub/widgets'))?.json as { widgets: { id: string }[] }).widgets.map(w => w.id), ['sessions', 'git']);

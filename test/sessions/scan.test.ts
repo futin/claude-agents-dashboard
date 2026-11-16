@@ -242,6 +242,22 @@ export function run(): number {
     assert.deepStrictEqual(both.sessions.map(s => s.id), ['q1', 'n1']);
   })) p++; else f++;
 
+  if (test('scanSessions project filter: unknown-project transcripts do not use up the matching pool', () => {
+    const now = 1_700_000_000_000;
+    const unknowns = [1, 2, 3, 4].map(i => ({ dirName: '-x-nocwd', id: `u${i}`, mtimeMs: now - i * 60 * 1000, records: [usageRec(1000)] }));
+    const root = makeRoot([
+      ...unknowns,
+      { dirName: '-a-busy', id: 'b1', mtimeMs: now - 10 * 60 * 1000, records: [metaRec('/a/busy', 'main'), usageRec(1000)] },
+      { dirName: '-a-busy', id: 'b2', mtimeMs: now - 11 * 60 * 1000, records: [metaRec('/a/busy', 'main'), usageRec(1000)] }
+    ]);
+    const busy = scan.scanSessions(projCfg, { root, now, skipProcScan: true, projects: new Set(['busy']) });
+    assert.deepStrictEqual(busy.sessions.map(s => s.id), ['b1', 'b2']);
+    // mirror: unfiltered, the first four by mtime are the pool, as before
+    assert.deepStrictEqual(scan.scanSessions(projCfg, { root, now, skipProcScan: true }).sessions.map(s => s.id), ['u1', 'u2']);
+    // mirror: the unknowns still resolve on parse
+    assert.deepStrictEqual(scan.scanSessions(projCfg, { root, now, skipProcScan: true, projects: new Set(['nocwd']) }).sessions.map(s => s.id), ['u1', 'u2']);
+  })) p++; else f++;
+
   if (test('scanSessions project filter: an empty set filters nothing', () => {
     const now = 1_700_000_000_000;
     const out = scan.scanSessions(projCfg, { root: projectRoot(now), now, skipProcScan: true, projects: new Set() });
@@ -1103,18 +1119,13 @@ export function run(): number {
       assert.strictEqual('processLive' in plRow(out, 'headless'), false);
     })) p++; else f++;
 
-    if (test('processLive: skipProcScan without an injected set never runs ps and flags nothing', () => {
-      let calls = 0;
-      scan.setPsRunner(() => { calls++; return '  1 claude -p --resume headless\n'; });
-      try {
-        const out = plScan({ skipProcScan: true });
-        assert.strictEqual(calls, 0, 'ps ran');
-        assert.strictEqual('processLive' in plRow(out, 'headless'), false);
-        // mirror: without skipProcScan the same argv flags the row
-        const probed = plScan({ liveCwds: null });
-        assert.strictEqual(calls, 1);
-        assert.strictEqual(plRow(probed, 'headless').processLive, true);
-      } finally { scan.setPsRunner(null); }
+    if (test('processLive: skipProcScan ignores the probe and flags nothing', () => {
+      const proc = { runningClaudeProcs: 1, liveCwds: null, liveSessionIds: new Set(['headless']) };
+      const out = plScan({ skipProcScan: true, proc });
+      assert.strictEqual('processLive' in plRow(out, 'headless'), false);
+      assert.strictEqual(out.runningClaudeProcs, null);
+      // mirror: without skipProcScan the same probe flags the row
+      assert.strictEqual(plRow(plScan({ proc }), 'headless').processLive, true);
     })) p++; else f++;
   }
 
@@ -1266,32 +1277,40 @@ export function run(): number {
     assert.strictEqual(scan.findTranscript('/nowhere', 's', [cur, old]), cur);
   })) p++; else f++;
 
-  if (test('one ps -Ao pid=,comm= per scan feeds runningClaudeProcs', () => {
-    const root = makeRoot([]);
-    let calls = 0;
-    const out = (s: string) => () => { calls++; return s; };
+  if (test('scanSessions spawns nothing: with no proc it fails open', () => {
+    const now = 1_700_000_000_000;
+    const root = makeRoot([
+      { dirName: '-a-headless', id: 'headless', mtimeMs: now - 60 * 1000, records: [metaRec('/a/headless', 'main'), entryRec('sdk-cli')] }
+    ]);
+    let execs = 0, ps = 0;
+    scan.setProbeExec(() => { execs++; throw new Error('spawned'); });
+    scan.setPsRunner(() => { ps++; throw new Error('spawned'); });
     try {
-      scan.setCommRunner(out('12 claude\n34 /usr/local/bin/claude\n56 claude-helper\n78 node\n'));
-      const counted = scan.scanSessions({}, { root, liveCwds: new Set(), liveSessionIds: null, lessons: null });
-      assert.strictEqual(counted.runningClaudeProcs, 2);
-      assert.strictEqual(calls, 1);
+      const out = scan.scanSessions({ maxSessions: 5, activeWindowMin: 5, lookbackHours: 24 }, { root, now, lessons: null });
+      assert.strictEqual(execs, 0);
+      assert.strictEqual(ps, 0);
+      assert.strictEqual(out.runningClaudeProcs, null);
+      assert.ok(out.sessions.length === 1 && out.sessions.every(s => !('processLive' in s)));
+    } finally { scan.setProbeExec(null); scan.setPsRunner(null); }
+  })) p++; else f++;
 
-      calls = 0;
-      const probed = scan.scanSessions({}, { root, liveSessionIds: null, lessons: null });
-      assert.strictEqual(probed.runningClaudeProcs, 2);
-      assert.strictEqual(calls, 1, 'liveCwds and the count share one ps');
-
-      calls = 0;
-      const skipped = scan.scanSessions({}, { root, skipProcScan: true, liveSessionIds: null, lessons: null });
-      assert.strictEqual(skipped.runningClaudeProcs, null);
-      assert.strictEqual(calls, 0);
-
-      scan.setCommRunner(() => { throw new Error('ps: command not found'); });
-      assert.strictEqual(scan.scanSessions({}, { root, liveCwds: new Set(), liveSessionIds: null, lessons: null }).runningClaudeProcs, null);
-
-      scan.setCommRunner(() => '78 node\n');
-      assert.strictEqual(scan.scanSessions({}, { root, liveCwds: new Set(), liveSessionIds: null, lessons: null }).runningClaudeProcs, 0);
-    } finally { scan.setCommRunner(null); }
+  if (test('scanSessions honours proc: count, cwd gate and processLive; a per-field override still wins', () => {
+    const now = 1_700_000_000_000;
+    const freshTs = new Date(now - 30 * 1000).toISOString();
+    const root = makeRoot([
+      { dirName: '-a-dead', id: 'dead', mtimeMs: now - 30 * 1000, records: [metaRec('/a/dead', 'main'), at(assistantPending(), freshTs)] },
+      { dirName: '-a-headless', id: 'headless', mtimeMs: now - 60 * 1000, records: [metaRec('/a/headless', 'main'), entryRec('sdk-cli')] }
+    ]);
+    const cfg = { maxSessions: 5, activeWindowMin: 5, lookbackHours: 24 };
+    const proc = { runningClaudeProcs: 2, liveCwds: new Set(['/a/lv']), liveSessionIds: new Set(['headless']) };
+    const out = scan.scanSessions(cfg, { root, now, lessons: null, proc });
+    const row = (o: typeof out, id: string) => o.sessions.find(s => s.id === id)!;
+    assert.strictEqual(out.runningClaudeProcs, 2);
+    assert.strictEqual(row(out, 'dead').status, 'idle');
+    assert.strictEqual(row(out, 'headless').processLive, true);
+    // mirror: liveCwds: null beside the same proc turns the gate off
+    const nogate = scan.scanSessions(cfg, { root, now, lessons: null, proc, liveCwds: null });
+    assert.strictEqual(row(nogate, 'dead').status, 'working');
   })) p++; else f++;
 
   // ---- bug-7: the liveness gate matches on either cwd key -------------------
