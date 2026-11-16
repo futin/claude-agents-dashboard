@@ -171,10 +171,11 @@ Detection only — the app never edits `settings.json`.
 ⚠️ **A second trap is specific to the window:** the CLI kills a hook at the `timeout` on its
 `settings.json` entry (installed as `630`). A window above ~615s means the hook dies mid-wait,
 so the question or plan silently falls back to the terminal dialog early — and a reply window's
-session just stops early instead, with nothing left to fall back to. The UI therefore offers
-**5–600s** and warns above 600; the server still clamps to 5–1800 (`MIN/MAX_ANSWER_SECS`,
-mirroring `MIN/MAX_TIMEOUT_MS` in `pending.ts`) so an env var or a hand-edited file with a
-matching hook timeout is not blocked.
+session just stops early instead, with nothing left to fall back to. The UI therefore warns
+above 600 and names the hook timeout to raise. The field itself offers the server's own
+**5–1800s** (`MIN/MAX_ANSWER_SECS`, mirroring `MIN/MAX_TIMEOUT_MS` in `pending.ts`; the client's
+copies are `client/src/lib/settingsBounds.ts`, pinned by `test/guards/client-server-caps.test.ts`),
+so a window with a matching hook timeout is not marked invalid (#436).
 
 `setSettings` takes a **partial** patch — one row saves one key — but a key that is present and
 unusable rejects the whole patch rather than half-applying it, since a half-applied save is the

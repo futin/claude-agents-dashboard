@@ -4,6 +4,9 @@
  * DOM.
  */
 import assert from 'node:assert';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import type { FetchClock, GitBranch, RepoGitStats } from '../../shared/types.js';
 import { OWNED_KEYS } from '../../client/src/hooks/useSettings.js';
@@ -19,7 +22,7 @@ import {
 import { GIT_BAR_HALF_PX, GIT_BAR_MIN_PX, gitBarMax, gitBarWidth } from '../../client/src/lib/gitBar.js';
 import { GIT_POLL_MS, startGitPoll } from '../../client/src/lib/gitPoll.js';
 import {
-  FETCH_FOLLOW_MS, GIT_FETCH_OPTIONS, countdownText, createFollowTracker, createPollGate, fetchFailureOf, fetchKeyState, fetchReading, followUp, skewOf,
+  FETCH_FOLLOW_MS, GIT_FETCH_OPTIONS, countdownText, createFollowTracker, createPollGate, fetchFailureOf, fetchKeyState, fetchKeyStateOf, fetchReading, fetchStartBlocked, followUp, skewOf,
   syncReading,
 } from '../../client/src/lib/gitClock.js';
 import { SYNC_NEEDS_TOKEN } from '../../client/src/lib/gitSync.js';
@@ -355,6 +358,42 @@ export function run(): number {
     assert.strictEqual(fetchFailureOf(403, { error: 'read-only from this network' }), 'read-only');
     assert.strictEqual(fetchFailureOf(403, { error: 'bad token' }), 'refused');
     assert.deepStrictEqual(k({ failure: 'read-only' }), { disabled: true, label: 'now', sub: READ_ONLY_TEXT, subTone: 'amber' });
+  })) p++; else f++;
+
+  if (test('fetchKeyStateOf: the fetch control, health and clock read as fetchKeyState — a refusal disables, no failure does not', () => {
+    const ctl = (failure: 'refused' | 'read-only' | 'failed' | null) => ({ tokenStored: true, failure, pending: false });
+    const clock = { runningSinceMs: null, intervalSecs: 300 } as unknown as FetchClock;
+    assert.strictEqual(fetchKeyStateOf(ctl('refused'), true, 'token', clock).disabled, true);
+    assert.strictEqual(fetchKeyStateOf(ctl(null), true, 'token', clock).disabled, false);
+    assert.strictEqual(fetchKeyStateOf(ctl('read-only'), undefined, undefined, undefined).disabled, true);
+    assert.strictEqual(fetchKeyStateOf(ctl(null), undefined, undefined, { runningSinceMs: 1, intervalSecs: 300 } as unknown as FetchClock).disabled, true, 'running');
+    assert.deepStrictEqual(fetchKeyStateOf(ctl('refused'), true, 'token', clock),
+      fetchKeyState({ tokenRequired: true, writeAccess: 'token', tokenStored: true, failure: 'refused', pending: false, running: false, intervalSecs: 300 }));
+  })) p++; else f++;
+
+  if (test('fetchStartBlocked: a press sends nothing while pending, read-only, tokenless, refused or read-only-failed; a plain failure retries', () => {
+    const b = (over: Partial<Parameters<typeof fetchStartBlocked>[0]>) =>
+      fetchStartBlocked({ pending: false, writeAccess: undefined, tokenRequired: false, tokenStored: true, failure: null, ...over });
+    assert.strictEqual(b({}), false);
+    assert.strictEqual(b({ failure: 'failed' }), false);
+    assert.strictEqual(b({ failure: 'refused' }), true);
+    assert.strictEqual(b({ failure: 'read-only' }), true);
+    assert.strictEqual(b({ pending: true }), true);
+    assert.strictEqual(b({ writeAccess: 'none' }), true);
+    assert.strictEqual(b({ tokenRequired: true, tokenStored: false }), true);
+  })) p++; else f++;
+
+  if (test('GitParts.tsx: the Retry fetch key reads the shared gate, with no inline copy of it', () => {
+    const src = fs.readFileSync(path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../client/src/components/management/GitParts.tsx'), 'utf8');
+    const retry = src.slice(src.indexOf('{retry && ('), src.indexOf("'Retry fetch'"));
+    assert.ok(retry.length > 0, 'the Retry fetch key was not found');
+    assert.match(retry, /disabled=\{[^}]*fetchKeyStateOf\(/, 'the Retry key\'s disabled must come from fetchKeyStateOf');
+    assert.ok(!src.includes("writeAccess === 'none'"), "GitParts.tsx carries its own writeAccess === 'none' gate");
+  })) p++; else f++;
+
+  if (test('useGitFetch.ts: start() refuses through fetchStartBlocked, reading the last failure', () => {
+    const src = fs.readFileSync(path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../client/src/hooks/useGitFetch.ts'), 'utf8');
+    assert.match(src, /if \(fetchStartBlocked\(\{[^}]*\bfailure\b[^}]*\}\)\) return;/);
   })) p++; else f++;
 
   if (test('gitFetchedText: trouble word with the age, lock and old payloads read plain, running + origin reads fetching…', () => {
