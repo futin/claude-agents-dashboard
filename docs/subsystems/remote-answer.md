@@ -203,8 +203,8 @@ already decide this?" versus "is the user back?".
 - **⚠️ Hook timeout:** the CLI kills a hook at its `timeout`, so `settings.json` needs
   `"timeout": 630` ≥ curl's `--max-time` (window + 15) ≥ the server clamp (600s default,
   range 5s–30min). Each layer fails inward; a mis-set timeout degrades to the terminal
-  dialog. Because the window is now editable from Settings, that ceiling is enforced in the
-  UI too: the field offers 5–600s and warns above it (see [settings](settings.md)).
+  dialog. Because the window is now editable from Settings, that ceiling is surfaced in the
+  UI too: the field offers the server's 5–1800s and warns above 600 (see [settings](settings.md)).
 - **The toggle persists to `.remote-answer.json`** (gitignored,
   repo-root, cwd-relative) — needed because `tsx watch` restarts on every edit and a
   switch flipped before walking away must survive that. Deliberately **not** under

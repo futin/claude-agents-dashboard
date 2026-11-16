@@ -259,7 +259,7 @@ before:
 ```
 
 Before this feature the hook never waited — it POSTed with a 1s cap and exited, so no
-`timeout` was necessary. Now it can hold for up to the answer window (≤600s), and the CLI
+`timeout` was necessary. Now it can hold for up to the answer window (600s by default), and the CLI
 kills a hook at its configured `timeout` — so `630` (window + margin) is required, same
 number and same reasoning as the ask/plan hooks. Miss it and a held turn dies mid-wait: the
 session stops early, exactly as if the gates had failed, and a Send that lands after that

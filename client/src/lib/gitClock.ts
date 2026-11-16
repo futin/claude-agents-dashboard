@@ -137,6 +137,16 @@ export function fetchFailureOf(status: number | 'network', body?: unknown): Fetc
 }
 
 /**
+ * Whether a Fetch all press sends nothing: this tab's POST is out, the network is read-only, a token the server wants is not stored, or the last press was
+ * refused (`'refused'` clears when the token changes) or read-only. A plain `'failed'` may retry.
+ */
+export function fetchStartBlocked(s: {
+  pending: boolean; writeAccess: WriteAccess | undefined; tokenRequired: boolean | undefined; tokenStored: boolean; failure: FetchFailure | null;
+}): boolean {
+  return s.pending || s.writeAccess === 'none' || (s.tokenRequired === true && !s.tokenStored) || s.failure === 'refused' || s.failure === 'read-only';
+}
+
+/**
  * The Fetch all key. A read-only network (`writeAccess: 'none'`) outranks everything: no token could make the press work. Next, no stored token on a server
  * that wants one (nothing was sent, so nothing can have been refused); an undefined `tokenRequired` means health has not answered, and the key stays usable. `intervalSecs` is undefined before any payload or on an older server, which has no
  * auto-fetch to be off — so the sub is the bare command and never amber.
@@ -151,4 +161,17 @@ export function fetchKeyState(s: {
   if (s.running || s.pending) return { disabled: true, label: READ_FETCHING, sub: fetchRowSub(s.intervalSecs), subTone: offTone };
   if (s.failure === 'failed') return { disabled: false, label: KEY_NOW, sub: FETCH_START_FAILED, subTone: 'amber' };
   return { disabled: false, label: KEY_NOW, sub: fetchRowSub(s.intervalSecs), subTone: offTone };
+}
+
+/** `fetchKeyState` read off the fetch control, health and the payload's clock — the one argument list the chip's Fetch all and every Retry fetch key share. */
+export function fetchKeyStateOf(
+  fetchCtl: { tokenStored: boolean; failure: FetchFailure | null; pending: boolean },
+  tokenRequired: boolean | undefined,
+  writeAccess: WriteAccess | undefined,
+  clock: FetchClock | undefined,
+): ReturnType<typeof fetchKeyState> {
+  return fetchKeyState({
+    tokenRequired, writeAccess, tokenStored: fetchCtl.tokenStored, failure: fetchCtl.failure, pending: fetchCtl.pending,
+    running: clock?.runningSinceMs != null, intervalSecs: clock?.intervalSecs,
+  });
 }

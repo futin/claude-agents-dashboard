@@ -253,7 +253,8 @@ disabled, since Pull and Push need no session; while a quick op runs on the repo
 plain key. The last quick op's result is one line under the toolbar (`.git-quick-note`, or `.git-sync-note` for a warning), cleared when a sync starts or by
 the first poll after it has stood 30s (`quickNoteExpired`). **Retry fetch**
 shows
-for a failed fetch and runs Fetch all, since no per-repo fetch route exists. **Unpin** is the only key on a dead repo and goes through `usePins`. **Open PR**
+for a failed fetch and runs Fetch all, since no per-repo fetch route exists; it is disabled by the same `fetchKeyStateOf` gate as the chip's Fetch all key,
+and `useGitFetch.start` refuses after a refusal too (`fetchStartBlocked`), so a refused token is never re-sent (#436). **Unpin** is the only key on a dead repo and goes through `usePins`. **Open PR**
 is a link on a Ready card in Branches, from `gitCompareUrl` (`client/src/lib/gitLinks.ts`) over `originUrl`, for `github.com` and `gitlab.com` only: any other
 host gets no key. **Open folder** is on the Inspector pane for an `ok` repo with a path: `useOpenFolder` posts `POST /api/open-folder` `{path}` with the Answer
 token, and the server runs macOS `open` on it only when the path string-equals a listed pin's (`server/lib/open-folder.ts`, argv through `execFile`, no

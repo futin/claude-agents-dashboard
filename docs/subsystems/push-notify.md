@@ -429,7 +429,9 @@ trade ever looks different.
 Every failure here is invisible from the outside: an off switch, a missing topic and a
 dropped packet all look identical. So `POST /api/notify/test` fires one push **regardless of
 policy** and returns what actually happened, including whether taps will open anything. The
-Settings button surfaces that string verbatim.
+Settings button surfaces that string verbatim. It sends through `postWrite` like every other write, so a refused request reads
+as the shared read-only or token text rather than the server's raw `error`, and a reply that is not JSON as `the dashboard
+answered <status>` (`pushTestText`, `client/src/lib/pushTest.ts`).
 
 ### Two silences that are not failures
 

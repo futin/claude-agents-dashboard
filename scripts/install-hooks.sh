@@ -72,7 +72,7 @@ kill-guard-hook.sh|kill-guard.sh
 # split from both ends: event is the first field, name and timeout the last two,
 # and the matcher is everything in between.
 # The 630s timeouts are not arbitrary: they must exceed the dashboard's answer
-# window (≤600s), or the CLI kills the hook mid-hold. permission-notify appears
+# window (600s default), or the CLI kills the hook mid-hold. permission-notify appears
 # twice because PermissionRequest is the live signal and Notification is the
 # legacy fallback — both are wanted, and they are separate registrations.
 #
