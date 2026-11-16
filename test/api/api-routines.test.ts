@@ -208,6 +208,19 @@ export async function run(): Promise<number> {
     assert.strictEqual(installedFrom(report('failed', [], 2), 'x', true), true, 'failed applying, but planned');
   }));
 
+  // The run log forgets runs past retention, but never a job's last (spec 2026-11-14-poll-path-probes A7).
+  tally(await testAsync('GET /api/routines: a job whose only run is 300 days old still shows it as last', async () => {
+    await withRoutines('', true, async c => {
+      writeJob(c, 'b', job());
+      logRun(c, 'r-a-old', 'a', 300 * DAY);
+      logRun(c, 'r-a-new', 'a', DAY);
+      logRun(c, 'r-b-old', 'b', 300 * DAY);
+      const body = (await send(c.h, 'GET', '/api/routines')).json as unknown as RoutinesResponse;
+      const b = body.jobs.find(j => j.name === 'b')!;
+      assert.strictEqual(b.last?.id, 'r-b-old');
+    });
+  }));
+
   tally(await testAsync('GET /api/routines on a non-owner: owner { ownedBy: "" }, reconcile not-owner, installed false', async () => {
     await withRoutines('', false, async c => {
       writeJob(c, 'x', job());

@@ -14,7 +14,7 @@
  * outside its intended path. Anthropic may change it between CLI versions.
  */
 
-import { execFileSync } from 'node:child_process';
+import { execFile } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -75,8 +75,11 @@ function baseUrl(): string {
  * NOTE: the first keychain read by this process triggers a macOS access
  * prompt ("… wants to use your confidential information") — approve once
  * with "Always Allow".
+ *
+ * Async, so a slow or prompting keychain never blocks the loop for the full
+ * timeout (spec `2026-11-14-poll-path-probes-design.md` A2). Never rejects.
  */
-export function readToken(): TokenState {
+export async function readToken(): Promise<TokenState> {
   const seen: TokenState[] = [];
 
   // 0. Env var — the container-passthrough path (host Keychain isn't reachable
@@ -88,17 +91,11 @@ export function readToken(): TokenState {
   }
 
   // 1. macOS keychain.
-  try {
-    const out = execFileSync(
-      'security',
-      ['find-generic-password', '-a', os.userInfo().username, '-w', '-s', KEYCHAIN_SERVICE],
-      { encoding: 'utf8', timeout: REQUEST_TIMEOUT_MS, stdio: ['ignore', 'pipe', 'ignore'] }
-    ).trim();
+  const out = await readKeychain();
+  if (out !== null) {
     const t = tokenFromCredsBlob(out);
     if (t.state === 'ok') return t;
     seen.push(t);
-  } catch {
-    /* no keychain item / not macOS / access denied — try the file */
   }
 
   // 2. ~/.claude/.credentials.json fallback.
@@ -112,6 +109,24 @@ export function readToken(): TokenState {
   }
 
   return pickTokenState(seen);
+}
+
+/** The keychain item's text, or null when there is none to read — no item, not macOS, access denied, timed out. Never rejects. */
+function readKeychain(): Promise<string | null> {
+  return new Promise(resolve => {
+    try {
+      const child = execFile(
+        'security',
+        ['find-generic-password', '-a', os.userInfo().username, '-w', '-s', KEYCHAIN_SERVICE],
+        { encoding: 'utf8', timeout: REQUEST_TIMEOUT_MS },
+        (err, out) => resolve(err ? null : out.trim())
+      );
+      // `execFile` leaves stdin an open pipe; `security` never reads it, so close it as `token-refresh.ts` does for its spawn. Stderr is ignored.
+      child.stdin?.end();
+    } catch {
+      resolve(null);
+    }
+  });
 }
 
 /**
@@ -273,7 +288,7 @@ let cycleSeq = 0;
  * cycle under test reaches the real keychain (`security`) or spawns a `claude` renewal turn.
  */
 export interface UsageCycleDeps {
-  readToken: () => TokenState;
+  readToken: () => TokenState | Promise<TokenState>;
   autoRenew: (opts: AutoRenewOptions) => Promise<void>;
 }
 const DEFAULT_CYCLE_DEPS: UsageCycleDeps = { readToken, autoRenew };
@@ -336,7 +351,7 @@ export function refreshNow(force = false): Promise<void> {
   const cycle = (async () => {
     let next: UsageState = { usage: null, status: 'unavailable' };
     try {
-      const t = cycleDeps.readToken();
+      const t = await cycleDeps.readToken();
       if (t.state !== 'ok') {
         next = { usage: null, status: statusForToken(t.state) };
         // A stored token only ever expires — and nothing renews it in a
@@ -349,7 +364,7 @@ export function refreshNow(force = false): Promise<void> {
         // login. Widening this gate spends a `claude -p` turn to learn that.
         if (t.state === 'expired' && autoRefreshEnabled) {
           void cycleDeps.autoRenew({
-            probe: () => cycleDeps.readToken().state === 'ok',
+            probe: async () => (await cycleDeps.readToken()).state === 'ok',
             // Drop the TTL so the very next poll refetches, instead of serving
             // a known-stale `token-expired` for up to another CACHE_TTL_MS.
             onRenewed: () => { cachedAt = 0; }

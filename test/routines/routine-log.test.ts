@@ -8,7 +8,7 @@ import os from 'node:os';
 import path from 'node:path';
 
 import type { RoutineRun, RoutineStep } from '../../shared/types.js';
-import { computeStats, createLogReader, pushableEvents, rotateIfLarge } from '../../server/lib/routine-log.js';
+import { LIVENESS_TTL_MS, RUN_RETAIN_DAYS, computeStats, createLogReader, pushableEvents, rotateIfLarge } from '../../server/lib/routine-log.js';
 
 function test(name: string, fn: () => void): boolean {
   try { fn(); console.log('  ✓ ' + name); return true; }
@@ -37,6 +37,10 @@ function complete(run: string, o: { startO?: object; endO?: object; s1?: object 
 
 const never = (): boolean | null => null;
 const hour = (): number => 60 * MIN;
+// The fixtures sit at T0; a reader on the wall clock would prune them once it passes T0 + RUN_RETAIN_DAYS, so every reader gets a clock. `later` is
+// four weeks on, which is where the wall clock stood when the cases were written, so the ages they assert are unchanged.
+const at0 = (): number => T0;
+const later = (): number => T0 + 28 * 24 * 60 * MIN;
 
 export function run(): number {
   console.log('\n=== routine-log.ts ===\n');
@@ -46,7 +50,7 @@ export function run(): number {
   t('a complete run folds to ok with its two steps and their numbers as the wrapper wrote them', () => {
     const dir = tmp();
     fs.writeFileSync(path.join(dir, 'mac.jsonl'), complete('r1'));
-    const [r, ...rest] = createLogReader(dir, never, hour).read();
+    const [r, ...rest] = createLogReader(dir, never, hour, later).read();
     assert.strictEqual(rest.length, 0);
     assert.strictEqual(r.state, 'ok');
     assert.strictEqual(r.id, 'r1');
@@ -67,7 +71,7 @@ export function run(): number {
   t('failed 1 on the end record folds to failed', () => {
     const dir = tmp();
     fs.writeFileSync(path.join(dir, 'mac.jsonl'), complete('r1', { endO: { ok: 1, failed: 1 }, s1: { outcome: 'failed', exit: 1, why: 'exit 1' } }));
-    const [r] = createLogReader(dir, never, hour).read();
+    const [r] = createLogReader(dir, never, hour, later).read();
     assert.strictEqual(r.state, 'failed');
     assert.strictEqual(r.failed, 1);
     assert.strictEqual(r.steps[1].outcome, 'failed');
@@ -77,7 +81,7 @@ export function run(): number {
   t('an end.error with no steps folds to failed and keeps the error', () => {
     const dir = tmp();
     fs.writeFileSync(path.join(dir, 'mac.jsonl'), [start('r1', { steps: 0 }), end('r1', { ok: 0, error: 'no pins snapshot' })].map(line).join(''));
-    const [r] = createLogReader(dir, never, hour).read();
+    const [r] = createLogReader(dir, never, hour, later).read();
     assert.strictEqual(r.state, 'failed');
     assert.strictEqual(r.error, 'no pins snapshot');
     assert.deepStrictEqual(r.steps, []);
@@ -87,7 +91,7 @@ export function run(): number {
     const dir = tmp();
     fs.writeFileSync(path.join(dir, 'mac.jsonl'), [start('r1'), stepStart('r1', 0), stepEnd('r1', 0), stepStart('r1', 1)].map(line).join(''));
     const calls: Array<[number, string]> = [];
-    const [r] = createLogReader(dir, (pid, job) => { calls.push([pid, job]); return false; }, hour).read();
+    const [r] = createLogReader(dir, (pid, job) => { calls.push([pid, job]); return false; }, hour, later).read();
     assert.strictEqual(r.state, 'lost');
     assert.strictEqual(r.why, 'wrapper not running');
     assert.deepStrictEqual(calls, [[4242, 'git-sync-all']]);
@@ -104,6 +108,76 @@ export function run(): number {
     fs.writeFileSync(path.join(dir, 'mac.jsonl'), line(start('r1')));
     const [r] = createLogReader(dir, () => true, hour, () => T0 + 30 * 24 * 60 * MIN).read();
     assert.strictEqual(r.state, 'running');
+  });
+
+  // Liveness is memoised per run (spec 2026-11-14-poll-path-probes A4): false is final, true and null are reused for LIVENESS_TTL_MS.
+  const memoReader = (dir: string, answer: (pid: number) => boolean | null) => {
+    const calls: number[] = [];
+    let clock = T0;
+    const reader = createLogReader(dir, (pid) => { calls.push(pid); return answer(pid); }, hour, () => clock);
+    return { calls, reader, at: (ms: number) => { clock = T0 + ms; return reader.read(); } };
+  };
+  const SEC = 1000;
+
+  t('liveness memo: a true answer is reused for 10 s, then asked again', () => {
+    assert.strictEqual(LIVENESS_TTL_MS, 10_000);
+    const dir = tmp();
+    fs.writeFileSync(path.join(dir, 'mac.jsonl'), line(start('r1')));
+    const m = memoReader(dir, () => true);
+    assert.strictEqual(m.at(0)[0].state, 'running');
+    assert.strictEqual(m.at(5 * SEC)[0].state, 'running');
+    assert.strictEqual(m.calls.length, 1);
+    assert.strictEqual(m.at(11 * SEC)[0].state, 'running');
+    assert.strictEqual(m.calls.length, 2);
+  });
+
+  t('liveness memo: a false answer is final — one call across an hour, lost every time', () => {
+    const dir = tmp();
+    fs.writeFileSync(path.join(dir, 'mac.jsonl'), line(start('r1')));
+    const m = memoReader(dir, () => false);
+    for (const ms of [0, MIN, 60 * MIN]) {
+      const [r] = m.at(ms);
+      assert.deepStrictEqual([r.state, r.why], ['lost', 'wrapper not running']);
+    }
+    assert.strictEqual(m.calls.length, 1);
+  });
+
+  t('liveness memo: a null answer is reused for 10 s, then asked again', () => {
+    const dir = tmp();
+    fs.writeFileSync(path.join(dir, 'mac.jsonl'), line(start('r1')));
+    const m = memoReader(dir, () => null);
+    m.at(0); m.at(5 * SEC);
+    assert.strictEqual(m.calls.length, 1);
+    m.at(11 * SEC);
+    assert.strictEqual(m.calls.length, 2);
+  });
+
+  t('liveness memo: once the end record is folded the run is settled and liveness is not asked again', () => {
+    const dir = tmp();
+    const file = path.join(dir, 'mac.jsonl');
+    fs.writeFileSync(file, line(start('r1')));
+    const m = memoReader(dir, () => true);
+    m.at(0);
+    fs.appendFileSync(file, line(end('r1')));
+    assert.strictEqual(m.at(SEC)[0].state, 'ok');
+    assert.strictEqual(m.at(20 * SEC)[0].state, 'ok');
+    assert.strictEqual(m.calls.length, 1);
+  });
+
+  t('liveness memo: per run — a lost run and a running one keep their own memos, and one ending leaves the other\'s', () => {
+    const dir = tmp();
+    const file = path.join(dir, 'mac.jsonl');
+    fs.writeFileSync(file, [start('ra', { job: 'a', pid: 101 }), start('rb', { job: 'b', pid: 202, at: iso(T0 + SEC) })].map(line).join(''));
+    const m = memoReader(dir, (pid) => pid === 202);
+    const state = (runs: RoutineRun[], job: string) => runs.find(r => r.job === job)!.state;
+    for (const ms of [0, 5 * SEC, 11 * SEC]) {
+      const runs = m.at(ms);
+      assert.deepStrictEqual([state(runs, 'a'), state(runs, 'b')], ['lost', 'running'], `at ${ms} ms`);
+    }
+    assert.deepStrictEqual([m.calls.filter(p => p === 101).length, m.calls.filter(p => p === 202).length], [1, 2]);
+    fs.appendFileSync(file, line(end('ra')));
+    m.at(12 * SEC);
+    assert.strictEqual(m.calls.filter(p => p === 202).length, 2, 'b\'s memo survives a\'s end');
   });
 
   t('liveness null falls to the age rule: timeout x steps + 5 min, 124 min running, 126 min lost', () => {
@@ -131,7 +205,7 @@ export function run(): number {
     const torn = line(stepEnd('r1', 1, { outcome: 'ok' }));
     const head = [start('r1'), stepStart('r1', 0), stepEnd('r1', 0), stepStart('r1', 1)].map(line).join('');
     fs.writeFileSync(file, head + torn.slice(0, 14));
-    const reader = createLogReader(dir, () => true, hour);
+    const reader = createLogReader(dir, () => true, hour, later);
     const before = reader.read();
     assert.strictEqual(before[0].state, 'running');
     assert.strictEqual(before[0].steps[1].outcome, null);
@@ -146,7 +220,7 @@ export function run(): number {
     const dir = tmp();
     const file = path.join(dir, 'mac.jsonl');
     fs.writeFileSync(file, complete('r1'));
-    const reader = createLogReader(dir, never, hour);
+    const reader = createLogReader(dir, never, hour, later);
     reader.read();
     // Overwrite the first record's bytes in place with a same-length different job: a re-read from 0 would show it, an offset read cannot.
     const text = fs.readFileSync(file, 'utf8');
@@ -162,8 +236,121 @@ export function run(): number {
     fs.writeFileSync(path.join(dir, 'mac.20261001.jsonl'), complete('old', { startO: { at: iso(T0 - 20 * 24 * 60 * MIN) } }));
     fs.writeFileSync(path.join(dir, 'mac.jsonl'), complete('new') + line({ kind: 'refused', job: 'pull-pins', at: iso(T0 + MIN), trigger: 'schedule', why: 'file gone' }));
     fs.writeFileSync(path.join(dir, 'notes.txt'), 'not a log');
-    const runs = createLogReader(dir, never, hour).read();
+    const runs = createLogReader(dir, never, hour, later).read();
     assert.deepStrictEqual(runs.map((r) => r.id).sort(), ['new', 'old', 'refused-mac-pull-pins-' + Date.parse(iso(T0 + MIN))].sort());
+  });
+
+  // Archives past retention are not read (spec 2026-11-14-poll-path-probes A6). Each archive's run is its job's only run.
+  const DAY = 24 * 60 * MIN;
+  const stampOf = (d: Date): string => `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`;
+  const cutoffOf = (ms: number): Date => { const d = new Date(ms); return new Date(d.getFullYear(), d.getMonth(), d.getDate() - RUN_RETAIN_DAYS); };
+  const onDay = (stamp: string): number => Date.UTC(+stamp.slice(0, 4), +stamp.slice(4, 6) - 1, +stamp.slice(6, 8), 12);
+
+  t('retention: an archive stamped before the cutoff is not read, and stays on disk', () => {
+    assert.strictEqual(RUN_RETAIN_DAYS, 181);
+    const dir = tmp();
+    fs.writeFileSync(path.join(dir, 'mac.jsonl'), complete('r-live', { startO: { job: 'live' } }));
+    fs.writeFileSync(path.join(dir, 'mac.20200101.jsonl'), complete('r-old', { startO: { job: 'old', at: iso(Date.UTC(2019, 11, 31)) } }));
+    const runs = createLogReader(dir, never, hour, at0).read();
+    assert.deepStrictEqual(runs.map((r) => r.job), ['live']);
+    assert.ok(fs.existsSync(path.join(dir, 'mac.20200101.jsonl')));
+  });
+
+  t('retention: an archive stamped on the cutoff day is read; one stamped a day earlier is not', () => {
+    const dir = tmp();
+    const edge = stampOf(cutoffOf(T0));
+    const before = new Date(cutoffOf(T0)); before.setDate(before.getDate() - 1);
+    fs.writeFileSync(path.join(dir, `mac.${edge}.jsonl`), complete('r-edge', { startO: { job: 'edge', at: iso(onDay(edge)) } }));
+    fs.writeFileSync(path.join(dir, `mac.${stampOf(before)}.jsonl`), complete('r-gone', { startO: { job: 'gone', at: iso(onDay(stampOf(before))) } }));
+    assert.deepStrictEqual(createLogReader(dir, never, hour, at0).read().map((r) => r.job), ['edge']);
+  });
+
+  t('retention: a numbered archive (mac.20200101.2.jsonl) is skipped the same way', () => {
+    const dir = tmp();
+    fs.writeFileSync(path.join(dir, 'mac.jsonl'), complete('r-live', { startO: { job: 'live' } }));
+    fs.writeFileSync(path.join(dir, 'mac.20200101.2.jsonl'), complete('r-old', { startO: { job: 'old', at: iso(Date.UTC(2019, 11, 31)) } }));
+    assert.deepStrictEqual(createLogReader(dir, never, hour, at0).read().map((r) => r.job), ['live']);
+  });
+
+  t('retention: a rotation to today\'s stamp while a run is open loses and duplicates nothing', () => {
+    const dir = tmp();
+    const file = path.join(dir, 'mac.jsonl');
+    fs.writeFileSync(file, complete('r1') + line(start('r2', { at: iso(T0 + MIN) })));
+    const reader = createLogReader(dir, () => true, hour, at0);
+    assert.deepStrictEqual(reader.read().map((r) => [r.id, r.state]), [['r2', 'running'], ['r1', 'ok']]);
+    fs.renameSync(file, path.join(dir, `mac.${stampOf(new Date(T0))}.jsonl`));
+    fs.writeFileSync(file, line(end('r2', { at: iso(T0 + 2 * MIN) })));
+    assert.deepStrictEqual(reader.read().map((r) => [r.id, r.state]), [['r2', 'ok'], ['r1', 'ok']]);
+  });
+
+  t('retention: an archive tracked while in range stays tracked once it ages out — no rebuild drops its run', () => {
+    const dir = tmp();
+    const stamp = stampOf(new Date(T0 - 10 * DAY));
+    fs.writeFileSync(path.join(dir, `mac.${stamp}.jsonl`), complete('r-solo', { startO: { job: 'solo', at: iso(T0 - 10 * DAY) } }));
+    let clock = T0;
+    const reader = createLogReader(dir, never, hour, () => clock);
+    assert.deepStrictEqual(reader.read().map((r) => r.job), ['solo']);
+    clock = T0 + 200 * DAY;
+    fs.writeFileSync(path.join(dir, 'mac.jsonl'), complete('r-new', { startO: { job: 'live', at: iso(clock) } }));
+    assert.deepStrictEqual(reader.read().map((r) => r.job).sort(), ['live', 'solo']);
+  });
+
+  // The fold forgets runs past retention, keeping each job's `last` (spec 2026-11-14-poll-path-probes A7); finished runs are built once.
+  const run = (id: string, job: string, daysAgo: number): string => complete(id, { startO: { job, at: iso(T0 - daysAgo * DAY) } });
+  const refused = (job: string, daysAgo: number): string =>
+    line({ kind: 'refused', job, at: iso(T0 - daysAgo * DAY), trigger: 'schedule', why: 'file gone' });
+
+  t('prune: runs past retention are dropped, but each job keeps its newest finished run', () => {
+    const dir = tmp();
+    fs.writeFileSync(path.join(dir, 'mac.jsonl'), run('a-old', 'a', 300) + run('a-new', 'a', 1) + run('b-old', 'b', 300));
+    assert.deepStrictEqual(createLogReader(dir, never, hour, at0).read().map((r) => r.id), ['a-new', 'b-old']);
+  });
+
+  t('prune: a lost run is a job\'s last too — kept over an older ok run, which goes', () => {
+    const dir = tmp();
+    fs.writeFileSync(path.join(dir, 'mac.jsonl'), run('c-ok', 'c', 310) + line(start('c-lost', { job: 'c', at: iso(T0 - 300 * DAY) })));
+    const runs = createLogReader(dir, never, hour, at0).read();
+    assert.deepStrictEqual(runs.map((r) => [r.id, r.state]), [['c-lost', 'lost']]);
+  });
+
+  t('prune: an old refusal goes when its job has a newer run, and stays when it is the job\'s only record', () => {
+    const dir = tmp();
+    fs.writeFileSync(path.join(dir, 'mac.jsonl'), refused('d', 300) + run('d-new', 'd', 1) + refused('e', 300));
+    const runs = createLogReader(dir, never, hour, at0).read();
+    assert.deepStrictEqual(runs.map((r) => [r.job, r.state]), [['d', 'ok'], ['e', 'refused']]);
+  });
+
+  t('prune: a run inside retention but older than the 90-day window stays, and counts in prev', () => {
+    const dir = tmp();
+    fs.writeFileSync(path.join(dir, 'mac.jsonl'), run('f-120', 'f', 120) + run('f-1', 'f', 1));
+    const runs = createLogReader(dir, never, hour, at0).read();
+    assert.deepStrictEqual(runs.map((r) => r.id), ['f-1', 'f-120']);
+    assert.strictEqual(computeStats(runs, 90, new Date(T0)).prev.runs, 1);
+  });
+
+  t('read(): no new bytes gives equal runs in a new array each time; changing one array leaves the next read alone', () => {
+    const dir = tmp();
+    fs.writeFileSync(path.join(dir, 'mac.jsonl'), run('r1', 'a', 2) + run('r2', 'b', 1) + line(start('r3', { at: iso(T0 - MIN) })));
+    const reader = createLogReader(dir, () => true, hour, at0);
+    const first = reader.read();
+    const second = reader.read();
+    assert.notStrictEqual(first, second);
+    assert.deepStrictEqual(first, second);
+    const ids = second.map((r) => r.id);
+    first.reverse();
+    first.length = 1;
+    assert.deepStrictEqual(reader.read().map((r) => r.id), ids);
+    assert.deepStrictEqual(second.map((r) => r.id), ids);
+  });
+
+  t('read(): an end record appended for a running run flips it to ok on the next read', () => {
+    const dir = tmp();
+    const file = path.join(dir, 'mac.jsonl');
+    fs.writeFileSync(file, run('r1', 'a', 1) + line(start('r2')));
+    const reader = createLogReader(dir, () => true, hour, at0);
+    assert.deepStrictEqual(reader.read().map((r) => [r.id, r.state]), [['r2', 'running'], ['r1', 'ok']]);
+    fs.appendFileSync(file, line(end('r2')));
+    assert.deepStrictEqual(reader.read().map((r) => [r.id, r.state]), [['r2', 'ok'], ['r1', 'ok']]);
   });
 
   t('rotateIfLarge renames a 21 MB log to today\'s mac.<yyyymmdd>.jsonl and leaves a 1 MB one alone', () => {
@@ -196,9 +383,9 @@ export function run(): number {
     fs.writeFileSync(file, complete('r1'));
     fs.appendFileSync(file, Buffer.alloc(200, 0x20));
     fs.appendFileSync(file, '\n');
-    const seen = createLogReader(dir, never, hour);
+    const seen = createLogReader(dir, never, hour, later);
     assert.strictEqual(seen.read().length, 1);
-    const unseen = createLogReader(dir, never, hour);
+    const unseen = createLogReader(dir, never, hour, later);
     assert.deepStrictEqual(rotateIfLarge(dir, 100).length, 1);
     // The wrapper's next run lands in a fresh mac.jsonl, and a run may even straddle the rotation: its start is in the old file, its end in the new.
     fs.writeFileSync(file, complete('r2', { startO: { at: iso(T0 + MIN) } }));
@@ -214,7 +401,7 @@ export function run(): number {
   t('a renamed file keeps its offset: bytes rewritten in place under the new name are not read again', () => {
     const dir = tmp();
     fs.writeFileSync(path.join(dir, 'mac.jsonl'), complete('r1'));
-    const reader = createLogReader(dir, never, hour);
+    const reader = createLogReader(dir, never, hour, later);
     reader.read();
     const rotated = path.join(dir, 'mac.20261001.jsonl');
     fs.renameSync(path.join(dir, 'mac.jsonl'), rotated);
@@ -226,7 +413,7 @@ export function run(): number {
     const dir = tmp();
     const file = path.join(dir, 'mac.jsonl');
     fs.writeFileSync(file, [start('r1'), stepStart('r1', 0)].map(line).join(''));
-    const reader = createLogReader(dir, () => true, hour);
+    const reader = createLogReader(dir, () => true, hour, later);
     assert.strictEqual(reader.read()[0].state, 'running');
     assert.strictEqual(rotateIfLarge(dir, 10).length, 1);
     fs.writeFileSync(file, [stepEnd('r1', 0), stepStart('r1', 1), stepEnd('r1', 1), end('r1')].map(line).join(''));
@@ -240,7 +427,7 @@ export function run(): number {
     const dir = tmp();
     const file = path.join(dir, 'mac.jsonl');
     fs.writeFileSync(file, complete('r1') + complete('r2', { startO: { at: iso(T0 + MIN) } }));
-    const reader = createLogReader(dir, never, hour);
+    const reader = createLogReader(dir, never, hour, later);
     assert.strictEqual(reader.read().length, 2);
     fs.writeFileSync(file, complete('r3', { startO: { at: iso(T0 + 2 * MIN) } }));
     assert.deepStrictEqual(reader.read().map((r) => r.id), ['r3']);
@@ -250,7 +437,7 @@ export function run(): number {
     const dir = tmp();
     const file = path.join(dir, 'mac.jsonl');
     fs.writeFileSync(file, [start('r1'), stepStart('r1', 0), stepEnd('r1', 0), stepStart('r1', 1)].map(line).join(''));
-    const reader = createLogReader(dir, () => false, hour);
+    const reader = createLogReader(dir, () => false, hour, later);
     assert.strictEqual(reader.read()[0].state, 'lost');
     fs.appendFileSync(file, [stepEnd('r1', 1), stepEnd('r1', 1), end('r1')].map(line).join(''));
     const [r] = reader.read();
@@ -266,7 +453,7 @@ export function run(): number {
       { kind: 'refused', job: 'pull-pins', at: iso(T0 + MIN), trigger: 'manual', why: 'file gone' },
       { kind: 'refused', job: 'pull-pins', at: iso(T0 + 2 * MIN), trigger: 'schedule', why: 'invalid: 3: unknown key "foo"' },
     ].map(line).join(''));
-    const runs = createLogReader(dir, never, hour).read();
+    const runs = createLogReader(dir, never, hour, later).read();
     assert.strictEqual(runs.length, 2);
     assert.deepStrictEqual(runs.map((r) => [r.state, r.why, r.trigger, r.job, r.machine, r.steps.length]), [
       ['refused', 'invalid: 3: unknown key "foo"', 'schedule', 'pull-pins', 'mac', 0],
@@ -279,13 +466,13 @@ export function run(): number {
     const dir = tmp();
     fs.writeFileSync(path.join(dir, 'mac.jsonl'),
       complete('a') + complete('b', { startO: { at: iso(T0 + MIN), late: true, trigger: 'manual' }, endO: { stopped: true, ok: 1, failed: 1 }, s1: { outcome: 'weird' } }));
-    const runs = createLogReader(dir, never, hour).read();
+    const runs = createLogReader(dir, never, hour, later).read();
     assert.deepStrictEqual(runs.map((r) => r.id), ['b', 'a']);
     assert.deepStrictEqual([runs[0].late, runs[0].trigger, runs[0].stopped, runs[0].steps[1].outcome], [true, 'manual', true, 'failed']);
   });
 
   t('a missing runs folder reads as no runs; watch on it arms nothing and its closer is safe', () => {
-    const reader = createLogReader(path.join(tmp(), 'nope'), never, hour);
+    const reader = createLogReader(path.join(tmp(), 'nope'), never, hour, later);
     assert.deepStrictEqual(reader.read(), []);
     const close = reader.watch(() => assert.fail('no folder, no event'));
     close();

@@ -44,6 +44,21 @@ function inTmpCwd(fn: () => void): void {
   }
 }
 
+/** `inTmpCwd` for a case whose body awaits — the idle sweep is async. */
+async function inTmpCwdAsync(fn: () => Promise<void>): Promise<void> {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cad-pending-'));
+  const prev = process.cwd();
+  try {
+    process.chdir(dir);
+    resetSettings();
+    await fn();
+  } finally {
+    process.chdir(prev);
+    resetSettings();
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+}
+
 const AUTH: PendingQuestionItem = {
   header: 'Auth', question: 'Which auth method?', multiSelect: false,
   options: [{ label: 'OAuth', description: 'redirect flow' }, { label: 'JWT' }]
@@ -398,15 +413,15 @@ export async function run(): Promise<number> {
 
   /* ----------------------------------------------------- idle auto-release */
 
-  if (test('sweepIdle releases a held question when you are back at the keyboard', () => {
-    inTmpCwd(() => {
+  if (await testAsync('sweepIdle releases a held question when you are back at the keyboard', async () => {
+    await inTmpCwdAsync(async () => {
       resetStore();
       setSettings({ idleSecs: 60 });
       const w = waiter();
       register('s1', [AUTH], 60_000, w.resolve);
       setIdleReader(() => 3); // 3s idle < 60s threshold
       try {
-        assert.strictEqual(sweepIdle(), 1);
+        assert.strictEqual(await sweepIdle(), 1);
         assert.deepStrictEqual(w.results, [{ status: 'released' }]);
         assert.strictEqual(getPending('s1'), null);
       } finally {
@@ -415,15 +430,15 @@ export async function run(): Promise<number> {
     });
   })) p++; else f++;
 
-  if (test('sweepIdle leaves a held question alone while still away', () => {
-    inTmpCwd(() => {
+  if (await testAsync('sweepIdle leaves a held question alone while still away', async () => {
+    await inTmpCwdAsync(async () => {
       resetStore();
       setSettings({ idleSecs: 60 });
       const w = waiter();
       register('s1', [AUTH], 60_000, w.resolve);
       setIdleReader(() => 9999); // 9999s idle >= 60s threshold
       try {
-        assert.strictEqual(sweepIdle(), 0);
+        assert.strictEqual(await sweepIdle(), 0);
         assert.strictEqual(w.results.length, 0);
       } finally {
         setIdleReader(null);
@@ -431,15 +446,15 @@ export async function run(): Promise<number> {
     });
   })) p++; else f++;
 
-  if (test('unreadable idle never auto-releases a question (Docker/non-macOS)', () => {
-    inTmpCwd(() => {
+  if (await testAsync('unreadable idle never auto-releases a question (Docker/non-macOS)', async () => {
+    await inTmpCwdAsync(async () => {
       resetStore();
       setSettings({ idleSecs: 60 });
       const w = waiter();
       register('s1', [AUTH], 60_000, w.resolve);
       setIdleReader(() => null); // unreadable idle
       try {
-        assert.strictEqual(sweepIdle(), 0);
+        assert.strictEqual(await sweepIdle(), 0);
         assert.strictEqual(w.results.length, 0);
       } finally {
         setIdleReader(null);
@@ -447,15 +462,15 @@ export async function run(): Promise<number> {
     });
   })) p++; else f++;
 
-  if (test('sweepIdle returns 0 when idleSecs is 0 (idle check disabled)', () => {
-    inTmpCwd(() => {
+  if (await testAsync('sweepIdle returns 0 when idleSecs is 0 (idle check disabled)', async () => {
+    await inTmpCwdAsync(async () => {
       resetStore();
       setSettings({ idleSecs: 0 });
       const w = waiter();
       register('s1', [AUTH], 60_000, w.resolve);
       setIdleReader(() => 3);
       try {
-        assert.strictEqual(sweepIdle(), 0);
+        assert.strictEqual(await sweepIdle(), 0);
         assert.strictEqual(w.results.length, 0);
       } finally {
         setIdleReader(null);
@@ -463,14 +478,14 @@ export async function run(): Promise<number> {
     });
   })) p++; else f++;
 
-  if (test('sweepIdle with nothing held never reads idle', () => {
-    inTmpCwd(() => {
+  if (await testAsync('sweepIdle with nothing held never reads idle', async () => {
+    await inTmpCwdAsync(async () => {
       resetStore();
       setSettings({ idleSecs: 60 });
       let reads = 0;
       setIdleReader(() => { reads++; return 3; });
       try {
-        assert.strictEqual(sweepIdle(), 0);
+        assert.strictEqual(await sweepIdle(), 0);
         assert.strictEqual(reads, 0);
       } finally {
         setIdleReader(null);
@@ -478,8 +493,8 @@ export async function run(): Promise<number> {
     });
   })) p++; else f++;
 
-  if (test('sweepIdle releases every held question, not just the first', () => {
-    inTmpCwd(() => {
+  if (await testAsync('sweepIdle releases every held question, not just the first', async () => {
+    await inTmpCwdAsync(async () => {
       resetStore();
       setSettings({ idleSecs: 60 });
       const a = waiter(), b = waiter();
@@ -487,7 +502,7 @@ export async function run(): Promise<number> {
       register('s2', [AUTH], 60_000, b.resolve);
       setIdleReader(() => 3);
       try {
-        assert.strictEqual(sweepIdle(), 2);
+        assert.strictEqual(await sweepIdle(), 2);
         assert.deepStrictEqual(a.results, [{ status: 'released' }]);
         assert.deepStrictEqual(b.results, [{ status: 'released' }]);
         assert.deepStrictEqual([...pendingSessionIds()], []);

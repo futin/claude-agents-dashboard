@@ -70,7 +70,7 @@ via `tsx`, dev and prod alike).
 - **Fail-open everywhere.** A missing token, an unreadable file, a failed probe — every
   auxiliary feature degrades to "not shown" rather than crashing the monitor.
 - **Path safety.** Endpoints never join request input into filesystem paths. IDs are
-  validated and resolved against enumerated sets (`listTranscripts`, `findTranscript`'s directory names,
+  validated and resolved against enumerated sets (`listTranscripts` and the shared listing, `findTranscript`'s directory names,
   `collectServablePaths`); anything else is a 400/404.
 
 ## HTTP surface
@@ -266,7 +266,9 @@ server/
   lib/tick-caps.ts       the `tick-capped` push: reads each backlog tick's `last-decide.json`, one push per capped episode, `tick-capped.json`
   lib/hub-widgets.ts  the Lookout hub tiles (usage gauge, sessions list, Git pending list), declared through lookout-widgets
   lib/scan-snapshot.ts  `scanSnapshot`: one session scan with every RAM-store injection and the held-wait terminal sweep — what /api/sessions
-                  and the hub's sessions tile both serve
+                  and the hub's sessions tile both serve; it publishes its walk to transcript-listing.ts
+  lib/transcript-listing.ts  the one held transcript listing (≤ 3 s old) every request path but the poll reads: `sharedListing`,
+                  `publishListing`, `resolveTranscript` for id lookups
   lib/account.ts      `~/.claude.json` → `oauthAccount` as display strings, behind GET /api/account; fail-open to null
   lib/releases.ts     GET /api/releases: release-kit's memoised tag reader, pointed at the checkout, plus two test seams
   lib/analyze.ts  whole-session post-mortem → SessionAnalysis

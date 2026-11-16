@@ -13,7 +13,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 import { writeFileAtomic } from './atomic-write.js';
-import { foldLines } from './jsonl-tail.js';
+import { FOLD_CHUNK_BYTES, foldLines } from './jsonl-tail.js';
 import { stateDir } from './paths.js';
 import { listUsageTranscripts, projectsRoot } from './scan.js';
 import { getSettings } from './settings.js';
@@ -315,6 +315,9 @@ interface FileCursor {
   seenSet: Set<string>;
 }
 
+/** Most bytes the first read of a transcript first seen after the seed takes: its tail, so one huge fork cannot stall a tick. */
+export const NEW_FILE_READ_CAP = 8 * FOLD_CHUNK_BYTES;
+
 let cursors = new Map<string, FileCursor>();
 let prevTickMs: number | null = null;
 let bytesRead = 0;
@@ -329,6 +332,11 @@ export function resetLedgerRecorder(): void {
 /** Test seam: transcript bytes the recorder has read since the last reset. */
 export function ledgerReadStats(): { bytes: number } {
   return { bytes: bytesRead };
+}
+
+/** Test seam: the transcripts the recorder holds a cursor for, and each one's offset. */
+export function ledgerCursorOffsets(): Map<string, number> {
+  return new Map([...cursors].map(([file, cursor]) => [file, cursor.offset]));
 }
 
 function ledgerPath(dir?: string): string {
@@ -387,11 +395,14 @@ function eventFromRecord(raw: unknown, cursor: FileCursor): UsageEvent | null {
  */
 function collectEvents(root: string): UsageEvent[] {
   const events: UsageEvent[] = [];
-  for (const ref of listUsageTranscripts(root)) {
+  const listing = listUsageTranscripts(root);
+  for (const ref of listing) {
     const size = ref.size; // the listing's own stat — a second one per file doubled every tick's syscalls
     let cursor = cursors.get(ref.file);
     if (!cursor) {
-      cursor = { offset: 0, seen: [], seenSet: new Set() };
+      // A file first seen after the seed: a big one is a fork or a restore, whose old records `sumWindow` would drop anyway. The tail start lands
+      // mid-line, and that fragment fails to parse like any junk line.
+      cursor = { offset: size > NEW_FILE_READ_CAP ? size - NEW_FILE_READ_CAP : 0, seen: [], seenSet: new Set() };
       cursors.set(ref.file, cursor);
     }
     if (size < cursor.offset) cursor.offset = 0; // rotated out from under us
@@ -422,6 +433,9 @@ function collectEvents(root: string): UsageEvent[] {
       }
     }
   }
+  // A transcript gone from the listing takes its cursor with it, or the map grows with every session this server ever saw.
+  const listed = new Set(listing.map(ref => ref.file));
+  for (const file of cursors.keys()) if (!listed.has(file)) cursors.delete(file);
   return events;
 }
 

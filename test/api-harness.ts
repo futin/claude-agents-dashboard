@@ -40,6 +40,7 @@ import { resetStore as resetPending } from '../server/lib/pending.js';
 import { resetStore as resetPlans } from '../server/lib/plans.js';
 import { resetState } from '../server/lib/remoteState.js';
 import { resetSettings } from '../server/lib/settings.js';
+import { resetListingCache } from '../server/lib/transcript-listing.js';
 import type { Config } from '../server/lib/config.js';
 
 /** One `it`-style case. Async throughout: every request below is a promise. */
@@ -172,6 +173,8 @@ export async function withServer(
  * and an unhandled `'error'` on a bare `http.request` kills the test process.
  */
 export function request(base: string, pathname: string, options: RequestOptions = {}): Promise<Reply> {
+  // The server runs in this process, so its held transcript listing outlives a request; a test that plants a file and then asks must see it.
+  resetListingCache();
   const { method = 'GET', body, headers = {} } = options;
   return new Promise((resolve, reject) => {
     let done = false;

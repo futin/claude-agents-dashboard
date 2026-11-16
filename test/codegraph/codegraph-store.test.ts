@@ -27,6 +27,7 @@ import {
 import { encodeProjectDir } from '../../server/lib/management.js';
 import { overrideClaudeRoots } from '../../server/lib/paths.js';
 import { resetSettings, setPinned } from '../../server/lib/settings.js';
+import { resetListingCache } from '../../server/lib/transcript-listing.js';
 import type { CodegraphRepo, CodegraphResponse } from '../../shared/types.js';
 
 function test(name: string, fn: () => Promise<void>): Promise<boolean> {
@@ -91,6 +92,8 @@ function pinned(dir: string, indexed: boolean): Pinned {
   const proj = path.join(home, '.claude', 'projects', dirName);
   fs.mkdirSync(proj, { recursive: true });
   fs.writeFileSync(path.join(proj, 'a.jsonl'), JSON.stringify(userRecord('u1', 'hi', dir)) + '\n');
+  // A folder planted mid-case must be on the next read, not behind the held transcript listing.
+  resetListingCache();
   setPinned(dirName, true);
   return { dir, dirName };
 }
@@ -549,6 +552,20 @@ export async function run(): Promise<number> {
     const r = await row(a);
     assert.deepStrictEqual([r.run, r.lastRun!.ok, r.lastRun!.message], [null, false, 'spawn codegraph ENOENT']);
     assert.strictEqual(await startCodegraphRun({}, a.dirName, 'sync'), 'started', 'a rejected run frees the repo');
+    await codegraphRunsSettled();
+  });
+
+  await it('run end: a run that timed out is a failed lastRun, and the repo takes the next launch', async () => {
+    const a = repo();
+    overrideCodegraphRunner(fake(async (_c, args) => {
+      if (args[0] === 'status') return { code: 0, stdout: FIXTURE, stderr: '' };
+      throw Object.assign(new Error('codegraph timed out'), { code: 'ETIMEDOUT' });
+    }).run);
+    assert.strictEqual(await startCodegraphRun({}, a.dirName, 'reindex'), 'started');
+    await codegraphRunsSettled();
+    const r = await row(a);
+    assert.deepStrictEqual([r.run, r.lastRun!.ok, r.lastRun!.message], [null, false, 'codegraph timed out']);
+    assert.strictEqual(await startCodegraphRun({}, a.dirName, 'sync'), 'started', 'a timed-out run frees the repo');
     await codegraphRunsSettled();
   });
 

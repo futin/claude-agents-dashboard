@@ -492,7 +492,7 @@ The filter is applied at the **call sites**, not inside `listTranscripts()`: `ap
 ([configs](configs.md)), the same injected-Set pattern as `pendingIds`. Two other readers
 deliberately keep seeing archived transcripts — `analytics.ts` `listReports` through
 `listTranscripts` (a kaizen entry must still resolve its transcript), and the `api.ts` id lookups
-behind the transcript and chat panels through `findTranscript` (a panel already open would 404 for no gain).
+behind the transcript and chat panels through `resolveTranscript` (a panel already open would 404 for no gain).
 `usage-ledger.ts` is unfiltered for the same kind of reason — token history is not rewritten
 by a delete — but it no longer calls `listTranscripts` at all: it reads `scan.ts`
 `listUsageTranscripts`, the top-level files *plus* each session's
@@ -530,6 +530,20 @@ It walks the directory names and stats only the matches, because an id lookup ne
 directory mtime loses rows: an append does not move it, and in 87 of 92 project dirs the newest transcript was more than 1 s newer than its dir (2026-11-03, WSL2). And
 knowing a file is still old takes a stat, because any old file can be appended to, so skipping needs a cache with a re-check interval or file watchers: about 3 ms saved
 of a roughly 70 ms poll (431 of 527 transcripts older than 48 h, 2026-11-03, WSL2), in exchange for a resumed old session appearing up to one interval late.
+
+**Every other request path reads the poll's listing** (`server/lib/transcript-listing.ts`, #472). `scanSnapshot` walks fresh and hands its listing to
+`publishListing`; the module holds the newest listing of one root and the time it was taken. `sharedListing(root)` serves it while it is at most
+`LISTING_MAX_AGE_MS` (3 s, the default poll interval) old, otherwise walks once and holds that. Its readers: the `api.ts` id lookups through
+`resolveTranscript` (session detail, spend, chat, `sessionExists`, PR, the routine-run resolve, the row endpoint), and every pin and project list —
+`pinOptions` carries the listing, so a pin toggle's membership check, `pins.json` snapshot and reply share one walk, and `git-stats.ts`,
+`git-fetch.ts`, `codegraph-store.ts` and `routine-store.ts` pass it to `listPinRows`. One pin toggle went from 43–55 ms warm to 7.5–14 ms
+(2026-11-15, WSL2, 656 transcripts). `listTranscripts` stays the raw walk; `test/guards/transcript-walks.test.ts` pins the few files that may call it.
+
+`resolveTranscript` takes the held refs for the id, stats each again so size and mtime are current, drops the gone ones and reduces with
+`newestPerId`; an id the listing lacks falls back to `findTranscript`'s name walk, so a session created after the listing is found on its first
+request. Two accepted lags, each at most 3 s: a split session whose second half starts in a new dir resolves to the old half until the next
+listing, and a project whose first transcript is newer than the listing is not yet pinnable (404). `notify.ts` and `handover.ts` stay on
+`findTranscript`: they run once per event, not per poll.
 
 **Signals** come from the **newest message record** (newest tail record with
 `message.role` of `user`/`assistant`): `transcript.ts` exposes `turnComplete` (default

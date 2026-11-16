@@ -11,8 +11,10 @@ import nodePath from 'node:path';
 
 import type { HubHandler } from 'lookout-widgets';
 
-import { listTranscripts, findTranscript, launchRowIds, liveSessionIds, projectsRoot, sessionFromRef, sessionSurface } from './lib/scan.js';
+import { launchRowIds, liveSessionIds, projectsRoot, sessionFromRef, sessionSurface } from './lib/scan.js';
 import { scanSnapshot } from './lib/scan-snapshot.js';
+import { resolveTranscript, sharedListing } from './lib/transcript-listing.js';
+import type { TranscriptRef } from './lib/scan.js';
 import { readSessionAnalyticsLog } from './lib/sessionAnalyticsLog.js';
 import { archivedSessionIds, desktopLiveSessionIds } from './lib/archived.js';
 import { lastSessionEffort, readTranscript } from './lib/transcript.js';
@@ -76,7 +78,7 @@ import type { JobError, PinSnapshot } from '../shared/routine-file.js';
 import { foldForPush, ownerStatus, runsReader } from './lib/routine-boot.js';
 import { machineName, routineDirs } from './lib/routine-config.js';
 import { computeStats } from './lib/routine-log.js';
-import { applyReconcile, lastReconcile, planReconcile, scheduled } from './lib/routine-reconcile.js';
+import { applyReconcile, lastReconcile, planReconcile, planReconcileCached, scheduled } from './lib/routine-reconcile.js';
 import { runJob, stopJob } from './lib/routine-run.js';
 import { RoutineStoreError, deleteJob, isOwner, readJobs, writeJob, writePinsSnapshot } from './lib/routine-store.js';
 import type {
@@ -191,7 +193,7 @@ export function serveSessionDetail(id: string, res: ServerResponse): void {
 
   let detail: SessionDetail;
   try {
-    const ref = findTranscript(projectsRoot(), id);
+    const ref = resolveTranscript(projectsRoot(), id);
     if (!ref) return fail(404);
     const agents = readAgentsCached(ref.file);
     if (!agents) return fail(404);
@@ -221,7 +223,7 @@ export function serveSessionSpend(id: string, res: ServerResponse): void {
 
   let body: SessionSpend;
   try {
-    const ref = findTranscript(projectsRoot(), id);
+    const ref = resolveTranscript(projectsRoot(), id);
     if (!ref) return fail(404);
     const spend = readSessionSpend(ref.file);
     if (!spend) return fail(404);
@@ -267,7 +269,7 @@ export function serveSessionChat(id: string, params: URLSearchParams, res: Serve
 
   let body: SessionChat;
   try {
-    const ref = findTranscript(projectsRoot(), id);
+    const ref = resolveTranscript(projectsRoot(), id);
     if (!ref) return fail(404);
     const chat =
       after !== undefined ? readChatAfter(ref.file, after, caps)
@@ -536,7 +538,7 @@ export function refuseWrite(config: Config, req: IncomingMessage, res: ServerRes
 
 /** True when the id names a transcript we can see. Never joined into a path. */
 function sessionExists(id: string): boolean {
-  try { return findTranscript(projectsRoot(), id) !== undefined; }
+  try { return resolveTranscript(projectsRoot(), id) !== undefined; }
   catch { return false; }
 }
 
@@ -916,7 +918,7 @@ export async function serveSessionPr(id: string, res: ServerResponse): Promise<v
   if (!ID_RE.test(id)) return fail(400);
 
   try {
-    const ref = findTranscript(projectsRoot(), id);
+    const ref = resolveTranscript(projectsRoot(), id);
     const detected = ref ? readSessionPr(ref.file) : null;
     if (!detected) return sendJson(res, 200, { id, pr: null } satisfies SessionPrResponse);
 
@@ -1303,11 +1305,11 @@ const STILL_RUNNING: SpawnError = 'session is still running';
  */
 function resumeTarget(rid: string, requireCwd: boolean):
   | { refuse: { status: number; error: string } }
-  | { t: NonNullable<ReturnType<typeof findTranscript>>; tr: NonNullable<ReturnType<typeof readTranscript>> } {
+  | { t: NonNullable<ReturnType<typeof resolveTranscript>>; tr: NonNullable<ReturnType<typeof readTranscript>> } {
   const refuse = (status: number, error: string) => ({ refuse: { status, error } });
   // Membership check against the enumerated transcripts, same posture as
   // resolveProject: the id never becomes a path by joining.
-  const t = findTranscript(projectsRoot(), rid);
+  const t = resolveTranscript(projectsRoot(), rid);
   if (!t) return refuse(400, 'unknown session');
   const tr = readTranscript(t.file);
   // Only `dashboard`-pill sessions (`sessionSurface`: `sdk-cli` or `claude-agents-dashboard`): a terminal
@@ -1508,14 +1510,15 @@ export async function serveConfigsFile(config: Config, rawPath: string, res: Ser
  * The stored pins, as the `ProjectsOptions` every project-list caller passes
  * (#161). Read per request — `settings.ts` caches it, so this costs nothing.
  * The Claude roots ride along so no list, spawn or pin ever reaches a scratchpad, a scratch workspace or a dir under `~/.claude`.
+ * So does the shared listing (`transcript-listing.ts`): a pin write's membership check, snapshot and reply take one walk between them, not one each.
  */
-function pinOptions(): { pinnedDirs: ReadonlySet<string>; claudeRoots: readonly string[] } {
-  return { pinnedDirs: new Set(getPinnedProjects()), claudeRoots: defaultClaudeRoots() };
+function pinOptions(): { pinnedDirs: ReadonlySet<string>; claudeRoots: readonly string[]; transcripts: readonly TranscriptRef[] } {
+  return { pinnedDirs: new Set(getPinnedProjects()), claudeRoots: defaultClaudeRoots(), transcripts: sharedListing(projectsRoot()) };
 }
 
 let pinsPayloadOverride: ((config: Config) => PinsResponse) | null = null;
 
-/** Test seam: replace {@link pinsPayload} process-wide, null to restore. No disk fault reaches it, since `listTranscripts` swallows its readdir errors. */
+/** Test seam: replace {@link pinsPayload} process-wide, null to restore. No disk fault reaches it, since the listing swallows its readdir errors. */
 export function overridePinsPayload(fn: ((config: Config) => PinsResponse) | null): void {
   pinsPayloadOverride = fn;
 }
@@ -1540,7 +1543,7 @@ function readPinRows(config: Config): ReturnType<typeof listPinRows> {
 function pinsPayload(config: Config): PinsResponse {
   if (pinsPayloadOverride) return pinsPayloadOverride(config);
   // One listing for all three lists, which used to enumerate the tree five times between them.
-  const options = { archivedIds: archivedSessionIds(), ...pinOptions(), transcripts: listTranscripts(projectsRoot()) };
+  const options = { archivedIds: archivedSessionIds(), ...pinOptions() };
   return {
     pinned: listPinRows(config, getPinnedProjects(), options),
     recent: listRecentProjects(config, options).filter(r => !r.pinned),
@@ -1853,8 +1856,8 @@ export async function serveRoutines(config: Config, res: ServerResponse): Promis
     const stored = readJobs(dir, machine);
     const runs = runsReader(config).read();
     foldForPush(config, runs);
-    const plan = await planReconcile(config);
-    // The plan re-reads the OS on every poll; a failed apply's message would otherwise vanish behind the drift it left.
+    const plan = await planReconcileCached(config);
+    // The plan re-reads the OS at most every few seconds (`PLAN_TTL_MS`); a failed apply's message would otherwise vanish behind the drift it left.
     const last = lastReconcile();
     const reconcile = plan.state === 'drift' && plan.error === null && last?.state === 'failed' ? { ...plan, error: last.error } : plan;
     const now = new Date();
@@ -2086,14 +2089,14 @@ export async function serveRoutineValidate(config: Config, req: IncomingMessage,
 }
 
 /**
- * `GET /api/sessions/:id/row` — one `Session` row for any transcript `findTranscript` resolves, whatever its age: a routine run's `session →` opens
+ * `GET /api/sessions/:id/row` — one `Session` row for any transcript `resolveTranscript` resolves, whatever its age: a routine run's `session →` opens
  * the chat drawer with it. No lookback, the liveness set null (fail open), no wait sets, and none of the list's skips, so a run the list would hide
  * still opens. `404` only when no transcript exists.
  */
 export function serveSessionRow(config: Config, id: string, res: ServerResponse): void {
   if (!ID_RE.test(id)) return sendJson(res, 400, { error: 'bad id' });
   try {
-    const ref = findTranscript(projectsRoot(), id);
+    const ref = resolveTranscript(projectsRoot(), id);
     if (!ref) return sendJson(res, 404, { error: 'no such session' });
     const row = sessionFromRef(ref, {
       now: Date.now(), activeWindowMin: config.activeWindowMin, liveCwds: null,

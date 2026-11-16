@@ -8,6 +8,8 @@ import {
   LEDGER_FILE,
   LEDGER_UNROTATED_MAX_BYTES,
   MAX_LEDGER_BYTES,
+  NEW_FILE_READ_CAP,
+  ledgerCursorOffsets,
   ledgerReadStats,
   ledgerStartMs,
   readLedgerSince,
@@ -441,6 +443,66 @@ export function run(): number {
       assert.ok(kept.length > 0 && kept.length <= Math.floor(cap / 2), 'not trimmed to the newest half');
       assert.ok(lines.join('').endsWith(kept), 'not the newest lines');
       assert.ok(lines.includes(kept.split('\n')[0] + '\n'), 'does not start on a whole line');
+    });
+  })) p++; else f++;
+
+  // ── cursor prune and the first-read cap (#472) ──
+
+  if (test('a transcript deleted from disk loses its cursor on the next tick', () => {
+    withFixture(fx => {
+      recordLedgerTick({ dir: fx.dir, root: fx.root, nowMs: T0 });
+      const a = path.join(path.dirname(fx.transcript), 'a.jsonl');
+      fs.writeFileSync(a, assistantLine(T0 + 10_000, 'opus-5', 'a1', { in: 1, out: 0, cc: 0, cr: 0 }) + '\n');
+      recordLedgerTick({ dir: fx.dir, root: fx.root, nowMs: T0 + MIN });
+      assert.ok(ledgerCursorOffsets().has(a), 'the new file got a cursor');
+      fs.rmSync(a);
+      recordLedgerTick({ dir: fx.dir, root: fx.root, nowMs: T0 + 2 * MIN });
+      assert.strictEqual(ledgerCursorOffsets().has(a), false);
+    });
+  })) p++; else f++;
+
+  if (test('a transcript still on disk keeps its cursor and offset across the prune', () => {
+    withFixture(fx => {
+      recordLedgerTick({ dir: fx.dir, root: fx.root, nowMs: T0 });
+      const line = assistantLine(T0 + 10_000, 'opus-5', 'm1', { in: 1, out: 0, cc: 0, cr: 0 }) + '\n';
+      fs.appendFileSync(fx.transcript, line);
+      recordLedgerTick({ dir: fx.dir, root: fx.root, nowMs: T0 + MIN });
+      recordLedgerTick({ dir: fx.dir, root: fx.root, nowMs: T0 + 2 * MIN });
+      assert.strictEqual(ledgerCursorOffsets().get(fx.transcript), Buffer.byteLength(line));
+    });
+  })) p++; else f++;
+
+  if (test('a big transcript first seen after the seed is read from its last NEW_FILE_READ_CAP bytes only', () => {
+    withFixture(fx => {
+      recordLedgerTick({ dir: fx.dir, root: fx.root, nowMs: T0 });
+      const before = ledgerReadStats().bytes;
+      const big = path.join(path.dirname(fx.transcript), 'fork.jsonl');
+      const pad = JSON.stringify({ type: 'user', pad: 'x'.repeat(1000) }) + '\n';
+      const padLines = Math.ceil((NEW_FILE_READ_CAP + 3 * 1024 * 1024) / pad.length);
+      const fd = fs.openSync(big, 'w');
+      try {
+        for (let i = 0; i < padLines; i++) fs.writeSync(fd, pad);
+        fs.writeSync(fd, assistantLine(T0 + 10_000, 'opus-5', 'tail', { in: 7, out: 0, cc: 0, cr: 0 }) + '\n');
+      } finally { fs.closeSync(fd); }
+      assert.ok(fs.statSync(big).size > NEW_FILE_READ_CAP + 3 * 1024 * 1024 - pad.length);
+      recordLedgerTick({ dir: fx.dir, root: fx.root, nowMs: T0 + MIN });
+      const read = ledgerReadStats().bytes - before;
+      assert.ok(read > 0 && read <= NEW_FILE_READ_CAP, `read ${read} bytes, cap ${NEW_FILE_READ_CAP}`);
+      assert.deepStrictEqual(JSON.parse(fx.ledgerLines()[0]).tok, { 'opus-5': { in: 7, out: 0, cc: 0, cr: 0 } },
+        'a record in the tail is still counted');
+    });
+  })) p++; else f++;
+
+  if (test('a small transcript first seen after the seed is read from offset 0', () => {
+    withFixture(fx => {
+      recordLedgerTick({ dir: fx.dir, root: fx.root, nowMs: T0 });
+      const before = ledgerReadStats().bytes;
+      const small = path.join(path.dirname(fx.transcript), 'new.jsonl');
+      const text = assistantLine(T0 + 10_000, 'opus-5', 'first', { in: 3, out: 0, cc: 0, cr: 0 }) + '\n';
+      fs.writeFileSync(small, text);
+      recordLedgerTick({ dir: fx.dir, root: fx.root, nowMs: T0 + MIN });
+      assert.strictEqual(ledgerReadStats().bytes - before, Buffer.byteLength(text));
+      assert.deepStrictEqual(JSON.parse(fx.ledgerLines()[0]).tok, { 'opus-5': { in: 3, out: 0, cc: 0, cr: 0 } });
     });
   })) p++; else f++;
 

@@ -187,7 +187,7 @@ export function run(): number {
     assert.strictEqual(fs.existsSync(path.join(state, 'notified.json')), false);
   }, false));
 
-  // The fold has no window (rotation keeps every log file), so dedupe must not depend on how many ids the ledger can hold.
+  // The fold reaches back months (RUN_RETAIN_DAYS), so dedupe must not depend on how many ids the ledger can hold.
   t('2100 failed runs older than the horizon plus 3 inside it: 3 pushes, then a restart on the same notified.json pushes 0', () => world(({ sent, state }) => {
     fs.mkdirSync(state, { recursive: true });
     fs.writeFileSync(path.join(state, 'notified.json'), JSON.stringify({ seen: {} }));
