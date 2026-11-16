@@ -104,6 +104,8 @@ SEGMENTS=$(printf '%s\n' "$CMD" | sed -e 's/&&/\
 /g')
 
 # Words that can precede the real command without changing which command it is.
+# The control keywords are on the list because `if cd /Users; then …` and
+# `if pkill …; then …` are a `cd` and a `pkill` all the same.
 # `env` is handled by the VAR=value case below it, since `env FOO=1 pkill …` and
 # `FOO=1 pkill …` are the same command wearing different clothes.
 strip_wrappers() {
@@ -111,7 +113,7 @@ strip_wrappers() {
   while :; do
     first=$(printf '%s' "$seg" | awk '{print $1}')
     case "$first" in
-      sudo|exec|nohup|time|command|builtin|env|xargs|then|do|else|!|'{')
+      sudo|exec|nohup|time|command|builtin|env|xargs|if|elif|while|until|then|do|else|!|'{')
         seg=$(printf '%s' "$seg" | sed -E 's/^[[:space:]]*[^[:space:]]+[[:space:]]*//') ;;
       *=*)
         seg=$(printf '%s' "$seg" | sed -E 's/^[[:space:]]*[^[:space:]]+[[:space:]]*//') ;;

@@ -100,7 +100,13 @@ const DENIED: string[] = [
   // not the session's cwd: this one is `pkill -f "/Users/"`.
   'cd /Users && pkill -f "$PWD/"',
   'cd / ; pkill -f "${PWD}/Users"',
-  'pushd /tmp && pkill -f "$PWD/vite"'
+  'pushd /tmp && pkill -f "$PWD/vite"',
+  // A `cd` written as a condition is still a `cd`: the keyword in front of it
+  // must not hide the verb, and neither may it hide a `pkill` written the same way.
+  'if cd /Users; then pkill -f "$PWD/"; fi',
+  'while cd /Users; do pkill -f "$PWD/"; done',
+  'until cd /Users; do sleep 1; done; pkill -f "$PWD/"',
+  'if pkill -f vite; then echo ok; fi'
 ];
 
 const ALLOWED: string[] = [
