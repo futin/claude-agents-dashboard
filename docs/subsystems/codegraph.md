@@ -60,7 +60,10 @@ with **no** watcher (with one, the lock is the watcher's own write and a sync is
 the per-`dirName` mark is taken before the first await.
 
 The CLI starts detached from the request and the answer is immediate; the next poll shows `run`. Argv is exactly `codegraph sync` / `codegraph index`: no path argument (`index <path>`
-does not walk up), no `-q` (it hides the lock-loss line below), `cwd` = the graph root, `stdio: ['ignore', 'pipe', 'pipe']` so `index` never prompts. There is no timer on a run.
+does not walk up), no `-q` (it hides the lock-loss line below), `cwd` = the graph root, `stdio: ['ignore', 'pipe', 'pipe']` so `index` never prompts. A run is killed after `CODEGRAPH_RUN_TIMEOUT_MS` (30 min): SIGTERM, then SIGKILL after a 5 s
+grace. It rejects `ETIMEDOUT` once the child closes or the grace ends, whichever is first, so the repo records a failed `lastRun` (`codegraph timed out`)
+and takes the next launch instead of answering `busy` until restart. Each of stdout and stderr keeps only its last 8 MiB, the tail that `lastRun.message`
+and the lock-loss check read (spec `2026-11-14-poll-path-probes-design.md` A3).
 `lastRun.message` is the last non-empty stderr line, else stdout's, else `exit <code>`.
 
 **Lock-loss rule.** A non-zero exit whose output contains `could not acquire the file lock` (`LOCK_LOSS_TEXT`), with `watchingAtLaunch` true, is recorded `ok` with the message
