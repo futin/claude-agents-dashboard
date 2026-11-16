@@ -957,6 +957,50 @@ export async function run(): Promise<number> {
     });
   }));
 
+  /**
+   * A fresh launch into a project the `?project=` filter leaves out, through the real router (#471). `plant` false leaves the transcript off disk;
+   * returns the launch id and what the filtered poll reported as `launching`.
+   */
+  async function filteredPoll(plant: boolean): Promise<{ id: string; launching: string[]; stored: string[] }> {
+    let out = { id: '', launching: [] as string[], stored: [] as string[] };
+    await withServer(ROUTER_ENV, async h => {
+      resetLaunches();
+      setSpawner(fakeSpawner());
+      try {
+        const id = launch(h.cfg, REF, { prompt: 'filtered out', permissionMode: 'auto' });
+        if (plant) {
+          h.plant(id, [
+            { type: 'user', entrypoint: 'sdk-cli', cwd: h.home, timestamp: new Date().toISOString(), message: { role: 'user', content: 'go' } },
+            { type: 'assistant', entrypoint: 'sdk-cli', cwd: h.home, timestamp: new Date().toISOString(),
+              message: { role: 'assistant', stop_reason: 'end_turn', content: [{ type: 'text', text: 'done' }] } }
+          ]);
+        }
+        const reply = await h.req('/api/sessions?project=no-such-filter-project');
+        assert.equal(reply.status, 200);
+        assert.deepEqual((reply.json?.sessions as unknown[]).length, 0, 'the filter hides the launched project');
+        const launching = (reply.json?.launching as { sessionId: string }[]).map(e => e.sessionId);
+        const stored = listLaunching().filter(e => e.state === 'launching').map(e => e.sessionId);
+        out = { id, launching, stored };
+      } finally {
+        resetLaunches();
+        setSpawner(null);
+      }
+    });
+    return out;
+  }
+
+  check(await testAsync('a filtered poll adopts a launch whose transcript makes a row, though the filter hides that row', async () => {
+    const { id, launching, stored } = await filteredPoll(true);
+    assert.ok(!launching.includes(id), 'no launching phantom once the transcript makes a row');
+    assert.ok(!stored.includes(id), 'the store moved it out of launching');
+  }));
+
+  check(await testAsync('a filtered poll still reports a launch with no transcript yet as launching', async () => {
+    const { id, launching, stored } = await filteredPoll(false);
+    assert.ok(launching.includes(id));
+    assert.ok(stored.includes(id));
+  }));
+
   check(await testAsync('POST /api/sessions/%ZZ/stop is 400 and the server keeps answering', async () => {
     await withServer(ROUTER_ENV, async h => {
       // `decodeURIComponent` throws a URIError on a lone `%ZZ`, synchronously

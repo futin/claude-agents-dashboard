@@ -718,6 +718,19 @@ export function sessionFromRef(ref: TranscriptRef, opts: RowOptions): Session | 
   };
 }
 
+/**
+ * The launch ids whose transcript already makes a row under the list's own skips, whatever project filter the poll carries. Adoption asks this for the
+ * launches the served rows did not cover: a filtered-out launch never reaches `sessions`, and without it would read `launching` until its TTL (#471).
+ * `scanSkips` keeps adoption at the poll where the row is a real conversation, so an unfiltered board never loses the phantom before its row arrives.
+ */
+export function launchRowIds(ids: readonly string[], opts: { root: string; refs?: readonly TranscriptRef[]; homeDir?: string }): string[] {
+  const rowOptions: RowOptions = { homeDir: opts.homeDir, now: Date.now(), activeWindowMin: 1, liveCwds: null, lessons: null, scanSkips: true };
+  return ids.filter(id => {
+    const ref = findTranscript(opts.root, id, opts.refs);
+    return !!ref && sessionFromRef(ref, rowOptions) !== null;
+  });
+}
+
 /** A `Session.project` from its launch cwd: the folder's basename. */
 function projectNameOf(cwd: string): string {
   return cwd.split('/').filter(Boolean).pop() || cwd;

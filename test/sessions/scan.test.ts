@@ -318,6 +318,31 @@ export function run(): number {
     }
   })) p++; else f++;
 
+  // launchRowIds — the unfiltered "does this launch make a row yet?" read that adoption uses (#471).
+  {
+    const root = makeRoot([
+      { dirName: '-a-launched', id: 'talked', records: [{ ...metaRec('/a/launched', 'main'), message: { role: 'user', content: 'go' } }, assistantDone()] },
+      { dirName: '-a-launched', id: 'stub', records: [{ type: 'queue-operation' }, metaRec('/a/launched', 'main')] }
+    ]);
+    if (test('launchRowIds returns an id whose transcript has a user and an assistant message', () => {
+      assert.deepStrictEqual(scan.launchRowIds(['talked'], { root }), ['talked']);
+    })) p++; else f++;
+    if (test('launchRowIds leaves out an id whose transcript has no conversational message (the scanSkips gate)', () => {
+      assert.deepStrictEqual(scan.launchRowIds(['stub', 'talked'], { root }), ['talked']);
+    })) p++; else f++;
+    if (test('launchRowIds leaves out an id with no transcript on disk', () => {
+      assert.deepStrictEqual(scan.launchRowIds(['nowhere'], { root }), []);
+    })) p++; else f++;
+    if (test('launchRowIds of no ids is [] and reads nothing', () => {
+      const refs = scan.listTranscripts(root);
+      assert.deepStrictEqual(scan.launchRowIds([], { root: path.join(root, 'no-such-dir'), refs }), []);
+    })) p++; else f++;
+    if (test('launchRowIds resolves from a given listing without walking the root', () => {
+      const refs = scan.listTranscripts(root);
+      assert.deepStrictEqual(scan.launchRowIds(['talked'], { root: path.join(root, 'no-such-dir'), refs }), ['talked']);
+    })) p++; else f++;
+  }
+
   if (test('scanSessions: Session.tasks folds a transcript\'s task calls; no task records → null', () => {
     const now = 1_700_000_000_000;
     const taskCall = (id: string, name: string, input: unknown) =>
