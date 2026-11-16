@@ -8,7 +8,7 @@ import os from 'node:os';
 import path from 'node:path';
 
 import type { RoutineRun, RoutineStep } from '../../shared/types.js';
-import { computeStats, createLogReader, pushableEvents, rotateIfLarge } from '../../server/lib/routine-log.js';
+import { LIVENESS_TTL_MS, computeStats, createLogReader, pushableEvents, rotateIfLarge } from '../../server/lib/routine-log.js';
 
 function test(name: string, fn: () => void): boolean {
   try { fn(); console.log('  ✓ ' + name); return true; }
@@ -104,6 +104,76 @@ export function run(): number {
     fs.writeFileSync(path.join(dir, 'mac.jsonl'), line(start('r1')));
     const [r] = createLogReader(dir, () => true, hour, () => T0 + 30 * 24 * 60 * MIN).read();
     assert.strictEqual(r.state, 'running');
+  });
+
+  // Liveness is memoised per run (spec 2026-11-14-poll-path-probes A4): false is final, true and null are reused for LIVENESS_TTL_MS.
+  const memoReader = (dir: string, answer: (pid: number) => boolean | null) => {
+    const calls: number[] = [];
+    let clock = T0;
+    const reader = createLogReader(dir, (pid) => { calls.push(pid); return answer(pid); }, hour, () => clock);
+    return { calls, reader, at: (ms: number) => { clock = T0 + ms; return reader.read(); } };
+  };
+  const SEC = 1000;
+
+  t('liveness memo: a true answer is reused for 10 s, then asked again', () => {
+    assert.strictEqual(LIVENESS_TTL_MS, 10_000);
+    const dir = tmp();
+    fs.writeFileSync(path.join(dir, 'mac.jsonl'), line(start('r1')));
+    const m = memoReader(dir, () => true);
+    assert.strictEqual(m.at(0)[0].state, 'running');
+    assert.strictEqual(m.at(5 * SEC)[0].state, 'running');
+    assert.strictEqual(m.calls.length, 1);
+    assert.strictEqual(m.at(11 * SEC)[0].state, 'running');
+    assert.strictEqual(m.calls.length, 2);
+  });
+
+  t('liveness memo: a false answer is final — one call across an hour, lost every time', () => {
+    const dir = tmp();
+    fs.writeFileSync(path.join(dir, 'mac.jsonl'), line(start('r1')));
+    const m = memoReader(dir, () => false);
+    for (const ms of [0, MIN, 60 * MIN]) {
+      const [r] = m.at(ms);
+      assert.deepStrictEqual([r.state, r.why], ['lost', 'wrapper not running']);
+    }
+    assert.strictEqual(m.calls.length, 1);
+  });
+
+  t('liveness memo: a null answer is reused for 10 s, then asked again', () => {
+    const dir = tmp();
+    fs.writeFileSync(path.join(dir, 'mac.jsonl'), line(start('r1')));
+    const m = memoReader(dir, () => null);
+    m.at(0); m.at(5 * SEC);
+    assert.strictEqual(m.calls.length, 1);
+    m.at(11 * SEC);
+    assert.strictEqual(m.calls.length, 2);
+  });
+
+  t('liveness memo: once the end record is folded the run is settled and liveness is not asked again', () => {
+    const dir = tmp();
+    const file = path.join(dir, 'mac.jsonl');
+    fs.writeFileSync(file, line(start('r1')));
+    const m = memoReader(dir, () => true);
+    m.at(0);
+    fs.appendFileSync(file, line(end('r1')));
+    assert.strictEqual(m.at(SEC)[0].state, 'ok');
+    assert.strictEqual(m.at(20 * SEC)[0].state, 'ok');
+    assert.strictEqual(m.calls.length, 1);
+  });
+
+  t('liveness memo: per run — a lost run and a running one keep their own memos, and one ending leaves the other\'s', () => {
+    const dir = tmp();
+    const file = path.join(dir, 'mac.jsonl');
+    fs.writeFileSync(file, [start('ra', { job: 'a', pid: 101 }), start('rb', { job: 'b', pid: 202, at: iso(T0 + SEC) })].map(line).join(''));
+    const m = memoReader(dir, (pid) => pid === 202);
+    const state = (runs: RoutineRun[], job: string) => runs.find(r => r.job === job)!.state;
+    for (const ms of [0, 5 * SEC, 11 * SEC]) {
+      const runs = m.at(ms);
+      assert.deepStrictEqual([state(runs, 'a'), state(runs, 'b')], ['lost', 'running'], `at ${ms} ms`);
+    }
+    assert.deepStrictEqual([m.calls.filter(p => p === 101).length, m.calls.filter(p => p === 202).length], [1, 2]);
+    fs.appendFileSync(file, line(end('ra')));
+    m.at(12 * SEC);
+    assert.strictEqual(m.calls.filter(p => p === 202).length, 2, 'b\'s memo survives a\'s end');
   });
 
   t('liveness null falls to the age rule: timeout x steps + 5 min, 124 min running, 126 min lost', () => {

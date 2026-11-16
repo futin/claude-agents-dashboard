@@ -5,7 +5,8 @@
  *
  * The reader is incremental: per file it keeps the inode and the byte offset of the last complete line it folded, and a poll reads only what was
  * appended. Folding is keyed by run id (and step index), so reading a record twice changes nothing — which is what lets a renamed or re-read file be
- * absorbed without bookkeeping. `lost` is derived at `read()` time from the injected liveness check, never stored.
+ * absorbed without bookkeeping. `lost` is derived at `read()` time from the injected liveness check, never stored — but the check's answer is memoised per
+ * run (spec 2026-11-14-poll-path-probes A4), so a poll does not fork a `ps` per unfinished run.
  */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -16,6 +17,9 @@ import { foldLines } from './jsonl-tail.js';
 const AGE_SLACK_MS = 5 * 60_000;
 const WATCH_DEBOUNCE_MS = 100;
 const OUTCOMES = new Set(['ok', 'failed', 'skipped', 'timeout', 'stopped']);
+
+/** How long a `true` or `null` liveness answer is reused; `false` is final, since a wrapper that is gone does not come back under that run id. */
+export const LIVENESS_TTL_MS = 10_000;
 
 type Rec = Record<string, unknown>;
 
@@ -54,6 +58,16 @@ export function createLogReader(
   let folds = new Map<string, Fold>();
   let refusals = new Map<string, RoutineRun>();
   let files = new Map<string, FileState>();
+  const live = new Map<string, { alive: boolean | null; at: number }>();
+
+  const aliveOf = (id: string, pid: number, job: string): boolean | null => {
+    const memo = live.get(id);
+    const t = now();
+    if (memo && (memo.alive === false || t - memo.at < LIVENESS_TTL_MS)) return memo.alive;
+    const alive = liveness(pid, job);
+    live.set(id, { alive, at: t });
+    return alive;
+  };
 
   const foldOf = (id: string): Fold => {
     let f = folds.get(id);
@@ -80,7 +94,7 @@ export function createLogReader(
     if (!id) return;
     const f = foldOf(id);
     if (kind === 'start') f.start = rec;
-    else if (kind === 'end') f.end = rec;
+    else if (kind === 'end') { f.end = rec; live.delete(id); }
     else if (kind === 'step-start' || kind === 'step-end') {
       const index = num(rec.step);
       const at = str(rec.at);
@@ -198,7 +212,7 @@ export function createLogReader(
       state = failed > 0 || error ? 'failed' : 'ok';
     } else {
       const pid = num(start.pid);
-      const alive = pid === null ? null : liveness(pid, job);
+      const alive = pid === null ? null : aliveOf(id, pid, job);
       if (alive === true) state = 'running';
       else if (alive === false) { state = 'lost'; why = 'wrapper not running'; }
       else if (now() - Date.parse(startedAt) > timeoutMsFor(job) * Math.max(total, 1) + AGE_SLACK_MS) { state = 'lost'; why = 'no end record past its timeout'; }
