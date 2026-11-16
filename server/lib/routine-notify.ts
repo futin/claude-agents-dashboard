@@ -18,7 +18,7 @@ import { pushableEvents } from './routine-log.js';
 import { isOwner } from './routine-store.js';
 
 /** Only a run whose end (or, lost or refused, whose start) falls inside this window can push; the ledger is pruned by the same age, so it always covers
- * every run the fold can offer. The fold itself has no window: rotation keeps every log file, so it hands over the whole history. */
+ * every run the fold can offer. The fold itself reaches back `RUN_RETAIN_DAYS` (181), far past this window, so it hands over months of history. */
 export const PUSH_HORIZON_MS = 7 * 24 * 3600_000;
 
 /** Backstop only. Past it the oldest ids are dropped and `floor` rises to the newest dropped stamp, so nothing at or before it pushes again. */
