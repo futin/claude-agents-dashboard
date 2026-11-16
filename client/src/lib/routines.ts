@@ -9,21 +9,14 @@ import { isManualCron } from '../../../shared/cron';
 import { scalarEnd, writeFrontmatterLine } from '../../../shared/frontmatter';
 import { LABEL_PREFIX, NAME_RE, RESERVED, inlineList, unquote } from '../../../shared/routine-file';
 import type {
-  ReconcileChange, RoutineJob, RoutineJobRow, RoutineRun, RoutineRunConflict, RoutineStats, RoutineStep, RoutinesResponse,
+  ReconcileChange, RoutineJob, RoutineJobRow, RoutineRun, RoutineRunConflict, RoutineRunsQuery, RoutineStats, RoutineStep, RoutineWriteError,
+  RoutinesResponse,
 } from '../../../shared/types';
 import { READ_ONLY_TEXT, refusalKind } from './writeRefusal';
 
 /** The chip colours a pill may take; `run` is the cyan "in flight" one the mock draws, `dim` the dashed one. */
 export type PillTone = 'green' | 'amber' | 'red' | 'mustard' | 'run' | 'dim';
 export interface Pill { text: string; tone: PillTone }
-
-/** The Runs page's filters, as `GET /api/routines/runs` takes them; an empty string is "no filter". */
-export interface RoutineRunsQuery {
-  days: 7 | 30 | 90;
-  job: string;
-  outcome: '' | 'failed' | 'lost';
-  runner: '' | 'claude' | 'shell';
-}
 
 /** The query string for `GET /api/routines/runs`, empty filters left out. */
 export function runsQueryString(q: RoutineRunsQuery): string {
@@ -335,6 +328,11 @@ export function withLate(line: string, late: boolean): string {
   return [parts[0], 'late', ...parts.slice(1)].join(' · ');
 }
 
+/** The other routine write codes `writeFailureText` words, each checked against the shared union so a reworded code fails the typecheck here and in `server/api.ts`. */
+const WRITE_ERROR = {
+  notOwner: 'not-owner', notRunning: 'not-running', exists: 'exists', badOnly: 'bad-only', spawnFailed: 'spawn-failed',
+} as const satisfies Record<string, RoutineWriteError>;
+
 /** Run now's 409s, keyed by the shared union so a code the server adds fails the typecheck here. */
 const RUN_CONFLICT_TEXT: Record<RoutineRunConflict, (what: string) => string> = {
   'already-running': what => `${what}: the job is already running.`,
@@ -349,14 +347,14 @@ export function writeFailureText(what: string, status: number, body: unknown): s
   if (kind === 'token') return `${what} needs the Answer token — set it under Settings › Local › Connection.`;
   if (status === 0) return `${what} failed: the server did not answer.`;
   const error = body !== null && typeof body === 'object' ? (body as { error?: unknown }).error : undefined;
-  if (status === 409 && error === 'not-owner') return 'Another server owns the routines on this machine; this one only reads.';
+  if (status === 409 && error === WRITE_ERROR.notOwner) return 'Another server owns the routines on this machine; this one only reads.';
   if (status === 409 && typeof error === 'string' && Object.hasOwn(RUN_CONFLICT_TEXT, error)) return RUN_CONFLICT_TEXT[error as RoutineRunConflict](what);
-  if (status === 409 && error === 'not-running') return `${what}: the job is not running.`;
-  if (status === 409 && error === 'exists') return `${what}: a job with that name already exists.`;
+  if (status === 409 && error === WRITE_ERROR.notRunning) return `${what}: the job is not running.`;
+  if (status === 409 && error === WRITE_ERROR.exists) return `${what}: a job with that name already exists.`;
   if (status === 404) return `${what}: no such job.`;
   if (status === 422) return `${what}: the file has errors.`;
-  if (status === 400 && error === 'bad-only') return `${what}: the steps picked to run were not valid.`;
-  if (status === 500 && error === 'spawn-failed') return `${what} failed: the job could not be launched.`;
+  if (status === 400 && error === WRITE_ERROR.badOnly) return `${what}: the steps picked to run were not valid.`;
+  if (status === 500 && error === WRITE_ERROR.spawnFailed) return `${what} failed: the job could not be launched.`;
   if (status === 501) return `${what} needs macOS.`;
   return `${what} failed (HTTP ${status}).`;
 }

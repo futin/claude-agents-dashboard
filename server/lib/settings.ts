@@ -34,7 +34,9 @@ import path from 'node:path';
 
 import { writeFileAtomic } from './atomic-write.js';
 import { claudeHome, stateDir } from './paths.js';
-import type { EnvOverride, GitFetchSecs, LaunchSurface, NoneMissing, NotifyEvent, NotifyPolicy, ServerSettings, ServerSettingsPatch } from '../../shared/types.js';
+import type {
+  EnvOverride, GitFetchSecs, LaunchSurface, NoneMissing, NotifyEvent, NotifyPatch, NotifyPolicy, ServerSettings, ServerSettingsPatch, Unvalidated
+} from '../../shared/types.js';
 
 /** Gitignored, repo-local — never inside `~/.claude` (read-only under Docker). */
 export const SETTINGS_FILE = '.dashboard-settings.json';
@@ -162,7 +164,7 @@ export function clampPinned(value: unknown): string[] {
  */
 export function mergeNotify(current: NotifyPolicy, patch: unknown): NotifyPolicy | null {
   if (!patch || typeof patch !== 'object') return null;
-  const p = patch as Record<string, unknown>;
+  const p = patch as Unvalidated<NotifyPatch>;
   const next: NotifyPolicy = { ...current, events: { ...current.events } };
 
   for (const key of ['enabled', 'requireRemoteAnswer', 'requireAfk', 'requireAutoMode'] as const) {
@@ -292,7 +294,7 @@ export function getSettings(homeDir?: string): ServerSettings {
  * a half-applied save is the one outcome the UI can't report honestly.
  */
 export function setSettings(patch: unknown): ServerSettings | null {
-  const body = patch as { [K in keyof ServerSettingsPatch]?: unknown } | null;
+  const body = patch as Unvalidated<ServerSettingsPatch> | null;
   if (!body || typeof body !== 'object') return null;
 
   const next: Partial<Stored> = {};

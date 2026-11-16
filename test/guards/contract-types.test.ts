@@ -7,7 +7,8 @@ import assert from 'node:assert';
 import { GIT_FETCH_OPTIONS } from '../../client/src/lib/gitClock.js';
 import type { PendingPollPath, PendingReplyOptions } from '../../client/src/hooks/usePendingReply.js';
 import { GIT_FETCH_SECS } from '../../server/lib/settings.js';
-import type { ServerSettingsPatch } from '../../shared/types.js';
+import type { ReleasesResponse, ServerSettingsPatch } from '../../shared/types.js';
+import type { ReleasesResponse as KitReleasesResponse } from 'ui-kit';
 
 type IdOf<P extends PendingPollPath> = PendingReplyOptions<P, 'sent'>['idOf'];
 
@@ -32,6 +33,16 @@ const patches: ServerSettingsPatch[] = [
   // @ts-expect-error off the list: the server would refuse it
   { gitFetchSecs: 45 },
 ];
+
+/**
+ * What `GET /api/releases` sends is what ui-kit's `useWhatsNew` accepts: the client never sees `shared`'s type at run time, since ui-kit fetches the route
+ * itself, so this assignability check is the tie.
+ */
+const releases = {
+  served: (r: ReleasesResponse): KitReleasesResponse => r,
+  // @ts-expect-error a `current.ahead` that is not a number is not what ui-kit reads
+  aheadAsText: (r: Omit<ReleasesResponse, 'current'> & { current: { version: string; ahead: string } | null }): KitReleasesResponse => r,
+};
 
 export function run(): number {
   console.log('\ncontract-types.test.ts');

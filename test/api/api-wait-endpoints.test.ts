@@ -392,6 +392,8 @@ export async function run(): Promise<number> {
           ['{not json', 'bad body'],
           [JSON.stringify({ sessionId: '../../etc/passwd', event: 'stop' }), 'bad sessionId'],
           [JSON.stringify({ sessionId: ID, event: 'bogus' }), 'bad event'],
+          // A real NotifyEvent, but raised server-side: the route takes only HookNotifyEvent.
+          [JSON.stringify({ sessionId: ID, event: 'routine-failed' }), 'bad event'],
           [JSON.stringify({ sessionId: ID }), 'bad event']
         ];
         for (const [body, error] of cases) {
