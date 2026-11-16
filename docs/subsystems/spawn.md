@@ -351,7 +351,9 @@ single source of truth, the same division that keeps `pending.ts`/`plans.ts`/
   entirely and `toPublic` is never called for one, so the shared contract is unchanged.
   `serveSessions` calls `adoptLaunched(ids)` with the freshly-scanned session ids before
   it calls `listLaunching()`, so an id that just showed up on disk stops being reported as
-  `launching` in the same response.
+  `launching` in the same response. A `launching` non-resume entry the filtered rows did not
+  cover is checked against its own transcript (`launchRowIds`, `scan.ts`) and adopted when it
+  makes a row, so a `?project=` filter that hides the project cannot hold it to the TTL (#471).
 - **No reaper — unlike the other three stores.** `pending.ts`, `plans.ts`, and
   `messages.ts` each run their own timer, because something has to fire even when
   nobody is reading. This store has no timer at all: `listLaunching(now)`
@@ -670,7 +672,7 @@ one seam for it, and nothing about `launch`'s own contract changes. Three differ
 | `client/src/lib/stopControl.ts` | the pure decision function behind the Stop control: render or not, the label, and which POST it sends |
 | `client/src/components/sessions/SessionStopControl.tsx` | the Stop control itself, rendered by the expanded row and the chat drawer's sidecar |
 | `client/src/hooks/useStopSession.ts` | POSTs the stop, same bearer-token pattern as `useSpawn`, read-only 403 included (`READ_ONLY_TEXT`, no token prompt) |
-| `serveSessions` wiring | calls `adoptLaunched(ids)` then `listLaunching()` before every `/api/sessions` response, so `launching` rides the poll the client already makes |
+| `serveSessions` wiring | calls `adoptLaunched(ids)` — the served rows plus `launchRowIds` of the launches they missed — then `listLaunching()` before every `/api/sessions` response, so `launching` rides the poll the client already makes |
 | `serveHealth` wiring | publishes `spawnAvailable` (`probeSpawn`), `desktopAvailable` (`desktopAvailable()`), `launchSurfaceDefault` (the [Shared setting](settings.md)) and `spawnMaxPermission` (`config.spawnMaxPermission`) |
 | `client/src/components/SpawnPanel.tsx` | the launch form, as a **modal** (below; a launch error is the form's last line, so the body scrolls to it when it appears) — project picker, prompt textarea with the reply composer's own `MicButton` in the foot, name on its own line, then model/effort/permission as a triplet (model and effort start at the per-device Settings defaults, `spawnDefaultModel`/`spawnDefaultEffort` in `client/src/lib/settings.ts`, where `''` still means "send no flag and let the CLI decide"), and remote control and Close when done as the board's pill switch; a **Dashboard | Desktop** pick at the top when the host offers both (`offeredSurfaces`/`initialSurface`, `client/src/lib/launchSurface.ts`), which fixes the two toggles a desktop launch forces (remote control Off, Close when done On) under the note `A short first turn plans here, then the session moves to the desktop app.`; own lazy chunk, cyan chrome (a compose surface opened on purpose, not a hold waiting on you) |
 | Management › Git's Sync button | a second launcher (`client/src/hooks/useGitSync.ts`): `useSpawn().launch` with no sheet, the body built by `syncRequest` (`client/src/lib/gitSync.ts`) from the Settings › Git Sync model and effort, the host's `SYNC_PERMISSION_MODE` (`HealthResponse.syncPermissionMode`, clamped to the ceiling) and Remote answers' state, always `oneShot`; `docs/subsystems/git-stats.md` §Client |
