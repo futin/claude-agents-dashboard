@@ -318,6 +318,10 @@ The Routines section, second in the rail, `client/src/components/routines/`; its
 line under the toolbar, one `busy` key so only the clicked control greys out, and a re-poll after every success), the drawer and the ChatDrawer.
 The drawer guards unsaved edits: while it is dirty, Escape, the backdrop and the browser's Back all leave it open, with no prompt, and only Save, Delete or
 Cancel leave. A New job drawer counts as dirty from the start. Back re-arms after a refusal (`useBackClose`'s `rearm`), since that press spent the history entry.
+A poll that lacks an open edit drawer's job (renamed or deleted on the other machine; a rename reads as a delete here) does not close it from
+`RoutinesView` (#434): the drawer stays mounted on the last row it saw with `gone` set, and decides by the same rule — clean, it closes on its own; dirty,
+it stays open with Save disabled and a note that the file is gone on disk, so the edits can be copied out before Cancel. A row that comes back clears
+`gone`, and the `diskChanged` mtime check covers any change.
 
 - **Jobs:** the stats band (`StatsBand`) and the ledger (`JobLedger`, one row per file, with `JobFold` for the unfolded stats and last three runs and
   `JobMenu` for Edit, Run now on one repo, Pause or Resume, Reveal in Finder, Copy launchd label and Delete).

@@ -262,6 +262,12 @@ request for it and `/api/sessions/:id/chat` knows nothing of it. Three behaviour
   `back()` first, because an entry left on the stack is a back press that visibly does
   nothing. If `pushState` throws (Safari's throttle, `file://`) the arm goes inert and the
   drawer behaves exactly as it did before — teardown must never `back()` in that state.
+- **An unsent draft holds the drawer open (#434).** While any composer it renders holds non-whitespace text — `ResumePanel`'s follow-up,
+  `MessagePanel`'s reply or `PlanPanel`'s revision feedback — Escape, the scrim and Back leave it open, silently, and only ✕ closes it: the job drawer's
+  rule (#376, [routines](routines.md)). Each panel reports its own draft through an `onDraft` prop, `false` again once no composer shows the text (sent,
+  dismissed, window gone) or the panel unmounts; `ChatDrawer` ORs one flag per panel into a `keepOpen` ref, so one panel clearing never releases another's.
+  A refused Back re-arms through `useBackClose`'s `rearm`, since that press spent the history entry. No `window.confirm`: a dialog on a phone is worse
+  than a drawer that stays open.
 
 - The `Chat` button (`ChatButton` in `sessions/atoms.tsx`, `.cbtn`) sits inside the clickable
   card and stops its click from propagating — so opening the drawer never also toggles the row.

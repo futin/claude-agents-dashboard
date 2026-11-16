@@ -24,10 +24,12 @@ const SENT_RESET_MS = 15_000;
  * which relaunches `claude -p --resume <id>` in the session's own cwd; the
  * transcript keeps its id, so this very drawer live-tails the continuation.
  */
-export default function ResumePanel({ session, suggestion }: {
+export default function ResumePanel({ session, suggestion, onDraft }: {
   session: Session;
   /** The last turn's recommended reply (`latestSuggestion`), offered on Tab. */
   suggestion: string | null;
+  /** Told whether this panel holds unsent text, and `false` on unmount: ChatDrawer's stray exits stay shut while it does. */
+  onDraft?: (held: boolean) => void;
 }) {
   const { launch, pending: busy, error, needsToken, setToken } = useSpawn();
   const [text, setText] = useState('');
@@ -38,6 +40,8 @@ export default function ResumePanel({ session, suggestion }: {
   };
   const [tokenDraft, setTokenDraft] = useState('');
   const [sent, setSent] = useState(false);
+  const draft = text.trim() !== '';
+  useEffect(() => { onDraft?.(draft); return () => onDraft?.(false); }, [draft, onDraft]);
 
   useEffect(() => {
     if (!sent) return;

@@ -521,6 +521,19 @@ export function run(): number {
     assert.match(hook, /latest\.current\(\)\), \[rearm\]\)/);
   });
 
+  t('a job gone from the poll keeps a dirty drawer open on its last row, with Save off; a clean one still closes (#434)', () => {
+    const view = fs.readFileSync(new URL('../../client/src/components/routines/RoutinesView.tsx', import.meta.url), 'utf8');
+    const source = fs.readFileSync(new URL('../../client/src/components/routines/JobDrawer.tsx', import.meta.url), 'utf8');
+    assert.ok(!/setDrawer\(null\);\s*\n\s*\}, \[data, drawer\]\)/.test(view), 'RoutinesView closes the drawer itself when the row disappears');
+    assert.ok(!view.includes('!data.jobs.some(j => j.name === drawer.name)) setDrawer(null)'), 'the missing-row effect is back');
+    assert.match(view, /if \(editRow\) lastRow\.current = editRow;/);
+    assert.match(view, /row=\{shownRow\}/);
+    assert.match(view, /gone=\{gone\}/);
+    assert.match(source, /const canSave = !readOnly && !ctl\.locked && !saving && !diskChanged && !gone && /);
+    assert.match(source, /useEffect\(\(\) => \{ if \(gone && !keepOpen\.current\) onClose\(\); \}, \[gone, onClose\]\);/);
+    assert.match(source, /\{gone && \(\s*<div className="rtn-vmsg warn">/);
+  });
+
   t('the timeout rule lives in shared/routine-file.ts: the form and the boot code keep no copy', () => {
     const form = fs.readFileSync(new URL('../../client/src/lib/routineForm.ts', import.meta.url), 'utf8');
     assert.ok(!form.includes('([smh])'), 'the grammar is imported');

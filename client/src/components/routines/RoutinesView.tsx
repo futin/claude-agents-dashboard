@@ -1,4 +1,4 @@
-import { Suspense, lazy, useCallback, useEffect, useMemo, useState } from 'react';
+import { Suspense, lazy, useCallback, useMemo, useRef, useState } from 'react';
 
 import type { RoutineJobRow, Session } from '../../../../shared/types';
 import { useAnswerToken } from '../../hooks/useAnswerToken';
@@ -109,10 +109,12 @@ export default function RoutinesView() {
   const names = useMemo(() => (data?.jobs ?? []).map(j => j.name), [data]);
   const editRow: RoutineJobRow | null = drawer?.mode === 'edit' ? data?.jobs.find(j => j.name === drawer.name) ?? null : null;
 
-  // A drawer left open on a job deleted elsewhere has nothing to save into; the next poll closes it.
-  useEffect(() => {
-    if (drawer?.mode === 'edit' && data && !data.jobs.some(j => j.name === drawer.name)) setDrawer(null);
-  }, [data, drawer]);
+  // A poll can lack an open drawer's job (renamed or deleted elsewhere). The drawer stays mounted on the last row it saw, `gone`, and decides itself:
+  // closed when clean, kept open with Save off when it holds unsaved edits.
+  const lastRow = useRef<RoutineJobRow | null>(null);
+  if (editRow) lastRow.current = editRow;
+  const shownRow = editRow ?? (drawer?.mode === 'edit' && lastRow.current?.name === drawer.name ? lastRow.current : null);
+  const gone = drawer?.mode === 'edit' && editRow === null;
 
   return (
     <div className="usage-section rtn-view">
@@ -209,11 +211,12 @@ export default function RoutinesView() {
       ) : (
         <RunsList query={{ days, ...filters }} rows={data.jobs} ctl={ctl} focusRun={focusRun} />
       )}
-      {drawer && data && (drawer.mode === 'new' || editRow) && (
+      {drawer && data && (drawer.mode === 'new' || shownRow) && (
         <JobDrawer
           key={drawer.mode === 'new' ? 'new' : drawer.name}
           mode={drawer.mode}
-          row={editRow}
+          row={shownRow}
+          gone={gone}
           confirmDelete={drawer.mode === 'edit' && drawer.confirmDelete}
           existing={names}
           ctl={ctl}

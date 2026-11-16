@@ -87,12 +87,19 @@ export function splitPlan(md: string): { title: string; body: string } {
  * Fed by the plan store (the markdown from the hook's stdin), so it works even
  * before the `tool_use` record reaches the transcript the drawer renders.
  */
-export default function PlanPanel({ state }: { state: PendingPlanState }) {
+export default function PlanPanel({ state, onDraft }: {
+  state: PendingPlanState;
+  /** Told whether this panel holds unsent text, and `false` on unmount: ChatDrawer's stray exits stay shut while it does. */
+  onDraft?: (held: boolean) => void;
+}) {
   const { pending, phase, needsToken, readOnly, reject, dismiss, setToken } = state;
   const [feedback, setFeedback] = useState('');
   const [tokenDraft, setTokenDraft] = useState('');
   const [open, setOpen] = useState(false);
   const [minimised, setMinimised] = useState(false);
+  // As MessagePanel: feedback left behind a gone or sent note stops counting.
+  const draft = !!pending && phase !== 'gone' && phase !== 'sent' && feedback.trim() !== '';
+  useEffect(() => { onDraft?.(draft); return () => onDraft?.(false); }, [draft, onDraft]);
   const planBoxId = useId();
   const { title, body } = useMemo(() => splitPlan(pending?.plan ?? ''), [pending?.plan]);
 

@@ -24,10 +24,12 @@ function secsLeft(expiresAt: string): number {
  * a bug. The window carries no content: the turn's final message is already the
  * last message in the transcript above.
  */
-export default function MessagePanel({ state, suggestion }: {
+export default function MessagePanel({ state, suggestion, onDraft }: {
   state: PendingMessageState;
   /** The finished turn's recommended reply (`latestSuggestion`), offered on Tab. */
   suggestion: string | null;
+  /** Told whether this panel holds unsent text, and `false` on unmount: ChatDrawer's stray exits stay shut while it does. */
+  onDraft?: (held: boolean) => void;
 }) {
   const { pending, phase, needsToken, readOnly, send, dismiss, setToken } = state;
   const [text, setText] = useState('');
@@ -35,6 +37,9 @@ export default function MessagePanel({ state, suggestion }: {
   const [tokenDraft, setTokenDraft] = useState('');
   const [left, setLeft] = useState(0);
   const [minimised, setMinimised] = useState(false);
+  // The panel outlives its composer (the gone and sent notes, or nothing), so text left behind stops counting once no composer shows it.
+  const draft = !!pending && phase !== 'gone' && phase !== 'sent' && text.trim() !== '';
+  useEffect(() => { onDraft?.(draft); return () => onDraft?.(false); }, [draft, onDraft]);
 
   // A new window (or a fresh drawer) starts from a clean slate — expanded
   // included, so a fresh window is never hidden behind an old stub.
