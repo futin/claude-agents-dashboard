@@ -130,23 +130,29 @@ export default function SpawnPanel({ onClose, onLaunched, spawnMaxPermission, sp
 
   const canLaunch = !pending && surface !== null && prompt.trim() !== '' && selectedProject !== '';
 
-  // Every exit is the cancel button's exit: refused mid-launch, so a stray tap
-  // on the scrim can't unmount the request's own `pending` guard.
+  // ✕ is refused mid-launch, so no exit can unmount the request's own `pending` guard.
   function close(): void {
     if (!pending) onClose();
   }
 
+  // The scrim, Escape and Back are stray exits: they also leave a typed prompt standing, so only ✕ discards one. The name field alone does not count.
+  const keepOpen = pending || prompt.trim() !== '';
+  function strayClose(): void {
+    if (!keepOpen) onClose();
+  }
+  const [backGen, setBackGen] = useState(0);
+
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
-      if (e.key === 'Escape' && !pending) onClose();
+      if (e.key === 'Escape' && !keepOpen) onClose();
     }
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [onClose, pending]);
+  }, [onClose, keepOpen]);
 
   // Same intent as Escape, for the input a phone actually has: below `md`
-  // (768px) the modal is full-screen and there is no scrim left to tap.
-  useBackClose(close);
+  // (768px) the modal is full-screen and there is no scrim left to tap. A refused Back spent the history entry, so it re-arms.
+  useBackClose(() => { if (keepOpen) setBackGen(g => g + 1); else onClose(); }, backGen);
 
   async function pinAndSelect(dirName: string): Promise<string | null> {
     const failure = await setPin(dirName, true);
@@ -167,7 +173,7 @@ export default function SpawnPanel({ onClose, onLaunched, spawnMaxPermission, sp
   }
 
   return (
-    <div className="spawn-back" onClick={close}>
+    <div className="spawn-back" onClick={strayClose}>
       <div className="spawn" role="dialog" aria-label="New session" onClick={e => e.stopPropagation()}>
         <div className="spawn-head">
           <span className="qp-badge">new session</span>

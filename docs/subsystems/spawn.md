@@ -555,10 +555,13 @@ tiles.
 Nothing about *what* it does changed: same request, same defaults, same ceiling-aware
 permission list. Two rules are worth stating because they are easy to break:
 
-- **Every exit is the cancel button's exit.** ✕, Escape, the scrim and the browser's
-  back all route through one `close()` that refuses while `pending` — the same guard
-  `Cancel` has always carried. Without it a stray tap on the scrim unmounts the
-  component holding the in-flight request's own `pending` flag.
+- **No exit unmounts a launch in flight, and no stray exit drops a typed prompt.** ✕ goes
+  through `close()`, which refuses while `pending` — the same guard `Cancel` has always
+  carried; without it a stray tap would unmount the component holding the in-flight
+  request's own `pending` flag. Escape, the scrim and the browser's back go through
+  `strayClose()`, which also refuses while the prompt holds non-whitespace text (#434), so only ✕ discards a typed
+  prompt; the name field alone does not hold the panel open. A refused back re-arms through `useBackClose`'s `rearm`, since that press spent the
+  history entry.
 - **The boolean is the board's pill switch**, the `.set-seg` Off/On Settings already
   draws, not a second toggle shape invented for this modal. `remoteControl` still
   defaults ON: a launch from here is phone-first, which is exactly when account

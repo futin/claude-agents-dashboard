@@ -25,9 +25,11 @@ const KINDS: Array<{ kind: JobKind; title: string; line: string; small: string }
  * whose file changed on disk since it was loaded (the row's `mtimeMs` moved) cannot be saved until it is reloaded, so a save never overwrites an edit
  * made elsewhere. A non-owner sees the file read-only.
  */
-export default function JobDrawer({ mode, row, confirmDelete, existing, ctl, send, onClose }: {
+export default function JobDrawer({ mode, row, confirmDelete, existing, ctl, send, onClose, gone = false }: {
   mode: 'new' | 'edit';
   row: RoutineJobRow | null;
+  /** The last poll lacks this job: `row` is the last one seen, and the file is gone on disk. */
+  gone?: boolean;
   confirmDelete: boolean;
   existing: string[];
   ctl: RoutineCtl;
@@ -100,7 +102,9 @@ export default function JobDrawer({ mode, row, confirmDelete, existing, ctl, sen
   const diskChanged = mode === 'edit' && row !== null && loaded !== null && row.mtimeMs !== loaded.mtimeMs;
   const dirty = mode === 'new' || (loaded !== null && text !== loaded.text);
   keepOpen.current = dirty && !readOnly;
-  const canSave = !readOnly && !ctl.locked && !saving && !diskChanged && nameErr === null && errors.length === 0 && (mode === 'new' || (loaded !== null && dirty));
+  // Nothing to save into, so a clean drawer closes; a dirty one stays for the edits to be copied out.
+  useEffect(() => { if (gone && !keepOpen.current) onClose(); }, [gone, onClose]);
+  const canSave = !readOnly && !ctl.locked && !saving && !diskChanged && !gone && nameErr === null && errors.length === 0 && (mode === 'new' || (loaded !== null && dirty));
 
   const save = async (enabled: boolean | null) => {
     setSaving(true);
@@ -220,6 +224,11 @@ export default function JobDrawer({ mode, row, confirmDelete, existing, ctl, sen
               <div className="rtn-vmsg warn">
                 The file changed on disk since it was opened. Reload it to save; your edits here are dropped.{' '}
                 <button type="button" className="git-link" onClick={load}>Reload</button>
+              </div>
+            )}
+            {gone && (
+              <div className="rtn-vmsg warn">
+                This job’s file is gone on disk: it was renamed or deleted elsewhere. Save is off; copy your edits out before you Cancel.
               </div>
             )}
             {failure && <div className="rtn-vmsg err">{failure}</div>}

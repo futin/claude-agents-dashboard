@@ -190,9 +190,22 @@ export default function ChatDrawer({ session, onClose, spawnAvailable, desktopAv
   /** Filter at last render — a change re-anchors instead of looking like a prepend. */
   const prevMode = useRef(mode);
 
+  // Every exit but ✕ reads this, as JobDrawer's does: a half-typed reply, follow-up or plan revision survives a stray key, tap or Back. The text lives
+  // in the leaf panels, so each reports its own draft and one panel clearing its flag never releases another's.
+  const drafts = useRef({ resume: false, message: false, plan: false });
+  const keepOpen = useRef(false);
+  const onDraft = useMemo(() => {
+    const report = (k: keyof typeof drafts.current) => (held: boolean) => {
+      drafts.current[k] = held;
+      keepOpen.current = drafts.current.resume || drafts.current.message || drafts.current.plan;
+    };
+    return { resume: report('resume'), message: report('message'), plan: report('plan') };
+  }, []);
+  const [backGen, setBackGen] = useState(0);
+
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
-      if (e.key === 'Escape') onClose();
+      if (e.key === 'Escape' && !keepOpen.current) onClose();
     }
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -200,8 +213,8 @@ export default function ChatDrawer({ session, onClose, spawnAvailable, desktopAv
 
   // Same intent as Escape above, for the input a phone actually has: below
   // `md` (768px) the drawer is full-width with no scrim to tap, so back is the
-  // other exit.
-  useBackClose(onClose);
+  // other exit. A refused Back spent the history entry, so it re-arms.
+  useBackClose(() => { if (keepOpen.current) setBackGen(g => g + 1); else onClose(); }, backGen);
 
   useLayoutEffect(() => {
     const el = bodyRef.current;
@@ -257,7 +270,7 @@ export default function ChatDrawer({ session, onClose, spawnAvailable, desktopAv
   }
 
   return (
-    <div className="chat-back" onClick={onClose}>
+    <div className="chat-back" onClick={() => { if (!keepOpen.current) onClose(); }}>
       <aside className="chat" onClick={e => e.stopPropagation()} role="dialog" aria-label="Session chat history">
         {/* The head keeps the session's name, the project pill and the close
             control. Everything else it used to carry — branch, model, surface,
@@ -399,19 +412,19 @@ export default function ChatDrawer({ session, onClose, spawnAvailable, desktopAv
                 {/* Same deal for a proposed plan. The two stores are one-entry-per-
                     session and a session can only be parked on one thing at a time, so
                     in practice only one of these ever renders. */}
-                <PlanPanel state={plan} />
+                <PlanPanel state={plan} onDraft={onDraft.plan} />
 
                 {/* And for a turn-end reply window. One-entry-per-session per store and
                     a session parks on one thing at a time, so at most one of the three
                     panels renders. */}
-                <MessagePanel state={message} suggestion={suggestion} />
+                <MessagePanel state={message} suggestion={suggestion} onDraft={onDraft.message} />
 
                 {/* The opposite case: a dashboard session whose turn is OVER — window
                     expired, released, or capped out. Sends `resume` through the spawn
                     path; the same transcript (same id) continues, so this drawer
                     live-tails the answer. Can render under MessagePanel's "gone" note,
                     which is the natural hand-off. */}
-                {canResume && <ResumePanel session={session} suggestion={suggestion} />}
+                {canResume && <ResumePanel session={session} suggestion={suggestion} onDraft={onDraft.resume} />}
 
                 {/* A dashboard session whose process is alive but not this server's to stop (`processLive`): the composer would only meet a 409,
                     so say why it is missing. The composer returns on the first poll after the process exits. */}
