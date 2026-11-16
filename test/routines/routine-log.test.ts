@@ -8,7 +8,7 @@ import os from 'node:os';
 import path from 'node:path';
 
 import type { RoutineRun, RoutineStep } from '../../shared/types.js';
-import { LIVENESS_TTL_MS, computeStats, createLogReader, pushableEvents, rotateIfLarge } from '../../server/lib/routine-log.js';
+import { LIVENESS_TTL_MS, RUN_RETAIN_DAYS, computeStats, createLogReader, pushableEvents, rotateIfLarge } from '../../server/lib/routine-log.js';
 
 function test(name: string, fn: () => void): boolean {
   try { fn(); console.log('  ✓ ' + name); return true; }
@@ -234,6 +234,62 @@ export function run(): number {
     fs.writeFileSync(path.join(dir, 'notes.txt'), 'not a log');
     const runs = createLogReader(dir, never, hour).read();
     assert.deepStrictEqual(runs.map((r) => r.id).sort(), ['new', 'old', 'refused-mac-pull-pins-' + Date.parse(iso(T0 + MIN))].sort());
+  });
+
+  // Archives past retention are not read (spec 2026-11-14-poll-path-probes A6). Each archive's run is its job's only run.
+  const DAY = 24 * 60 * MIN;
+  const stampOf = (d: Date): string => `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`;
+  const cutoffOf = (ms: number): Date => { const d = new Date(ms); return new Date(d.getFullYear(), d.getMonth(), d.getDate() - RUN_RETAIN_DAYS); };
+  const onDay = (stamp: string): number => Date.UTC(+stamp.slice(0, 4), +stamp.slice(4, 6) - 1, +stamp.slice(6, 8), 12);
+  const at0 = (): number => T0;
+
+  t('retention: an archive stamped before the cutoff is not read, and stays on disk', () => {
+    assert.strictEqual(RUN_RETAIN_DAYS, 181);
+    const dir = tmp();
+    fs.writeFileSync(path.join(dir, 'mac.jsonl'), complete('r-live', { startO: { job: 'live' } }));
+    fs.writeFileSync(path.join(dir, 'mac.20200101.jsonl'), complete('r-old', { startO: { job: 'old', at: iso(Date.UTC(2019, 11, 31)) } }));
+    const runs = createLogReader(dir, never, hour, at0).read();
+    assert.deepStrictEqual(runs.map((r) => r.job), ['live']);
+    assert.ok(fs.existsSync(path.join(dir, 'mac.20200101.jsonl')));
+  });
+
+  t('retention: an archive stamped on the cutoff day is read; one stamped a day earlier is not', () => {
+    const dir = tmp();
+    const edge = stampOf(cutoffOf(T0));
+    const before = new Date(cutoffOf(T0)); before.setDate(before.getDate() - 1);
+    fs.writeFileSync(path.join(dir, `mac.${edge}.jsonl`), complete('r-edge', { startO: { job: 'edge', at: iso(onDay(edge)) } }));
+    fs.writeFileSync(path.join(dir, `mac.${stampOf(before)}.jsonl`), complete('r-gone', { startO: { job: 'gone', at: iso(onDay(stampOf(before))) } }));
+    assert.deepStrictEqual(createLogReader(dir, never, hour, at0).read().map((r) => r.job), ['edge']);
+  });
+
+  t('retention: a numbered archive (mac.20200101.2.jsonl) is skipped the same way', () => {
+    const dir = tmp();
+    fs.writeFileSync(path.join(dir, 'mac.jsonl'), complete('r-live', { startO: { job: 'live' } }));
+    fs.writeFileSync(path.join(dir, 'mac.20200101.2.jsonl'), complete('r-old', { startO: { job: 'old', at: iso(Date.UTC(2019, 11, 31)) } }));
+    assert.deepStrictEqual(createLogReader(dir, never, hour, at0).read().map((r) => r.job), ['live']);
+  });
+
+  t('retention: a rotation to today\'s stamp while a run is open loses and duplicates nothing', () => {
+    const dir = tmp();
+    const file = path.join(dir, 'mac.jsonl');
+    fs.writeFileSync(file, complete('r1') + line(start('r2', { at: iso(T0 + MIN) })));
+    const reader = createLogReader(dir, () => true, hour, at0);
+    assert.deepStrictEqual(reader.read().map((r) => [r.id, r.state]), [['r2', 'running'], ['r1', 'ok']]);
+    fs.renameSync(file, path.join(dir, `mac.${stampOf(new Date(T0))}.jsonl`));
+    fs.writeFileSync(file, line(end('r2', { at: iso(T0 + 2 * MIN) })));
+    assert.deepStrictEqual(reader.read().map((r) => [r.id, r.state]), [['r2', 'ok'], ['r1', 'ok']]);
+  });
+
+  t('retention: an archive tracked while in range stays tracked once it ages out — no rebuild drops its run', () => {
+    const dir = tmp();
+    const stamp = stampOf(new Date(T0 - 10 * DAY));
+    fs.writeFileSync(path.join(dir, `mac.${stamp}.jsonl`), complete('r-solo', { startO: { job: 'solo', at: iso(T0 - 10 * DAY) } }));
+    let clock = T0;
+    const reader = createLogReader(dir, never, hour, () => clock);
+    assert.deepStrictEqual(reader.read().map((r) => r.job), ['solo']);
+    clock = T0 + 200 * DAY;
+    fs.writeFileSync(path.join(dir, 'mac.jsonl'), complete('r-new', { startO: { job: 'live', at: iso(clock) } }));
+    assert.deepStrictEqual(reader.read().map((r) => r.job).sort(), ['live', 'solo']);
   });
 
   t('rotateIfLarge renames a 21 MB log to today\'s mac.<yyyymmdd>.jsonl and leaves a 1 MB one alone', () => {

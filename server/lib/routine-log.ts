@@ -21,6 +21,20 @@ const OUTCOMES = new Set(['ok', 'failed', 'skipped', 'timeout', 'stopped']);
 /** How long a `true` or `null` liveness answer is reused; `false` is final, since a wrapper that is gone does not come back under that run id. */
 export const LIVENESS_TTL_MS = 10_000;
 
+/**
+ * How many days of runs the reader keeps: twice the widest stats window, since `computeStats`'s `prev` reads the window before it, plus one
+ * (spec 2026-11-14-poll-path-probes A6). A rotated archive stamped before it is not read; nothing is deleted.
+ */
+export const RUN_RETAIN_DAYS = 181;
+
+const ARCHIVE = /^[^.]+\.(\d{8})(?:\.\d+)?\.jsonl$/;
+
+/** The local midnight `RUN_RETAIN_DAYS` days before `now`. */
+function retainCutoff(now: number): Date {
+  const d = new Date(now);
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate() - RUN_RETAIN_DAYS);
+}
+
 type Rec = Record<string, unknown>;
 
 interface Fold {
@@ -175,7 +189,11 @@ export function createLogReader(
       refusals = new Map();
       next.clear();
     }
+    // An archive whose stamp is past retention is not read — unless it is tracked already: dropping a tracked file would read as "vanished" and rebuild.
+    const oldest = ymd(retainCutoff(now()));
     for (const [n, st] of current) {
+      const stamp = ARCHIVE.exec(n)?.[1];
+      if (stamp !== undefined && stamp < oldest && !next.has(n)) continue;
       const state = next.get(n) ?? { ino: st.ino, offset: 0 };
       if (state.ino !== st.ino) { state.ino = st.ino; state.offset = 0; }
       try { state.offset = readFrom(n, state.offset, st.size); } catch { /* unreadable this poll; retried the next */ }
