@@ -11,7 +11,7 @@ import { getCachedUsageState, type UsageState } from './usage.js';
 
 export interface HubSources {
   usage?: () => UsageState;
-  sessions?: () => Session[];
+  sessions?: () => Session[] | Promise<Session[]>;
   git?: () => Promise<RepoGitStats[]>;
   /** Called on every `git` data read, so a placed tile keeps the fetch timer running the way an open Git view does. */
   watchGit?: () => void;
@@ -78,12 +78,12 @@ export function gitPendingRows(repos: RepoGitStats[]): GitRow[] {
 /** Getters default to the live usage cache and a fresh session scan; tests inject fixtures. */
 export function createDashboardHub(config: Config, sources: HubSources = {}): HubHandler {
   const usage = sources.usage ?? getCachedUsageState;
-  const sessions = sources.sessions ?? (() => scanSnapshot(config).sessions);
+  const sessions = sources.sessions ?? (async () => (await scanSnapshot(config)).sessions);
   const git = sources.git ?? (async () => (await readGitStats(config)).repos);
   const watchGit = sources.watchGit ?? markGitWatched;
   const widgets: WidgetDecl[] = [];
   if (config.showUsage) widgets.push({ id: 'usage', title: 'Claude usage', render: 'gauge', refreshSeconds: 60, load: () => usageBars(usage()) });
-  widgets.push({ id: 'sessions', title: 'Sessions', render: 'list', refreshSeconds: 10, open: '/', load: () => ({ rows: sessions().map(sessionRow) }) });
+  widgets.push({ id: 'sessions', title: 'Sessions', render: 'list', refreshSeconds: 10, open: '/', load: async () => ({ rows: (await sessions()).map(sessionRow) }) });
   widgets.push({
     id: 'git', title: 'Git pending', render: 'list', refreshSeconds: 30, open: GIT_OPEN,
     load: async () => {

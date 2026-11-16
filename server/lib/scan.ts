@@ -6,7 +6,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { execFileSync } from 'node:child_process';
+import { execFile, execFileSync } from 'node:child_process';
 
 import { launchCwd, readTranscript } from './transcript.js';
 import { readAgentsCached } from './agents-cache.js';
@@ -34,13 +34,16 @@ interface ScanOptions {
   homeDir?: string;
   now?: number;
   root?: string;
-  skipProcScan?: boolean;
-  /** Override the live-cwd set (tests). null disables gating; undefined probes. The process count still forks its one `ps` unless `skipProcScan`. */
-  liveCwds?: Set<string> | null;
   /**
-   * Override the set of session ids named by a live `claude` argv (tests). null = unknown, no row is flagged `processLive`; undefined probes
-   * (`liveSessionIds()`), unless `skipProcScan` is set.
+   * The process probe the caller already ran ({@link probeProcesses}, shared through `scan-snapshot.ts`'s `sharedProcProbe`). The scan spawns
+   * nothing itself, so absent or null fails open: no liveness gate, no `processLive`, `runningClaudeProcs` null.
    */
+  proc?: ProcProbe | null;
+  /** Ignore `proc`, as if the probe was skipped (tests). */
+  skipProcScan?: boolean;
+  /** Override the live-cwd set (tests). null disables gating; undefined takes `proc`'s. */
+  liveCwds?: Set<string> | null;
+  /** Override the set of session ids named by a live `claude` argv (tests). null = unknown, no row is flagged `processLive`; undefined takes `proc`'s. */
   liveSessionIds?: Set<string> | null;
   /** Override kaizen lessons (tests). null skips tagging; undefined reads the log. */
   lessons?: readonly SessionAnalyticsLesson[] | null;
@@ -379,8 +382,8 @@ export function subagentRunning(parentFile: string, sessionId: string, nowMs: nu
 }
 
 /**
- * Running `claude` processes (informational cross-check), counted from the `ps -Ao pid=,comm=` stdout {@link liveCwds} already reads — so one poll forks
- * one `ps` for both. `null` when `ps` failed; `0` when it ran and matched nothing, where `liveCwds` answers `null` instead.
+ * Running `claude` processes (informational cross-check), counted from the `ps -Ao pid=,comm=` stdout the live-cwd set already reads — so one probe
+ * forks one `ps` for both. `null` when `ps` failed; `0` when it ran and matched nothing, where the cwd set answers `null` instead.
  */
 export function countClaudeProcs(psOut: string | null): number | null {
   return psOut === null ? null : parsePsClaudePids(psOut).length;
@@ -454,54 +457,95 @@ export function usableLsofStdout(err: unknown): string | null {
   return out === '' ? null : out;
 }
 
+/** One finished probe child: its exit code (null when it never ran, or died by a signal), the signal, and whatever stdout it printed. */
+export interface ProbeResult {
+  code: number | null;
+  signal: string | null;
+  stdout: string;
+}
+
+/** What runs one probe child. Resolves on every outcome, a failed spawn included; {@link setProbeExec} swaps it in tests. */
+export type ProbeExec = (bin: string, args: string[], opts: { timeoutMs: number; maxBuffer?: number }) => Promise<ProbeResult>;
+
+/** Every process-liveness answer one scan needs; each field null when its probe could not answer (callers fail open). */
+export interface ProcProbe {
+  /** Running `claude` CLI processes, from `ps -Ao pid=,comm=`. */
+  runningClaudeProcs: number | null;
+  /** Cwds of those processes, from `lsof` ({@link composeLiveCwds}). */
+  liveCwds: Set<string> | null;
+  /** Session ids named in a live `claude` argv, from `ps -Ao pid=,args=` ({@link parsePsSessionIds}). */
+  liveSessionIds: Set<string> | null;
+}
+
+/** Per-child kill timer for the probe. */
+export const PROBE_CHILD_TIMEOUT_MS = 2000;
+
 /**
- * Working directories of every running `claude` CLI process, via `ps` + `lsof`.
- * The transcript records a session's `cwd`; if no live process shares it, the
- * session is dead (closed/cleaned) and cannot be actively working.
- *
- * Pids come from `ps` rather than `lsof -c claude`, which matches the *binary's
- * filename*: the native installer runs each version as a file named after it
- * (`~/.local/share/claude/versions/2.1.250`) reached through a `claude` symlink,
- * so lsof reported it as `2.1.250` and every session under it read dead. `ps`
- * reports the launcher path, which ends in `claude` for both install flavours.
- *
- * Returns `null` when the probe can't run — callers fail open and skip liveness
- * gating rather than mislabel every session dead. Granularity is per-cwd: two
- * sessions in the same directory can't be told apart, so a dead session sharing
- * a directory with a live one still reads live.
+ * Run one probe child without blocking the event loop. The kill timer is its own because `execFile`'s `timeout` destroys stdout on a stalled event loop
+ * and still reports success with empty output (#168), the same reason `makeGitRunner` in `git-stats.ts` keeps one. A child our timer killed reads
+ * `code: null`, so its truncated stdout is never taken for a complete answer.
  */
-export function liveCwds(psOut: string | null = readPsComm()): Set<string> | null {
-  if (psOut === null) return null;
-  const pids = parsePsClaudePids(psOut);
-  if (pids.length === 0) return null;
+export function runProbeChild(bin: string, args: string[], opts: { timeoutMs: number; maxBuffer?: number }): Promise<ProbeResult> {
+  return new Promise(resolve => {
+    let timedOut = false;
+    let timer: NodeJS.Timeout | undefined;
+    try {
+      const child = execFile(bin, args, { encoding: 'utf8', maxBuffer: opts.maxBuffer ?? 1024 * 1024 }, (err, stdout) => {
+        clearTimeout(timer);
+        if (!err) return resolve({ code: 0, signal: null, stdout });
+        const e = err as NodeJS.ErrnoException & { code?: number | string; signal?: NodeJS.Signals | null };
+        const code = !timedOut && typeof e.code === 'number' ? e.code : null;
+        resolve({ code, signal: e.signal ?? (timedOut ? 'SIGTERM' : null), stdout: typeof stdout === 'string' ? stdout : '' });
+      });
+      timer = setTimeout(() => { timedOut = true; child.kill(); }, opts.timeoutMs);
+    } catch {
+      resolve({ code: null, signal: null, stdout: '' });
+    }
+  });
+}
 
+let probeExec: ProbeExec | null = null;
+
+/** Test seam: swap what runs the probe's children. `null` restores {@link runProbeChild}. Mirrors {@link setPsRunner}. */
+export function setProbeExec(fn: ProbeExec | null): void {
+  probeExec = fn;
+}
+
+/**
+ * The process-liveness probe: which `claude` CLI processes run, in which working directories, under which session ids. The transcript records a
+ * session's `cwd`; if no live process shares it, the session is dead (closed/cleaned) and cannot be actively working.
+ *
+ * Pids come from `ps` rather than `lsof -c claude`, which matches the *binary's filename*: the native installer runs each version as a file named
+ * after it (`~/.local/share/claude/versions/2.1.250`) reached through a `claude` symlink, so lsof reported it as `2.1.250` and every session under it
+ * read dead. `ps` reports the launcher path, which ends in `claude` for both install flavours.
+ *
+ * Async, with both `ps` reads in parallel and `lsof` after them, so a hung child costs this probe its kill timer and never blocks every other request
+ * for it. Each field fails open on its own: `ps comm` failed → count and cwds null; no claude pid → `lsof` is not run, cwds null, count 0; `ps args`
+ * failed → ids null. Granularity of the cwd set is per-cwd: two sessions in one directory cannot be told apart. Resolves on every failed or killed
+ * child; only an exec that breaks the {@link ProbeResult} contract can make it reject.
+ */
+export async function probeProcesses(opts: { exec?: ProbeExec; timeoutMs?: number } = {}): Promise<ProcProbe> {
+  const exec = opts.exec ?? probeExec ?? runProbeChild;
+  const timeoutMs = opts.timeoutMs ?? PROBE_CHILD_TIMEOUT_MS;
+  const run = (bin: string, args: string[], maxBuffer?: number): Promise<ProbeResult | null> =>
+    Promise.resolve().then(() => exec(bin, args, { timeoutMs, maxBuffer })).catch(() => null);
+  const stdoutOf = (r: ProbeResult | null): string | null => (r && r.code === 0 ? r.stdout : null);
+
+  const [comm, args] = await Promise.all([
+    run('ps', ['-Ao', 'pid=,comm=']).then(stdoutOf),
+    run('ps', ['-Ao', 'pid=,args='], 8 * 1024 * 1024).then(stdoutOf)
+  ]);
+  const pids = comm === null ? [] : parsePsClaudePids(comm);
   let lsofOut: string | null = null;
-  try {
-    lsofOut = execFileSync('lsof', ['-p', pids.join(','), '-a', '-d', 'cwd', '-Fn'], {
-      encoding: 'utf8',
-      timeout: 2000
-    });
-  } catch (e) {
-    lsofOut = usableLsofStdout(e);
+  if (pids.length) {
+    const r = await run('lsof', ['-p', pids.join(','), '-a', '-d', 'cwd', '-Fn']);
+    lsofOut = !r ? null : r.code === 0 ? r.stdout : usableLsofStdout({ status: r.code, signal: r.signal, stdout: r.stdout });
   }
-  return composeLiveCwds(psOut, lsofOut);
-}
-
-/** Test seam for {@link readPsComm}, the `ps -Ao pid=,comm=` read; same shape as {@link setPsRunner}. */
-let commRunner: PsRunner | null = null;
-
-/** Test seam: swap the `ps -Ao pid=,comm=` runner. `null` restores the real `execFileSync`. */
-export function setCommRunner(fn: PsRunner | null): void {
-  commRunner = fn;
-}
-
-/** The stdout of `ps -Ao pid=,comm=`, or `null` when it could not run. Read once per scan and shared by {@link liveCwds} and {@link countClaudeProcs}. */
-function readPsComm(): string | null {
-  try {
-    return commRunner ? commRunner() : execFileSync('ps', ['-Ao', 'pid=,comm='], { encoding: 'utf8', timeout: 2000 });
-  } catch {
-    return null;
-  }
+  return {
+    runningClaudeProcs: countClaudeProcs(comm),
+    liveCwds: composeLiveCwds(comm, lsofOut),
+    liveSessionIds: args === null ? null : parsePsSessionIds(args)
+  };
 }
 
 /**
@@ -532,7 +576,7 @@ export function parsePsSessionIds(out: string): Set<string> {
   return ids;
 }
 
-/** Test seam for {@link liveSessionIds}: what actually runs `ps`. */
+/** Test seam for {@link liveSessionIds}, the resume guard's synchronous `ps`. */
 export type PsRunner = () => string;
 
 let psRunner: PsRunner | null = null;
@@ -550,21 +594,24 @@ export function setPsRunner(fn: PsRunner | null): void {
  * Every session id a live `claude` process names in its argv, or `null` when
  * the probe could not run.
  *
- * The per-session-id answer {@link liveCwds} cannot give: it resolves to a
+ * The per-session-id answer the live-cwd set cannot give: it resolves to a
  * *directory*, so two sessions in one repo are indistinguishable. `serveSpawn`'s
  * resume guard needs the id, and needs it for children this process never
  * spawned — a session started from a terminal, from a second dashboard, or
  * before the last restart, none of which the launch store can see.
  *
- * **`null` means the opposite of what it means in `liveCwds`.** There, failing
+ * **`null` means the opposite of what it means for the cwd set.** There, failing
  * open costs a badge colour; here it means the guard cannot fire, so the
  * store-based check stands alone and a legal resume is never refused on a
  * probe that never ran. Keep this probe as simple as it looks.
  *
- * A second `ps` fork rather than teaching `liveCwds`' one to serve both: that
+ * A second `ps` fork rather than teaching the cwd probe's one to serve both: that
  * one parses `comm=`, and the launcher path can contain spaces
  * (`…/Application Support/…`), so a merged format reintroduces exactly the
  * parsing ambiguity its comment warns about — for one saved fork per poll.
+ *
+ * Synchronous, unlike {@link probeProcesses}, which answers the same question for the scan: the resume guard runs on a rare POST and must see a
+ * session launched a moment ago, which the shared probe's cache could miss.
  */
 export function liveSessionIds(): Set<string> | null {
   try {
@@ -794,21 +841,26 @@ export function scanSessions(config: Partial<Config>, options: ScanOptions = {})
   const wanted = options.projects && options.projects.size ? options.projects : null;
   // A row with no launch cwd is named only by its parsed `project`, which stands in.
   const rowPicker = (s: Session): string | null => s.projectPath === null ? s.project : pickerProjectOf(s.projectPath, claudeRoots);
-  // An unknown project stays a candidate: the parsed row settles it below.
-  const candidates = (wanted ? inLookback.filter(t => { const p = projectOf.get(t); return p == null || wanted.has(p); }) : inLookback)
-    .slice(0, maxSessions * 2);
+  // Under a filter, matching and still-unknown transcripts each get a pool of their own: unknowns sharing one pool could fill it ahead of every
+  // match, leaving a filtered board short of rows while matching transcripts exist. An unknown stays a candidate because the parsed row settles it.
+  let candidates: TranscriptRef[];
+  if (wanted) {
+    candidates = [];
+    let matched = 0, unknown = 0;
+    for (const t of inLookback) {
+      const p = projectOf.get(t);
+      if (p == null) { if (unknown < maxSessions * 2) { unknown++; candidates.push(t); } }
+      else if (wanted.has(p) && matched < maxSessions * 2) { matched++; candidates.push(t); }
+    }
+  } else candidates = inLookback.slice(0, maxSessions * 2);
 
-  // One `ps -Ao pid=,comm=` per scan, feeding both the live-cwd set and `runningClaudeProcs`. null = skipped or failed.
-  const psOut = options.skipProcScan ? null : readPsComm();
+  const proc = options.skipProcScan ? null : options.proc ?? null;
   // Set of cwds with a live `claude` process. null = probe skipped/unavailable
   // → fail open (no gating). A session whose cwd is absent has no live process,
   // so it can't be working/pending — force it to idle regardless of transcript.
-  const live = options.liveCwds !== undefined ? options.liveCwds : liveCwds(psOut);
-  // Session ids in a live `claude` argv: one more `ps` per poll, the same cost class as the two above. A null probe fails open (no row flagged), leaving
-  // the server-side 409 on POST as the safety net.
-  const liveIds = options.liveSessionIds !== undefined
-    ? options.liveSessionIds
-    : options.skipProcScan ? null : liveSessionIds();
+  const live = options.liveCwds !== undefined ? options.liveCwds : proc?.liveCwds ?? null;
+  // Session ids in a live `claude` argv. A null probe fails open (no row flagged), leaving the server-side 409 on POST as the safety net.
+  const liveIds = options.liveSessionIds !== undefined ? options.liveSessionIds : proc?.liveSessionIds ?? null;
 
   // `/kaizen` lessons keyed to each session by UUID-prefix match. Read once per
   // scan (tiny, fail-open file). Skipped when analytics is disabled or injected
@@ -838,7 +890,7 @@ export function scanSessions(config: Partial<Config>, options: ScanOptions = {})
     generatedAt: new Date(now).toISOString(),
     activeWindowMin,
     maxSessions,
-    runningClaudeProcs: countClaudeProcs(psOut),
+    runningClaudeProcs: proc?.runningClaudeProcs ?? null,
     totals: {
       shown: sessions.length,
       active: sessions.filter(s => s.status === 'working').length

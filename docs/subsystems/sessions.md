@@ -379,14 +379,24 @@ what it reads: the desktop hand-over ([spawn](spawn.md#launching-in-the-desktop-
 
 **Process-liveness gate (overrides the 2×2):** a cleaned/interrupted session's last
 record often has no `end_turn`, so on disk it looks recent + pending = `working` forever
-even though nothing runs. So `scan.ts` `liveCwds()` shells out twice — `ps -Ao pid=,comm=`
+even though nothing runs. So `scan.ts` `probeProcesses()` shells out — `ps -Ao pid=,comm=`
 for the pids whose comm ends in `/claude` (or *is* `claude`), then
 `lsof -p <pids> -a -d cwd -Fn` for those pids' cwds; a session with **neither** cwd key in
 that set is forced to `idle`, no matter the transcript. That one `ps` stdout also yields
 `runningClaudeProcs` (the count of matching pids; `null` when `ps` failed, `0` when it ran and
-matched nothing), so a scan forks one `ps -Ao pid=,comm=`, not a second one for the count
-(`countClaudeProcs`). `scanSnapshot` likewise lists the transcript tree once per request and
+matched nothing), so a probe forks one `ps -Ao pid=,comm=`, not a second one for the count
+(`countClaudeProcs`). The same probe runs `ps -Ao pid=,args=` for `processLive` ([spawn](spawn.md#processlive-the-live-process-this-server-cannot-signal)).
+`scanSnapshot` likewise lists the transcript tree once per request and
 hands that listing to both the held-wait sweep and the scan (`ScanOptions.transcripts`).
+
+**The probe is async and shared, and `scanSessions` spawns nothing** (#481). The children run through async `execFile` — both `ps` reads in parallel, `lsof`
+after them only when `ps` named a claude pid — each under its own 2 s kill timer (`runProbeChild`; `execFile`'s own `timeout` can report success with empty
+stdout on a stalled loop, #168), so a hung `lsof` costs the requests waiting on that probe its timer, never the whole server's event loop. `scanSnapshot`
+awaits `sharedProcProbe` (`scan-snapshot.ts`): a call while a probe runs joins it, and one within `PROBE_TTL_MS` (1 s) of its completion reuses its answer,
+so two tabs and the hub tile polling in the same second fork one set of children. The TTL sits under the 3 s client poll, so a single tab still gets a fresh
+probe on every poll; serving the last probe while refreshing behind it was rejected, because a just-launched session would read `idle` for a whole poll. The
+result reaches the scan as `ScanOptions.proc`, and `scanSessions` itself never forks. The one synchronous probe left is `liveSessionIds()`, the resume
+guard's ([spawn](spawn.md)): it runs on a rare POST and must see a session launched a moment ago, which a cached probe could miss.
 
 **Two cwd keys, either one is proof of life.** `lsof` reports the *process* cwd, and a
 transcript's newest `cwd` drifts away from it in both directions, so neither value is reliable
@@ -418,10 +428,10 @@ can't be told apart — a dead one there still reads live. Probe is fail-open, r
 future launcher must not condemn every session — or when `lsof` yields no cwd. An `lsof` that
 exits non-zero but still printed cwds is used as a partial set (`usableLsofStdout`) — it warns
 and exits 1 on processes it may not inspect, so that output is complete about a subset. A
-*killed* `lsof` (the 2s timeout, or any signal) is not: its stdout is truncated mid-stream, and
+*killed* `lsof` (its 2 s kill timer, or any signal) is not: its stdout is truncated mid-stream, and
 a short set would mark live sessions dead, so that path fails open too. Split into pure
 `parsePsClaudePids` / `parseLsofCwds` / `composeLiveCwds` so all of that is testable without
-spawning. Injectable via `ScanOptions.liveCwds` for tests; `skipProcScan` also disables it.
+spawning. Injectable via `ScanOptions.proc`, or per field via `ScanOptions.liveCwds` for tests; `skipProcScan` also disables it.
 
 **Docker:** the dashboard container only has its own process namespace —
 `ps`/`lsof` inside it can never see the host's real `claude` CLI process, so the
@@ -512,7 +522,8 @@ project with no session among the newest `maxSessions` overall still fills its r
 payload already had. The pre-filter cannot afford `readTranscript`'s 256 KB tail on every transcript in the lookback (226 at 7 days, 2026-10-21), so it
 names each one's project from `launchCwd` — the 16 KB head read, cached per file in `originCache` alongside `resolveOriginCwd`. A transcript whose head
 holds no cwd yet stays a candidate, and every parsed row is checked against the set again, so the cheap name only decides what gets parsed, never what is
-shown. The same pass builds `SessionsResponse.projects` — every project in the lookback, plus the rows' own — which is what the picker offers.
+shown. Those still-unknown transcripts get a `maxSessions * 2` pool of their own beside the matching ones' (#481): sharing one pool, a run of recent
+headless transcripts with no cwd yet could fill it ahead of every match and leave the filtered board short of rows. The same pass builds `SessionsResponse.projects` — every project in the lookback, plus the rows' own — which is what the picker offers.
 
 **One row per session id, not per file.** An id does not name a file: records are filed under
 the project dir derived from the cwd at write time, so a session that `cd`s into a git worktree

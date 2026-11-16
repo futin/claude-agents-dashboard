@@ -512,7 +512,7 @@ export function createRequestListener(config: Config): http.RequestListener {
       // Query params carry the Settings page's per-device scan knobs (limit /
       // lookback / active). The detail regex above needs a slash, so a bare
       // `/api/sessions?limit=20` still lands here.
-      return serveSessions(config, res, u.searchParams);
+      return void serveSessions(config, res, u.searchParams);
     }
     return serveStatic(req.url || '/', res);
   };

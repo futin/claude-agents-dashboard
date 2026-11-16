@@ -197,7 +197,7 @@ same permission ladder and ceiling, prompt still stdin-only — with these diffe
      `--session-id <id>` / `--resume <id>`, **inexact but unscoped**: the fallback for a
      session started from a terminal, from a second dashboard, or before the last restart,
      none of which the store can see. It returns `null` when `ps` cannot run, and a `null`
-     never refuses — the opposite direction from `liveCwds`' fail-open, which only costs a
+     never refuses — the opposite direction from the live-cwd gate's fail-open, which only costs a
      badge colour. Neither check can see a session whose argv carries no id at all.
 
   The client-side gate (`resumeEligible`, `client/src/lib/resume.ts`) hides the composer
@@ -513,8 +513,8 @@ process is a terminal job (`kill <pid>`).
 or **anything spawned before the last restart** (`tsx watch` restarts the dev API on every server-side edit) — carries no `stopState`, reads `idle`/`incomplete` once its
 turn ends, and used to get the resume composer, whose POST then met the `ps` scan's 409. A pending background `Monitor` is the usual reason the process outlives its turn.
 
-`scanSessions` therefore probes `liveSessionIds()` once per poll (the same cost class as its two other `ps` calls; `skipProcScan` skips it, an injected
-`ScanOptions.liveSessionIds` replaces it) and `sessionFromRef` sets `Session.processLive` to `true` for a `dashboard` row with no `stopState` whose id is in it. Absent,
+The poll's shared process probe (`probeProcesses`, [sessions](sessions.md)) therefore runs the same `ps -Ao pid=,args=` scan beside its other two children
+(`skipProcScan` skips it, an injected `ScanOptions.liveSessionIds` replaces it) and `sessionFromRef` sets `Session.processLive` to `true` for a `dashboard` row with no `stopState` whose id is in it. Absent,
 never `false`, like `stopState`, and absent on a `null` probe: that fails open, so the server-side 409 stays the safety net. `resumeEligible` returns `false` for it, and
 `ChatDrawer` shows a `still running` note in the composer's place (`stillRunningNote`); the composer returns by itself on the first poll after the process exits. The
 409 itself reaches the user as the same plain sentence (`resumeErrorText`), for the up-to-3s gap between a poll and a click. There is no Stop control for these rows:
