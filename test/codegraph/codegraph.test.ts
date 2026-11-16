@@ -16,6 +16,7 @@ import {
   defaultCodegraphRunner,
   findGraphRoot,
   isPidAlive,
+  lastLine,
   livePid,
   makeCodegraphRunner,
   overrideCodegraphRunner,
@@ -347,6 +348,49 @@ export async function run(): Promise<number> {
       assert.ok(Date.now() - started < 10_000, 'the timer, not the child, ended the wait');
       const slow = await node(dir, ['-e', 'setTimeout(() => { console.log("late"); process.exit(4); }, 200)'], null);
       assert.deepStrictEqual(slow, { code: 4, stdout: 'late\n', stderr: '' });
+    });
+  }));
+
+  // A run (null timeout) has its own long timer (spec 2026-11-14-poll-path-probes A3): SIGTERM, SIGKILL after the grace, reject ETIMEDOUT.
+  const gone = (pid: number): boolean => { try { process.kill(pid, 0); return false; } catch (e) { return (e as NodeJS.ErrnoException).code === 'ESRCH'; } };
+  const pidOf = async (file: string): Promise<number> => {
+    for (let i = 0; i < 200 && !fs.existsSync(file); i++) await new Promise(r => setTimeout(r, 10));
+    return Number(fs.readFileSync(file, 'utf8'));
+  };
+
+  check(await test('runner: a run past its timeout is killed and rejects ETIMEDOUT', async () => {
+    await withTmp(async dir => {
+      const pidFile = path.join(dir, 'pid');
+      const node = makeCodegraphRunner(process.execPath, { runTimeoutMs: 200 });
+      const started = Date.now();
+      const run = node(dir, ['-e', `require('fs').writeFileSync(${JSON.stringify(pidFile)}, String(process.pid)); setInterval(() => {}, 1000)`], null);
+      await assert.rejects(run, (e: NodeJS.ErrnoException) => e.code === 'ETIMEDOUT');
+      assert.ok(Date.now() - started < 2000, 'rejected within about a second');
+      assert.ok(gone(await pidOf(pidFile)), 'the child is gone once the run rejects');
+    });
+  }));
+
+  check(await test('runner: a run that ignores SIGTERM is SIGKILLed after the grace, and rejects no earlier', async () => {
+    await withTmp(async dir => {
+      const pidFile = path.join(dir, 'pid');
+      const node = makeCodegraphRunner(process.execPath, { runTimeoutMs: 200, killGraceMs: 200 });
+      const started = Date.now();
+      const script = `process.on('SIGTERM', () => {}); require('fs').writeFileSync(${JSON.stringify(pidFile)}, String(process.pid)); setInterval(() => {}, 1000)`;
+      await assert.rejects(node(dir, ['-e', script], null), (e: NodeJS.ErrnoException) => e.code === 'ETIMEDOUT');
+      assert.ok(Date.now() - started >= 380, 'not before the grace ends');
+      const pid = await pidOf(pidFile);
+      for (let i = 0; i < 100 && !gone(pid); i++) await new Promise(r => setTimeout(r, 10));
+      assert.ok(gone(pid), 'SIGKILL ended the child within a second');
+    });
+  }));
+
+  check(await test('runner: a run keeps only the tail of an output past 8 MiB', async () => {
+    await withTmp(async dir => {
+      const node = makeCodegraphRunner(process.execPath);
+      const out = await node(dir, ['-e', `process.stdout.write('x'.repeat(9 * 1024 * 1024) + '\\nLAST\\n')`], null);
+      assert.strictEqual(out.code, 0);
+      assert.ok(out.stdout.length <= 8 * 1024 * 1024, `kept ${out.stdout.length} characters`);
+      assert.strictEqual(lastLine(out.stdout), 'LAST');
     });
   }));
 

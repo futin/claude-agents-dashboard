@@ -158,12 +158,18 @@ the skip reason or `file gone`) and `pending`. The chip state is one of:
 | State | Meaning |
 |---|---|
 | `in-sync` | nothing to do |
-| `drift` | at least one install, update or remove is outstanding, e.g. launchd refused a plist; re-read from the OS on every poll, never remembered |
+| `drift` | at least one install, update or remove is outstanding, e.g. launchd refused a plist; re-read from the OS, never remembered past the plan cache below |
 | `failed` | an apply errored, planning could not proceed, or a crontab line is too long; `error` says why |
 | `pending` | the only outstanding changes are deferred because the job is running |
 | `no-claude` | the only outstanding changes are claude jobs held back because `CLAUDE_BIN` is unset |
 | `not-owner`, `no-plugin`, `bad-machine` | the check that stopped it |
 | `cron-down` | WSL only: `pgrep -x cron\|crond` found nothing, so installed lines fire nothing |
+
+**Plan cache.** `GET /api/routines` plans through `planReconcileCached` (spec `2026-11-14-poll-path-probes-design.md` A5): concurrent polls share one
+plan in flight, and a plan younger than 5 s (`PLAN_TTL_MS`) is served as is, so two tabs do not each fork a `launchctl print` per plist. An apply leaves its
+post-apply plan cached; the reconcile watchers drop the cache the moment they fire, before their debounce. A plan that started before a drop, or before an
+apply's plan, still answers its own callers but is not cached. `POST /api/routines/reconcile` always plans fresh. Within one plan the `launchctl print`
+calls run together.
 
 **Pending.** `bootout` kills a running job, so an update or remove of a job whose lock is held is deferred as `pending · running` and re-runs when the
 runs watcher sees the `end`. Two further reasons are deferred rather than applied: `claude cli not configured` (a claude job on a machine without
@@ -249,7 +255,13 @@ written**: a `start` with no `end` whose pid is dead, or alive but not running `
 times its steps plus 5 minutes) applies only where the pid cannot be checked, so a laptop that slept mid-run shows `running` until the wrapper ends it, and
 an `end` that arrives later supersedes the lost reading. A refusal gets the id `refused-<machine>-<job>-<epoch ms>`. The reader is incremental, keeping an
 inode and byte offset per file: a file rotation renamed keeps its offset under the new name, a file that vanished or shrank in place rebuilds the whole
-fold from 0, and a torn last line stays unread until its newline arrives. Stats are over 7, 30 or 90 whole local days (`ROUTINE_WINDOWS`), built from
+fold from 0, and a torn last line stays unread until its newline arrives.
+
+The fold is bounded (spec `2026-11-14-poll-path-probes-design.md` A4, A6, A7). The liveness answer is memoised per run: `false` for good, `true` and
+`null` for 10 s (`LIVENESS_TTL_MS`), so a poll does not fork a `ps` per unfinished run; the `ps` itself has a 2 s timeout. Retention is 181 days
+(`RUN_RETAIN_DAYS`, twice the 90-day window for `prev`, plus one): a rotated archive stamped before the cutoff is not read unless the reader already
+tracks it, and nothing is deleted. After each read, runs that started before the cutoff are dropped from the fold, except each job's newest run that is
+not running, of any state, which is its `last` row. A finished run is built once and reused until a record for it arrives. Stats are over 7, 30 or 90 whole local days (`ROUTINE_WINDOWS`), built from
 calendar arithmetic so a DST change cannot shift a run across a day, with the previous window of the same length beside it; refusals are not runs.
 
 ## Notifications
@@ -273,7 +285,7 @@ Success never pushes, and neither does a run that ended `stopped` (Stop, or SIGT
 followed by a second one if the run later ends. On the first start, with `notified.json` absent, `seedRoutineNotify` marks every run older than 24 h as
 notified without pushing, so installing the feature does not replay history. The click URL is `<publicUrl>/?view=routines&run=<id>`.
 
-The fold has no window (rotation renames log files, never deletes them), so the dedupe is bounded by age, not by count. Only a run whose end, or for a lost
+The fold reaches back 181 days, far past the push horizon, so the dedupe is bounded by age, not by count. Only a run whose end, or for a lost
 or refused run whose start, falls within `PUSH_HORIZON_MS` (7 days) can push. Each id in `notified.json` carries that time and is pruned once it passes the
 same 7 days, so the ledger always covers every run the fold can offer. The 2000-id cap is a backstop: past it the oldest ids go and `floor` rises to the
 newest dropped time, and nothing at or before `floor` pushes. The first shape, a plain `{ids: [...]}` list, is read as ids stamped with the load time.

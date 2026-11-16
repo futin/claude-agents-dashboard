@@ -42,42 +42,54 @@ export interface WaitStore<E extends WaitEntry<R>, R> {
   /** A fresh Set: callers never get a handle on the store's keys. */
   sessionIds(): Set<string>;
   readonly size: number;
-  /** This store's own idle sweep: release its releasable entries if the user is back at the desk. Never reads idle with nothing to release. */
-  sweepIdle(): number;
+  /**
+   * This store's own idle sweep: release its releasable entries if the user is back at the desk. Never reads idle with nothing to release. Settles only
+   * the entries collected before the read that are still held when it answers, and resolves their count.
+   */
+  sweepIdle(): Promise<number>;
   /** Test seam: drop every entry without resolving. Stops the shared reaper once every store is empty. */
   reset(): void;
 }
 
 interface Reapable {
   readonly size: number;
-  releasable(): (() => void)[];
+  /** One closure per releasable entry; each settles it if it is still held and says whether it did. */
+  releasable(): (() => boolean)[];
 }
 
 const stores = new Set<Reapable>();
 let reaper: NodeJS.Timeout | null = null;
+/** True while a {@link reapIdle} tick awaits its reading, so ticks never overlap. */
+let reaping = false;
 
 function stopReaperIfEmpty(): void {
   if (reaper && [...stores].every(s => s.size === 0)) { clearInterval(reaper); reaper = null; }
 }
 
 /**
- * One tick of the shared reaper, exported as the test seam for it. Collects the releasable entries of every store; with none, returns 0 without calling
+ * One tick of the shared reaper, exported as the test seam for it. Collects the releasable entries of every store; with none, resolves 0 without calling
  * {@link backAtDesk}, so an idle server and a headless-only hold never spawn `ioreg`. Otherwise asks once — one `ioreg` per tick, not one per store — and
- * releases them all. Returns how many.
+ * releases the collected entries still held when the reading lands: one answered meanwhile keeps its answer, one added meanwhile waits for the next tick.
+ * Resolves how many it released. A call made while an earlier tick is still awaiting resolves 0 without reading.
  */
-export function reapIdle(): number {
+export async function reapIdle(): Promise<number> {
+  if (reaping) return 0;
   const release = [...stores].flatMap(s => s.releasable());
-  if (release.length === 0 || !backAtDesk()) return 0;
-  for (const r of release) r();
-  return release.length;
+  if (release.length === 0) return 0;
+  reaping = true;
+  try {
+    if (!(await backAtDesk())) return 0;
+  } finally {
+    reaping = false;
+  }
+  return release.filter(r => r()).length;
 }
 
 /** The 5 s interval behind {@link reapIdle}. Runs only while some store holds an entry; `unref()` so it cannot hold the process open. */
 function ensureReaper(): void {
   if (reaper) return;
   reaper = setInterval(() => {
-    reapIdle();
-    stopReaperIfEmpty();
+    void reapIdle().catch(() => 0).then(stopReaperIfEmpty);
   }, 5_000);
   reaper.unref();
 }
@@ -97,6 +109,12 @@ export function createWaitStore<E extends WaitEntry<R>, R>(opts: WaitStoreOption
   };
 
   const releasableEntries = (): E[] => [...entries.values()].filter(releasable);
+  /** Settle `entry` as released unless something settled it while the idle reading was in flight. */
+  const releaseIfHeld = (entry: E): boolean => {
+    if (settled.has(entry)) return false;
+    settle(entry, opts.released);
+    return true;
+  };
 
   const store: WaitStore<E, R> = {
     settle,
@@ -117,12 +135,11 @@ export function createWaitStore<E extends WaitEntry<R>, R>(opts: WaitStoreOption
     values: () => [...entries.values()],
     sessionIds: () => new Set(entries.keys()),
     get size() { return entries.size; },
-    sweepIdle() {
+    async sweepIdle() {
       const release = releasableEntries();
       if (release.length === 0) return 0; // nothing to release — don't spawn ioreg
-      if (!backAtDesk()) return 0;
-      for (const entry of release) settle(entry, opts.released);
-      return release.length;
+      if (!(await backAtDesk())) return 0;
+      return release.filter(entry => releaseIfHeld(entry)).length;
     },
     reset() {
       for (const entry of entries.values()) { settled.add(entry); clearTimeout(entry.timer); }
@@ -133,7 +150,7 @@ export function createWaitStore<E extends WaitEntry<R>, R>(opts: WaitStoreOption
 
   stores.add({
     get size() { return entries.size; },
-    releasable: () => releasableEntries().map(entry => () => settle(entry, opts.released))
+    releasable: () => releasableEntries().map(entry => () => releaseIfHeld(entry))
   });
   return store;
 }

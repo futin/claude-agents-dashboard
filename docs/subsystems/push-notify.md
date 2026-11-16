@@ -140,6 +140,11 @@ All AND, each layer independently optional. **Clause order is load-bearing**: `r
 is evaluated last and behind a thunk, so a policy that does not use it never pays the ~40ms
 `ioreg` spawn. `test/notify/notify.test.ts` asserts that directly.
 
+The read is async (spec `2026-11-14-poll-path-probes-design.md` A1), so the predicate splits in two. `notifyGateOpen` is the synchronous part — every clause
+but `requireAfk` — and is all that the senders without an AFK clause (routines, usage, tick caps) and the remote-answer gate ever call. `shouldNotify` is
+async and adds the `requireAfk` clause. `maybeSend` checks the gate inline; when the policy has `requireAfk`, or desk routing needs a reading, the send is
+deferred until the reading lands, and otherwise it goes out synchronously as before. Tests await `notifySettled()` for the deferred sends.
+
 ### The predicate is not the only AFK gate
 
 `requireAfk` off does **not** make every event unconditional, and the difference is invisible
@@ -390,7 +395,7 @@ the settings file moved, and there is no migration.
 
 **One `ioreg` per push.** `PredicateContext.readIdle` is a thunk precisely so a policy without
 `requireAfk` never pays ~40ms for a reading it will not use. Routing wants the same reading, so
-`maybeSend` memoises it: two consumers, at most one spawn — and still zero when neither wants
+`maybeSend` memoises it as one promise: two consumers, at most one spawn — and still zero when neither wants
 it, because `ntfyTopicDesk` is checked before the thunk is touched. `test/notify/notify.test.ts`
 counts the calls; deleting the memoisation takes that count to 2.
 

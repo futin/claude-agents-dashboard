@@ -25,7 +25,8 @@ pace, do I run dry before the window resets?*
   `rate_limits`. `mapUsage()` accepts both shapes defensively and is pure, unit-tested on
   its own (`test/usage/usage.test.ts`).
 - **Token:** read from the macOS keychain
-  (`security find-generic-password -s "Claude Code-credentials"`), falling back to
+  (`security find-generic-password -s "Claude Code-credentials"`, an async `execFile` with a 5 s timeout, so a slow or prompting keychain no longer
+  blocks the event loop — spec `2026-11-14-poll-path-probes-design.md` A2), falling back to
   `~/.claude/.credentials.json` → `claudeAiOauth.accessToken`. Expired tokens are
   skipped. ⚠️ The first keychain read by the dashboard process triggers a macOS GUI
   prompt — approve once with **"Always Allow"**. In Docker the keychain isn't reachable;

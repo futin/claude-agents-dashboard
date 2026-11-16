@@ -179,6 +179,10 @@ already decide this?" versus "is the user back?".
   plans were simply never given one.
 - **Callers check they have something releasable before asking**, so an idle server never
   spawns `ioreg`.
+- **The read is async** (`execFile`, 1 s timeout — spec `2026-11-14-poll-path-probes-design.md` A1), so a tick never blocks the event loop for the ~40 ms
+  `ioreg` takes. A tick that fires while the previous one is still reading does nothing, so reads never overlap. The release decision is made after the
+  read lands, against each store's state *then*: an entry answered while the read was pending is not released, and one added meanwhile waits for the
+  next tick.
 - **No headless exemption here**, unlike [remote-message](remote-message.md). A reply window
   is the only channel a [dashboard-spawned](spawn.md) `claude -p` session has, so releasing
   one orphans it — a question is not: `ask-remote-hook.sh` does no TTY detection at all, so

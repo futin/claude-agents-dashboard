@@ -78,7 +78,7 @@ import type { JobError, PinSnapshot } from '../shared/routine-file.js';
 import { foldForPush, ownerStatus, runsReader } from './lib/routine-boot.js';
 import { machineName, routineDirs } from './lib/routine-config.js';
 import { computeStats } from './lib/routine-log.js';
-import { applyReconcile, lastReconcile, planReconcile, scheduled } from './lib/routine-reconcile.js';
+import { applyReconcile, lastReconcile, planReconcile, planReconcileCached, scheduled } from './lib/routine-reconcile.js';
 import { runJob, stopJob } from './lib/routine-run.js';
 import { RoutineStoreError, deleteJob, isOwner, readJobs, writeJob, writePinsSnapshot } from './lib/routine-store.js';
 import type {
@@ -1847,8 +1847,8 @@ export async function serveRoutines(config: Config, res: ServerResponse): Promis
     const stored = readJobs(dir, machine);
     const runs = runsReader(config).read();
     foldForPush(config, runs);
-    const plan = await planReconcile(config);
-    // The plan re-reads the OS on every poll; a failed apply's message would otherwise vanish behind the drift it left.
+    const plan = await planReconcileCached(config);
+    // The plan re-reads the OS at most every few seconds (`PLAN_TTL_MS`); a failed apply's message would otherwise vanish behind the drift it left.
     const last = lastReconcile();
     const reconcile = plan.state === 'drift' && plan.error === null && last?.state === 'failed' ? { ...plan, error: last.error } : plan;
     const now = new Date();

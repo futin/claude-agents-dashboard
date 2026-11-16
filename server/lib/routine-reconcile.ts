@@ -66,6 +66,7 @@ let runner: RoutineRunner = realRunner();
 /** Test seam: route every `launchctl` / `crontab` / `pgrep` through `run`, or back to the real runner with `null`. */
 export function setRoutineRunner(run: RoutineRunner | null): void {
   runner = run ?? realRunner();
+  dropPlanCache();
 }
 
 interface ReconcileHost { uid: number; nodePath: string; probe: Probe }
@@ -75,6 +76,7 @@ let host: ReconcileHost = realHost();
 /** Test seam for what is not a launch: the gui domain's uid, the node baked into a job, and the probe judging a job lock's holder. */
 export function setReconcileHost(over: Partial<ReconcileHost> | null): void {
   host = { ...realHost(), ...(over ?? {}) };
+  dropPlanCache();
 }
 
 const home = (): string => process.env.HOME || os.homedir();
@@ -281,15 +283,16 @@ async function plan(config: Config): Promise<PlanContext | ReconcileReport> {
   if (machine.name === 'mac') {
     let files: string[] = [];
     try { files = fs.readdirSync(launchAgentsDir()); } catch { /* no LaunchAgents yet */ }
+    const plists: Array<{ name: string; text: string }> = [];
     for (const file of files.sort()) {
       if (!file.startsWith(LABEL_PREFIX) || !file.endsWith('.plist')) continue;
       const name = file.slice(LABEL_PREFIX.length, -'.plist'.length);
       if (!SAFE_NAME.test(name)) continue;
-      let text: string;
-      try { text = fs.readFileSync(path.join(launchAgentsDir(), file), 'utf8'); } catch { continue; }
-      const print = await runner('launchctl', ['print', `gui/${host.uid}/${LABEL_PREFIX}${name}`]);
-      installed.set(name, { text, loaded: print.code === 0 });
+      try { plists.push({ name, text: fs.readFileSync(path.join(launchAgentsDir(), file), 'utf8') }); } catch { continue; }
     }
+    // The prints run together; `installed` is still filled in filename order, which is the order the changes come out in.
+    const prints = await Promise.all(plists.map(({ name }) => runner('launchctl', ['print', `gui/${host.uid}/${LABEL_PREFIX}${name}`])));
+    plists.forEach(({ name, text }, i) => installed.set(name, { text, loaded: prints[i].code === 0 }));
     for (const file of files) {
       if (!file.startsWith(LEGACY_LABEL_PREFIX) || !file.endsWith('.plist')) continue;
       const name = file.slice(LEGACY_LABEL_PREFIX.length, -'.plist'.length);
@@ -372,6 +375,54 @@ export async function planReconcile(config: Config): Promise<ReconcileReport> {
   return isReport(p) ? p : p.report;
 }
 
+/** How long `planReconcileCached` serves a plan before reading the OS again (spec 2026-11-14-poll-path-probes A5). */
+export const PLAN_TTL_MS = 5_000;
+
+let planClock: () => number = Date.now;
+let cachedPlan: { report: ReconcileReport; at: number } | null = null;
+let planInFlight: Promise<ReconcileReport> | null = null;
+// Bumped by every seed and drop: a plan already in flight then still answers its own callers, but does not become the cached one.
+let planGeneration = 0;
+
+function dropPlanCache(): void {
+  planGeneration++;
+  cachedPlan = null;
+  planInFlight = null;
+}
+
+/** Cache an apply's own plan — unless a drop since the apply started (`since`) says the files moved under it, in which case it stays dropped. */
+function seedPlanCache(report: ReconcileReport, since: number): void {
+  if (planGeneration !== since) return;
+  planGeneration++;
+  cachedPlan = { report, at: planClock() };
+  planInFlight = null;
+}
+
+/**
+ * `planReconcile` for the `GET /api/routines` poll: callers share one plan in flight, and a plan younger than `PLAN_TTL_MS` is served as is, so two tabs
+ * polling do not each fork a `launchctl print` per plist. An apply seeds it with its post-apply plan; the watchers' trigger and the test seams drop it.
+ * A rejected plan is never cached.
+ */
+export function planReconcileCached(config: Config): Promise<ReconcileReport> {
+  if (cachedPlan && planClock() - cachedPlan.at < PLAN_TTL_MS) return Promise.resolve(cachedPlan.report);
+  if (planInFlight) return planInFlight;
+  const generation = planGeneration;
+  const p = planReconcile(config)
+    .then((report) => {
+      if (planGeneration === generation) cachedPlan = { report, at: planClock() };
+      return report;
+    })
+    .finally(() => { if (planInFlight === p) planInFlight = null; });
+  planInFlight = p;
+  return p;
+}
+
+/** Test seam: drop the cached plan, and drive its TTL from `clock` (`Date.now` again with `null`). */
+export function resetReconcileCache(clock: (() => number) | null = null): void {
+  planClock = clock ?? Date.now;
+  dropPlanCache();
+}
+
 /** Atomic write: launchd may read the plist the moment `bootstrap` names it, and cron may source the env file at any minute. */
 function writeFileAtomic(file: string, text: string, mode = 0o644): void {
   fs.mkdirSync(path.dirname(file), { recursive: true });
@@ -428,12 +479,14 @@ async function applyWsl(ctx: PlanContext, errors: string[]): Promise<void> {
 }
 
 async function applyOnce(config: Config): Promise<ReconcileReport> {
+  const generation = planGeneration;
   const p = await plan(config);
-  if (isReport(p)) { lastReport = p; return p; }
+  if (isReport(p)) { lastReport = p; seedPlanCache(p, generation); return p; }
   const errors: string[] = [];
   if (p.machine === 'mac') await applyMac(p, errors);
   else await applyWsl(p, errors);
   const after = await planReconcile(config);
+  seedPlanCache(after, generation);
   lastReport = errors.length > 0 ? { ...after, state: 'failed', error: errors.join('; ') } : after;
   return lastReport;
 }
@@ -444,7 +497,8 @@ let queuedConfig: Config | null = null;
 
 function start(config: Config): Promise<ReconcileReport> {
   const p: Promise<ReconcileReport> = applyOnce(config)
-    .catch((e: unknown) => (lastReport = bare('failed', (e as Error).message)))
+    // A throw may have come mid-apply, after the OS changed: the cached plan can no longer be trusted.
+    .catch((e: unknown) => { dropPlanCache(); return (lastReport = bare('failed', (e as Error).message)); })
     .finally(() => { if (current === p) current = null; });
   current = p;
   return p;
@@ -492,6 +546,8 @@ function watch(dir: string, onChange: (file: string | null) => void): void {
 export function startReconcileWatchers(config: Config): void {
   stopReconcileWatchers();
   const trigger = (): void => {
+    // Dropped now, not when the debounce fires: a poll in between reads the changed files instead of a plan made before them.
+    dropPlanCache();
     if (debounce) clearTimeout(debounce);
     debounce = setTimeout(() => { debounce = null; void applyReconcile(config); }, DEBOUNCE_MS);
   };

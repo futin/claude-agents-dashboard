@@ -143,7 +143,8 @@ export function createProbe(): Probe {
       try { process.kill(pid, 0); return true; } catch (e) { return (e as NodeJS.ErrnoException).code === 'EPERM'; }
     },
     command(pid) {
-      try { return execFileSync('ps', ['-o', 'command=', '-p', String(pid)], { encoding: 'utf8' }); } catch { return null; }
+      // The timeout keeps a wedged `ps` from holding the event loop; it throws like any other failure, which reads as "cannot tell".
+      try { return execFileSync('ps', ['-o', 'command=', '-p', String(pid)], { encoding: 'utf8', timeout: 2000 }); } catch { return null; }
     }
   };
 }

@@ -32,14 +32,34 @@ export const LOCK_LOSS_TEXT = 'could not acquire the file lock';
 
 const MAX_BUFFER = 8 * 1024 * 1024;
 
+/**
+ * Longest a run (`sync`, `index`) may take before it is killed and reported as timed out, so a hung CLI cannot leave its repo `busy` until restart
+ * (spec `2026-11-14-poll-path-probes-design.md` A3). A real first `index` of a very large repo could hit it; raise it if that shows up.
+ */
+export const CODEGRAPH_RUN_TIMEOUT_MS = 30 * 60_000;
+
+/** How long a timed-out run gets between SIGTERM and SIGKILL. */
+const KILL_GRACE_MS = 5_000;
+
+/** Test knobs for {@link makeCodegraphRunner}: a run timeout and kill grace in milliseconds. */
+export interface CodegraphRunnerOptions { runTimeoutMs?: number; killGraceMs?: number }
+
 function timeoutError(): Error {
   return Object.assign(new Error('codegraph timed out'), { code: 'ETIMEDOUT' });
 }
 
-/** The real runner, with a knob only tests turn: a `bin` that is not codegraph. */
-export function makeCodegraphRunner(bin = 'codegraph'): CodegraphRunner {
+/** The real runner, with knobs only tests turn: a `bin` that is not codegraph, and a shorter run timeout and kill grace. */
+export function makeCodegraphRunner(bin = 'codegraph', opts: CodegraphRunnerOptions = {}): CodegraphRunner {
+  const runTimeoutMs = opts.runTimeoutMs ?? CODEGRAPH_RUN_TIMEOUT_MS;
+  const killGraceMs = opts.killGraceMs ?? KILL_GRACE_MS;
   return (cwd, args, timeoutMs) =>
-    timeoutMs === null ? spawnToEnd(bin, cwd, args) : execWithTimer(bin, cwd, args, timeoutMs);
+    timeoutMs === null ? spawnToEnd(bin, cwd, args, runTimeoutMs, killGraceMs) : execWithTimer(bin, cwd, args, timeoutMs);
+}
+
+/** Append a chunk, keeping at most {@link MAX_BUFFER} characters — the tail, which is what `lastLine` and the lock-loss check read. */
+function appendTail(text: string, chunk: string): string {
+  const next = text + chunk;
+  return next.length > MAX_BUFFER ? next.slice(next.length - MAX_BUFFER) : next;
 }
 
 // The timer is its own because `execFile`'s `timeout` can report success with empty output when the event loop stalls (git-stats.ts, #168).
@@ -61,17 +81,37 @@ function execWithTimer(bin: string, cwd: string, args: string[], timeoutMs: numb
   });
 }
 
-// Runs (sync, reindex) can take minutes, so no timer; stdin is closed so `index` never waits on a prompt.
-function spawnToEnd(bin: string, cwd: string, args: string[]): ReturnType<CodegraphRunner> {
+// Runs (sync, reindex) can take minutes, so the timer is the long run timeout; stdin is closed so `index` never waits on a prompt. On expiry: SIGTERM,
+// SIGKILL after the grace, and the rejection waits for the child's `close` or the grace's end — whichever is first — so the store's `runs` entry is not
+// freed while the killed child may still hold the graph, and a descendant holding the pipe open cannot keep the promise pending.
+function spawnToEnd(bin: string, cwd: string, args: string[], runTimeoutMs: number, killGraceMs: number): ReturnType<CodegraphRunner> {
   return new Promise((resolve, reject) => {
     const child = spawn(bin, args, { cwd, env: CODEGRAPH_ENV, stdio: ['ignore', 'pipe', 'pipe'] });
     let stdout = '';
     let stderr = '';
-    child.stdout.setEncoding('utf8').on('data', (d: string) => { stdout += d; });
-    child.stderr.setEncoding('utf8').on('data', (d: string) => { stderr += d; });
-    child.on('error', reject);
+    let timedOut = false;
+    let settled = false;
+    let grace: NodeJS.Timeout | null = null;
+    const finish = (settle: () => void): void => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      if (grace) clearTimeout(grace);
+      settle();
+    };
+    const timer = setTimeout(() => {
+      timedOut = true;
+      child.kill('SIGTERM');
+      grace = setTimeout(() => {
+        child.kill('SIGKILL');
+        finish(() => reject(timeoutError()));
+      }, killGraceMs);
+    }, runTimeoutMs);
+    child.stdout.setEncoding('utf8').on('data', (d: string) => { stdout = appendTail(stdout, d); });
+    child.stderr.setEncoding('utf8').on('data', (d: string) => { stderr = appendTail(stderr, d); });
+    child.on('error', err => finish(() => reject(err)));
     // A signal death reports a null code; 1 keeps it a failure.
-    child.on('close', code => resolve({ code: code ?? 1, stdout, stderr }));
+    child.on('close', code => finish(() => (timedOut ? reject(timeoutError()) : resolve({ code: code ?? 1, stdout, stderr }))));
   });
 }
 
