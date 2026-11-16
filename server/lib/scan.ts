@@ -167,6 +167,11 @@ function statRef(full: string, dirName: string): TranscriptRef | null {
   };
 }
 
+/** A held ref stat-ed again, so its `mtimeMs` and `size` are current — null when the file has gone since it was listed. */
+export function restatRef(ref: TranscriptRef): TranscriptRef | null {
+  return statRef(ref.file, ref.dirName);
+}
+
 /** Directory entry names ending `.jsonl`, or [] when the dir is unreadable. */
 function jsonlNames(dir: string): string[] {
   try {

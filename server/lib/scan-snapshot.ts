@@ -14,6 +14,7 @@ import { planSessionIds, sweepDecided as sweepDecidedPlans } from './plans.js';
 import { lastMessageMs, listTranscripts, projectsRoot, scanSessions } from './scan.js';
 import type { TranscriptRef } from './scan.js';
 import { stopStates } from './spawn.js';
+import { publishListing } from './transcript-listing.js';
 import type { SessionsResponse } from '../../shared/types.js';
 
 /**
@@ -44,6 +45,8 @@ export function scanSnapshot(config: Config, projects?: ReadonlySet<string> | nu
   // One listing per request, shared by the sweep and the scan.
   const root = projectsRoot();
   const transcripts = listTranscripts(root);
+  // The other request paths read this walk instead of taking their own (`transcript-listing.ts`).
+  publishListing(root, transcripts);
   // Before the scan, not after: a wait the terminal already decided must not
   // colour this tick's row blue either.
   sweepTerminalDecisions(root, transcripts);
