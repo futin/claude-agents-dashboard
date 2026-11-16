@@ -11,8 +11,9 @@ import path from 'node:path';
 
 import type { Config } from '../../server/lib/config.js';
 import {
-  applyReconcile, CRON_END, CRON_LINE_MAX, CRON_START, LABEL_PREFIX, PLUGIN_ID, lastReconcile, planReconcile, renderCronEnv, renderCronLine, renderPlist,
-  realRunner, scheduled, setReconcileHost, setRoutineRunner, LEGACY_CRON_END, LEGACY_CRON_START, LEGACY_LABEL_PREFIX
+  applyReconcile, CRON_END, CRON_LINE_MAX, CRON_START, LABEL_PREFIX, PLAN_TTL_MS, PLUGIN_ID, lastReconcile, planReconcile, planReconcileCached,
+  renderCronEnv, renderCronLine, renderPlist, realRunner, resetReconcileCache, scheduled, setReconcileHost, setRoutineRunner, startReconcileWatchers,
+  stopReconcileWatchers, LEGACY_CRON_END, LEGACY_CRON_START, LEGACY_LABEL_PREFIX
 } from '../../server/lib/routine-reconcile.js';
 import type { ReconcilePaths, ReconcileReport } from '../../server/lib/routine-reconcile.js';
 import { claimOwner, releaseOwner } from '../../server/lib/routine-store.js';
@@ -58,18 +59,34 @@ class FakeOs {
   listError: string | null = null;
   /** Per-call delay, so two overlapping applies would interleave if nothing serialized them. */
   delayMs = 0;
+  /** Calls in flight other than `launchctl print`, which one plan runs together on purpose; anything else overlapping means two applies interleaved. */
   inFlight = 0;
   maxInFlight = 0;
+  /** Extra delay for one job's `launchctl print`, by job name. */
+  printDelayMs: Record<string, number> = {};
+  /** While set, this many more `launchctl print` calls wait on `printGate` before answering. */
+  heldPrints = 0;
+  printGate: Promise<void> | null = null;
+  printThrows = false;
 
   run = async (cmd: string, args: string[], input?: string): Promise<{ code: number; stdout: string; stderr: string }> => {
     this.calls.push(input === undefined ? { cmd, args } : { cmd, args, input });
-    this.inFlight++;
+    const print = cmd === 'launchctl' && args[0] === 'print';
+    if (!print) this.inFlight++;
     this.maxInFlight = Math.max(this.maxInFlight, this.inFlight);
     try {
       if (this.delayMs) await new Promise((r) => setTimeout(r, this.delayMs));
+      if (print) {
+        if (this.printThrows) throw new Error('launchctl blew up');
+        const ms = this.printDelayMs[(args[1] ?? '').split('/').pop()!.slice(LABEL_PREFIX.length)];
+        if (ms) await new Promise((r) => setTimeout(r, ms));
+        if (this.heldPrints > 0 && this.printGate) { this.heldPrints--; await this.printGate; }
+      }
       return this.answer(cmd, args, input);
-    } finally { this.inFlight--; }
+    } finally { if (!print) this.inFlight--; }
   };
+
+  prints(): number { return this.calls.filter((c) => c.cmd === 'launchctl' && c.args[0] === 'print').length; }
 
   private answer(cmd: string, args: string[], input?: string): { code: number; stdout: string; stderr: string } {
     const ok = (stdout = '') => ({ code: 0, stdout, stderr: '' });
@@ -146,8 +163,10 @@ async function withWorld(over: Partial<Config>, fn: (w: World) => Promise<void>,
     });
   } finally {
     releaseOwner();
+    stopReconcileWatchers();
     setRoutineRunner(null);
     setReconcileHost(null);
+    resetReconcileCache();
     if (saved === undefined) delete process.env.HOME; else process.env.HOME = saved;
     fs.rmSync(home, { recursive: true, force: true });
   }
@@ -697,6 +716,138 @@ export async function run(): Promise<number> {
       assert.strictEqual((await planReconcile(w.cfg)).state, 'drift');
       assert.strictEqual(lastReconcile()?.state, 'failed');
       assert.match(lastReconcile()?.error ?? '', /bootstrap/);
+    });
+  }));
+
+  // --- the cached plan behind GET /api/routines (spec 2026-11-14-poll-path-probes A5) -----------------------------------------------------------------
+
+  /** Installed, loaded plists with no job file behind them: each plans as a `remove` (file gone). */
+  const orphans = (w: World, names: string[]): void => {
+    fs.mkdirSync(w.agents, { recursive: true });
+    for (const n of names) {
+      fs.writeFileSync(w.plist(n), '<plist/>\n');
+      w.fake.loaded.add(`${LABEL_PREFIX}${n}`);
+    }
+  };
+
+  /** Waits for `n` prints to have started; fails instead of hanging when they never do (prints run one at a time, say). */
+  const untilPrints = async (w: World, n: number): Promise<void> => {
+    for (let i = 0; i < 200 && w.fake.prints() < n; i++) await new Promise((r) => setTimeout(r, 5));
+    assert.strictEqual(w.fake.prints(), n, 'the held prints all started');
+  };
+
+  check(await test('cached plan: two calls at once share one plan — one print per plist, the same report to both', async () => {
+    await withWorld({}, async (w) => {
+      orphans(w, ['a', 'b', 'c']);
+      const [x, y] = await Promise.all([planReconcileCached(w.cfg), planReconcileCached(w.cfg)]);
+      assert.strictEqual(w.fake.prints(), 3);
+      assert.strictEqual(x, y);
+      assert.deepStrictEqual(actions(x), ['a:remove:file gone', 'b:remove:file gone', 'c:remove:file gone']);
+    });
+  }));
+
+  check(await test('cached plan: served for 5 s, then read again', async () => {
+    await withWorld({}, async (w) => {
+      assert.strictEqual(PLAN_TTL_MS, 5_000);
+      let clock = 1_000_000;
+      resetReconcileCache(() => clock);
+      orphans(w, ['a', 'b', 'c']);
+      await planReconcileCached(w.cfg);
+      clock += 1_000;
+      await planReconcileCached(w.cfg);
+      assert.strictEqual(w.fake.prints(), 3, '1 s later: no new print');
+      clock += 5_000;
+      await planReconcileCached(w.cfg);
+      assert.strictEqual(w.fake.prints(), 6, '6 s later: a fresh plan');
+    });
+  }));
+
+  check(await test('cached plan: an apply leaves its post-apply plan cached, so the next poll makes no print', async () => {
+    await withWorld({}, async (w) => {
+      orphans(w, ['a', 'b', 'c']);
+      const applied = await applyReconcile(w.cfg);
+      assert.strictEqual(applied.state, 'in-sync');
+      const prints = w.fake.prints();
+      assert.strictEqual(await planReconcileCached(w.cfg), applied);
+      assert.strictEqual(w.fake.prints(), prints);
+    });
+  }));
+
+  check(await test('cached plan: planReconcile itself is never cached — every call prints every plist', async () => {
+    await withWorld({}, async (w) => {
+      orphans(w, ['a', 'b', 'c']);
+      await planReconcile(w.cfg);
+      await planReconcile(w.cfg);
+      assert.strictEqual(w.fake.prints(), 6);
+    });
+  }));
+
+  check(await test('plan: the prints run together, and the changes still come out in filename order', async () => {
+    await withWorld({}, async (w) => {
+      orphans(w, ['a', 'b', 'c']);
+      w.fake.printDelayMs = { a: 90, b: 50, c: 10 };
+      const started = Date.now();
+      const r = await planReconcile(w.cfg);
+      assert.ok(Date.now() - started < 150, `took ${Date.now() - started} ms`);
+      assert.deepStrictEqual(actions(r), ['a:remove:file gone', 'b:remove:file gone', 'c:remove:file gone']);
+    });
+  }));
+
+  check(await test('cached plan: an apply finishing while a plan is in flight wins — the in-flight callers get theirs, the next poll the apply\'s', async () => {
+    await withWorld({}, async (w) => {
+      orphans(w, ['a', 'b', 'c']);
+      let release!: () => void;
+      w.fake.printGate = new Promise<void>((r) => { release = r; });
+      w.fake.heldPrints = 3;
+      const pending = planReconcileCached(w.cfg);
+      await untilPrints(w, 3);
+      const applied = await applyReconcile(w.cfg);
+      assert.strictEqual(applied.state, 'in-sync');
+      release();
+      const stale = await pending;
+      assert.strictEqual(stale.state, 'drift');
+      assert.strictEqual(stale.changes.filter((c) => c.action === 'remove').length, 3);
+      const prints = w.fake.prints();
+      const next = await planReconcileCached(w.cfg);
+      assert.strictEqual(next.state, 'in-sync');
+      assert.strictEqual(w.fake.prints(), prints, 'no new print');
+    });
+  }));
+
+  check(await test('cached plan: a plan that throws rejects, is not cached, and the next call plans again', async () => {
+    await withWorld({}, async (w) => {
+      orphans(w, ['a', 'b', 'c']);
+      w.fake.printThrows = true;
+      await assert.rejects(planReconcileCached(w.cfg), /launchctl blew up/);
+      w.fake.printThrows = false;
+      const prints = w.fake.prints();
+      assert.strictEqual((await planReconcileCached(w.cfg)).state, 'drift');
+      assert.strictEqual(w.fake.prints(), prints + 3);
+    });
+  }));
+
+  check(await test('cached plan: a watched change drops a plan in flight — a poll after it starts its own instead of joining', async () => {
+    await withWorld({}, async (w) => {
+      orphans(w, ['a', 'b', 'c']);
+      let release!: () => void;
+      w.fake.printGate = new Promise<void>((r) => { release = r; });
+      w.fake.heldPrints = 3;
+      startReconcileWatchers(w.cfg);
+      const first = planReconcileCached(w.cfg);
+      await untilPrints(w, 3);
+      assert.strictEqual(planReconcileCached(w.cfg), first, 'before the change, a poll joins');
+      w.write('new-job', SHELL());
+      // Inside the 500 ms debounce, so only the drop has happened, not the apply.
+      let next = first;
+      for (let i = 0; i < 40 && next === first; i++) {
+        await new Promise((r) => setTimeout(r, 10));
+        next = planReconcileCached(w.cfg);
+      }
+      stopReconcileWatchers();
+      assert.notStrictEqual(next, first, 'the poll after the change started a new plan');
+      release();
+      await Promise.all([first, next]);
+      assert.strictEqual(w.fake.prints(), 6);
     });
   }));
 
