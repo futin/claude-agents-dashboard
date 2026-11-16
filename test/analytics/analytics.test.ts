@@ -3,7 +3,8 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-import { listReports, reviewStatus } from '../../server/lib/analytics.js';
+import { _analyticsCacheSize, _resetAnalyticsCache, listReports, reviewStatus } from '../../server/lib/analytics.js';
+import { analyzeSession } from '../../server/lib/analyze.js';
 
 function test(name: string, fn: () => void): boolean {
   try { fn(); console.log('  ✓ ' + name); return true; }
@@ -211,6 +212,113 @@ export function run(): number {
     assert.equal(byId['dddd4444'].lessonNone, true);
     assert.equal(byId['dddd4444'].lessonFields, undefined);
     assert.equal(byId['dddd4444'].lesson, 'none — nothing new.');
+  });
+
+  // ── #459: the analysis is memoised per transcript, keyed on the main file and its subagents/ dir ──
+  const SID = 'abc12345-0000-1111-2222-333344445555';
+  const cacheHome = (records: unknown[], log = logLine('2026-07-12', 'demo', 'abc12345', 'keep it tight.')) => {
+    _resetAnalyticsCache();
+    const home = fakeHome({ sessionAnalyticsLog: log, transcripts: { [SID]: records } });
+    const file = path.join(home, '.claude', 'projects', '-tmp-demo', `${SID}.jsonl`);
+    return { home, file, subDir: path.join(file.replace(/\.jsonl$/, ''), 'subagents') };
+  };
+  const first = (home: string) => listReports(5, { homeDir: home })[0];
+  const appendRec = (file: string, rec: unknown) => fs.appendFileSync(file, '\n' + JSON.stringify(rec));
+  /** A finished sync Agent launch the subagent file `agent-sub1.jsonl` belongs to. */
+  const agentWorld = () => [
+    turn('/tmp/demo', '2026-07-12T10:00:00.000Z'),
+    { timestamp: '2026-07-12T10:00:01.000Z', message: { role: 'assistant', content: [{ type: 'tool_use', id: 'toolu_S', name: 'Agent', input: { subagent_type: 'Explore', description: 'look' } }] } },
+    { timestamp: '2026-07-12T10:00:09.000Z', toolUseResult: { agentId: 'sub1', totalTokens: 10 },
+      message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'toolu_S', content: 'done' }] } }
+  ];
+  const subUsage = (id: string, inp: number) =>
+    JSON.stringify({ isSidechain: true, timestamp: '2026-07-12T10:00:05.000Z', message: { role: 'assistant', id, usage: { input_tokens: inp, output_tokens: 0 }, content: [] } });
+
+  t('cache: an unchanged transcript returns the memoised analysis object', () => {
+    const { home, file } = cacheHome([turn('/tmp/demo', '2026-07-12T10:00:00.000Z')]);
+    const a1 = first(home).analysis;
+    const a2 = first(home).analysis;
+    assert.ok(a1);
+    assert.strictEqual(a2, a1);
+    assert.deepStrictEqual(a1, analyzeSession(file, SID));
+  });
+
+  t('cache: appending to the main transcript re-runs the analysis', () => {
+    const { home, file } = cacheHome([turn('/tmp/demo', '2026-07-12T10:00:00.000Z')]);
+    const a1 = first(home).analysis!;
+    appendRec(file, {
+      timestamp: '2026-07-12T10:01:00.000Z',
+      message: { role: 'assistant', id: 'msg_more', model: 'claude-opus-4-8', usage: { input_tokens: 100 }, content: [] }
+    });
+    const a2 = first(home).analysis!;
+    assert.notStrictEqual(a2, a1);
+    assert.equal(a2.totals.input, a1.totals.input + 100);
+    assert.equal(a2.perTurn.count, a1.perTurn.count + 1);
+  });
+
+  t('cache: a subagent file alone re-runs the analysis, and so does appending to it', () => {
+    const { home, file, subDir } = cacheHome(agentWorld());
+    const st = fs.statSync(file);
+    const a1 = first(home).analysis!;
+    assert.equal(a1.subagentTotals.usage.combined, 0);
+    fs.mkdirSync(subDir, { recursive: true });
+    fs.writeFileSync(path.join(subDir, 'agent-sub1.jsonl'), subUsage('m1', 700));
+    assert.equal(fs.statSync(file).mtimeMs, st.mtimeMs);
+    assert.equal(fs.statSync(file).size, st.size);
+    const a2 = first(home).analysis!;
+    assert.notStrictEqual(a2, a1);
+    assert.equal(a2.subagentTotals.usage.combined, 700);
+    fs.appendFileSync(path.join(subDir, 'agent-sub1.jsonl'), '\n' + subUsage('m2', 50));
+    const a3 = first(home).analysis!;
+    assert.notStrictEqual(a3, a2);
+    assert.equal(a3.subagentTotals.usage.combined, 750);
+  });
+
+  t('cache: a .meta.json sidecar alone re-runs the analysis', () => {
+    const { home, subDir } = cacheHome(agentWorld());
+    const a1 = first(home).analysis;
+    fs.mkdirSync(subDir, { recursive: true });
+    fs.writeFileSync(path.join(subDir, 'agent-sub1.meta.json'), JSON.stringify({ toolUseId: 'toolu_S' }));
+    assert.notStrictEqual(first(home).analysis, a1);
+  });
+
+  t('cache: a null analysis is never stored — an unreadable transcript is retried', () => {
+    if (process.getuid?.() === 0) { console.log('    (skipped: root reads a 000 file)'); return; }
+    const { home, file } = cacheHome([turn('/tmp/demo', '2026-07-12T10:00:00.000Z')]);
+    const before = fs.statSync(file);
+    fs.chmodSync(file, 0o000);
+    try {
+      assert.equal(first(home).analysis, null);
+      assert.equal(_analyticsCacheSize(), 0);
+    } finally {
+      fs.chmodSync(file, 0o644);
+    }
+    assert.equal(fs.statSync(file).mtimeMs, before.mtimeMs);
+    assert.ok(first(home).analysis);
+  });
+
+  t('cache: bounded to the sessions the latest call looked up', () => {
+    _resetAnalyticsCache();
+    const ids = ['aaaa1111', 'bbbb2222', 'cccc3333'];
+    const home = fakeHome({
+      sessionAnalyticsLog: ids.map((id, i) => logLine(`2026-07-1${i + 1}`, 'demo', id, `lesson ${i}.`)).join('\n'),
+      transcripts: Object.fromEntries(ids.map(id => [`${id}-0000-1111-2222-333344445555`, [turn('/tmp/demo', '2026-07-12T10:00:00.000Z')]]))
+    });
+    const all = listReports(3, { homeDir: home });
+    assert.equal(_analyticsCacheSize(), 3);
+    const one = listReports(1, { homeDir: home });
+    assert.equal(_analyticsCacheSize(), 1);
+    assert.strictEqual(one[0].analysis, all.find(r => r.sessionId === one[0].sessionId)!.analysis); // the newest one kept its memo
+  });
+
+  t('cache: only the analysis is memoised — report fields read the log live', () => {
+    const { home } = cacheHome([turn('/tmp/demo', '2026-07-12T10:00:00.000Z')]);
+    const r1 = first(home);
+    assert.equal(r1.lessonStatus, null);
+    fs.appendFileSync(path.join(home, '.claude', 'session-analytics-log.md'), '\n- 2026-08-01 [demo] abc12345: status actioned — done');
+    const r2 = first(home);
+    assert.strictEqual(r2.analysis, r1.analysis);
+    assert.equal(r2.lessonStatus?.status, 'actioned');
   });
 
   console.log(`  ${ok}/${n}`);

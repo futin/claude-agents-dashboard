@@ -74,8 +74,9 @@ one of them at random — the same two-state rule the Sessions board follows.
 
 **The inspector** shows:
 
-- **The numbers** — a **live re-run** of the deterministic analyzer on every open
-  (`server/lib/analyze.ts` `analyzeSession()` → `SessionAnalysis`): billable tokens (the
+- **The numbers** — the deterministic analyzer's read of the transcript as it is on disk now
+  (`server/lib/analyze.ts` `analyzeSession()` → `SessionAnalysis`), re-run when the main transcript's mtime or size, or the listing of its
+  `subagents/` dir, changed since the last request, and otherwise served from a memo bounded to the last N sessions: billable tokens (the
   real cost signal), total context tokens, subagent count + tokens, turn count,
   tool-error/retry counts, then the priciest tools and subagents. The five figures are a
   strip of one value each — the subagent count and the retry count ride in their
@@ -130,8 +131,14 @@ line's project tag.
   `listTranscripts(projectsRoot())` through `scan.ts` `findTranscriptByPrefix` — the newest
   half per id, then the newest id, so a session split across two project dirs resolves to its
   live half (never joined into a path — same philosophy as
-  `serveSessionDetail`; validated with `ID_RE`) → `analyzeSession(ref.file, ref.id)`
-  live. `analysis` is `null` when the transcript is gone.
+  `serveSessionDetail`; validated with `ID_RE`) → `analyzeSession(ref.file, ref.id)`, memoised per transcript path. The memo key is the
+  main transcript's `mtimeMs` and `size` (already on the `TranscriptRef`), the session id, and every `agent-*.jsonl` / `agent-*.meta.json` in its
+  `subagents/` dir as `name:mtimeMs:size` — the dir is in the key because a synchronous Agent call writes its subagent transcript while the main
+  transcript sits unchanged. A hit returns the stored `SessionAnalysis`; a miss re-runs it; a `null` is never stored, so an unreadable transcript is
+  retried next request; entries for sessions the call did not look up are dropped. Only the analysis is memoised — `lessonStatus`, `lessonVerdict`
+  and the rest are rebuilt from the log every call. `analyzeSession` itself reads and parses the main transcript once: the agent-launch reducer
+  (`agents.ts` `parseRecordEvents` / `applyEvent`) is fed from its own line loop. A miss still reads every subagent file in full; making that
+  cheaper is #411. `analysis` is `null` when the transcript is gone.
 - **`reviewDue`** = lessons other than `none` ones exist AND no `review:` marker within 7 days
   (`REVIEW_INTERVAL_DAYS` in `analytics.ts`; `now` injectable for tests). An empty log, or one of only `none` lessons, is
   never "due". The client renders it twice over in the band: the `.an-review` chip
@@ -298,5 +305,5 @@ The live session meter (status line, `/compact` nudge, tool and subagent pane) u
     - client/src/hooks/useSettings.tsx
     - plugin/skills/kaizen/
   kind: subsystem
-  verified: 96b0f64a8c117ae160ba90bfdd34ef357890a8a1
+  verified: f25cfb16ab62216a5d9e3f4d1de6f1b20343ad2e
 -->
