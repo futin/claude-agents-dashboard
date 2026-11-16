@@ -107,7 +107,8 @@ with exactly the granularity the user picks events at:
 | `permission` | `POST /api/permissions/notify` | `servePermissionNotify` |
 | `stop` | `POST /api/notify/event` **or** `POST /api/messages/wait` | `scripts/stop-notify-hook.sh` — the plain fallback route at the desk / feature off, the [reply-window](remote-message.md) hold route away with remote answers on (headless sessions take the hold route at the desk too, unless an orchestrator run owns them or it is a one-shot launch) |
 
-All four session routes sit behind the write gate (`refuseWrite`), so a hook off loopback that cannot read the token file reaches
+`POST /api/notify/event` accepts exactly these four (`HookNotifyEvent` in `shared/types.ts`); the server-side events — `routine-failed`, `tick-capped`,
+`usage-limit`, `usage-reset` — are refused there with 400 `bad event`. All four session routes sit behind the write gate (`refuseWrite`), so a hook off loopback that cannot read the token file reaches
 none of them — see the last row of [Fail directions](#fail-directions).
 
 Only `stop` needed a new route, because a finished turn registers nothing. So the whole

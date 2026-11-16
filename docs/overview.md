@@ -100,7 +100,7 @@ remote-answer switch on, a **gate-only write** needs the gate alone ([who may wr
 | `POST /api/spawn/:id/stop` | SIGTERM a still-launching session's child (session write path — spawn) |
 | `POST /api/sessions/:id/stop` | stop a dashboard-spawned session at any point in its life — graceful by default, `{"force":true}` to skip the grace window; the row's button only ever calls this one (session write path — spawn) |
 | `POST /api/permissions/notify` | "a permission dialog is open" flag (display-only) (gate-only write) |
-| `POST /api/notify/event` | the Stop hook's push trigger — the other three events notify from the endpoint they already POST to (gate-only write) |
+| `POST /api/notify/event` | the Stop hook's push trigger — the other three session events notify from the endpoint they already POST to; takes only those four (`HookNotifyEvent`), a server-side event is 400 `bad event` (gate-only write) |
 | `POST /api/notify/test` | fire one push regardless of policy and report what ntfy said (gate-only write) |
 | `POST /api/remote-answer` | flip the remote-answer toggle (gate-only write) |
 | `GET /api/dismiss` | where a tapped desk push lands — a page that closes the tab it opened in; carries no deep link |
@@ -201,7 +201,7 @@ server/
                   `listUsageTranscripts` is the second enumeration — top-level files plus
                   `<sessionId>/subagents/*.jsonl` — read by the usage ledger only, since a
                   subagent file must never become a session row (`analyze.ts` reads one
-                  session's subagent files directly, through `subagent-usage.ts`)
+                  session's subagent files directly, through `session-spend.ts`'s `readSubagentUsage`)
   lib/archived.ts reads the desktop app's own session records (macOS Application
                   Support) for the `isArchived` flag, joined to transcripts by
                   `cliSessionId` — the only place that touches that store; the id
@@ -275,9 +275,10 @@ server/
   lib/tool-output-replay.ts  replays transcripts → bytes each tool put into context × later turns, and what a read-guard / bash-trim
                   hook would have saved per threshold, with Bash split by command kind (no server route; scripts/tool-output-replay.ts is
                   the one reader; findings: docs/superpowers/decisions/2026-11-12-context-mode-evaluation.md)
-  lib/subagent-usage.ts  sums one session's subagent transcripts → per-subagent token classes
-  lib/session-spend.ts  GET /api/sessions/:id/spend: main + claimed subagent transcripts, followed incrementally
-  lib/usage-line.ts  the one parse of an assistant usage line (id, model, ts, four counts); usage-ledger, subagent-usage, session-spend,
+  lib/subagent-usage.ts  the `subagents/` dir path, the per-subagent result type and the token-totals helpers
+  lib/session-spend.ts  GET /api/sessions/:id/spend: main + claimed subagent transcripts, followed incrementally; also `readSubagentUsage`, every
+                  subagent transcript's token classes for Analytics, through the same cache (LRU over 32 sessions)
+  lib/usage-line.ts  the one parse of an assistant usage line (id, model, ts, four counts); usage-ledger, session-spend,
                   analyze and scripts/lib/transcript-audit.ts each keep their own gates on it
   lib/jsonl-tail.ts  byte-offset JSONL follower: foldLines, the chunked read loop of all seven followers (tasks.ts, pr-detect.ts,
                   usage-ledger.ts, routine-log.ts, routine-run.ts directly; agents-cache.ts and session-spend.ts through followJsonl)
@@ -443,7 +444,8 @@ scripts/          install-hooks.sh (`pnpm hooks:install`), ask-remote-hook.sh,
                   regenerates and compares,
                   session-analytics.ts (`pnpm session-analytics`) — prints one
                   session's SessionAnalysis as JSON without the server running,
-                  which is how `/kaizen` gets exact numbers,
+                  which is how `/kaizen` gets exact numbers; its `--latest` resolver is
+                  lib/latest-session.ts (head reads, full parse only as a fallback),
                   tool-output-replay.ts (`pnpm replay:tool-output`) — replays the last
                   N days of transcripts (main + subagents) and prints, per threshold,
                   what a read-guard and a bash-trim hook would have kept out of context,

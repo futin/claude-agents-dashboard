@@ -389,7 +389,7 @@ export function createRequestListener(config: Config): http.RequestListener {
       if (req.method !== 'POST') return methodNotAllowed(res);
       return void servePermissionNotify(config, req, res);
     }
-    // Push trigger for the Stop hook — the other three events notify from the
+    // Push trigger for the Stop hook — the other three session events notify from the
     // endpoint they were already POSTing to (see docs/subsystems/push-notify.md).
     if (u.pathname === '/api/notify/event') {
       if (req.method !== 'POST') return methodNotAllowed(res);

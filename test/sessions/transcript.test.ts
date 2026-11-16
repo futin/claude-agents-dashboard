@@ -98,11 +98,6 @@ export function run(): number {
     assert.strictEqual(tr.resolveWindow(195290, haiku, {}, haiku, null, null), 200000);
   })) p++; else f++;
 
-  if (test('windowLabel formats k / M', () => {
-    assert.strictEqual(tr.windowLabel(200000), '200k');
-    assert.strictEqual(tr.windowLabel(1000000), '1M');
-  })) p++; else f++;
-
   if (test('describeTool per tool type', () => {
     assert.strictEqual(tr.describeTool({ name: 'Task', input: { subagent_type: 'Explore', description: 'find' } }), 'Explore: find');
     assert.strictEqual(tr.describeTool({ name: 'Bash', input: { description: 'run', command: 'x' } }), 'run');
@@ -449,7 +444,6 @@ export function run(): number {
     const s = tr.readTranscript(fixture([IDENT('claude-opus-5[1m]'), USAGE(0), USAGE(1)]))!;
     assert.strictEqual(s.model, 'claude-opus-5');
     assert.strictEqual(s.contextWindow, 1000000);
-    assert.strictEqual(s.contextWindowLabel, '1M');
   })) p++; else f++;
 
   if (test('readTranscript: the newest model attachment wins after a /model switch', () => {
@@ -491,7 +485,6 @@ export function run(): number {
     const file = fixture([IDENT('claude-opus-5[1m]'), at(0), at(1)]);
     const capped = tr.readTranscript(file)!;
     assert.strictEqual(capped.contextWindow, 200000);
-    assert.strictEqual(capped.contextWindowLabel, '200k');
   })) p++; else f++;
 
   // The Opus 5.5 session at 201.2k read 1M: the top-level 200k cap was the only one read, and 201k past it "proved" no cap.
@@ -505,7 +498,6 @@ export function run(): number {
     const at = (n: number) => ({ ...USAGE(0), cwd: project, message: { ...USAGE(0).message, model: 'claude-opus-5-5', usage: { input_tokens: n } } });
     const s = tr.readTranscript(fixture([IDENT('claude-opus-5-5'), at(1000), at(201200)]))!;
     assert.strictEqual(s.contextWindow, 300000);
-    assert.strictEqual(s.contextWindowLabel, '300k');
     assert.strictEqual(tr.readTranscript(fixture([IDENT('claude-sonnet-5'), at(1000)]))!.contextWindow, 200000);
   })) p++; else f++;
 

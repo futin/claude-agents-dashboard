@@ -1,6 +1,6 @@
 import type { LaunchingSession, Session } from '../../../../shared/types';
 import { apiErrorLabel } from '../../lib/apiError';
-import { fmtTok, formatAgo } from '../../lib/format';
+import { fmtTok, fmtWindow, formatAgo } from '../../lib/format';
 import { STATUS_LABEL } from '../../lib/filterSort';
 import { modelLabel } from '../../lib/modelLabel';
 import { chatTab } from '../../lib/holds';
@@ -78,7 +78,7 @@ export function TaskPill({ s }: { s: Session }) {
 }
 
 export function Tok({ s }: { s: Session }) {
-  return <span className="tok">{fmtTok(s.tokens)} / {s.contextWindowLabel}</span>;
+  return <span className="tok">{fmtTok(s.tokens)} / {fmtWindow(s.contextWindow)}</span>;
 }
 
 export function Pct({ s, big = false }: { s: Session; big?: boolean }) {

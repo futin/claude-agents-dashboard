@@ -25,7 +25,6 @@ function sess(p: Partial<Session>): Session {
     effort: null,
     tokens: 0,
     contextWindow: 200_000,
-    contextWindowLabel: '200k',
     contextPct: 0,
     status: p.status ?? 'idle',
     surface: p.surface ?? 'local',

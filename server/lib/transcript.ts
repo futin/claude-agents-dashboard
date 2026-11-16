@@ -78,7 +78,6 @@ export interface ParsedTranscript {
   tokens: number;
   model: string;
   contextWindow: number;
-  contextWindowLabel: string;
   contextPct: number;
   activity: Activity | null;
   cwd: string | null;
@@ -335,12 +334,6 @@ function nativeWindow(id: string | null | undefined): number | null {
   return large ? LARGE_WINDOW : STANDARD_WINDOW;
 }
 
-export function windowLabel(win: number): string {
-  if (win >= 1000000) return (win / 1000000) + 'M';
-  if (win >= 1000) return Math.round(win / 1000) + 'k';
-  return String(win);
-}
-
 /**
  * The cut applied to every free-form argument below. It is a transport bound,
  * not a display one: the board's collapsed rows show the tool *name* only and
@@ -517,7 +510,6 @@ export function readTranscript(
     tokens,
     model,
     contextWindow: win,
-    contextWindowLabel: windowLabel(win),
     contextPct,
     activity,
     cwd,

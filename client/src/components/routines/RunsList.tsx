@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState, type RefObject } from 'react';
 
-import type { RoutineJobRow, RoutineRun, RoutineStep } from '../../../../shared/types';
+import type { RoutineJobRow, RoutineRun, RoutineRunsQuery, RoutineStep } from '../../../../shared/types';
 import { useRoutineRuns } from '../../hooks/useRoutineRuns';
 import {
-  chipClass, dotTone, focusRunNote, formatStat, groupRunsByDay, isFanOut, runClock, runPill, splitSteps, stepErrLine, stepPill, type RoutineRunsQuery
+  chipClass, dotTone, focusRunNote, formatStat, groupRunsByDay, isFanOut, runClock, runPill, splitSteps, stepErrLine, stepPill
 } from '../../lib/routines';
 import Chevron from '../Chevron';
 import type { RoutineCtl } from './ctl';

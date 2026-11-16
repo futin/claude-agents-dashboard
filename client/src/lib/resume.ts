@@ -1,5 +1,9 @@
 import { DESKTOP_FAILED_TEXT, DESKTOP_HANDOVER_FAILED_TEXT, DESKTOP_STOP_FIRST_TEXT } from './launchSurface';
-import type { Session } from '../../../shared/types';
+import type { Session, SpawnError } from '../../../shared/types';
+
+/** The two spawn errors this file words, typed by the shared union so a reworded one fails the typecheck here and in `server/api.ts`. */
+const OPEN_FAILED: SpawnError = 'open failed';
+const STILL_RUNNING: SpawnError = 'session is still running';
 
 /**
  * Should the chat drawer offer the resume composer for this session?
@@ -65,7 +69,7 @@ export function handOverState(
 
 /** A hand-over's failure as the line beside the button: the 500 `open failed` becomes the fixed copy, every other server text (409s) passes through. */
 export function handOverErrorText(error: string): string {
-  return error === 'open failed' ? DESKTOP_FAILED_TEXT : error;
+  return error === OPEN_FAILED ? DESKTOP_FAILED_TEXT : error;
 }
 
 /** The drawer's note for a `handOverFailed` row. A first turn that timed out is usually still running, so `stop-first` also says what a retry needs first. */
@@ -96,5 +100,5 @@ export const STILL_RUNNING_DETAIL =
 
 /** The server's 409 for a live session, as the plain explanation; every other error passes through unchanged. */
 export function resumeErrorText(error: string): string {
-  return error === 'session is still running' ? STILL_RUNNING_DETAIL : error;
+  return error === STILL_RUNNING ? STILL_RUNNING_DETAIL : error;
 }

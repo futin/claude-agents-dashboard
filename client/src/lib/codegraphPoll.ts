@@ -2,7 +2,7 @@
  * The CodeGraph sub-view's poll and run rules, apart from React so `test/codegraph/codegraph-client.test.ts` can drive them: when the page polls fast, and which
  * line a `POST /api/codegraph/run` answer leaves under the band.
  */
-import type { CodegraphResponse, CodegraphRunKind } from '../../../shared/types';
+import type { CodegraphResponse, CodegraphRunKind, CodegraphRunRefusal } from '../../../shared/types';
 import { CODEGRAPH_NEEDS_TOKEN, codegraphRunConflictText, codegraphRunFailedText, codegraphRunMissingText } from './codegraphText';
 import { READ_ONLY_TEXT, refusalKind } from './writeRefusal';
 
@@ -13,6 +13,9 @@ export const CODEGRAPH_FAST_POLL_MS = 3000;
 export function hasLiveRun(data: CodegraphResponse | null): boolean {
   return data !== null && data.repos.some(r => r.run !== null);
 }
+
+/** The 403 that is not a token refusal, typed by the shared union so a reworded one fails the typecheck here and at `CODEGRAPH_RUN_REFUSALS`. */
+const NOT_PINNED: CodegraphRunRefusal = 'not a pinned project';
 
 /**
  * The note a run's answer leaves, or null when it started (200). A 403 is a token prompt unless it is the read-only refusal, or the server saying the
@@ -26,7 +29,7 @@ export function runNote(status: number, body: unknown, name: string, kind: Codeg
     const refusal = refusalKind(status, body);
     if (refusal === 'read-only') return READ_ONLY_TEXT;
     const error = body !== null && typeof body === 'object' ? (body as { error?: unknown }).error : undefined;
-    return error === 'not a pinned project' ? codegraphRunFailedText(name, kind) : CODEGRAPH_NEEDS_TOKEN;
+    return error === NOT_PINNED ? codegraphRunFailedText(name, kind) : CODEGRAPH_NEEDS_TOKEN;
   }
   return codegraphRunFailedText(name, kind);
 }

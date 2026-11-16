@@ -1,5 +1,5 @@
 import type { LaunchingSession, Session } from '../../../../shared/types';
-import { fmtTok } from '../../lib/format';
+import { fmtTok, fmtWindow } from '../../lib/format';
 import { ActLine, Bar, ChatButton, Dot, LaunchPill, Pct, Tags, keyActivate, launchState } from './atoms';
 import { Expanded } from './Expanded';
 import type { ViewProps } from './views';
@@ -31,7 +31,7 @@ function Tile({ s, open, onToggle, onOpenChat }: { s: Session; open: boolean; on
       <div className="tile-sub"><Tags s={s} withTitle={false} /></div>
       <div className="tile-metric">
         <Pct s={s} big />
-        <span className="of">{fmtTok(s.tokens)} / {s.contextWindowLabel} context</span>
+        <span className="of">{fmtTok(s.tokens)} / {fmtWindow(s.contextWindow)} context</span>
       </div>
       <Bar s={s} track />
       <ActLine s={s} />

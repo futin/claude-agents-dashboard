@@ -9,16 +9,16 @@
  * `<subagent_tokens>` — and that number is the subagent's FINAL context size:
  * measured 2026-09-23 it matches the last turn's four-class sum to within a few
  * hundred tokens, on subagents whose summed turns were 5–130x larger (bug-27).
- * So spend is summed here from the transcript, once per `message.id` — the same
+ * So spend is summed from the transcript, once per `message.id` — the same
  * de-duplication `analyze.ts` applies, because every record of one turn carries
- * a full copy of that turn's usage.
+ * a full copy of that turn's usage. The reader is `readSubagentUsage` in
+ * `session-spend.ts`, behind the cache the drawer's spend poll shares; this file
+ * keeps the path and the totals helpers both sides use.
  */
 
-import fs from 'node:fs';
 import path from 'node:path';
 
 import type { TokenTotals } from '../../shared/types.js';
-import { assistantUsage } from './usage-line.js';
 
 /** The per-session directory the CLI writes subagent transcripts into. */
 export const SUBAGENT_DIR = 'subagents';
@@ -42,53 +42,7 @@ export function addTotals(a: TokenTotals, b: TokenTotals): void {
   a.combined += b.combined; a.billableApprox += b.billableApprox;
 }
 
-/** Sum one subagent transcript's usage, once per `message.id`. Records without an id each count once. */
-function sumTranscript(text: string): TokenTotals {
-  const t = emptyTotals();
-  const seen = new Set<string>();
-  for (const raw of text.split('\n')) {
-    const trimmed = raw.trim();
-    if (!trimmed) continue;
-    let rec: unknown;
-    try { rec = JSON.parse(trimmed); } catch { continue; }
-    const line = assistantUsage(rec);
-    if (!line) continue;
-    if (line.id) {
-      if (seen.has(line.id)) continue;
-      seen.add(line.id);
-    }
-    t.input += line.tok.in; t.output += line.tok.out; t.cacheCreation += line.tok.cc; t.cacheRead += line.tok.cr;
-  }
-  t.combined = t.input + t.output + t.cacheCreation + t.cacheRead;
-  t.billableApprox = t.input + t.output + t.cacheCreation;
-  return t;
-}
-
 /** The `subagents/` dir beside the session transcript at `mainPath`: `<transcript without .jsonl>/subagents`. */
 export function subagentDirOf(mainPath: string): string {
   return path.join(mainPath.replace(/\.jsonl$/, ''), SUBAGENT_DIR);
-}
-
-/**
- * Every subagent transcript beside the session transcript at `mainPath`. Empty when the
- * session has no `subagents/` dir. Unreadable files are skipped, never thrown.
- */
-export function readSubagentUsage(mainPath: string): SubagentFileUsage[] {
-  const dir = subagentDirOf(mainPath);
-  let names: string[];
-  try { names = fs.readdirSync(dir); } catch { return []; }
-  const out: SubagentFileUsage[] = [];
-  for (const name of names) {
-    const m = /^agent-(.+)\.jsonl$/.exec(name);
-    if (!m) continue;
-    let text: string;
-    try { text = fs.readFileSync(path.join(dir, name), 'utf8'); } catch { continue; }
-    let toolUseId: string | null = null;
-    try {
-      const meta = JSON.parse(fs.readFileSync(path.join(dir, `agent-${m[1]}.meta.json`), 'utf8'));
-      if (meta && typeof meta.toolUseId === 'string') toolUseId = meta.toolUseId;
-    } catch { /* no sidecar — agentId matching still works */ }
-    out.push({ agentId: m[1], toolUseId, usage: sumTranscript(text) });
-  }
-  return out;
 }

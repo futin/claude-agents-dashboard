@@ -1,3 +1,4 @@
+// ui-kit's `ReleasesResponse` is the client's view of `shared/types.ts`'s; `test/guards/contract-types.test.ts` ties the two at typecheck.
 import { ReleasesDrawer as KitReleasesDrawer, type ReleasesResponse } from 'ui-kit';
 
 import { useBackClose } from '../hooks/useBackClose';
