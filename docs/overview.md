@@ -149,7 +149,7 @@ what the route will answer.
 tunnel's name needs `ALLOWED_HOSTS` ([configuration](workflows/configuration.md)), which Vite's `allowedHosts` reads too.
 
 ⚠️ Route order in `index.ts` is load-bearing: the `:id` detail regex would swallow
-`/api/sessions/:id/chat|question|answer|plan|plan-answer|stop|message|message-answer`, so
+`/api/sessions/:id/chat|spend|row|question|answer|plan|pr|plan-answer|stop|message|message-answer`, so
 all of those matches sit above it.
 
 ⚠️ Every `:id` route decodes its segment through `decodePath` in `index.ts`, never
@@ -245,7 +245,8 @@ server/
                   then one haiku turn) so the bars self-heal
   lib/management.ts   config scanner + servable-path security set
   lib/paths.ts        `~/.claude`, `~/.claude.json` and the Claude-owned roots never offered for pinning — a Node-only leaf, so no lib module
-                  reaches them through management.ts and closes an import cycle (`test/guards/import-cycles.test.ts`)
+                  reaches them through management.ts and closes an import cycle (`test/guards/import-cycles.test.ts`); also `stateDir`, where the
+                  dashboard's own state files go (`DASHBOARD_STATE_DIR` when set, else the caller's fallback)
   lib/git-stats.ts    read-only git reader for the pinned repos: runner, trunk, memoised branch counts + merged proof
   lib/codegraph.ts    the `codegraph` CLI reader: runner (update check off), status parser, graph-root walk, pid files
   lib/codegraph-store.ts  CodeGraph's per-(root, pin) status cache, runs, lock-loss rule and the payload
@@ -294,7 +295,8 @@ server/
   lib/remoteState.ts  remote-answer switch (env gate + persisted toggle)
   lib/atomic-write.ts  `writeFileAtomic`: temp file + rename in the same dir — settings, the remote toggle and both log rotations go through it
   lib/settings.ts persisted idle threshold, answer window, push policy + the
-                  usage-recording switch
+                  usage-recording switch, Git fetch interval, tailnet write trust, the launch form's
+                  default surface and the pin list
   lib/notify.ts   server-sent ntfy pushes — the layered policy (on idle.ts's `atDesk`
                   predicate), phone-vs-desk topic routing, and one of the backend's
                   two outbound calls (the other is `lib/usage.ts`)
@@ -330,7 +332,8 @@ client/src/
                   dismiss primitive), sessions/ (atoms, Expanded, SessionStopControl, EmptyState, AsideStrip
                   — the phone's one-bar aside — and the five views: Board, List, Split,
                   Tiles, Triage), SessionDetail (the subagent timeline),
-                  ChatDrawer, TasksCard (the sidecar's checklist card and its phone fold), QuestionPanel, PlanPanel,
+                  ChatDrawer, TasksCard (the sidecar's checklist card and its phone fold), PrCard (the sidecar's pull-request card),
+                  QuestionPanel, PlanPanel,
                   MessagePanel, PanelChrome (the head/stub the three panels share),
                   ComposerSuggestion (`composerKeyDown`, the Enter-sends / Tab-takes-the-suggestion keydown MessagePanel and ResumePanel share),
                   MicButton, SpawnPanel, PinPicker (the launch sheet's older projects to
@@ -353,6 +356,7 @@ client/src/
                   view), RunNowPopover, RunsList, SessionLink,
                   and `ctl.ts`, the one object of state and callbacks every part reads (see subsystems/routines.md)
   hooks/          useSessions (the main poll), useSessionDetail, useSessionChat, useSessionSpend,
+                  usePullRequest (the PR card's poll of `/api/sessions/:id/pr` while the drawer is open),
                   useConfigs, useConfigsScope (the scope + the one index
                   fetch, shared by the rail's tree and the page), useAnalytics,
                   useUsageProfile, useUsageRates, useUsageHistory, usePendingQuestion, usePendingPlan,
@@ -382,12 +386,14 @@ client/src/
                   composer (that keyboard's pure rules and the session's latest `wrap_up` suggestion), modelLabel (`claude-opus-5-5` → `Opus 5.5`),
                   notifyRows (Settings' push-event rows), writeRefusal (a 403's token vs read-only-network kind, and the flags each kind sets), postWrite (every write hook's POST and its one read of the reply), pinWrite (what a pin write's reply means to `usePins`),
                   pendingReply (the reply panels' phase machine), writeStatus (Settings › Local ›
-                  Connection's write-access line),
+                  Connection's write-access line), serverSettingsSave (the line a failed `POST /api/settings` leaves on the Settings page),
+                  pr (the PR card's rows, tones and copy, and `acceptPrAnswer`), sessionSpend (the drawer's Tokens spent card and `acceptSpend`),
                   webNotify, backClose, clipboard (copyText with the execCommand fallback), stopControl, apiError (the row's badge text for an API-error turn end), triage (the board/triage piles), answerToken (the token store + authHeaders),
                   stickyStrip, agentLabel (a subagent's type only when informative),
                   tasks (taskProgress — the one count the row pill and the Tasks card share),
                   gitLayouts / gitLevels / gitLinks / gitStatsText (the Git sub-view's switcher rules,
-                  the problems → levels rule and session join, the compare link, the copy table), gitChecks (the Git Inspector's check tiles), gitBar (the divergence bar's scale),
+                  the problems → levels rule and session join, the compare link, the copy table), gitChecks (the Git Inspector's check tiles), gitMatrixCells
+                  (Matrix's six check columns and whether a row has work for Sync), gitBar (the divergence bar's scale),
                   codegraphLayouts / codegraphLevels / codegraphText / codegraphPoll (the CodeGraph sub-view's switcher rules, the problems → levels rule and which Sync / Reindex keys a row offers,
                   the copy table, its poll schedule and run notes),
                   gitPoll (its poll schedule, apart from the DOM), gitClock (the fetch clock's meters,
@@ -511,5 +517,5 @@ that area:
     - vite.config.ts
     - package.json
   kind: overview
-  verified: 24f8d773dd459e02b1e4ef4a093aed285939555c
+  verified: 96b0f64a8c117ae160ba90bfdd34ef357890a8a1
 -->

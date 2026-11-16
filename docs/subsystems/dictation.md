@@ -186,13 +186,12 @@ section) is cached for the process's lifetime and also runs behind the unauthent
 keeping the auth boundary where every other route behind the write gate keeps it — not about hiding whether the
 capability exists.
 
-⚠️ One session write path runs those two checks the *other* way round: `serveSpawn` calls
-`probeSpawn` before `refuseWrite`. That divergence is harmless rather than principled, for the
-same reason the probe is harmless here — `GET /api/health` already publishes
-`spawnAvailable` unauthenticated and already calls the same memoised probe, so probe-first
-reveals nothing new and spawns no extra process. `api.ts` cross-references the two handlers
-in both directions on purpose: neither ordering should be "corrected" into matching the
-other without reading that paragraph. See [spawn](spawn.md#security-posture).
+⚠️ `serveSpawn` runs the same two checks in the same order — toggle, `refuseWrite`, then its probe — but for a different reason: which probe applies
+(`probeSpawn` for headless, `desktopAvailable` for desktop) is in the body, so it reads and parses the body *before* probing, where this handler refuses
+first. Its probe therefore no longer refuses before the body is buffered; that hides nothing, for the same reason the probe is harmless here —
+`GET /api/health` already publishes `spawnAvailable` and `desktopAvailable` unauthenticated from the same memoised probes — and its 64KB body cap bounds
+the buffering. `api.ts` cross-references the two handlers in both directions on purpose: read both paragraphs before reordering either. See
+[spawn](spawn.md#security-posture).
 
 ## The in-flight guard: a CPU- and memory-amplification defence
 
@@ -274,5 +273,5 @@ token as the minimum. The mitigations above are what stand behind the gate.
     - client/src/lib/dictation.ts
     - client/src/components/MessagePanel.tsx
   kind: subsystem
-  verified: 142439e51a92c5c5faebaf0c867bc5a36fef7c57
+  verified: 96b0f64a8c117ae160ba90bfdd34ef357890a8a1
 -->

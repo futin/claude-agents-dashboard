@@ -1,6 +1,6 @@
 # Analytics — kaizen-fed session post-mortems
 
-An **Analytics** section (third `SideRail` entry, persisted `dashboard.section`) shows the
+An **Analytics** section (sixth `SideRail` entry, `client/src/lib/sections.ts`, persisted `dashboard.section`) shows the
 last N (default 5) sessions the **`/kaizen` skill has logged**.
 `~/.claude/session-analytics-log.md` (one line per `/kaizen` run) is the **sole trigger** —
 a session appears here only because `/kaizen` logged it. The dashboard never writes that
@@ -298,5 +298,5 @@ The live session meter (status line, `/compact` nudge, tool and subagent pane) u
     - client/src/hooks/useSettings.tsx
     - plugin/skills/kaizen/
   kind: subsystem
-  verified: 24f8d773dd459e02b1e4ef4a093aed285939555c
+  verified: 96b0f64a8c117ae160ba90bfdd34ef357890a8a1
 -->

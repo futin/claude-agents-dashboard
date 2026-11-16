@@ -121,8 +121,9 @@ Answers, plan verdicts, messages and dictation are session write paths. All of t
   - **Stop:** while the server still holds a handle on the child, the expanded row and the drawer's sidecar carry a two-tap **stop** control
     (`Stop session` → `Really stop?`, with `Force stop` if the graceful signal doesn't land).
   - **Desktop app:** on macOS with the Claude desktop app installed, the launch form also offers **Desktop**: the first turn runs headless and the drawer
-    follows it, then the session hands over to the desktop app on its own. A finished dashboard session can be moved there too, with **Open in desktop
-    app** in its chat.
+    follows it, then the session hands over to the desktop app on its own. That first turn is kept short — a quick question gets its answer, anything
+    longer a brief plan — so the hand-over comes within seconds and the work starts when you say go in the app. A finished dashboard session can be moved
+    there too, with **Open in desktop app** in its chat.
   - Off by default (empty `CLAUDE_BIN`). How much a launch can do unattended is bounded by the `SPAWN_MAX_PERMISSION` ceiling on the host, never by the
     browser. `SPAWN_OWN_ENTRYPOINT=true` makes spawns and routine runs stamp the dashboard's own entrypoint label instead of `sdk-cli`
     ([why, and why it is unsupported](docs/subsystems/spawn.md#own-entrypoint-label)).
@@ -272,9 +273,10 @@ remote-control set above. The full picture is in [`docs/overview.md`](docs/overv
   turns it off). Besides those, the server runs local programs, none of them a third kind of call:
   - always, or as soon as the matching view or card is open: `ps` and `lsof` for session liveness on every scan; `security` for the keychain token and
     `claude` for a token refresh while the usage bar is on; `git` and `codegraph` behind the Git and CodeGraph views; `gh pr view` behind the PR card; the
-    browser auto-open on `pnpm start`;
+    browser auto-open on `pnpm start`; `launchctl` or `crontab`, `pgrep`, `ps` and `sysctl` to install routines on start and check their runs;
   - only on a setting or a press: `git fetch` on the pinned repos when you turn the Git fetch timer on, the fetch and push behind Pull and Push, `claude`
-    for spawns and routines, and `ffmpeg` plus whisper for dictation.
+    for spawns and routines, `ffmpeg` plus whisper for dictation, `ioreg` for the at-desk check behind pushes and held answers (macOS), and `open` for
+    Open folder and the desktop-app hand-over.
 - **Writes:** the app never writes to transcripts. Every write endpoint — answers, messages, launches, git actions — is refused unless the request comes
   from this machine, from a tailnet device while **Settings › Shared › Trust tailnet devices** is on (the default), or carries `ANSWER_TOKEN`. A LAN client
   without the token is read-only. Both servers bind all interfaces, and a DNS-rebinding guard answers only known host names (`ALLOWED_HOSTS` adds more).
@@ -325,5 +327,5 @@ remote-answers hook, push-notification and dictation setup, CI and releases) in 
     - scripts/
     - package.json
   kind: readme
-  verified: 648982fb0136a7a8bfbc41a87eb7b490e91d64d7
+  verified: 96b0f64a8c117ae160ba90bfdd34ef357890a8a1
 -->

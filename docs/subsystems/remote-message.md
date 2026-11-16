@@ -203,7 +203,8 @@ into a path; the store is keyed in memory, same as the other two.
   reasoning as a feedback-less plan reject: a bare send gives the model nothing to continue
   with. `dismiss: true` is the deliberate alternative to sending text, not a fallback for it.
 - **`TEXT_CAP = 4000`.** `answer()` truncates before composing the reason, so the cap bounds
-  your text specifically, not the fixed prose wrapped around it.
+  your text specifically, not the fixed prose wrapped around it. `MessagePanel`'s box and its dictation append stop at `MESSAGE_TEXT_CAP`
+  (`client/src/lib/textCaps.ts`), pinned to `TEXT_CAP` by `test/guards/client-server-caps.test.ts`, so the box never takes text the server would slice.
 - **`composeReason` carries the away-mode reminder, not just the text.** The
   [remote-decision](remote-plan.md#the-away-mode-alternative-skip-plan-mode-entirely)
   `UserPromptSubmit` injection does not fire on a hook-continued turn, so the "put decisions
@@ -284,5 +285,5 @@ state, reset on a new `messageId`, never persisted.
     - client/src/hooks/usePendingMessage.ts
     - client/src/lib/holds.ts
   kind: subsystem
-  verified: 24f8d773dd459e02b1e4ef4a093aed285939555c
+  verified: 96b0f64a8c117ae160ba90bfdd34ef357890a8a1
 -->

@@ -80,7 +80,10 @@ The atoms in `sessions/atoms.tsx`, in every view that has room for them:
   `dashboard` pill, and everything else — an unrecognized or absent value included — is
   `local` and prints nothing at all. The fail direction is deliberate: under-claiming loses a
   pill, while a wrong `dashboard` would say a session is invisible to the desktop app when it
-  is sitting in its sidebar. `lib/surface.ts` supplies the label and tooltip, and the pill has
+  is sitting in its sidebar. Two flags on a `dashboard` row change what it prints (`surfacePill` takes the whole session, so no render site can forget
+  them): a `desktopOwned` row — imported into the desktop app, not yet continued there — prints nothing, since the pill's claim that no other list has the
+  session stopped being true at the import, and a `handOverFailed` row reads `hand-over failed` instead.
+  `lib/surface.ts` supplies the label and tooltip, and the pill has
   no handler of its own — clicking it toggles the row like the rest of `.r1`. Which surface
   can continue what is mapped in [session surfaces](session-surfaces.md).
 - **Context bar + %** — current context tokens vs. the session's window. No record on disk names that window, so it is inferred (#159). The model
@@ -168,9 +171,9 @@ of 64 files; `scan.ts` shows `maxSessions` (default 5) at a time, so eviction on
   `task-start`, `task-done`, `review-package`, an Agent call, the two executing skills), or contains the id of a pending call (a `TaskUpdate`'s
   result says `taskId`, not `Task`). The hit is then checked against the exact block shape, so the words in message text, or a pending id in some other record,
   count for nothing.
-- **Bytes are split on `0x0A` before decoding**, as in `chat.ts`, and a chunk's tail after its last newline is carried into the next chunk: single records run
-  past the 1 MB read size, so a record is assembled across chunks rather than stalling the fold. Only the file's own unterminated last line waits for the next
-  poll.
+- **Bytes are split on `0x0A` before decoding**, in the read loop every transcript follower shares (`foldLines` in `server/lib/jsonl-tail.ts`), and a line
+  longer than the 1 MB read size is carried across chunks and delivered whole: single records run past it, so a record is assembled rather than stalling the
+  fold. Only the file's own unterminated last line waits for the next poll.
 - **It never throws.** A missing file is `null`; any other I/O error returns the remembered list and retries on the next poll, since one unreadable transcript
   must not fail the whole `/api/sessions` response.
 - **Main transcript only.** Subagent transcripts are not folded and the legacy `TodoWrite` tool is ignored. A list whose tasks were all deleted is `[]`, which
@@ -479,6 +482,8 @@ Two properties make it affordable and safe:
   absent flag → empty set, nothing hidden. Wrongly hiding a live session is the harmful
   direction. A transcript with **no** app record — a terminal `claude` run, a dashboard
   spawn — is never filtered: the app's list never showed it, so there is nothing to mirror.
+  `desktopLiveSessionIds` reads the same records with the **inverse** fail direction — it names the sessions the app holds open (`Session.desktopOwned`),
+  where a false "not owned" admits a second writer, so an absent or odd `isArchived` counts as live. See [session surfaces](session-surfaces.md).
 
 The filter is applied at the **call sites**, not inside `listTranscripts()`: `api.ts` passes
 `archivedIds: archivedSessionIds()` into `scanSessions` and into `listRecentProjects`
@@ -690,5 +695,5 @@ Measured at the same scroll position in all three configurations: default `24 / 
     - client/src/hooks/useSessionDetail.ts
     - client/src/lib/filterSort.ts
   kind: subsystem
-  verified: 24f8d773dd459e02b1e4ef4a093aed285939555c
+  verified: 96b0f64a8c117ae160ba90bfdd34ef357890a8a1
 -->

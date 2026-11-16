@@ -49,7 +49,7 @@ override it (see `dashboard.section` below).
   on `sessions` rather than falling through `App.tsx`'s chain to Settings. The id
   `management` is the Management tab (Git | Projects | CodeGraph); before the Claude Configs rename it named what is now
   Claude Configs, and a stored one is not migrated — it opens the new tab. A stored `schedules`, the section's id before Schedules became Routines, is
-  read as `routines` (`App.tsx`), so that device keeps its place.
+  read as `routines` (`startSection` in `lib/deepLink.ts`, which `App.tsx` calls), so that device keeps its place.
   A `?session=` deep link outranks both and forces
   `sessions` (see the URL-param note below);
   `dashboard.layout` (which of the five shapes the switcher was left on — the shape note
@@ -168,5 +168,5 @@ override it (see `dashboard.section` below).
     - client/src/components/analytics/AnalyticsView.tsx
     - client/src/hooks/useSettings.tsx
   kind: subsystem
-  verified: 24f8d773dd459e02b1e4ef4a093aed285939555c
+  verified: 96b0f64a8c117ae160ba90bfdd34ef357890a8a1
 -->
