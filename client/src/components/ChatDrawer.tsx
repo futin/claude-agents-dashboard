@@ -21,7 +21,7 @@ import { useSpawn } from '../hooks/useSpawn';
 import { usePersistedState } from '../hooks/usePersistedState';
 import { useSettings } from '../hooks/useSettings';
 import { CHAT_FILTERS, filterMessages, isChatFilter, type ChatFilter } from '../lib/chatFilter';
-import { fmtTok } from '../lib/format';
+import { fmtTok, fmtWindow } from '../lib/format';
 import { spendCard } from '../lib/sessionSpend';
 import { DESKTOP_OPENED_TEXT, DESKTOP_OWNED_TEXT, DESKTOP_STOP_FIRST_TEXT } from '../lib/launchSurface';
 import { handOverErrorText, handOverFailedText, handOverState, resumeEligible, stillRunningNote, STILL_RUNNING_DETAIL, STILL_RUNNING_HINT } from '../lib/resume';
@@ -306,7 +306,7 @@ export default function ChatDrawer({ session, onClose, spawnAvailable, desktopAv
                 <span className={`metric${ctxWarn ? ' warn' : ''}`}>{ctxPct}%</span>
                 <span className="u">
                   <span className="tok" title={`${session.tokens.toLocaleString()} of ${session.contextWindow.toLocaleString()} context tokens`}>
-                    {fmtTok(session.tokens)} / {session.contextWindowLabel}
+                    {fmtTok(session.tokens)} / {fmtWindow(session.contextWindow)}
                   </span>
                 </span>
               </div>

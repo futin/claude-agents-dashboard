@@ -9,6 +9,13 @@ export function fmtTok(n: number): string {
   return String(n || 0);
 }
 
+/** A context window's size as the token cells show it after the slash: 200k, 300k, 1M, 1.5M — rounded thousands, millions with no forced decimal. */
+export function fmtWindow(n: number): string {
+  if (n >= 1e6) return n / 1e6 + 'M';
+  if (n >= 1e3) return Math.round(n / 1e3) + 'k';
+  return String(n);
+}
+
 /** Compact file size: 0 B, 1023 B, 15.1 KB, 2.5 MB. */
 export function fmtBytes(n: number): string {
   // Same rule as fmtTok: 1048575 is "1.0 MB", not "1024.0 KB".

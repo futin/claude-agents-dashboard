@@ -21,6 +21,7 @@
 import {
   DEFAULT_LAYOUT, WIDE_ONLY_LAYOUTS, isLayout, layoutsFor, type Layout
 } from './filterSort';
+import type { RoutineRunsQuery, RoutineRunsWindow } from '../../../shared/types';
 import { SECTIONS, type Section } from './sections';
 import { EFFORTS, MODELS } from './spawnOptions';
 
@@ -49,12 +50,13 @@ export type ManagementTab = 'git' | 'projects' | 'codegraph';
 /** Which sub-view the Routines section opens on. */
 export type RoutinesTab = 'jobs' | 'runs';
 /** The day windows the Routines stats band and Runs list read: the server's `ROUTINE_WINDOWS`. */
-export type RoutineWindow = 7 | 30 | 90;
-/** The Runs page's filters; an empty string is "no filter". The same three fields as `RoutineRunsQuery` (`lib/routines.ts`). */
-export interface RoutineRunFilters {
-  outcome: '' | 'failed' | 'lost';
-  runner: '' | 'claude' | 'shell';
-  job: string;
+export type RoutineWindow = RoutineRunsWindow;
+/**
+ * The Runs page's filters; an empty string is "no filter". Three of `RoutineRunsQuery`'s fields (`shared/types.ts`), with the page's narrower outcome
+ * picker: the server accepts every run state, the page offers only these two.
+ */
+export interface RoutineRunFilters extends Pick<RoutineRunsQuery, 'runner' | 'job'> {
+  outcome: Extract<RoutineRunsQuery['outcome'], '' | 'failed' | 'lost'>;
 }
 /** Which section opens on load. `last` restores whatever you were on. */
 export type Landing = Section | 'last';

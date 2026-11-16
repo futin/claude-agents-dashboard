@@ -100,7 +100,7 @@ remote-answer switch on, a **gate-only write** needs the gate alone ([who may wr
 | `POST /api/spawn/:id/stop` | SIGTERM a still-launching session's child (session write path — spawn) |
 | `POST /api/sessions/:id/stop` | stop a dashboard-spawned session at any point in its life — graceful by default, `{"force":true}` to skip the grace window; the row's button only ever calls this one (session write path — spawn) |
 | `POST /api/permissions/notify` | "a permission dialog is open" flag (display-only) (gate-only write) |
-| `POST /api/notify/event` | the Stop hook's push trigger — the other three events notify from the endpoint they already POST to (gate-only write) |
+| `POST /api/notify/event` | the Stop hook's push trigger — the other three session events notify from the endpoint they already POST to; takes only those four (`HookNotifyEvent`), a server-side event is 400 `bad event` (gate-only write) |
 | `POST /api/notify/test` | fire one push regardless of policy and report what ntfy said (gate-only write) |
 | `POST /api/remote-answer` | flip the remote-answer toggle (gate-only write) |
 | `GET /api/dismiss` | where a tapped desk push lands — a page that closes the tab it opened in; carries no deep link |

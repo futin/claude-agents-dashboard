@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-import type { CodegraphRunKind, WriteAccess } from '../../../shared/types';
+import type { CodegraphRunKind, CodegraphRunRequest, WriteAccess } from '../../../shared/types';
 import { authHeaders } from '../lib/answerToken';
 import { runNote } from '../lib/codegraphPoll';
 import { useAnswerToken } from './useAnswerToken';
@@ -52,7 +52,7 @@ export function useCodegraphRun(onChange: () => void): CodegraphRunControl {
       const res = await fetch('/api/codegraph/run', {
         method: 'POST',
         headers: authHeaders(token, { 'Content-Type': 'application/json' }),
-        body: JSON.stringify({ dirName, kind }),
+        body: JSON.stringify({ dirName, kind } satisfies CodegraphRunRequest),
       });
       line = runNote(res.status, await res.json().catch(() => undefined), name, kind);
     } catch {
