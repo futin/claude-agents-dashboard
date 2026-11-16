@@ -552,6 +552,20 @@ export async function run(): Promise<number> {
     await codegraphRunsSettled();
   });
 
+  await it('run end: a run that timed out is a failed lastRun, and the repo takes the next launch', async () => {
+    const a = repo();
+    overrideCodegraphRunner(fake(async (_c, args) => {
+      if (args[0] === 'status') return { code: 0, stdout: FIXTURE, stderr: '' };
+      throw Object.assign(new Error('codegraph timed out'), { code: 'ETIMEDOUT' });
+    }).run);
+    assert.strictEqual(await startCodegraphRun({}, a.dirName, 'reindex'), 'started');
+    await codegraphRunsSettled();
+    const r = await row(a);
+    assert.deepStrictEqual([r.run, r.lastRun!.ok, r.lastRun!.message], [null, false, 'codegraph timed out']);
+    assert.strictEqual(await startCodegraphRun({}, a.dirName, 'sync'), 'started', 'a timed-out run frees the repo');
+    await codegraphRunsSettled();
+  });
+
   await it('run end: a successful run replaces an earlier failed one, and the failure is held until then', async () => {
     const a = repo();
     let code = 1;
