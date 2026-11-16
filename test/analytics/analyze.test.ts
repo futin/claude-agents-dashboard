@@ -4,6 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 
+import { readAgents } from '../../server/lib/agents.js';
 import { analyzeSession } from '../../server/lib/analyze.js';
 
 function test(name: string, fn: () => void): boolean {
@@ -738,7 +739,56 @@ export function run(): number {
 
   if (test('missing file → null', () => {
     assert.strictEqual(analyzeSession('/no/such/transcript.jsonl'), null);
+    assert.strictEqual(analyzeSession('/nonexistent.jsonl'), null);
   })) p++; else f++;
+
+  if (test('the main transcript is read once — the agent scan shares the analysis read (#459)', () => {
+    const main = fixture([
+      toolUseRec([tu('toolu_A', 'Agent', { subagent_type: 'Explore', description: 'look' })], '2026-07-01T10:00:00Z', undefined, 'msg_A'),
+      resultRec('toolu_A', '2026-07-01T10:00:05Z', { toolUseResult: { agentId: 'abc123', totalTokens: 500 }, content: 'done' })
+    ]);
+    subagentFile(main, 'abc123', [
+      usageRec({ input_tokens: 100, output_tokens: 50, cache_creation_input_tokens: 400, cache_read_input_tokens: 1000 }, '2026-07-01T10:00:01Z', { id: 'm1' })
+    ]);
+    const orig = fs.readFileSync;
+    let mainReads = 0;
+    (fs as any).readFileSync = (p: any, ...rest: any[]) => {
+      if (p === main) mainReads++;
+      return (orig as any)(p, ...rest);
+    };
+    let a;
+    try { a = analyzeSession(main)!; } finally { (fs as any).readFileSync = orig; }
+    assert.strictEqual(mainReads, 1);
+    assert.deepStrictEqual(a.bySubagent.map(s => [s.id, s.tokens]), [['toolu_A', 1550]]);
+  })) p++; else f++;
+
+  // A background completion landing mid-turn is written without a `message` (test/sessions/agents.test.ts queueOpRec / attachmentRec), so it fails
+  // isConversationRecord — the agent scan has to see it before the loop's skips, or the launch reads as running forever.
+  const notifyXml = (agentId: string) =>
+    `<task-notification>\n<task-id>${agentId}</task-id>\n<status>completed</status>\n<usage><subagent_tokens>4321</subagent_tokens><tool_uses>3</tool_uses><duration_ms>9000</duration_ms></usage>\n</task-notification>`;
+  const asyncWorld = (completion: unknown) => fixture([
+    toolUseRec([tu('toolu_Q', 'Agent', { subagent_type: 'Explore', description: 'bg' })], '2026-07-01T10:00:00Z', undefined, 'msg_Q'),
+    resultRec('toolu_Q', '2026-07-01T10:00:01Z', { content: 'Async agent launched successfully. agentId: q1', toolUseResult: { isAsync: true, agentId: 'q1' } }),
+    completion,
+    usageRec({ input_tokens: 10 }, '2026-07-01T10:00:20Z', { id: 'msg_after' })
+  ]);
+  const shapes: [string, unknown][] = [
+    ['queue-operation', { type: 'queue-operation', operation: 'enqueue', timestamp: '2026-07-01T10:00:10Z', sessionId: 's1', content: notifyXml('q1') }],
+    ['attachment', {
+      type: 'attachment', timestamp: '2026-07-01T10:00:10Z',
+      attachment: { type: 'queued_command', commandMode: 'prompt', timestamp: '2026-07-01T10:00:10Z', prompt: notifyXml('q1') }
+    }]
+  ];
+  for (const [shape, rec] of shapes) {
+    if (test(`a completion shaped as ${shape} (no message) still reaches the agent scan`, () => {
+      const file = asyncWorld(rec);
+      const a = analyzeSession(file)!;
+      assert.strictEqual(a.bySubagent.length, 1);
+      assert.strictEqual(a.bySubagent[0].status, 'done');
+      assert.strictEqual(a.bySubagent[0].tokens, 4321);
+      assert.deepStrictEqual(a.bySubagent, readAgents(file)!.filter(x => !x.resumed));
+    })) p++; else f++;
+  }
 
   console.log('\nPassed: ' + p + '  Failed: ' + f + '\n');
   return f;

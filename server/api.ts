@@ -2103,7 +2103,7 @@ export function serveSessionRow(config: Config, id: string, res: ServerResponse)
 
 /**
  * `GET /api/analytics` — the last N sessions `/kaizen` has logged, newest-first,
- * each enriched with a live re-run of the analyzer. Read-only; `/kaizen` is the
+ * each enriched with the analyzer's read of its transcript (memoised until the transcript or its subagents change). Read-only; `/kaizen` is the
  * sole producer. Not polled; fetched on section mount and manual refresh. Fails
  * open to an empty list.
  */
