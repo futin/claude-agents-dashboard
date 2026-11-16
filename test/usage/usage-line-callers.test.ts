@@ -1,6 +1,6 @@
 /**
  * Characterization of the five readers of an assistant usage line — the ledger (`usage-ledger.ts`), the rates audit (`scripts/lib/transcript-audit.ts`),
- * subagent spend (`subagent-usage.ts`), session spend (`session-spend.ts`) and the session analysis (`analyze.ts`). They share one parse
+ * subagent spend (`readSubagentUsage`) and session spend (`readSessionSpend`), both in `session-spend.ts`, and the session analysis (`analyze.ts`). They share one parse
  * (`usage-line.ts`) but keep their own gates on purpose, so each scenario pins every caller's total side by side: a change to one gate shows up as one
  * cell, never as a silent drift between readers. Every fixture puts its tokens in `input_tokens` only, so each reader's figure is that one class.
  */
@@ -12,9 +12,8 @@ import path from 'node:path';
 import { readRecords } from '../../scripts/lib/transcript-audit.js';
 import { _resetAgentsCache } from '../../server/lib/agents-cache.js';
 import { analyzeSession } from '../../server/lib/analyze.js';
-import { _resetSessionSpendCache, readSessionSpend } from '../../server/lib/session-spend.js';
+import { _resetSessionSpendCache, readSessionSpend, readSubagentUsage } from '../../server/lib/session-spend.js';
 import { resetSettings, setSettings } from '../../server/lib/settings.js';
-import { readSubagentUsage } from '../../server/lib/subagent-usage.js';
 import { LEDGER_FILE, recordLedgerTick, resetLedgerRecorder } from '../../server/lib/usage-ledger.js';
 
 function test(name: string, fn: () => void): boolean {

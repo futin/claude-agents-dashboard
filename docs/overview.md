@@ -201,7 +201,7 @@ server/
                   `listUsageTranscripts` is the second enumeration — top-level files plus
                   `<sessionId>/subagents/*.jsonl` — read by the usage ledger only, since a
                   subagent file must never become a session row (`analyze.ts` reads one
-                  session's subagent files directly, through `subagent-usage.ts`)
+                  session's subagent files directly, through `session-spend.ts`'s `readSubagentUsage`)
   lib/archived.ts reads the desktop app's own session records (macOS Application
                   Support) for the `isArchived` flag, joined to transcripts by
                   `cliSessionId` — the only place that touches that store; the id
@@ -275,9 +275,10 @@ server/
   lib/tool-output-replay.ts  replays transcripts → bytes each tool put into context × later turns, and what a read-guard / bash-trim
                   hook would have saved per threshold, with Bash split by command kind (no server route; scripts/tool-output-replay.ts is
                   the one reader; findings: docs/superpowers/decisions/2026-11-12-context-mode-evaluation.md)
-  lib/subagent-usage.ts  sums one session's subagent transcripts → per-subagent token classes
-  lib/session-spend.ts  GET /api/sessions/:id/spend: main + claimed subagent transcripts, followed incrementally
-  lib/usage-line.ts  the one parse of an assistant usage line (id, model, ts, four counts); usage-ledger, subagent-usage, session-spend,
+  lib/subagent-usage.ts  the `subagents/` dir path, the per-subagent result type and the token-totals helpers
+  lib/session-spend.ts  GET /api/sessions/:id/spend: main + claimed subagent transcripts, followed incrementally; also `readSubagentUsage`, every
+                  subagent transcript's token classes for Analytics, through the same cache (LRU over 32 sessions)
+  lib/usage-line.ts  the one parse of an assistant usage line (id, model, ts, four counts); usage-ledger, session-spend,
                   analyze and scripts/lib/transcript-audit.ts each keep their own gates on it
   lib/jsonl-tail.ts  byte-offset JSONL follower: foldLines, the chunked read loop of all seven followers (tasks.ts, pr-detect.ts,
                   usage-ledger.ts, routine-log.ts, routine-run.ts directly; agents-cache.ts and session-spend.ts through followJsonl)
