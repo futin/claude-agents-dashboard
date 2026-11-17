@@ -231,6 +231,13 @@ returned — no backend change, so the read-only invariant above still holds.
   heuristic. `kaizen.mjs`'s `compactions` block — one row per boundary, a replayed boundary with the same timestamp counted once in
   `duplicatesSkipped` — is kaizen-only by decision: a `/kaizen` lesson input with no dashboard consumer, like `--trend`
   (`plugin/skills/kaizen/test/compactions.test.mjs`).
+  The `contextLifetime` block is kaizen-only by the same decision: how long each tool result stayed in context, as token-turns (chars ÷ 4 × main-chain
+  turns lived), a per-tool roll-up and a `flagged` list `/kaizen` §5 turns into suggestions. A lifetime turn is every distinct main-chain
+  `message.id`, usage or not — deliberately not `perTurn.count`, which counts only turns with usage — and a result's lifetime ends at the next
+  boundary, a replayed duplicate included, or at the end of the session. A result is flagged at ≥ 250,000 token-turns AND ≥ 5 % of the session's total,
+  at most 5 per session (measured 2026-11-17 over 2,234 sessions with tool results: 18 % get a flag, p50 = 2 rows). It is pinned to
+  `server/lib/tool-output-replay.ts` `extractResults` by a parity case in `test/analytics/analyze.test.ts` (results per tool and turns lived; token
+  sizing differs — kaizen sizes by chars ÷ 4, the replay CLI by bytes), and tested in `plugin/skills/kaizen/test/context-lifetime.test.mjs`.
   That heuristic (`errorSignals.userCorrections`) also skips a user turn carrying `<agent-message`, on both sides: it is a subagent's hand-back
   delivered as a user turn, not the user correcting anything (#302).
 - **The lesson line's figures are data, not only prose.** `kaizen.mjs --trend [log]` reads the `<billable> billable (<ctx> ctx` prefix back out of

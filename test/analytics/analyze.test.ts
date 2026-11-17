@@ -6,6 +6,7 @@ import { spawnSync } from 'node:child_process';
 
 import { readAgents } from '../../server/lib/agents.js';
 import { analyzeSession } from '../../server/lib/analyze.js';
+import { extractResults } from '../../server/lib/tool-output-replay.js';
 
 function test(name: string, fn: () => void): boolean {
   try { fn(); console.log('  ✓ ' + name); return true; }
@@ -735,6 +736,45 @@ export function run(): number {
       assert.deepStrictEqual(k.subagentTotals, a.subagentTotals);
       assert.strictEqual(k.bySubagent.length, a.bySubagent.length);
     }
+  })) p++; else f++;
+
+  if (test('plugin kaizen.mjs contextLifetime agrees with extractResults on results and turns lived', () => {
+    const kaizen = path.resolve(path.dirname(new URL(import.meta.url).pathname), '../../plugin/skills/kaizen/kaizen.mjs');
+    const boundary = { type: 'system', subtype: 'compact_boundary', timestamp: '2026-07-01T10:00:10Z', compactMetadata: { trigger: 'auto', preTokens: 9 } };
+    const u = { input_tokens: 10, output_tokens: 1 };
+    const file = fixture([
+      toolUseRec([tu('L1', 'Read', { file_path: '/a.ts' })], '2026-07-01T10:00:00Z', u, 'msg_1'),
+      resultRec('L1', '2026-07-01T10:00:01Z', { content: 'a'.repeat(800) }),
+      usageRec(u, '2026-07-01T10:00:02Z', { id: 'msg_2' }),
+      boundary,
+      toolUseRec([tu('L2', 'Read', { file_path: '/b.ts', offset: 1, limit: 5 })], '2026-07-01T10:00:11Z', u, 'msg_3'),
+      resultRec('L2', '2026-07-01T10:00:12Z', { content: 'b'.repeat(400) }),
+      // one turn split across two records — a thinking record, then the tool_use record
+      toolUseRec([think()], '2026-07-01T10:00:13Z', u, 'msg_4'),
+      toolUseRec([tu('L3', 'Bash', { command: 'ls -la' })], '2026-07-01T10:00:13Z', u, 'msg_4'),
+      resultRec('L3', '2026-07-01T10:00:14Z', { content: 'c'.repeat(1200) }),
+      // turns without usage still count
+      toolUseRec([], '2026-07-01T10:00:15Z', undefined, 'msg_5'),
+      toolUseRec([], '2026-07-01T10:00:16Z', undefined, 'msg_6'),
+      boundary,
+      toolUseRec([], '2026-07-01T10:00:17Z', undefined, 'msg_7')
+    ]);
+    const r = spawnSync(process.execPath, [kaizen, file], { encoding: 'utf8' });
+    assert.strictEqual(r.status, 0, r.stderr);
+    const k = JSON.parse(r.stdout);
+    const rows = extractResults(fs.readFileSync(file, 'utf8'), { scope: 'main' });
+    const want = new Map<string, { results: number; maxTurnsAfter: number }>();
+    for (const row of rows) {
+      const w = want.get(row.tool) ?? { results: 0, maxTurnsAfter: 0 };
+      w.results++; w.maxTurnsAfter = Math.max(w.maxTurnsAfter, row.turnsAfter);
+      want.set(row.tool, w);
+    }
+    const got = new Map<string, { results: number; maxTurnsAfter: number }>(
+      k.contextLifetime.byTool.map((t: any) => [t.tool, { results: t.results, maxTurnsAfter: t.maxTurnsAfter }])
+    );
+    assert.deepStrictEqual(got, want);
+    // Pins the fixture itself: Read /a.ts lives 1 turn (msg_2), Read /b.ts 3 (msg_4..msg_6, the duplicate boundary ends it), Bash 2.
+    assert.deepStrictEqual(rows.map(x => [x.tool, x.turnsAfter]), [['Read', 1], ['Read', 3], ['Bash', 2]]);
   })) p++; else f++;
 
   if (test('missing file → null', () => {

@@ -96,6 +96,12 @@ both embed it as `…/<uuid>/…` — or list candidates with
     calls; the transcript has no per-tool token field. Say "approx" when you cite it.
 
   `count`, `errors`, and `durationMs` (wall time, includes model latency) ARE exact — lean on those for firm claims.
+- `contextLifetime` — how long each tool result **stayed** in context, not only how big it was. Its unit is the **token-turn**: a result's tokens
+  (chars ÷ 4) × the main-chain turns it lived, up to the next compaction — roughly the cache-read tokens spent re-reading it. A share of
+  `totals.cacheRead`, never added to it; subagent results are not in it. It ranks by lifetime, so it can disagree with `byTool[0]`: a big result that
+  arrived late costs little, a modest one read at turn 3 of a 300-turn session costs a lot. `contextLifetime.byTool` is the per-tool roll-up;
+  **`contextLifetime.flagged` is the list to act on** — each row names the `tool`, its `target` (file, command, pattern…), the `turnIndex` it arrived
+  at and how many turns it lived. A row is flagged only past both floors in `threshold`; an empty list means no single result stood out.
 - `bySubagent` has per-subagent `tokens` (summed from that subagent's own transcript; the harness's final-context figure
   only where none is complete) and exact `toolUses` / `durationMs`. Name the priciest subagents and whether the work
   justified the spend. Rows still `status: "running"` carry `null` — they are unmeasured, not cheap: rank only what is
@@ -116,6 +122,10 @@ Tie each suggestion to evidence above. Examples: `perTurn.neverCompacted` → su
 repeated manual work a skill would cover → name the skill to **use, add, or install**
 (check installed skills first). Keep it to a few high-signal actions, not a checklist.
 
+Each `contextLifetime.flagged` row becomes one suggestion naming its `tool`, `target` and `turnIndex`: a whole-file `Read` → a ranged read or a
+subagent; a large `Bash` output → a narrower command, or `grep` first; a big result early in a long session → do that exploration in a subagent, so only
+its conclusion stays in context. No flagged rows → say so; do not invent one.
+
 ## 6. Append one lesson (the learning loop)
 
 Read the last ~20 lines of `~/.claude/session-analytics-log.md` (create the file if absent) so you can
@@ -134,7 +144,7 @@ never fires again**: write each one for the next situation, not this one.
 - **`component`** — the concrete artifact the lesson would change: a file and section (`global CLAUDE.md §Learnings`, `project CLAUDE.md §Code rules`), a
   skill (`skill:docs-sync`), a hook (`hook:kill-guard`), a script, a memory file — or the literal `habit` when no artifact would change. Free text.
 - **`evidence`** — what in this record backs it: an analyzer field (`perTurn.maxCombined`, `byTool[…]`, `compactions`, `bySubagent[…]`,
-  `errorSignals.*`) or a transcript moment (a turn, or a short quote). "Looks like good practice" is not evidence.
+  `errorSignals.*`, `contextLifetime.flagged[…]`, `contextLifetime.tokenTurns`) or a transcript moment (a turn, or a short quote). "Looks like good practice" is not evidence.
 - **`confidence`** — `high`, `medium` or `low`, then why in parentheses.
 
 **A lesson with no evidence is a `none` line instead** — and so is a session that taught nothing new. Say so outright rather than inventing a takeaway:

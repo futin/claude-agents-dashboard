@@ -22,7 +22,9 @@
  * `resolveLatest`, has a TS twin in scripts/lib/latest-session.ts; it and the CLI's path, session-id and usage errors are tested in test/latest.test.mjs.
  * Counting compaction replays once (#174), skipping compact summaries and reading compact_boundary for neverCompacted are in that
  * source too (#226), pinned by its parity tests. Kaizen-only by decision: the `compactions` block — a lesson input with no dashboard
- * consumer — tested in test/compactions.test.mjs (`node --test test/*.test.mjs`).
+ * consumer — tested in test/compactions.test.mjs (`node --test test/*.test.mjs`); and the `contextLifetime` block — how long each tool result stayed
+ * in context — tested in test/context-lifetime.test.mjs and pinned to its TS twin, server/lib/tool-output-replay.ts extractResults, by a parity case
+ * in test/analytics/analyze.test.ts.
  */
 
 import fs from 'node:fs';
@@ -290,6 +292,29 @@ const CORRECTION_RE = /\b(no|nope|wrong|incorrect|not (?:what|right|correct)|act
 const NEVER_COMPACTED_PEAK = 250_000;
 const COMPACTION_DROP_RATIO = 0.5;
 
+// CONTEXT LIFETIME flag: a tool result is worth a suggestion when its token-turns (tokens × main-chain turns it lived) clear BOTH floors, at most
+// LIFETIME_MAX_FLAGGED per session. Measured over every main transcript modified in the 30 days to 2026-11-17 (2,234 sessions with tool results):
+// 411 sessions (18 %) get a flag, flagged rows per session p50 = 2, p90 = 4, max = 8 before the cap. The absolute floor alone over-flags long sessions
+// (p99 = 29 rows); the share floor alone flags trivial ones. 250k token-turns is a ~10 KB read that lived 100 turns.
+const LIFETIME_MIN_TOKEN_TURNS = 250_000;
+const LIFETIME_MIN_SHARE = 0.05;
+const LIFETIME_MAX_FLAGGED = 5;
+
+// A short label for what a tool call read or ran — evidence for a suggestion, never parsed.
+function lifetimeTarget(b) {
+  const input = b.input && typeof b.input === 'object' ? b.input : {};
+  const str = (v) => (typeof v === 'string' ? v : '');
+  switch (b.name) {
+    case 'Read': return str(input.file_path) + (input.offset !== undefined || input.limit !== undefined ? ' [offset/limit]' : '');
+    case 'Edit': case 'Write': return str(input.file_path);
+    case 'Bash': return str(input.command).slice(0, 120);
+    case 'Grep': case 'Glob': return str(input.pattern);
+    case 'Task': case 'Agent': return str(input.description);
+    case 'WebFetch': return str(input.url);
+    default: return '';
+  }
+}
+
 export function analyzeSession(filePath, id) {
   let text;
   try { text = fs.readFileSync(filePath, 'utf8'); } catch { return null; }
@@ -336,6 +361,16 @@ export function analyzeSession(filePath, id) {
   let duplicatesSkipped = 0, awaitingPost = null, skipSummary = false, lastCtx = null;
   const turnCtx = [];
 
+  // CONTEXT LIFETIME. Mirrors server/lib/tool-output-replay.ts extractResults: a lifetime turn is every distinct main-chain message.id, usage or
+  // not — deliberately NOT turnCount, which counts only turns with usage and feeds perTurn. A result lives from its arrival to the next boundary (a
+  // replayed duplicate included) or the end of the session; each segment is settled there.
+  const lifeRows = [];
+  let lifeSegment = [], lifeSegTurns = 0, lifeTurns = 0;
+  const settleLife = () => {
+    for (const { row, at } of lifeSegment) row.turnsAfter = lifeSegTurns - at;
+    lifeSegment = []; lifeSegTurns = 0;
+  };
+
   for (const line of text.split('\n')) {
     const trimmed = line.trim();
     if (!trimmed) continue;
@@ -348,6 +383,7 @@ export function analyzeSession(filePath, id) {
     if (rec.isSidechain === true) continue;
 
     if (rec.compactMetadata && typeof rec.compactMetadata === 'object') {
+      settleLife();
       const key = ts ?? `#b${boundaries.length + duplicatesSkipped}`;
       if (boundaryKeys.has(key)) { duplicatesSkipped++; skipSummary = true; continue; }
       boundaryKeys.add(key); skipSummary = false;
@@ -381,6 +417,7 @@ export function analyzeSession(filePath, id) {
       const turnKey = typeof msg.id === 'string' && msg.id ? msg.id : `#anon${anonTurnSeq++}`;
       const firstOfTurn = !countedTurns.has(turnKey);
       countedTurns.add(turnKey);
+      if (firstOfTurn) { lifeTurns++; lifeSegTurns++; }
       const turn = getTurn(turnKey);
 
       const u = msg.usage;
@@ -414,7 +451,7 @@ export function analyzeSession(filePath, id) {
           s.count++;
           turn.tools.push(b.name);
           if (errorOutstanding.has(b.name)) { retries++; errorOutstanding.delete(b.name); }
-          if (typeof b.id === 'string') pendingTool.set(b.id, { name: b.name, ts });
+          if (typeof b.id === 'string') pendingTool.set(b.id, { name: b.name, ts, target: lifetimeTarget(b) });
         }
       }
     } else if (msg.role === 'user') {
@@ -428,8 +465,11 @@ export function analyzeSession(filePath, id) {
           if (p) {
             pendingTool.delete(b.tool_use_id);
             const s = getTool(p.name);
+            const resultText = toolResultText(b);
             // Per call, error text included — independent of the errors count.
-            s.resultTokens += approxTokens(toolResultText(b));
+            s.resultTokens += approxTokens(resultText);
+            const row = { tool: p.name, target: p.target, turnIndex: lifeTurns, resultTokens: Math.round(approxTokens(resultText)), turnsAfter: 0 };
+            lifeRows.push(row); lifeSegment.push({ row, at: lifeSegTurns });
             if (p.ts && ts) { const d = Date.parse(ts) - Date.parse(p.ts); if (Number.isFinite(d) && d >= 0) s.durationMs += d; }
             if (err) { s.errors++; toolErrors++; errorOutstanding.add(p.name); } else errorOutstanding.delete(p.name);
           } else if (err) { toolErrors++; }
@@ -440,6 +480,8 @@ export function analyzeSession(filePath, id) {
       if (t && !t.includes('<task-notification>') && !t.includes('<agent-message') && CORRECTION_RE.test(t)) userCorrections++;
     }
   }
+
+  settleLife();
 
   // Settle the per-tool split: one turn's output_tokens across all its tools.
   for (const t of turns.values()) {
@@ -478,6 +520,8 @@ export function analyzeSession(filePath, id) {
     boundaries
   };
 
+  const contextLifetime = lifetimeSummary(lifeRows);
+
   const notes = [
     'combined includes cache_read (replayed cached prompt, billed ~10%); lead with billableApprox for real cost.',
     "byTool.approxOutputTokens splits each turn's output tokens evenly across its tool calls — approximate; the transcript has no per-tool token field.",
@@ -502,7 +546,34 @@ export function analyzeSession(filePath, id) {
     serverTools: { webSearch: serverWebSearch, webFetch: serverWebFetch },
     errorSignals: { toolErrors, retries, userCorrections },
     compactions,
+    contextLifetime,
     notes
+  };
+}
+
+function lifetimeSummary(rows) {
+  let tokenTurns = 0;
+  const tools = new Map();
+  const scored = rows.map(r => {
+    const tt = r.resultTokens * r.turnsAfter;
+    tokenTurns += tt;
+    let t = tools.get(r.tool);
+    if (!t) { t = { tool: r.tool, results: 0, tokenTurns: 0, maxTurnsAfter: 0 }; tools.set(r.tool, t); }
+    t.results++; t.tokenTurns += tt; t.maxTurnsAfter = Math.max(t.maxTurnsAfter, r.turnsAfter);
+    return { ...r, tokenTurns: tt };
+  });
+  const flagged = scored
+    .filter(r => r.tokenTurns >= LIFETIME_MIN_TOKEN_TURNS && r.tokenTurns / tokenTurns >= LIFETIME_MIN_SHARE)
+    .sort((a, b) => b.tokenTurns - a.tokenTurns || a.turnIndex - b.turnIndex)
+    .slice(0, LIFETIME_MAX_FLAGGED)
+    .map(r => ({ tool: r.tool, target: r.target, turnIndex: r.turnIndex, resultTokens: r.resultTokens, turnsAfter: r.turnsAfter, tokenTurns: r.tokenTurns,
+      share: Math.round((r.tokenTurns / tokenTurns) * 1000) / 1000 }));
+  return {
+    tokenTurns,
+    byTool: [...tools.values()].sort((a, b) => b.tokenTurns - a.tokenTurns || a.tool.localeCompare(b.tool)),
+    flagged,
+    threshold: { minTokenTurns: LIFETIME_MIN_TOKEN_TURNS, minShare: LIFETIME_MIN_SHARE, max: LIFETIME_MAX_FLAGGED },
+    note: 'tokenTurns approximate the cache-read tokens this session spent re-reading tool output: each result sized at chars ÷ 4, times the main-chain turns it lived (up to the next compaction). A share of totals.cacheRead, never added to it; subagent results are not included — they live in the subagent’s own context.'
   };
 }
 
