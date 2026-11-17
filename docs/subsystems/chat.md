@@ -182,7 +182,9 @@ request for it and `/api/sessions/:id/chat` knows nothing of it. Three behaviour
   (`serveSessionChat` in `api.ts`), reader in `lib/chat.ts`:
   - no query → **tail**: newest `CHAT_PAGE_MESSAGES` (100) in the last
     `CHAT_WINDOW_BYTES` (512 KB) of the file,
-  - `?after=<cursor>` → **live tail**: only the bytes appended since (`O(new bytes)`),
+  - `?after=<cursor>` → **live tail**: only the bytes appended since, at most `CHAT_MAX_WINDOW_BYTES` (8 MB) of them per call (#486). A client further
+    behind catches up one page per poll from the returned `cursor`; a record larger than the cap is skipped (the cursor jumps past the window) rather than
+    stalling the cursor,
   - `?before=<headOffset>` → **older page**: the 512 KB window ending at that offset.
 
   A tail or older window that holds no message at all doubles backwards until it finds one,
@@ -201,7 +203,7 @@ request for it and `/api/sessions/:id/chat` knows nothing of it. Three behaviour
   move the live cursor. `?after=` past EOF (truncation/rotation) returns `reset: true`
   and the client refetches the tail. Bad/negative/non-integer offsets → 400.
 - **No cache.** Unlike `agents-cache.ts` there's no accumulated reducer state to keep, so
-  every call is already `O(window)` or `O(appended bytes)`. Measured on an 805 KB
+  every call is already `O(window)` or `O(min(appended bytes, 8 MB))`. Measured on an 805 KB
   transcript: tail page ≈ 10 KB, idle poll ≈ 110 bytes.
 - **Filter (`lib/chatFilter.ts`, pure + unit-tested):** the board's segmented switch — the
   same `.seg` the sessions toolbar picks a view with, sized down — sitting in `.chat-foot` beside the `N shown` count it changes (full-width on a phone):
@@ -235,7 +237,7 @@ request for it and `/api/sessions/:id/chat` knows nothing of it. Three behaviour
   bundle is unchanged), keyed by session id in `SessionsView` so switching sessions
   remounts the tail. `useSessionChat` keeps `cursor`/`headOffset` in `createChatPaging` (`client/src/lib/chatPaging.ts`, node-tested in
   `test/chat/chat-paging.test.ts`) — outside React state, so the poll always sees the latest without re-arming — and it holds four rules: no poll before the
-  first page lands (`?after=0` would ship the whole file); one poll out at a time, because `?after=` is stateless and two polls with the same cursor would
+  first page lands (`?after=0` would ship up to 8 MB of the file's start); one poll out at a time, because `?after=` is stateless and two polls with the same cursor would
   append the same page twice when a poll outlasts the refresh interval; an epoch per (re)tail, so a poll or "load older" page fetched before a reset
   is dropped instead of merged into the new transcript; and a failed tail retries. `endTail` answers `land`, `stale` or `failed`, and `failed` — no page, or
   `error: true`, whose cursor 0 must never become `?after=0` — keeps the polls held and arms `retryDue`, so the next tick re-tails where it would have polled.

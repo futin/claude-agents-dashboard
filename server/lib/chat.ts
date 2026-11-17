@@ -3,10 +3,11 @@
  *
  * A transcript is append-only JSONL, so paging is pure byte arithmetic: a fixed
  * `CHAT_WINDOW_BYTES` window ending at EOF is the first page, `cursor` walks
- * forward for the live tail (O(new bytes) per poll), and `headOffset` walks
- * backward one window at a time for older history. No cache is needed — unlike
- * agents-cache.ts there is no accumulated reducer state to keep, every call is
- * already O(window) or O(appended bytes).
+ * forward for the live tail (O(new bytes) per poll, capped at
+ * `CHAT_MAX_WINDOW_BYTES`), and `headOffset` walks backward one window at a time
+ * for older history. No cache is needed — unlike agents-cache.ts there is no
+ * accumulated reducer state to keep, every call is already O(window) or
+ * O(min(appended bytes, 8 MB)).
  *
  * Correctness notes (same rules as agents-cache.ts):
  *  - Offsets are BYTES and lines are split on 0x0A *before* decoding — a
@@ -53,7 +54,9 @@ export const TOOL_BODY_CAP = 20_000;
  * A `full` page is still bounded: a page never reads more than
  * `CHAT_WINDOW_BYTES` (`CHAT_MAX_WINDOW_BYTES` only when that window held no
  * message at all), so lifting the per-message caps raises the worst case from
- * ~200 KB to the window size, not to the transcript size.
+ * ~200 KB to the window size, not to the transcript size. The live tail
+ * (`?after=`) reads at most `CHAT_MAX_WINDOW_BYTES` of appended bytes per
+ * call, so no read of any of the three kinds is bounded by the transcript.
  */
 export interface ChatCaps {
   text: number;
@@ -330,21 +333,30 @@ export function readChatBefore(
 }
 
 /**
- * The live tail: everything appended past `after`. Unlimited by design — the
- * span is one poll interval of appends. `after > size` means the file was
+ * The live tail: what was appended past `after`, at most `maxBytes` of it
+ * (#486). A normal poll appends far less; a client further behind gets one
+ * capped page per poll, each ending on a line boundary, and catches up from
+ * `cursor`. A record starting at `after` and longer than the cap would leave
+ * `cursor` where it was forever, so the cursor jumps to the window's end
+ * instead: the next poll starts mid-record, that fragment fails `JSON.parse`
+ * and is consumed at its newline, and the record is skipped (it is a base64
+ * screenshot, which renders nothing). `after > size` means the file was
  * truncated/rotated, so the cursor is meaningless → `reset`.
  */
-export function readChatAfter(file: string, after: number, caps: ChatCaps = DEFAULT_CAPS): ChatPage | null {
+export function readChatAfter(
+  file: string, after: number, caps: ChatCaps = DEFAULT_CAPS, maxBytes = CHAT_MAX_WINDOW_BYTES
+): ChatPage | null {
   const size = statSize(file);
   if (size === null) return null;
   if (after > size) return { messages: [], cursor: 0, headOffset: 0, hasMore: false, reset: true };
   if (after === size) return { messages: [], cursor: after, headOffset: after, hasMore: after > 0 };
-  const buf = readRange(file, after, size);
+  const end = Math.min(size, after + maxBytes);
+  const buf = readRange(file, after, end);
   if (!buf) return null;
   const parse = parseChatWindow(buf, after, false, caps);
   return {
     messages: parse.items.map(i => i.msg),
-    cursor: parse.consumed,
+    cursor: end < size && parse.consumed === after ? end : parse.consumed,
     headOffset: after,
     hasMore: after > 0
   };

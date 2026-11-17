@@ -427,6 +427,59 @@ export function run(): number {
     assert.strictEqual(page.cursor, fs.statSync(file).size);
   })) p++; else f++;
 
+  // The live tail is capped like the other two reads (#486). A small injected cap keeps
+  // these fixtures small; the oversized-record case below runs at the real cap.
+  const AFTER_CAP = 1000;
+  const manyRecords = Array.from({ length: 40 }, (_, i) => userRec('m' + i, 'message number ' + i + ' 描述'));
+
+  if (test('after=0 on a file larger than the cap reads at most the cap', () => {
+    const file = writeJsonl(manyRecords);
+    const size = fs.statSync(file).size;
+    assert.ok(size > AFTER_CAP + 200);
+    const page = readChatAfter(file, 0, undefined, AFTER_CAP)!;
+    assert.ok(page.cursor > 0 && page.cursor <= AFTER_CAP && page.cursor < size, `cursor ${page.cursor}`);
+    assert.strictEqual(fs.readFileSync(file)[page.cursor - 1], 0x0a); // a line start
+    const lineEnds: number[] = [];
+    let end = 0;
+    for (const r of manyRecords) lineEnds.push(end += Buffer.byteLength(JSON.stringify(r) + '\n'));
+    const oracle = readChatTail(file, 1000)!.messages;
+    assert.deepStrictEqual(page.messages, oracle.filter((_, i) => lineEnds[i] <= page.cursor));
+  })) p++; else f++;
+
+  if (test('catch-up from a capped after equals the unbounded parse', () => {
+    const file = writeJsonl(manyRecords);
+    const size = fs.statSync(file).size;
+    const seen: ChatMessage[] = [];
+    let cursor = 0, calls = 0;
+    while (cursor < size) {
+      if (++calls > 100) throw new Error('catch-up did not terminate');
+      const page = readChatAfter(file, cursor, undefined, AFTER_CAP)!;
+      seen.push(...page.messages);
+      cursor = page.cursor;
+    }
+    assert.ok(calls > 1, `took ${calls} call(s)`);
+    assert.deepStrictEqual(seen, readChatTail(file, 1000)!.messages);
+  })) p++; else f++;
+
+  if (test('a record larger than the after cap does not stall the cursor', () => {
+    const file = writeJsonl([
+      userRec('u0', 'before'),
+      imageRec('i1', CHAT_MAX_WINDOW_BYTES + 1000),
+      userRec('u2', 'after')
+    ]);
+    const size = fs.statSync(file).size;
+    const seen: string[] = [];
+    let cursor = 0, calls = 0;
+    while (cursor < size) {
+      if (++calls > 10) throw new Error('live tail did not terminate');
+      const page = readChatAfter(file, cursor)!;
+      assert.ok(page.cursor > cursor, `cursor stalled at ${cursor}`);
+      seen.push(...page.messages.map(m => m.uuid));
+      cursor = page.cursor;
+    }
+    assert.deepStrictEqual(seen, ['u0', 'u2']);
+  })) p++; else f++;
+
   if (test('cursor past EOF signals reset; cursor at EOF is a no-op', () => {
     const file = writeJsonl([userRec('u1', 'a')]);
     const size = fs.statSync(file).size;
