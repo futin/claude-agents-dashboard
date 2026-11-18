@@ -3504,6 +3504,7 @@ button.chip[aria-pressed="true"]{color:var(--ink);background:var(--strip-hi)}
 .rtn-f-two{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
 .rtn-f-hint{font-size:12px;color:var(--ink3);margin-top:8px;line-height:1.5}
 .rtn-f-hint b{color:var(--ink2);font-weight:500}
+.rtn-f-ctl .rtn-f-gate{margin-top:14px}
 .rtn-pick.rtn-f-ro{cursor:default;border-style:dashed}
 .rtn-pick.rtn-f-add{border-style:dashed;color:var(--ink3)}
 

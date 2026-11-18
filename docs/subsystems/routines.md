@@ -103,6 +103,17 @@ timeout: 30m
 | `model`, `effort`, `allowed-tools`, `max-turns` | claude only, passed through to the CLI |
 | `permission-mode` | claude only: `plan`, `acceptEdits` or `auto`, never anything else (`bypassPermissions` is refused, not clamped); absent means the baked `SYNC_PERMISSION_MODE` |
 | `timeout` | `30s`, `30m` or `2h`; the wrapper kills the step after it; default 60m |
+| `when` | claude only (an error on a `shell` job: `when is only for run: claude`): one shell line the wrapper runs before minting the session — exit 0 launches, 10 skips the step, anything else fails it; its own 60 s limit, never `timeout`. Read raw: no unquoting, no ` #` comment cut |
+
+`when:` is a pre-spawn gate, so a tick with nothing to do costs a `node` call, not a Claude session. backlog-manager's tick jobs carry its peek verdict
+(spec: backlog-manager `docs/superpowers/specs/2026-11-14-tick-session-review-fixes-design.md` §Fix 1b):
+
+```yaml
+when: node "$(node -p "require(process.env.HOME+'/.claude/plugins/installed_plugins.json').plugins['backlog-manager@backlog-manager-marketplace'][0].installPath")/skills/backlog-tick/tools/tick.mjs" decide --peek
+```
+
+The gate repeats every `decide` flag the job's prompt carries (`--max-prs`, `--max-plans`, `--base`, `--lock-ttl`) in the same values, or it skips ticks
+the session would have worked. The wrapper does not parse the prompt to enforce that; the job file is the one place both lines live.
 
 An unknown key is a validation error naming the key. A cron that launchd cannot express (day-of-month and weekday both restricted: cron ORs them, launchd
 ANDs them) is an error when the validating machine is `mac` (`parseJob(name, text, machine)`). Step values and ranges are expanded into a list of `StartCalendarInterval` dicts. The parser, the
@@ -219,13 +230,17 @@ only process that runs a job. In order:
    `refused` (`running`) and exit **75**; any other lock is stale and taken over, and the reader shows that run as lost. The boot id is the seconds of
    `sysctl -n kern.boottime` on mac and `/proc/sys/kernel/random/boot_id` on WSL.
 3. A scheduled fire more than 10 minutes after its slot is marked `late` (never a manual one).
-4. Compute the steps, append `start`, then per step `step-start`, launch in its own process group, wait (kill at `timeout`), `step-end`; then `end`.
+4. Compute the steps, append `start`, then per step: run the `when:` gate if the job has one (`bash -c` in the step's cwd and env, its own process
+   group, killed at 60 s), then `step-start` — with a `session` only when the step will launch — launch in its own process group, wait (kill at
+   `timeout`), `step-end`; then `end`. A gated-out step never mints a session id, exactly like a pin-skipped one. A stop that lands as the gate exits 0
+   still ends the step `stopped`, unlaunched.
 5. Exit 0 if every step passed, **1** if not, and an `end` with `stopped: true` and exit **143**/**130**/**129** on SIGTERM/SIGINT/SIGHUP: the signal goes
    to the current step's process group, which has 10 s to exit before SIGKILL. A usage error is **64**. An error thrown mid-run exits 1 with no `end`
    record, so the run reads as lost.
 
-A step is `ok` when the shell exits 0 or the claude result has `is_error: false`; `skipped` when its pin is missing or unlisted; otherwise `failed`, which
-includes `timeout` and `stopped`. `end.failed` counts every non-ok, non-skipped step, and a run is failed when `failed > 0` or `error` is set.
+A step is `ok` when the shell exits 0 or the claude result has `is_error: false`; `skipped` when its pin is missing or unlisted, or its `when:` gate
+exits 10 (`exit: 10`, `why` the reason: the last non-blank stdout line's string `reason` when it is a JSON object, else that line, else `when: exit 10`); otherwise `failed`, which
+includes `timeout` and `stopped` — a gate's other exits read `when: exit <n>`, `when: signal <SIG>` or `when: timeout`. `end.failed` counts every non-ok, non-skipped step, and a run is failed when `failed > 0` or `error` is set.
 
 The claude step is `claude -p --output-format json --session-id <uuid> --name '<job> · HH:MM'` plus the model, effort, permission mode, allowed tools and max turns from the
 file, the prompt on stdin. The mode is clamped to `SPAWN_MAX_PERMISSION` the way `spawn.ts` does. With `CLAUDE_BIN` unset the run ends with `end.error`
@@ -245,8 +260,8 @@ prompt that needs an answer must say what to do instead. The marker is covered i
 | Kind | Fields |
 |---|---|
 | `start` | `run`, `job`, `machine`, `trigger`, `at`, `slot` (scheduled only), `late`, `steps`, `pid` |
-| `step-start` | `run`, `step`, `repo`, `cwd`, `at`, `session` (claude only) |
-| `step-end` | `run`, `step`, `at`, `ms`, `exit`, `outcome` (`ok`, `failed`, `skipped`, `timeout`, `stopped`), `why`, `tail` (shell: last 20 lines), `cost`, `tokensIn`, `tokensOut`, `turns`, `model` |
+| `step-start` | `run`, `step`, `repo`, `cwd`, `at`, `session` (only when a claude step launched) |
+| `step-end` | `run`, `step`, `at`, `ms`, `exit`, `outcome` (`ok`, `failed`, `skipped`, `timeout`, `stopped`), `why`, `tail` (shell, or a step its `when:` gate ended: last 20 lines), `cost`, `tokensIn`, `tokensOut`, `turns`, `model` |
 | `end` | `run`, `at`, `ms`, `ok`, `failed`, `skipped`, `stopped`, `error` (only when the run failed before its first step) |
 | `refused` | `job`, `at`, `trigger`, `why` (`running`, `file gone`, `invalid: <line>: <message>`, `disabled`; old records may also say `not this machine`), `pid`, `heldBy` |
 
@@ -344,8 +359,9 @@ it stays open with Save disabled and a note that the file is gone on disk, so th
   fetches the row and opens the ChatDrawer, and its failure shows beside the link that was clicked.
 - **Drawer:** `JobDrawer` shows one text two ways, switched by a `Form | File` seg in its header (Form by default). Form is `JobRows`: one summary row per
   setting the job's `run:` kind shows (Schedule, Repos, Script or Prompt, Model, Permission, Limits, Tools), one opened at a time, each control
-  writing only the lines its field owns through the registry in `client/src/lib/routineForm.ts` (Schedule's six presets live in `ScheduleControl`; what a preset click or an edit shows and writes is `routineForm.ts`'s `schedulePick` / `scheduleEdit`). A
-  `/validate` error shows inside the row that owns its line and turns that row's summary red; the rest show under the rows. A value the form cannot show
+  writing only the lines its field owns through the registry in `client/src/lib/routineForm.ts` (Schedule's six presets live in `ScheduleControl`; what a preset click or an edit shows and writes is `routineForm.ts`'s `schedulePick` / `scheduleEdit`).
+  Limits owns `max-turns`, `timeout` and, on a claude job, `when:` as a plain Gate input that reads and writes the line raw (a summary of `gated` when
+  set). A `/validate` error shows inside the row that owns its line and turns that row's summary red; the rest show under the rows. A value the form cannot show
   reads `edit in File`. File is the raw textarea. The text is validated on each keystroke (debounced) in both views; a New job's **Save and install**
   writes `enabled: true` and **Save, keep paused** writes `false`, a New job whose schedule is Manual has a single **Save** (`enabled: true`; nothing
   installs either way), and an edit has one **Save and reconcile**, which writes the text as it stands.
@@ -381,6 +397,7 @@ All class names are `.rtn-` prefixed and colours are theme tokens.
 - `ROUTINES_STATE_ROOT` points the state root somewhere else so a test or a verification run never touches `~/.claude/routines/`. A server using it is
   never an owner (`ownedBy: 'seam'`), so it can read but never install anything.
 - `RUN_ROUTINE_GRACE_MS` shortens the wrapper's 10 s TERM-to-KILL grace in tests; it is a process-env variable and is never baked into a job.
+- `RUN_ROUTINE_WHEN_TIMEOUT_MS` shortens the 60 s `when:` gate limit the same way, and is never baked either.
 - `setRoutineRunner` (reconcile's launcher for `launchctl`, `crontab`, `pgrep`) and `setSpawner` (the same seam `spawn.ts` uses) are how every server
   test fakes the OS; `startRoutines` takes its `deps` for the same reason; the log reader and `Probe` (pid liveness) take injected readers.
 

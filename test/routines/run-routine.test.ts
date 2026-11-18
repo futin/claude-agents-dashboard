@@ -771,6 +771,145 @@ export async function run(): Promise<number> {
     assert.ok(/^invalid: /.test(String(recs[0].why)) && String(recs[0].why).includes('machines'), String(recs[0].why));
   }));
 
+  // --- when: the claude-only pre-spawn gate ---
+
+  const launched = (fx: Fx): boolean => fs.existsSync(path.join(fx.rec, 'argv'));
+  /** One-step run's step-start and step-end, after asserting the log's shape. */
+  const oneStep = (fx: Fx): { ss: any; se: any; end: any } => {
+    const recs = log(fx);
+    assert.deepStrictEqual(kinds(recs), ['start', 'step-start', 'step-end', 'end']);
+    return { ss: recs[1], se: recs[2], end: recs[3] };
+  };
+
+  tally(await test('G1 when: exit 0 → the gate ran in the step cwd with the routine env, then claude launched with the step-start session', () => {
+    const fx = setup();
+    const cwd = repo(fx, 'g1');
+    claudeJob(fx, 'gated', [`cwd: ${cwd}`, 'when: printf \'%s %s\' "$PWD" "$CLAUDE_DASHBOARD_ROUTINE" > "$FAKE_REC/gate"']);
+    assert.strictEqual(wrap(fx, ['gated', '--trigger', 'manual']).code, 0);
+    assert.strictEqual(fs.readFileSync(path.join(fx.rec, 'gate'), 'utf8'), `${fs.realpathSync(cwd)} gated`);
+    const { ss, se } = oneStep(fx);
+    assert.match(ss.session, UUID_RE);
+    assert.strictEqual(after(argvOf(fx), '--session-id'), ss.session);
+    assert.strictEqual(se.outcome, 'ok');
+  }));
+
+  tally(await test('G2 when: exit 10 with a JSON reason line (then blank lines) → skipped, why = reason, tail keeps the line, no session', () => {
+    const fx = setup();
+    claudeJob(fx, 'gated', ['when: printf \'%s\\n\\n\' \'{"verdict":"idle","reason":"nothing to do: x"}\'; exit 10']);
+    assert.strictEqual(wrap(fx, ['gated', '--trigger', 'manual']).code, 0);
+    assert.ok(!launched(fx), 'claude launched');
+    const { ss, se, end } = oneStep(fx);
+    assert.ok(!('session' in ss), 'session in step-start');
+    assert.strictEqual(se.outcome, 'skipped');
+    assert.strictEqual(se.exit, 10);
+    assert.strictEqual(se.why, 'nothing to do: x');
+    assert.ok(String(se.tail).includes('{"verdict":"idle","reason":"nothing to do: x"}'), se.tail);
+    assert.strictEqual(end.skipped, 1);
+    assert.strictEqual(end.failed, 0);
+  }));
+
+  tally(await test('G3 when: exit 10 with plain text → why is stdout\'s last line, not stderr\'s', () => {
+    const fx = setup();
+    claudeJob(fx, 'gated', ['when: echo first; echo stack down; echo noise >&2; exit 10']);
+    wrap(fx, ['gated', '--trigger', 'manual']);
+    const { ss, se } = oneStep(fx);
+    assert.ok(!('session' in ss));
+    assert.strictEqual(se.why, 'stack down');
+    assert.ok(!launched(fx));
+  }));
+
+  tally(await test('G4 when: exit 3 → failed "when: exit 3", not launched, wrapper exit 1', () => {
+    const fx = setup();
+    claudeJob(fx, 'gated', ['when: exit 3']);
+    assert.strictEqual(wrap(fx, ['gated', '--trigger', 'manual']).code, 1);
+    const { ss, se } = oneStep(fx);
+    assert.ok(!('session' in ss));
+    assert.deepStrictEqual([se.outcome, se.why, se.exit], ['failed', 'when: exit 3', 3]);
+    assert.ok(!launched(fx));
+  }));
+
+  tally(await test('G5 a gate past RUN_ROUTINE_WHEN_TIMEOUT_MS → timeout "when: timeout", its process group gone, not launched', async () => {
+    const fx = setup();
+    claudeJob(fx, 'gated', ['when: sleep 30 & echo $! > "$FAKE_REC/sleep.pid"; wait', 'timeout: 1h']);
+    const t0 = Date.now();
+    assert.strictEqual(wrap(fx, ['gated', '--trigger', 'manual'], { RUN_ROUTINE_WHEN_TIMEOUT_MS: '500' }).code, 1);
+    assert.ok(Date.now() - t0 < 4000, `took ${Date.now() - t0} ms`);
+    const { ss, se } = oneStep(fx);
+    assert.ok(!('session' in ss));
+    assert.deepStrictEqual([se.outcome, se.why, se.exit], ['timeout', 'when: timeout', null]);
+    assert.ok(await gone(readPid(path.join(fx.rec, 'sleep.pid'))), 'sleep still alive');
+    assert.ok(!launched(fx));
+  }));
+
+  tally(await test('G6 when: exit 10 printing nothing → skipped, why "when: exit 10"', () => {
+    const fx = setup();
+    claudeJob(fx, 'gated', ['when: exit 10']);
+    wrap(fx, ['gated', '--trigger', 'manual']);
+    const { ss, se } = oneStep(fx);
+    assert.ok(!('session' in ss));
+    assert.deepStrictEqual([se.outcome, se.why], ['skipped', 'when: exit 10']);
+  }));
+
+  tally(await test('G7 SIGTERM while the gate runs → stopped, end.stopped, exit 143, the gate\'s child gone, not launched', async () => {
+    const fx = setup();
+    claudeJob(fx, 'gated', ['when: sleep 30 & echo $! > "$FAKE_REC/sleep.pid"; wait']);
+    const kid = spawn(process.execPath, [WRAPPER, 'gated', '--trigger', 'manual'], { env: envFor(fx), stdio: 'ignore' });
+    kids.push(kid);
+    const exited = new Promise<number | null>((r) => kid.on('exit', (code) => r(code)));
+    const pidFile = path.join(fx.rec, 'sleep.pid');
+    await waitFor(() => fs.existsSync(pidFile) && fs.readFileSync(pidFile, 'utf8').trim() !== '');
+    kid.kill('SIGTERM');
+    assert.strictEqual(await exited, 143);
+    const { ss, se, end } = oneStep(fx);
+    assert.ok(!('session' in ss));
+    assert.strictEqual(se.outcome, 'stopped');
+    assert.strictEqual(end.stopped, true);
+    assert.ok(await gone(readPid(pidFile)), 'sleep still alive');
+    assert.ok(!launched(fx));
+  }));
+
+  tally(await test('G8 a pin-skipped step never runs its gate', () => {
+    const fx = setup();
+    writePins(fx, [{ dirName: '-r-a', name: 'a', path: repo(fx, 'a'), listed: true }]);
+    claudeJob(fx, 'gated', ['foreach: [ghost]', 'when: touch "$FAKE_REC/marker"']);
+    assert.strictEqual(wrap(fx, ['gated', '--trigger', 'manual']).code, 0);
+    assert.ok(!fs.existsSync(path.join(fx.rec, 'marker')), 'the gate ran');
+    assert.strictEqual(oneStep(fx).se.why, 'not pinned');
+  }));
+
+  tally(await test('G9 a gate killed by a signal → failed "when: signal SIGKILL", exit null, not launched', () => {
+    const fx = setup();
+    claudeJob(fx, 'gated', ['when: kill -KILL $$']);
+    assert.strictEqual(wrap(fx, ['gated', '--trigger', 'manual']).code, 1);
+    const { ss, se } = oneStep(fx);
+    assert.ok(!('session' in ss));
+    assert.deepStrictEqual([se.outcome, se.why, se.exit], ['failed', 'when: signal SIGKILL', null]);
+    assert.ok(!launched(fx));
+  }));
+
+  tally(await test('G10 a missing cwd fails "no such cwd" before the gate runs, with no session', () => {
+    const fx = setup();
+    claudeJob(fx, 'gated', [`cwd: ${path.join(fx.home, 'nope')}`, 'when: touch "$FAKE_REC/marker"']);
+    assert.strictEqual(wrap(fx, ['gated', '--trigger', 'manual']).code, 1);
+    const { ss, se } = oneStep(fx);
+    assert.ok(!('session' in ss));
+    assert.strictEqual(se.outcome, 'failed');
+    assert.ok(String(se.why).startsWith('no such cwd'), se.why);
+    assert.ok(!fs.existsSync(path.join(fx.rec, 'marker')), 'the gate ran');
+  }));
+
+  tally(await test('G11 a gate that stops its wrapper and exits 0 → stopped, exit 143, not launched', () => {
+    for (let k = 0; k < 3; k++) {
+      const fx = setup();
+      claudeJob(fx, 'gated', ['when: kill -TERM $PPID; exit 0']);
+      assert.strictEqual(wrap(fx, ['gated', '--trigger', 'manual']).code, 143);
+      const { ss, se } = oneStep(fx);
+      assert.ok(!('session' in ss));
+      assert.strictEqual(se.outcome, 'stopped');
+      assert.ok(!launched(fx), 'claude launched');
+    }
+  }));
+
   tally(await test('a job name outside [a-z0-9-]+ is a usage error: exit 64, nothing logged, no path touched', () => {
     const fx = setup();
     for (const bad of ['../evil', 'Upper', '']) {

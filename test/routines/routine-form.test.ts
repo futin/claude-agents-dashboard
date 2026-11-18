@@ -293,23 +293,77 @@ export function run(): number {
 
   t('limits: read and kind-aware summaries', () => {
     const lm = FIELDS.limits;
-    assert.deepStrictEqual(lm.read(SKILL), { maxTurns: '60', timeout: '30m' });
-    assert.deepStrictEqual(lm.summary({ maxTurns: '60', timeout: '30m' }, ctx), { text: '60 turns · 30m timeout', tone: 'set' });
+    assert.deepStrictEqual(lm.read(SKILL), { maxTurns: '60', timeout: '30m', when: null });
+    assert.deepStrictEqual(lm.summary({ maxTurns: '60', timeout: '30m', when: null }, ctx), { text: '60 turns · 30m timeout', tone: 'set' });
     const none = lm.read('---\nrun: claude\n---\n');
-    assert.deepStrictEqual(none, { maxTurns: null, timeout: null });
-    assert.deepStrictEqual(lm.summary({ maxTurns: null, timeout: null }, ctx), { text: 'No turn limit · 1h timeout (default)', tone: 'dim' });
-    assert.deepStrictEqual(lm.summary({ maxTurns: null, timeout: null }, { pinCount: 0, kind: 'shell' }), { text: '1h timeout (default)', tone: 'dim' });
-    assert.deepStrictEqual(lm.summary({ maxTurns: '60', timeout: '2h' }, { pinCount: 0, kind: 'shell' }), { text: '2h timeout', tone: 'set' });
+    assert.deepStrictEqual(none, { maxTurns: null, timeout: null, when: null });
+    assert.deepStrictEqual(lm.summary({ maxTurns: null, timeout: null, when: null }, ctx), { text: 'No turn limit · 1h timeout (default)', tone: 'dim' });
+    assert.deepStrictEqual(lm.summary({ maxTurns: null, timeout: null, when: null }, { pinCount: 0, kind: 'shell' }), { text: '1h timeout (default)', tone: 'dim' });
+    assert.deepStrictEqual(lm.summary({ maxTurns: '60', timeout: '2h', when: null }, { pinCount: 0, kind: 'shell' }), { text: '2h timeout', tone: 'set' });
+    assert.deepStrictEqual(lm.summary({ maxTurns: null, timeout: null, when: 'exit 0' }, ctx), { text: 'No turn limit · 1h timeout (default) · gated', tone: 'set' });
   });
 
   t('limits: blank removes, a value writes in place', () => {
     const lm = FIELDS.limits;
     const at = lineOf(SKILL, 'timeout:') - 1;
-    const out = lm.write(SKILL, { maxTurns: '60', timeout: '2h' });
+    const out = lm.write(SKILL, { maxTurns: '60', timeout: '2h', when: null });
     assert.strictEqual(out.split('\n')[at], SKILL.split('\n')[at].replace('30m', '2h'));
     onlyLineChanged(SKILL, out, at);
-    assert.strictEqual(lm.write(SKILL, { maxTurns: '', timeout: '30m' }), SKILL.split('\n').filter(l => !l.startsWith('max-turns:')).join('\n'));
-    assert.strictEqual(lm.write(SHELL, { maxTurns: null, timeout: '2h' }), SHELL.replace('enabled: true\n', 'enabled: true\ntimeout: 2h\n'));
+    assert.strictEqual(lm.write(SKILL, { maxTurns: '', timeout: '30m', when: null }), SKILL.split('\n').filter(l => !l.startsWith('max-turns:')).join('\n'));
+    assert.strictEqual(lm.write(SHELL, { maxTurns: null, timeout: '2h', when: null }), SHELL.replace('enabled: true\n', 'enabled: true\ntimeout: 2h\n'));
+  });
+
+  // --- limits: the when: gate (raw shell line: never unquoted, never comment-cut) ---
+
+  t('F5 when: set lands after timeout, clear removes it, a timeout edit leaves it byte-identical', () => {
+    const lm = FIELDS.limits;
+    const set = lm.write(SKILL, { maxTurns: '60', timeout: '30m', when: 'node x.mjs decide --peek' });
+    const lines = set.split('\n');
+    assert.strictEqual(lines[lineOf(SKILL, 'timeout:')], 'when: node x.mjs decide --peek');
+    assert.strictEqual(parseJob('a', set, 'mac').job?.when, 'node x.mjs decide --peek');
+    assert.strictEqual(lm.write(set, { maxTurns: '60', timeout: '30m', when: null }), SKILL);
+    assert.strictEqual(lm.write(set, { maxTurns: '60', timeout: '30m', when: '  ' }), SKILL);
+    const at = lineOf(set, 'timeout:') - 1;
+    const edited = lm.write(set, { maxTurns: '60', timeout: '2h', when: 'node x.mjs decide --peek' });
+    onlyLineChanged(set, edited, at);
+  });
+
+  t('F6 when: with quotes reads back exactly and writes verbatim on a file without it', () => {
+    const lm = FIELDS.limits;
+    const cmd = '"$HOME/x" decide --base "main"';
+    const withIt = SKILL.replace(/(timeout:[^\n]*\n)/, `$1when: ${cmd}\n`);
+    assert.strictEqual((lm.read(withIt) as { when: string | null }).when, cmd);
+    const out = lm.write(SKILL, { maxTurns: '60', timeout: '30m', when: cmd });
+    assert.ok(out.split('\n').includes(`when: ${cmd}`));
+    assert.strictEqual(parseJob('a', out, 'mac').job?.when, cmd);
+    assert.strictEqual((lm.read(out) as { when: string | null }).when, cmd);
+  });
+
+  t('F7 when: with a # reads back exactly and writes verbatim on a file without it', () => {
+    const lm = FIELDS.limits;
+    const cmd = 'echo "a #b"; exit 10';
+    const withIt = SKILL.replace(/(timeout:[^\n]*\n)/, `$1when: ${cmd}\n`);
+    assert.strictEqual((lm.read(withIt) as { when: string | null }).when, cmd);
+    const out = lm.write(SKILL, { maxTurns: '60', timeout: '30m', when: cmd });
+    assert.ok(out.split('\n').includes(`when: ${cmd}`));
+    assert.strictEqual(parseJob('a', out, 'mac').job?.when, cmd);
+  });
+
+  t('F8 replacing a when: holding a # writes exactly the new line, nothing re-appended', () => {
+    const lm = FIELDS.limits;
+    const withIt = SKILL.replace(/(timeout:[^\n]*\n)/, '$1when: echo "a #b"; exit 10\n');
+    const out = lm.write(withIt, { maxTurns: '60', timeout: '30m', when: 'true' });
+    const at = lineOf(withIt, 'when:') - 1;
+    assert.strictEqual(out.split('\n')[at], 'when: true');
+    onlyLineChanged(withIt, out, at);
+    const crlfIn = crlf(withIt);
+    assert.strictEqual(lm.write(crlfIn, { maxTurns: '60', timeout: '30m', when: 'true' }).split('\n')[at], 'when: true\r');
+  });
+
+  t('when: is routed to the limits row', () => {
+    const text = SHELL.replace('enabled: true\n', 'enabled: true\nwhen: true\n');
+    const r = parseJob('a', text, 'mac');
+    assert.deepStrictEqual(routeErrors(text, r.errors, 'shell').byField.limits, [{ line: lineOf(text, 'when:'), message: 'when is only for run: claude' }]);
   });
 
   t('limits: the timeout unit is the file\'s, the pick before any timeout, and none for an unparsed one', () => {

@@ -2326,6 +2326,11 @@ export interface RoutineJob {
   allowedTools: string[] | null;
   maxTurns: number | null;
   timeoutMs: number;
+  /**
+   * `claude` only: a pre-spawn gate, one shell line run with `bash -c` before the session is minted. Exit 0 launches, 10 skips the step (the gate's
+   * reason as `why`), anything else fails it. Kept raw — no unquoting, no ` #` comment cut. Null when absent.
+   */
+  when: string | null;
   /** Everything after the frontmatter, trimmed: the prompt for `claude`, the whole body for `shell`. */
   body: string;
   /** `shell` only: the inner text of the body's first ```bash fence. */

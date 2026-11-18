@@ -573,8 +573,12 @@ export function pinOutcome(last: RoutineRun | null, pin: string): Pill | null {
   return step ? stepPill(step, last!.state) : null;
 }
 
-/** The last non-blank line of a shell step's output, or its `why`: the one mono line a failed step shows under its name. */
+/**
+ * The last non-blank line of a shell step's output, or its `why`: the one mono line a failed step shows under its name. A skipped step and a `when:`
+ * gate's verdict show `why` — the runner already pulled the reason out of the gate's output, which `tail` holds raw (a JSON line, for a tick).
+ */
 export function stepErrLine(step: RoutineStep): string | null {
+  if (step.why && (step.outcome === 'skipped' || step.why.startsWith('when: '))) return step.why;
   const tail = step.tail?.split(/\r?\n/).map(l => l.trim()).filter(Boolean).pop();
   return tail ?? step.why ?? null;
 }
