@@ -9,7 +9,7 @@
  * Exit 0 every step ok (or a refusal), 1 a step failed or the run failed before its first step, 75 the job's lock is held by a live wrapper,
  * 143 SIGTERM (130 SIGINT, 129 SIGHUP, handled the same way), 64 a usage error. The environment is exactly what reconcile bakes: PATH, HOME,
  * CLAUDE_BIN, SPAWN_MAX_PERMISSION, SYNC_PERMISSION_MODE, ROUTINE_MACHINE, ROUTINES_DIR. `RUN_ROUTINE_GRACE_MS` (not baked) is a test seam for the
- * 10 s TERM→KILL grace.
+ * 10 s TERM→KILL grace, `RUN_ROUTINE_WHEN_TIMEOUT_MS` (not baked) one for the 60 s `when:` gate limit.
  *
  * An error thrown mid-run (a full disk under `append`) exits 1 without an `end` record; the server's fold reads that run as lost, which is the truth.
  *
@@ -33,6 +33,10 @@ const TAIL_LINES = 20;
 const TAIL_MAX_CHARS = 8192;
 const WHY_MAX_CHARS = 300;
 const KILL_GRACE_MS = Number(process.env.RUN_ROUTINE_GRACE_MS) > 0 ? Number(process.env.RUN_ROUTINE_GRACE_MS) : 10_000;
+// A `when:` gate's own limit, never the job's `timeout:` — a gate is a quick check, and a hung one must not hold the job for an hour.
+const WHEN_TIMEOUT_MS = Number(process.env.RUN_ROUTINE_WHEN_TIMEOUT_MS) > 0 ? Number(process.env.RUN_ROUTINE_WHEN_TIMEOUT_MS) : 60_000;
+// The gate's "skip this step" exit code; 0 launches, anything else fails the step.
+const WHEN_SKIP_EXIT = 10;
 // setTimeout clamps anything above 2^31-1 ms to 1 ms; a timeout that long is "never" in practice.
 const MAX_TIMER_MS = 2 ** 31 - 1;
 const GROUP_POLL_MS = 50;
@@ -113,6 +117,15 @@ const lastLine = (s) => lines(s).pop() ?? '';
 const short = (s) => (s.length > WHY_MAX_CHARS ? s.slice(0, WHY_MAX_CHARS - 1) + '…' : s);
 /** Local `HH:MM` of a run's start, for the session name. */
 const hhmm = (ms) => { const d = new Date(ms); return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; };
+
+/** A gate's skip reason out of its last stdout line: the string `reason` of a JSON object (tick.mjs's verdict line), else the line as printed. */
+function reasonOf(line) {
+  try {
+    const v = JSON.parse(line);
+    if (v && typeof v === 'object' && !Array.isArray(v) && typeof v.reason === 'string') return v.reason;
+  } catch { /* plain text */ }
+  return line;
+}
 
 function tailOf(text) {
   const lines = text.replace(/\n+$/, '').split('\n').slice(-TAIL_LINES).join('\n');
@@ -276,10 +289,13 @@ class Wrapper {
     if (planned.error) { finish({ error: planned.error }); return 1; }
     for (let i = 0; i < steps.length && !this.stopping; i++) {
       const step = steps[i];
-      const session = job.run === 'claude' && !step.skip ? randomUUID() : undefined;
       const s0 = Date.now();
+      // The gate runs before the session id is minted and before step-start is written: a gated-out step must leave no session id anywhere,
+      // exactly like a pin-skipped one, or the Sessions board and kaizen look for a transcript that never existed.
+      const early = step.skip ? { exit: null, outcome: 'skipped', why: step.skip } : job.run === 'claude' && job.when ? await this.gate(job, step.cwd) : null;
+      const session = job.run === 'claude' && !early ? randomUUID() : undefined;
       this.append({ kind: 'step-start', run: runId, step: i, repo: step.repo, cwd: step.cwd, at: new Date(s0).toISOString(), ...(session ? { session } : {}) });
-      const result = step.skip ? { exit: null, outcome: 'skipped', why: step.skip } : await this.launch(job, step.cwd, session, `${this.job} · ${hhmm(t0)}`);
+      const result = early ?? await this.launch(job, step.cwd, session, `${this.job} · ${hhmm(t0)}`);
       const at = Date.now();
       this.append({ kind: 'step-end', run: runId, step: i, at: new Date(at).toISOString(), ms: at - s0, ...result });
       if (result.outcome === 'ok') counts.ok++;
@@ -289,6 +305,24 @@ class Wrapper {
     finish({});
     if (this.stopping) return this.stopExit;
     return counts.failed > 0 ? 1 : 0;
+  }
+
+  /**
+   * Run a claude job's `when:` line with `bash -c` in the step's cwd and env. Null = launch the step; otherwise the step's result. Exit 10 skips, with
+   * the reason from stdout's last non-empty line (a JSON object's string `reason`, else the line itself).
+   */
+  async gate(job, cwd) {
+    if (!fs.existsSync(cwd)) return { exit: null, outcome: 'failed', why: short(`no such cwd ${cwd}`) };
+    const env = { ...process.env, CLAUDE_DASHBOARD_ROUTINE: this.job };
+    const r = await this.spawnStep('bash', ['-c', job.when], { cwd, env }, null, WHEN_TIMEOUT_MS, true);
+    const tail = tailOf(r.combined);
+    if (r.outcome === 'timeout') return { exit: null, outcome: 'timeout', why: 'when: timeout', tail };
+    // A stop that lands after the gate's leader exited is ignored by spawnStep's `end`, so `stopping` is checked here too: never launch past a stop.
+    if (r.outcome || this.stopping) return { exit: null, outcome: 'stopped', why: 'stopped', tail };
+    if (r.code === 0) return null;
+    if (r.code === WHEN_SKIP_EXIT) return { exit: WHEN_SKIP_EXIT, outcome: 'skipped', why: short(reasonOf(lastLine(r.stdout)) || `when: exit ${WHEN_SKIP_EXIT}`), tail };
+    if (r.code === null) return { exit: null, outcome: 'failed', why: `when: signal ${r.signal}`, tail };
+    return { exit: r.code, outcome: 'failed', why: `when: exit ${r.code}`, tail };
   }
 
   async launch(job, cwd, session, name) {
