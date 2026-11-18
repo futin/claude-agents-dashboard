@@ -509,6 +509,11 @@ export function run(): number {
     assert.strictEqual(stepErrLine(step({ tail: 'one\nfatal: no auth\n\n', why: 'exit 1' })), 'fatal: no auth');
     assert.strictEqual(stepErrLine(step({ tail: null, why: 'timeout' })), 'timeout');
     assert.strictEqual(stepErrLine(step({ tail: null, why: null })), null);
+    // A when: gate's verdict: its why is the reason the runner worked out, the tail only the raw output behind it.
+    const json = '{"verdict":"idle","reason":"nothing to do: x"}';
+    assert.strictEqual(stepErrLine(step({ outcome: 'skipped', tail: json, why: 'nothing to do: x' })), 'nothing to do: x');
+    assert.strictEqual(stepErrLine(step({ outcome: 'timeout', tail: 'waiting on api', why: 'when: timeout' })), 'when: timeout');
+    assert.strictEqual(stepErrLine(step({ outcome: 'failed', tail: 'boom', why: 'when: exit 3' })), 'when: exit 3');
   });
 
   t('the job drawer: Escape, the backdrop and Back all read one keep-open predicate, and a refused Back re-arms', () => {
