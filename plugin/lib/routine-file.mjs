@@ -14,8 +14,10 @@ export const RESERVED = new Set(['runs', 'validate', 'reconcile', 'reveal']);
 export const LABEL_PREFIX = 'com.claude-dashboard.routine.';
 const KEY_RE = /^([A-Za-z0-9_-]+):(.*)$/;
 const KNOWN = new Set([
-    'cron', 'run', 'foreach', 'cwd', 'enabled', 'model', 'effort', 'permission-mode', 'allowed-tools', 'max-turns', 'timeout',
+    'cron', 'run', 'foreach', 'cwd', 'enabled', 'model', 'effort', 'permission-mode', 'allowed-tools', 'max-turns', 'timeout', 'when',
 ]);
+/** Keys whose value is a shell line: read raw (the rest of the line, trimmed) — a ` #` or a pair of quotes is shell syntax there, not YAML. */
+export const RAW_KEYS = new Set(['when']);
 const LIST_KEYS = new Set(['allowed-tools']);
 /** The modes a routine may run under, lowest to highest: the runner clamps a file's mode to its ceiling by this order. */
 export const PERMISSION_MODES = ['plan', 'acceptEdits', 'auto'];
@@ -78,7 +80,7 @@ export function parseJob(name, text, machine) {
         }
         const key = m[1];
         const rest = m[2].trimStart();
-        const value = unquote(rest.slice(0, scalarEnd(rest)));
+        const value = RAW_KEYS.has(key) ? rest.trimEnd() : unquote(rest.slice(0, scalarEnd(rest)));
         i++;
         // A block under the key (nested list/map, or `>` / `|` scalar) is consumed whole so it is reported once, on the key's own line.
         const blockScalar = /^[>|][+-]?$/.test(value);
@@ -231,6 +233,15 @@ export function parseJob(name, text, machine) {
         else
             push(toE.line, 'timeout must be like 30s, 30m or 2h');
     }
+    // A shell job can test for itself; the gate exists to spare a claude session.
+    let when = null;
+    const whenE = requireValue('when');
+    if (whenE) {
+        if (runKind === 'shell')
+            push(whenE.line, 'when is only for run: claude');
+        else
+            when = whenE.value;
+    }
     // body + script
     const bodyLines = lines.slice(end + 1);
     const body = bodyLines.join('\n').trim();
@@ -251,7 +262,8 @@ export function parseJob(name, text, machine) {
     if (errors.length > 0 || cron === null || runKind === null)
         return done(null);
     return done({
-        name, cron, run: runKind, foreach, cwd: cwdE ? cwdE.value : null, enabled, model, effort, permissionMode, allowedTools, maxTurns, timeoutMs, body, script,
+        name, cron, run: runKind, foreach, cwd: cwdE ? cwdE.value : null, enabled, model, effort, permissionMode, allowedTools, maxTurns, timeoutMs, when, body,
+        script,
     });
 }
 /**

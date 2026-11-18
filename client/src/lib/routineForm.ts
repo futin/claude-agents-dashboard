@@ -45,11 +45,12 @@ export type Script = string;
 export type Prompt = string;
 export type ModelEffort = { model: string | null; effort: string | null };
 export type Permission = string | null;
-export type Limits = { maxTurns: string | null; timeout: string | null };
+/** `when` is the claude-only gate line, raw (see {@link rawScalar}). */
+export type Limits = { maxTurns: string | null; timeout: string | null; when: string | null };
 export type Tools = string[];
 
 /** Where an inserted key lands: after the nearest key before it in this order that the file has. The parser's own key order. */
-const KEY_ORDER = ['cron', 'run', 'foreach', 'cwd', 'enabled', 'model', 'effort', 'permission-mode', 'allowed-tools', 'max-turns', 'timeout'];
+const KEY_ORDER = ['cron', 'run', 'foreach', 'cwd', 'enabled', 'model', 'effort', 'permission-mode', 'allowed-tools', 'max-turns', 'timeout', 'when'];
 
 const strip = (l: string): string => l.replace(/\r$/, '');
 // The parser's own notion of a block line under a key, so "unreadable" means exactly what the validator would refuse as a nested value.
@@ -134,6 +135,31 @@ function scalar(text: string, key: string): Read<string | null> {
   if (/^[>|][+-]?$/.test(v.value)) return UNREADABLE;
   if (v.value === '' && blockFollows(d, v.line - 1)) return UNREADABLE;
   return v.value;
+}
+
+/**
+ * A shell-line key's value as the parser reads it (`RAW_KEYS`): the rest of the line, trimmed — no unquoting, no ` #` comment cut, since both are shell
+ * syntax there. Null when absent or empty, UNREADABLE for a block under it.
+ */
+function rawScalar(text: string, key: string): Read<string | null> {
+  const d = doc(text);
+  if (!d) return UNREADABLE;
+  const at = keyIndex(d, key);
+  if (at === -1) return null;
+  const v = strip(d.lines[at]).slice(key.length + 1).trim();
+  if (/^[>|][+-]?$/.test(v) || (v === '' && blockFollows(d, at))) return UNREADABLE;
+  return v || null;
+}
+
+/** Set or remove a shell-line key: an existing line is replaced whole (nothing after a ` #` survives, it was part of the old command). */
+function setRawKey(text: string, key: string, value: string | null): string {
+  const d = doc(text);
+  if (!d) return text;
+  const at = keyIndex(d, key);
+  if (value === null || at === -1) return setKey(text, key, value);
+  const lines = [...d.lines];
+  lines[at] = `${key}: ${value}${lines[at].endsWith('\r') ? '\r' : ''}`;
+  return lines.join('\n');
 }
 
 /** A key's inline list `[a, b]`: null when absent or empty, UNREADABLE for any other shape. */
@@ -324,24 +350,29 @@ const permission: FieldDef<Permission> = {
 };
 
 const limits: FieldDef<Limits> = {
-  id: 'limits', label: 'Limits', keys: ['max-turns', 'timeout'], kinds: kindsOf('limits'),
+  id: 'limits', label: 'Limits', keys: ['max-turns', 'timeout', 'when'], kinds: kindsOf('limits'),
   read(text) {
     const mt = scalar(text, 'max-turns');
     const to = scalar(text, 'timeout');
-    if (mt === UNREADABLE || to === UNREADABLE) return UNREADABLE;
-    return { maxTurns: mt || null, timeout: to || null };
+    const wh = rawScalar(text, 'when');
+    if (mt === UNREADABLE || to === UNREADABLE || wh === UNREADABLE) return UNREADABLE;
+    return { maxTurns: mt || null, timeout: to || null, when: wh };
   },
   write(text, v) {
     const now = limits.read(text);
     if (now === UNREADABLE) return text;
-    return writeKeys(text, { 'max-turns': now.maxTurns, timeout: now.timeout }, { 'max-turns': v.maxTurns, timeout: v.timeout });
+    const out = writeKeys(text, { 'max-turns': now.maxTurns, timeout: now.timeout }, { 'max-turns': v.maxTurns, timeout: v.timeout });
+    // Raw, unlike writeKeys: quoting a shell line to protect a ` #` would change the command the gate runs.
+    const when = v.when?.trim() || null;
+    return when === now.when ? out : setRawKey(out, 'when', when);
   },
   summary(v, ctx) {
     const parts: string[] = [];
-    // max-turns only means something to claude; a shell or kind-less job shows the timeout alone.
+    // max-turns and the gate only mean something to claude; a shell or kind-less job shows the timeout alone.
     if (ctx.kind === 'claude') parts.push(v.maxTurns ? `${v.maxTurns} turns` : 'No turn limit');
     parts.push(v.timeout ? `${v.timeout} timeout` : `${DEFAULT_TIMEOUT_MS / 3_600_000}h timeout (default)`);
-    const set = (ctx.kind === 'claude' && v.maxTurns) || v.timeout;
+    if (ctx.kind === 'claude' && v.when) parts.push('gated');
+    const set = (ctx.kind === 'claude' && (v.maxTurns || v.when)) || v.timeout;
     return { text: parts.join(' · '), tone: set ? 'set' : 'dim' };
   },
 };
@@ -519,7 +550,7 @@ export const FIELDS: {
 /** Which row owns a frontmatter key's line. */
 const OWNER: Record<string, FieldId> = {
   cron: 'schedule', foreach: 'repos', cwd: 'repos', model: 'model', effort: 'model', 'permission-mode': 'permission',
-  'allowed-tools': 'tools', 'max-turns': 'limits', timeout: 'limits',
+  'allowed-tools': 'tools', 'max-turns': 'limits', timeout: 'limits', when: 'limits',
 };
 
 /**

@@ -25,6 +25,7 @@ function job(over: Partial<RoutineJob> & Pick<RoutineJob, 'name' | 'cron' | 'run
     allowedTools: null,
     maxTurns: null,
     timeoutMs: 30 * MIN,
+    when: null,
     body: '',
     script: null,
     ...over

@@ -40,7 +40,7 @@ function mkRun(over: Partial<RoutineRun> = {}): RoutineRun {
 function mkJob(over: Partial<RoutineJob> = {}): RoutineJob {
   return {
     name: 'j', cron: '0 7 * * 1-5', run: 'shell', foreach: 'pinned', cwd: null, enabled: true, model: null, effort: null, permissionMode: null,
-    allowedTools: null, maxTurns: null, timeoutMs: 600_000, body: 'x', script: 'x', ...over
+    allowedTools: null, maxTurns: null, timeoutMs: 600_000, when: null, body: 'x', script: 'x', ...over
   };
 }
 

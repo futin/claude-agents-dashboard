@@ -135,6 +135,7 @@ function LimitsControl({ v, kind, disabled, put }: { v: Limits; kind: FormKind; 
   const turns = useDraft<HTMLInputElement>(v.maxTurns ?? '', s => put({ ...v, maxTurns: s.trim() || null }), s => WHOLE_COUNT.test(s));
   const amount = useDraft<HTMLInputElement>(view.amount, s => put({ ...v, timeout: s.trim() ? `${s.trim()}${view.commit}` : null }),
     s => WHOLE_COUNT.test(s));
+  const gate = useDraft<HTMLInputElement>(v.when ?? '', s => put({ ...v, when: s.trim() || null }));
   const pickUnit = (u: TimeoutUnit) => {
     setUnitPick(u);
     const timeout = timeoutWithUnit(v.timeout, u);
@@ -159,6 +160,19 @@ function LimitsControl({ v, kind, disabled, put }: { v: Limits; kind: FormKind; 
         </div>
       </div>
       <div className="rtn-f-hint">Blank timeout = the 1h default.</div>
+      {kind === 'claude' && (
+        <>
+          <div className="rtn-field rtn-f-last">
+            <span className="rtn-label">Gate</span>
+            <div className="rtn-f-row">
+              <span className="rtn-in rtn-f-grow">
+                <input aria-label="Gate" placeholder="shell line run before the session" disabled={disabled} spellCheck={false} autoCapitalize="off" {...gate} />
+              </span>
+            </div>
+          </div>
+          <div className="rtn-f-hint">Runs first, in the step's folder: exit 0 launches, 10 skips the step, anything else fails it. Blank = always launch.</div>
+        </>
+      )}
     </>
   );
 }

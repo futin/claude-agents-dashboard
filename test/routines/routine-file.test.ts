@@ -55,7 +55,7 @@ export function run(): number {
     assert.deepStrictEqual(j, {
       name: 'nightly-sync', cron: '0 22 * * *', run: 'claude', foreach: 'pinned', cwd: null, enabled: true,
       model: 'opus', effort: 'medium', permissionMode: 'acceptEdits', allowedTools: ['Bash', 'Read'], maxTurns: 60, timeoutMs: 1_800_000,
-      body: '/git-sync', script: null,
+      when: null, body: '/git-sync', script: null,
     });
   })) p++; else f++;
 
@@ -304,6 +304,33 @@ export function run(): number {
 
   if (test('checkPins: an unpinned name is not an error here (the wrapper logs skipped: not pinned)', () => {
     assert.deepStrictEqual(checkPins(withForeach(['ghost']), [pin('dir-a', 'lookout')]), []);
+  })) p++; else f++;
+
+  // --- when: (the claude-only pre-spawn gate) ---
+
+  if (test('F1 when: on a claude job parses to the raw command line', () => {
+    assert.strictEqual(must('a', claude('when: node x.mjs decide --peek')).when, 'node x.mjs decide --peek');
+  })) p++; else f++;
+
+  if (test('F2 no when: line -> when is null', () => {
+    assert.strictEqual(must('a', claude()).when, null);
+  })) p++; else f++;
+
+  if (test('F3 when: on a shell job is an error on its line naming the key', () => {
+    assert.deepStrictEqual(errs('a', shell('when: true')), [{ line: 4, message: 'when is only for run: claude' }]);
+  })) p++; else f++;
+
+  if (test('F4 an empty when: is the empty-value error', () => {
+    assert.deepStrictEqual(errs('a', claude('when:')), [{ line: 4, message: 'when is empty' }]);
+  })) p++; else f++;
+
+  if (test('F6 when: keeps its quotes: no unquoting of shell syntax', () => {
+    assert.strictEqual(must('a', claude('when: "$HOME/x" decide --base "main"')).when, '"$HOME/x" decide --base "main"');
+  })) p++; else f++;
+
+  if (test('F7 when: keeps a # inside the command: no comment cut; outer blanks trimmed', () => {
+    assert.strictEqual(must('a', claude('when: echo "a #b"; exit 10')).when, 'echo "a #b"; exit 10');
+    assert.strictEqual(must('a', claude('when:   exit 10   ')).when, 'exit 10');
   })) p++; else f++;
 
   if (test('serializeEnabled: flips true to false and every other byte stays equal', () => {
