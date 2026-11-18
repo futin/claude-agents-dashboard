@@ -162,13 +162,11 @@ function LimitsControl({ v, kind, disabled, put }: { v: Limits; kind: FormKind; 
       <div className="rtn-f-hint">Blank timeout = the 1h default.</div>
       {kind === 'claude' && (
         <>
-          <div className="rtn-field rtn-f-last">
+          <div className="rtn-field rtn-f-last rtn-f-gate">
             <span className="rtn-label">Gate</span>
-            <div className="rtn-f-row">
-              <span className="rtn-in rtn-f-grow">
-                <input aria-label="Gate" placeholder="shell line run before the session" disabled={disabled} spellCheck={false} autoCapitalize="off" {...gate} />
-              </span>
-            </div>
+            <span className="rtn-in">
+              <input aria-label="Gate" placeholder="shell line run before the session" disabled={disabled} spellCheck={false} autoCapitalize="off" {...gate} />
+            </span>
           </div>
           <div className="rtn-f-hint">Runs first, in the step's folder: exit 0 launches, 10 skips the step, anything else fails it. Blank = always launch.</div>
         </>
