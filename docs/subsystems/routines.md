@@ -239,7 +239,7 @@ only process that runs a job. In order:
    record, so the run reads as lost.
 
 A step is `ok` when the shell exits 0 or the claude result has `is_error: false`; `skipped` when its pin is missing or unlisted, or its `when:` gate
-exits 10 (`exit: 10`, `why` the reason: a JSON last stdout line's string `reason`, else that line, else `when: exit 10`); otherwise `failed`, which
+exits 10 (`exit: 10`, `why` the reason: the last non-blank stdout line's string `reason` when it is a JSON object, else that line, else `when: exit 10`); otherwise `failed`, which
 includes `timeout` and `stopped` — a gate's other exits read `when: exit <n>`, `when: signal <SIG>` or `when: timeout`. `end.failed` counts every non-ok, non-skipped step, and a run is failed when `failed > 0` or `error` is set.
 
 The claude step is `claude -p --output-format json --session-id <uuid> --name '<job> · HH:MM'` plus the model, effort, permission mode, allowed tools and max turns from the
@@ -359,7 +359,7 @@ it stays open with Save disabled and a note that the file is gone on disk, so th
   fetches the row and opens the ChatDrawer, and its failure shows beside the link that was clicked.
 - **Drawer:** `JobDrawer` shows one text two ways, switched by a `Form | File` seg in its header (Form by default). Form is `JobRows`: one summary row per
   setting the job's `run:` kind shows (Schedule, Repos, Script or Prompt, Model, Permission, Limits, Tools), one opened at a time, each control
-  writing only the lines its field owns through the registry in `client/src/lib/routineForm.ts` (Schedule's six presets live in `ScheduleControl`; what a preset click or an edit shows and writes is `routineForm.ts`'s `schedulePick` / `scheduleEdit`). A
+  writing only the lines its field owns through the registry in `client/src/lib/routineForm.ts` (Schedule's six presets live in `ScheduleControl`; what a preset click or an edit shows and writes is `routineForm.ts`'s `schedulePick` / `scheduleEdit`).
   Limits owns `max-turns`, `timeout` and, on a claude job, `when:` as a plain Gate input that reads and writes the line raw (a summary of `gated` when
   set). A `/validate` error shows inside the row that owns its line and turns that row's summary red; the rest show under the rows. A value the form cannot show
   reads `edit in File`. File is the raw textarea. The text is validated on each keystroke (debounced) in both views; a New job's **Save and install**
