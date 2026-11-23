@@ -71,6 +71,7 @@ function isAgentLaunch(b) {
   if (b.name === 'Task' || b.name === 'Agent') return true;
   return !!(b.input && typeof b.input.subagent_type === 'string');
 }
+function isSendMessage(b) { return !!b && b.type === 'tool_use' && b.name === 'SendMessage'; }
 function contentText(content) {
   if (typeof content === 'string') return content;
   if (!Array.isArray(content)) return '';
@@ -88,11 +89,14 @@ function toolResultText(b) {
   return '';
 }
 const AGENT_ID_RE = /agentId:\s*([A-Za-z0-9]+)/;
+const RESUMED_ID_RE = /"resumedAgentId"\s*:\s*"([A-Za-z0-9]+)"/;
 const TASK_ID_RE = /<task-id>\s*([A-Za-z0-9]+)\s*<\/task-id>/;
 const STATUS_RE = /<status>\s*([a-z_]+)\s*<\/status>/i;
 const SUBAGENT_TOKENS_RE = /<subagent_tokens>\s*(\d+)\s*<\/subagent_tokens>/;
 const TOOL_USES_RE = /<tool_uses>\s*(\d+)\s*<\/tool_uses>/;
 const DURATION_MS_RE = /<duration_ms>\s*(\d+)\s*<\/duration_ms>/;
+// The `<status>` values that end a run. Closing only on `completed` left a failed, killed or stopped run open, so its spend was never counted (#420, #506).
+const TERMINAL_STATUSES = new Set(['completed', 'failed', 'killed', 'stopped']);
 
 // Untyped records (fixtures, older transcripts) still count.
 function isConversationRecord(rec) { return typeof rec.type !== 'string' || rec.type === 'user' || rec.type === 'assistant'; }
@@ -118,7 +122,7 @@ function parseRecordEvents(rec) {
   if (flat.includes('<task-notification>')) {
     const idM = flat.match(TASK_ID_RE), stM = flat.match(STATUS_RE);
     if (idM && stM) events.push({
-      kind: 'notify', agentId: idM[1], completed: stM[1].toLowerCase() === 'completed', ts,
+      kind: 'notify', agentId: idM[1], terminal: TERMINAL_STATUSES.has(stM[1].toLowerCase()), ts,
       tokens: intFromMatch(flat, SUBAGENT_TOKENS_RE), toolUses: intFromMatch(flat, TOOL_USES_RE),
       exactDurationMs: intFromMatch(flat, DURATION_MS_RE)
     });
@@ -134,6 +138,9 @@ function parseRecordEvents(rec) {
         type: typeof input.subagent_type === 'string' ? input.subagent_type : '',
         description: typeof input.description === 'string' ? input.description : '', ts
       });
+    } else if (isSendMessage(b) && typeof b.id === 'string') {
+      const input = b.input || {};
+      events.push({ kind: 'send', id: b.id, summary: typeof input.summary === 'string' ? input.summary : '', ts });
     } else if (b.type === 'tool_result' && typeof b.tool_use_id === 'string') {
       const text = toolResultText(b);
       const t = tur && typeof tur === 'object' ? tur : null;
@@ -141,8 +148,10 @@ function parseRecordEvents(rec) {
       const isAsyncAck = (t && (t.isAsync === true || t.status === 'async_launched')) || /Async agent launched/i.test(text);
       let agentId = t && typeof t.agentId === 'string' ? t.agentId : null;
       if (isAsyncAck && !agentId) { const m = text.match(AGENT_ID_RE); agentId = m ? m[1] : null; }
+      let resumedAgentId = t && typeof t.resumedAgentId === 'string' ? t.resumedAgentId : null;
+      if (!resumedAgentId) { const m = text.match(RESUMED_ID_RE); resumedAgentId = m ? m[1] : null; }
       events.push({
-        kind: 'result', toolUseId: b.tool_use_id, ts, isAsyncAck: !!isAsyncAck, agentId,
+        kind: 'result', toolUseId: b.tool_use_id, ts, isAsyncAck: !!isAsyncAck, agentId, resumedAgentId,
         tokens: isAsyncAck ? null : finiteOrNull(t && t.totalTokens),
         toolUses: isAsyncAck ? null : finiteOrNull(t && t.totalToolUseCount),
         exactDurationMs: isAsyncAck ? null : finiteOrNull(t && t.totalDurationMs)
@@ -155,28 +164,53 @@ function parseRecordEvents(rec) {
 function readAgents(filePath) {
   let text;
   try { text = fs.readFileSync(filePath, 'utf8'); } catch { return null; }
-  const launches = [], byToolUseId = new Map(), byAgentId = new Map();
-  // Both indexes are emptied as they are consumed, so only this set recognizes a launch replayed after a compaction (#174).
-  const seenLaunch = new Set();
+  const launches = [], byToolUseId = new Map(), byAgentId = new Map(), sends = new Map();
+  // The indexes are emptied as they are consumed, so only this set recognizes a launch or send replayed after a compaction (#174).
+  const seen = new Set();
+  // A resume proves the previous run stopped: one still open (no terminal notification seen) closes at the resume time, with no figures of its own —
+  // left open, nothing could ever close it (#420). The resumed row takes over byAgentId, so the next notification for that id is its own.
+  const resume = (id, agentId, send, resultTs) => {
+    const prev = byAgentId.get(agentId);
+    if (prev && prev.endedAt === null) prev.endedAt = send.ts ?? resultTs;
+    const origin = launches.find(x => x.agentId === agentId && !x.resumed);
+    const l = {
+      id, type: origin ? origin.type : '', description: send.summary || (origin ? origin.description : ''),
+      startedAt: send.ts, endedAt: null, exactDurationMs: null, tokens: null, toolUses: null, agentId, resumed: true
+    };
+    launches.push(l);
+    byAgentId.set(agentId, l);
+  };
   const apply = (ev) => {
+    if (ev.kind === 'launch' || ev.kind === 'send') {
+      if (seen.has(ev.id)) return;
+      seen.add(ev.id);
+    }
     if (ev.kind === 'launch') {
-      if (seenLaunch.has(ev.id)) return;
-      seenLaunch.add(ev.id);
-      const l = { id: ev.id, type: ev.type, description: ev.description, startedAt: ev.ts, endedAt: null, exactDurationMs: null, tokens: null, toolUses: null, agentId: null };
+      const l = { id: ev.id, type: ev.type, description: ev.description, startedAt: ev.ts, endedAt: null, exactDurationMs: null, tokens: null, toolUses: null, agentId: null, resumed: false };
       launches.push(l);
       if (!byToolUseId.has(ev.id)) byToolUseId.set(ev.id, l);
       return;
     }
+    if (ev.kind === 'send') {
+      if (!sends.has(ev.id)) sends.set(ev.id, { summary: ev.summary, ts: ev.ts });
+      return;
+    }
     if (ev.kind === 'result') {
       const l = byToolUseId.get(ev.toolUseId);
-      if (!l) return;
+      if (!l) {
+        const send = sends.get(ev.toolUseId);
+        if (!send) return;
+        sends.delete(ev.toolUseId);
+        if (ev.resumedAgentId) resume(ev.toolUseId, ev.resumedAgentId, send, ev.ts);
+        return;
+      }
       byToolUseId.delete(ev.toolUseId);
       l.agentId = ev.agentId;
       if (ev.isAsyncAck) { if (ev.agentId && !byAgentId.has(ev.agentId)) byAgentId.set(ev.agentId, l); }
       else { l.endedAt = ev.ts; l.tokens = ev.tokens; l.toolUses = ev.toolUses; l.exactDurationMs = ev.exactDurationMs; }
       return;
     }
-    if (!ev.completed || !ev.ts) return;
+    if (!ev.terminal || !ev.ts) return;
     const l = byAgentId.get(ev.agentId);
     if (!l) return;
     byAgentId.delete(ev.agentId);
@@ -195,7 +229,8 @@ function readAgents(filePath) {
     const diff = Number.isFinite(startMs) && Number.isFinite(endMs) ? endMs - startMs : null;
     return {
       id: l.id, type: l.type, description: l.description, status: l.endedAt ? 'done' : 'running',
-      startedAt: l.startedAt, endedAt: l.endedAt, durationMs: l.exactDurationMs ?? diff, tokens: l.tokens, toolUses: l.toolUses, agentId: l.agentId
+      startedAt: l.startedAt, endedAt: l.endedAt, durationMs: l.exactDurationMs ?? diff, tokens: l.tokens, toolUses: l.toolUses, agentId: l.agentId,
+      resumed: l.resumed
     };
   });
   agents.reverse();
@@ -250,7 +285,8 @@ function readSubagentUsage(mainPath) {
   return out;
 }
 // A finished launch takes its transcript sum unless that sums below the harness figure (file
-// still being written) — then the harness figure, as a lower bound. Unclaimed files are left out.
+// still being written) — then the harness figure, as a lower bound. Unclaimed files are left out, and so is a resumed row: its runs write into the
+// transcript the original launch already claims.
 function subagentSpend(filePath) {
   const files = readSubagentUsage(filePath);
   const byAgentId = new Map(files.map(f => [f.agentId, f]));
@@ -258,7 +294,7 @@ function subagentSpend(filePath) {
   const usage = emptyTotals();
   let tokens = 0, fallbackCount = 0, unknownTokenCount = 0;
   const added = new Set();
-  const agents = (readAgents(filePath) || []).map(a => {
+  const agents = (readAgents(filePath) || []).filter(a => !a.resumed).map(a => {
     const file = (a.agentId && byAgentId.get(a.agentId)) || byToolUseId.get(a.id);
     let figure = null;
     if (a.status === 'done') {

@@ -488,9 +488,23 @@ export function run(): number {
       taskRec('t4', 'Explore', '2026-07-01T10:03:00Z'),
       resultRec('t4', '2026-07-01T10:03:01Z', { content: 'Async agent launched successfully.\nagentId: aK4 (internal)' }),
       { type: 'queue-operation', operation: 'enqueue', timestamp: '2026-07-01T10:04:00Z',
-        content: '<task-notification>\n<task-id>aK4</task-id>\n<status>completed</status>\n</task-notification>' }
+        content: '<task-notification>\n<task-id>aK4</task-id>\n<status>completed</status>\n</task-notification>' },
+      // Async, ended by a non-completed terminal status (#506).
+      taskRec('t5', 'Explore', '2026-07-01T10:05:00Z'),
+      resultRec('t5', '2026-07-01T10:05:01Z', { content: 'Async agent launched successfully.\nagentId: aK5 (internal)' }),
+      humanRec('<task-notification>\n<task-id>aK5</task-id>\n<status>failed</status>\n</task-notification>', '2026-07-01T10:06:00Z'),
+      // Async, resumed by SendMessage while still open: the resume closes the launch row and is no row of its own (#506).
+      taskRec('t6', 'Explore', '2026-07-01T10:07:00Z'),
+      resultRec('t6', '2026-07-01T10:07:01Z', { content: 'Async agent launched successfully.\nagentId: aK6 (internal)' }),
+      { timestamp: '2026-07-01T10:08:00Z', message: { role: 'assistant', content: [{ type: 'tool_use', id: 'smK6', name: 'SendMessage', input: { to: 'aK6', summary: 'again', message: 'x' } }] } },
+      resultRec('smK6', '2026-07-01T10:08:01Z', { toolUseResult: { success: true, resumedAgentId: 'aK6' } })
     ]);
     subagentFile(file, 'aK4', [usageRec({ input_tokens: 9 }, '2026-07-01T10:03:10Z', { id: 'msg_k4' })]);
+    subagentFile(file, 'aK5', [usageRec({ input_tokens: 11 }, '2026-07-01T10:05:10Z', { id: 'msg_k5' })]);
+    subagentFile(file, 'aK6', [
+      usageRec({ input_tokens: 13 }, '2026-07-01T10:07:10Z', { id: 'msg_k6a' }),
+      usageRec({ input_tokens: 17 }, '2026-07-01T10:08:10Z', { id: 'msg_k6b' })
+    ]);
     subagentFile(file, 'aK1', [usageRec({ input_tokens: 5, cache_read_input_tokens: 600 }, '2026-07-01T10:00:10Z', { id: 'msg_k' })]);
     subagentFile(file, 'aK3', [usageRec({ output_tokens: 40 }, '2026-07-01T10:02:10Z', { id: 'msg_k3' })], { toolUseId: 't3' });
     const kaizen = path.resolve(path.dirname(new URL(import.meta.url).pathname), '../../plugin/skills/kaizen/kaizen.mjs');
@@ -498,7 +512,7 @@ export function run(): number {
     assert.strictEqual(r.status, 0, r.stderr);
     const k = JSON.parse(r.stdout);
     const a = analyzeSession(file)!;
-    assert.strictEqual(a.subagentTotals.tokens, 724);
+    assert.strictEqual(a.subagentTotals.tokens, 765);
     assert.strictEqual(a.subagentTotals.unknownTokenCount, 0);
     assert.deepStrictEqual(k.subagentTotals, a.subagentTotals);
     assert.deepStrictEqual(k.bySubagent.map((s: any) => [s.id, s.agentId, s.tokens]), a.bySubagent.map(s => [s.id, s.agentId, s.tokens]));
