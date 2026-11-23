@@ -49,7 +49,7 @@ curl -s localhost:4173/api/health
 ```
 
 `{"ok":true,...,"remoteAnswer":true}` means the hook will engage — if `remoteAnswer` is
-false, check the **remote answers** pill in the toolbar and `REMOTE_ANSWER` in your
+false, check the **remote answers** switch (the Board card of the Sessions aside, or the Settings tab) and `REMOTE_ANSWER` in your
 config. The same probe carries `writeAccess` and `tokenRequired`, true when *this caller*
 would need the token (a curl on this machine never does), so you can see that a token file
 is expected without waiting for a 403. Then drive the hook itself (`IDLE_SECS=0` forces the away branch, 20s window):
@@ -102,5 +102,5 @@ without waiting for a real question.
     - scripts/ask-remote-hook.sh
     - server/api.ts
   kind: workflow
-  verified: 24f8d773dd459e02b1e4ef4a093aed285939555c
+  verified: 7b75ae1917c8e25249c5d0ab4e16f13da9a22b82
 -->

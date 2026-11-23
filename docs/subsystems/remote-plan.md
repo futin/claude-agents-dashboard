@@ -52,7 +52,7 @@ for, and the hook's unreadable-idle-is-at-desk rule.
 | `scripts/plan-remote-hook.sh` | `PermissionRequest[ExitPlanMode]` hook. Same three gates as `ask-remote-hook.sh`, plus its own `tool_name` re-check (a matcher is config; never trust it alone). Its POST body also carries `permissionMode`, unused here and read only by the [push notifier](push-notify.md)'s auto-mode layer |
 | `POST /api/plans/wait` | `servePlanWait` — held open until a verdict, deadline, or supersede |
 | `GET /api/sessions/:id/plan` | `serveSessionPlan` — what the browser polls, at the configured refresh rate (`usePendingPlan` reads `refreshMs` from `useSettings` through `usePendingReply`, the poll all three reply hooks share) |
-| `POST /api/sessions/:id/plan-answer` | `serveSessionPlanAnswer` — `{verdict: 'reject', feedback}` or `'dismiss'`. Behind the remote-answer switch and the write gate (a session write path) |
+| `POST /api/sessions/:id/plan-answer` | `serveSessionPlanAnswer` — `{planId, verdict: 'reject', feedback}` or `{planId, verdict: 'dismiss'}`. Behind the remote-answer switch and the write gate (a session write path) |
 | `server/lib/plans.ts` | RAM-only store; same state machine as `pending.ts` with an injected `resolve` |
 | `scan.ts` `ScanOptions.planIds` | sets `Session.remotePlan` and forces `status: 'question'` |
 | chat button + `PlanPanel` | the row's chat button labelled `Plan?` and the pinned drawer panel |
@@ -202,7 +202,7 @@ persisted: a re-proposed plan always arrives expanded.
 
 ## Install
 
-`pnpm hooks:install` covers this hook and the other four
+`pnpm hooks:install` covers this hook and the other five
 ([hooks-setup](../workflows/hooks-setup.md)); by hand it is:
 
 ```bash
@@ -233,5 +233,5 @@ same failure mode, and the same one setting as
     - client/src/hooks/usePendingPlan.ts
     - client/src/lib/holds.ts
   kind: subsystem
-  verified: 24f8d773dd459e02b1e4ef4a093aed285939555c
+  verified: 7b75ae1917c8e25249c5d0ab4e16f13da9a22b82
 -->

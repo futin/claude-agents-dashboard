@@ -266,7 +266,8 @@ server/
   lib/tick-caps.ts       the `tick-capped` push: reads each backlog tick's `last-decide.json`, one push per capped episode, `tick-capped.json`
   lib/hub-widgets.ts  the Lookout hub tiles (usage gauge, sessions list, Git pending list), declared through lookout-widgets
   lib/scan-snapshot.ts  `scanSnapshot`: one session scan with every RAM-store injection and the held-wait terminal sweep — what /api/sessions
-                  and the hub's sessions tile both serve; it publishes its walk to transcript-listing.ts
+                  and the hub's sessions tile both serve; it publishes its walk to transcript-listing.ts, and `sharedProcProbe` is the one async
+                  `ps`/`lsof` probe those readers share (joined while in flight, reused for `PROBE_TTL_MS`)
   lib/transcript-listing.ts  the one held transcript listing (≤ 3 s old) every request path but the poll reads: `sharedListing`,
                   `publishListing`, `resolveTranscript` for id lookups
   lib/account.ts      `~/.claude.json` → `oauthAccount` as display strings, behind GET /api/account; fail-open to null
@@ -385,11 +386,11 @@ client/src/
                   polls share, and `pollFetch`, the 30s bound every guarded poll's request carries),
                   heldBody (which timeline body a pinned panel folds), markdown, configsEntries,
                   format, settings, persistedReset (Settings › Reset's reach into mounted usePersistedState holders),
-                  sections, deepLink, dictation, openFolder (the Open folder key's status → note), spawnOptions, textCaps (the composers' length caps, each the server's; pinned by `test/guards/client-server-caps.test.ts`), spawnResponse (`parseSpawnResponse`, the `POST /api/spawn` 200 body → its `SpawnResponse` branch; `spawnOutcome`, what `useSpawn` applies for a result), launchSurface (which launch surfaces the form offers, its initial pick, and the desktop copy), pins, resume, pace, usageProfile,
+                  sections, deepLink, dictation, openFolder (the Open folder key's status → note), spawnOptions, textCaps (the composers' length caps and the chat drawer's truncation caps behind Settings' Chat messages hint, each the server's; pinned by `test/guards/client-server-caps.test.ts`), settingsBounds (Settings › Shared's number-field bounds, the server's, pinned by the same guard), spawnResponse (`parseSpawnResponse`, the `POST /api/spawn` 200 body → its `SpawnResponse` branch; `spawnOutcome`, what `useSpawn` applies for a result), launchSurface (which launch surfaces the form offers, its initial pick, and the desktop copy), pins, resume, pace, usageProfile,
                   usageRatesFormat, usageHistory (the History tab's step path, ticks and figures), panelCollapse, surface, walkChart (the headroom
                   chart's geometry), walkRows (the same walk as day rows), holds,
                   composer (that keyboard's pure rules and the session's latest `wrap_up` suggestion), modelLabel (`claude-opus-5-5` → `Opus 5.5`),
-                  notifyRows (Settings' push-event rows), writeRefusal (a 403's token vs read-only-network kind, and the flags each kind sets), postWrite (every write hook's POST and its one read of the reply), pinWrite (what a pin write's reply means to `usePins`),
+                  notifyRows (Settings' push-event rows), pushTest (the line Settings' test push leaves, from its `postWrite` result), writeRefusal (a 403's token vs read-only-network kind, and the flags each kind sets), postWrite (every write hook's POST and its one read of the reply), pinWrite (what a pin write's reply means to `usePins`),
                   pendingReply (the reply panels' phase machine), writeStatus (Settings › Local ›
                   Connection's write-access line), serverSettingsSave (what a `POST /api/settings` leaves on the Settings page: the failure line, the 403 flags, the echoed settings and which keys
                   still read `saving…`),
@@ -524,5 +525,5 @@ that area:
     - vite.config.ts
     - package.json
   kind: overview
-  verified: 96b0f64a8c117ae160ba90bfdd34ef357890a8a1
+  verified: 7b75ae1917c8e25249c5d0ab4e16f13da9a22b82
 -->

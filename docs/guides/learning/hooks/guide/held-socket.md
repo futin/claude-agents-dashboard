@@ -35,7 +35,7 @@ sequenceDiagram
 The whole mechanism is six lines:
 
 ```ts
-// server/api.ts:811-817
+// server/api.ts:819-825
 let questionId = '';
 res.on('close', () => { if (questionId) cancelPending(sessionId, questionId); });
 questionId = register(sessionId, questions, clampTimeout(body.timeoutMs), (result: WaitResult) => {
@@ -48,7 +48,7 @@ if (res.destroyed) cancelPending(sessionId, questionId);
 **Why the push comes last:**
 
 ```ts
-// server/api.ts:819-820
+// server/api.ts:827-828
 // Last, so a refused registration never pushes. Returns immediately — the
 // response above stays held either way.
 ```
@@ -90,7 +90,7 @@ before writing to it.
 ## 3. `settle` is the entire state machine
 
 ```ts
-// server/lib/wait-store.ts:90-97
+// server/lib/wait-store.ts:102-109
   const settle = (entry: E, result: R): void => {
     if (settled.has(entry)) return;
     settled.add(entry);
@@ -131,7 +131,7 @@ stateDiagram-v2
 interrupted — shows up only as a closed socket:
 
 ```ts
-// server/api.ts:807-810
+// server/api.ts:815-818
 // The hook's socket closing IS the signal that nobody is waiting any more
 // (session interrupted, hook killed, CLI hook timeout). Listen before
 // registering, and re-check after, so a socket that dies during the body read
@@ -154,7 +154,7 @@ export function cancel(sessionId: string, questionId: string): void {
 The shared store runs that predicate, and drops the entry only when it passes:
 
 ```ts
-// server/lib/wait-store.ts:109-115
+// server/lib/wait-store.ts:127-133
     cancel(sessionId, isCurrent) {
       const entry = entries.get(sessionId);
       if (!entry || !isCurrent(entry)) return;

@@ -345,5 +345,5 @@ then turn tailnet trust off and use the token; behind a *public* tunnel it is th
     - client/src/components/sessions/atoms.tsx
     - client/src/lib/holds.ts
   kind: subsystem
-  verified: 96b0f64a8c117ae160ba90bfdd34ef357890a8a1
+  verified: 7b75ae1917c8e25249c5d0ab4e16f13da9a22b82
 -->

@@ -362,7 +362,7 @@ this figure does not, because transcripts are append-only, a replayed turn dedup
   `serveSessionDetail` / the configs file endpoint, `serveConfigsFile`).
 - **⚠️ Route order:** the detail regex `/^\/api\/sessions\/([^/?]+)/` in `index.ts` also
   matches `/api/sessions/:id/chat` and `/api/sessions/:id/spend` and would answer them with agents — both matches
-  **must** stay above it.
+  **must** stay above it. So must the PR card's `$`-anchored `/api/sessions/:id/pr` match.
 
 <!-- docs-sync:
   sources:
@@ -397,5 +397,5 @@ this figure does not, because transcripts are append-only, a replayed turn dedup
     - client/src/components/ComposerSuggestion.tsx
     - client/src/lib/markdown.ts
   kind: subsystem
-  verified: 24f8d773dd459e02b1e4ef4a093aed285939555c
+  verified: 7b75ae1917c8e25249c5d0ab4e16f13da9a22b82
 -->

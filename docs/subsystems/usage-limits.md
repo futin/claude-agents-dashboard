@@ -1682,6 +1682,9 @@ day's. The strip mirrors three server constants under the same rule as
 `test/guards/client-server-caps.test.ts`. The legend
 prints once under the table, from those constants, and a seventh glossary entry
 (`daily`) defines the strip; the ⓘ on its label reads the same string.
+Every other server rule the card's copy states is mirrored and pinned the same way and interpolated where the copy says it (#532): `DOMINANCE_PCT`,
+`CURRENT_MIN_WINDOWS` and `BASELINE_DAYS` from `usage-rate.ts` (the empty card's `RATES_EMPTY_TEXT` names the first two), and the boost detector's peak hours, ratio,
+run lengths and `BOOST_DAYS` from `usage-boost.ts` — so no sentence types a number the server decides.
 
 Every string the page says is a pure function in
 `client/src/lib/usageRatesFormat.ts`, so the statements are testable without a
@@ -1852,5 +1855,5 @@ Accepted limitations:
     - client/src/components/HeaderAccount.tsx
     - client/src/components/usage/
   kind: subsystem
-  verified: 142439e51a92c5c5faebaf0c867bc5a36fef7c57
+  verified: 7b75ae1917c8e25249c5d0ab4e16f13da9a22b82
 -->
