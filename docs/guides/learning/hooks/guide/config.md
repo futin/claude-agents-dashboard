@@ -272,14 +272,14 @@ should mean. Turning the switch off releases what it owns; it does not orphan it
 
 | Constant | Value | Where |
 |---|---|---|
-| `DEFAULT_IDLE_SECS` | 60 | [`settings.ts:42`](../../../../../server/lib/settings.ts) |
-| `MAX_IDLE_SECS` | 3600 | `settings.ts:44` |
-| `DEFAULT_ANSWER_SECS` | 600 | `settings.ts:47` |
-| `MIN_ANSWER_SECS` / `MAX_ANSWER_SECS` | 5 / 1800 | `settings.ts:49-50` |
+| `DEFAULT_IDLE_SECS` | 60 | [`settings.ts:45`](../../../../../server/lib/settings.ts) |
+| `MAX_IDLE_SECS` | 3600 | `settings.ts:47` |
+| `DEFAULT_ANSWER_SECS` | 600 | `settings.ts:50` |
+| `MIN_ANSWER_SECS` / `MAX_ANSWER_SECS` | 5 / 1800 | `settings.ts:52-53` |
 | `DEFAULT_TIMEOUT_MS` | 600_000 | [`pending.ts:46`](../../../../../server/lib/pending.ts) |
 | `MIN_TIMEOUT_MS` / `MAX_TIMEOUT_MS` | 5_000 / 1_800_000 | `pending.ts:47-48` |
 | `PERMISSION_TTL_MS` | 30 min | [`permissions.ts:26`](../../../../../server/lib/permissions.ts) |
-| idle reaper interval | 5s | [`wait-store.ts:81`](../../../../../server/lib/wait-store.ts) |
+| idle reaper interval | 5s | [`wait-store.ts:93`](../../../../../server/lib/wait-store.ts) |
 | `TEXT_CAP` (follow-up) | 4000 | `messages.ts:27` |
 | `QUESTION_CAP` / `LABEL_CAP` / `DESCRIPTION_CAP` | 2000 / 200 / 500 | `pending.ts:39-41` |
 | CLI Stop-block cap | 8 | `CLAUDE_CODE_STOP_HOOK_BLOCK_CAP` |
