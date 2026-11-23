@@ -5,8 +5,8 @@ import type { PinHandlers, TipHandlers } from '../../hooks/useFloatingTip';
 import { useFloatingTip } from '../../hooks/useFloatingTip';
 import { useUsageProfile } from '../../hooks/useUsageProfile';
 import {
-  cellTitle, DAY_ORDER, DAYS, earliestWeightMs, forecastStats, nextWeekStartMs,
-  profileGlossary, profileProgress, profileTip, TRUST_FLOOR_MIN, type ProfileTerm
+  cellTitle, DAY_ORDER, DAYS, earliestWeightMs, fmtLeft, fmtPts, forecastStats, nextWeekStartMs,
+  profileGlossary, profileProgress, profileStep, profileTip, TRUST_FLOOR_MIN, type ProfileTerm
 } from '../../lib/usageProfile';
 import {
   absentText, crossingX, dayTicks, fmtWalkHour, headroomScale, headSegments, hitRect,
@@ -71,24 +71,6 @@ import { Band, Definitions, RowHead, Sheet, SheetDivider, StatStrip } from './Sh
  */
 
 /**
- * Which of the five ramp steps a weight lands on.
- *
- * A weight of zero gets **no** step: it is a bare bordered cell, because "you
- * never work this hour" is a different statement from "you work 15% of it", and
- * a five-step ramp starting at 0 would render both as q1. Three visually
- * distinct states, which is the point: empty = measured idle, hatched = no
- * evidence, filled = measured active.
- */
-function stepOf(weight: number): string {
-  if (weight <= 0.02) return '';           // measured idle — the bare track
-  if (weight <= 0.2) return 'q1';
-  if (weight <= 0.4) return 'q2';
-  if (weight <= 0.6) return 'q3';
-  if (weight <= 0.8) return 'q4';
-  return 'q5';
-}
-
-/**
  * Hours as the tables print them: whole where they are whole, one decimal where
  * the reset cuts an hour in half. A column of `13 / 24 / 24 / 8.0` reads as a
  * mistake; `13 / 24 / 24 / 8` beside a real `7.5` does not.
@@ -96,18 +78,6 @@ function stepOf(weight: number): string {
 function hrs(n: number): string {
   const r = Math.round(n * 10) / 10;
   return Number.isInteger(r) ? String(r) : r.toFixed(1);
-}
-
-/** Points spent, always as a subtraction. The minus is U+2212, not a hyphen. */
-function pts(n: number): string {
-  const v = Math.abs(n) < 0.05 ? 0 : n;
-  return `${v > 0 ? '−' : ''}${Math.abs(v).toFixed(1)}`;
-}
-
-/** Points left — negative past empty, and set in the same minus as `pts`. */
-function left(n: number): string {
-  const v = Math.round(n);
-  return v < 0 ? `−${Math.abs(v)}` : String(v);
 }
 
 /**
@@ -294,8 +264,8 @@ function WalkTableRows({ table, globalMean }: { table: WalkTable; globalMean: nu
             <td data-l="Hours" className="n">{hrs(r.hours)}</td>
             <td data-l="Active h" className="n">{r.activeHours.toFixed(1)}</td>
             <td data-l="Weight source" className="src">{weightSource(r, globalMean)}</td>
-            <td data-l="Spent" className="n">{pts(r.spent)}</td>
-            <td data-l="Left" className={r.endHead < 0 ? 'n over' : 'n'}>{left(r.endHead)}</td>
+            <td data-l="Spent" className="n">{fmtPts(r.spent)}</td>
+            <td data-l="Left" className={r.endHead < 0 ? 'n over' : 'n'}>{fmtLeft(r.endHead)}</td>
             <td className="barcell">
               <i
                 className={r.learned === 0 ? 'bar assumed' : 'bar'}
@@ -321,8 +291,8 @@ function WalkTableRows({ table, globalMean }: { table: WalkTable; globalMean: nu
           <td data-l="Weight source" className="src">
             {totals.learned} measured · {totals.slices - totals.learned} at the mean
           </td>
-          <td data-l="Spent" className="n">{pts(totals.spent)}</td>
-          <td data-l="Left" className={totals.endHead < 0 ? 'n over' : 'n'}>{left(totals.endHead)}</td>
+          <td data-l="Spent" className="n">{fmtPts(totals.spent)}</td>
+          <td data-l="Left" className={totals.endHead < 0 ? 'n over' : 'n'}>{fmtLeft(totals.endHead)}</td>
           <td className="barcell">
             <i className="bar hatch" style={{ width: '100%' }} />
           </td>
@@ -361,7 +331,7 @@ function HourGrid({ wide, cells, tipHandlers }: {
     return (
       <div
         key={`${day}-${hour}`}
-        className={`up-cell ${c.weight == null ? 'unknown' : stepOf(c.weight)}`.trim()}
+        className={`up-cell ${c.weight == null ? 'unknown' : profileStep(c.weight)}`.trim()}
         tabIndex={0}
         role="img"
         aria-label={text.replace(/\n/g, ' — ')}

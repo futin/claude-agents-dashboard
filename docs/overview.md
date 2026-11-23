@@ -391,7 +391,8 @@ client/src/
                   composer (that keyboard's pure rules and the session's latest `wrap_up` suggestion), modelLabel (`claude-opus-5-5` → `Opus 5.5`),
                   notifyRows (Settings' push-event rows), writeRefusal (a 403's token vs read-only-network kind, and the flags each kind sets), postWrite (every write hook's POST and its one read of the reply), pinWrite (what a pin write's reply means to `usePins`),
                   pendingReply (the reply panels' phase machine), writeStatus (Settings › Local ›
-                  Connection's write-access line), serverSettingsSave (the line a failed `POST /api/settings` leaves on the Settings page),
+                  Connection's write-access line), serverSettingsSave (what a `POST /api/settings` leaves on the Settings page: the failure line, the 403 flags, the echoed settings and which keys
+                  still read `saving…`),
                   pr (the PR card's rows, tones and copy, and `acceptPrAnswer`), sessionSpend (the drawer's Tokens spent card and `acceptSpend`), sessionDetail (`nextDetail`, which subagent-detail answers replace the panel),
                   webNotify, backClose, clipboard (copyText with the execCommand fallback), stopControl, apiError (the row's badge text for an API-error turn end), triage (the board/triage piles), answerToken (the token store + authHeaders),
                   stickyStrip, agentLabel (a subagent's type only when informative),
@@ -400,9 +401,9 @@ client/src/
                   the problems → levels rule and session join, the compare link, the copy table), gitChecks (the Git Inspector's check tiles), gitMatrixCells
                   (Matrix's six check columns and whether a row has work for Sync), gitBar (the divergence bar's scale),
                   codegraphLayouts / codegraphLevels / codegraphText / codegraphPoll (the CodeGraph sub-view's switcher rules, the problems → levels rule and which Sync / Reindex keys a row offers,
-                  the copy table, its poll schedule and run notes),
+                  the copy table, its poll schedule and run notes), codegraphMatrixCells (Matrix's four check columns),
                   gitPoll (its poll schedule, apart from the DOM), gitClock (the fetch clock's meters,
-                  re-poll timing and Fetch all key state), gitQuick (the Sync menu's rules and result copy), gitSync / gitSyncRuns
+                  re-poll timing and Fetch all key state), gitQuick (the Sync menu's rules, the sync state that blocks them, and result copy), gitSync / gitSyncRuns
                   (the Sync button's rules, copy and run reconciler), projectsView (the
                   Projects sub-view's layouts, pinned / offered split, dir line and copy), releases (the
                   unseen dot's localStorage key; the chip and drawer logic are ui-kit's)

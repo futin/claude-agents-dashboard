@@ -7,7 +7,7 @@ import { gitBarWidth } from '../../lib/gitBar';
 import { gitBranchChipText, gitBranchCounts } from '../../lib/gitStatsText';
 import type { GitQuickControl } from '../../hooks/useGitQuick';
 import type { GitSyncControl } from '../../hooks/useGitSync';
-import { quickMenu, type QuickCtx } from '../../lib/gitQuick';
+import { quickMenu, quickSyncState } from '../../lib/gitQuick';
 import { GIT_LEVEL_DOT, agentOn, isStaleBranch, type GitAgent, type GitAssessed, type GitLevel } from '../../lib/gitLevels';
 import { canSync, syncKeyLabel, type OkRepo } from '../../lib/gitSync';
 import type { GitLayoutProps } from './gitLayoutProps';
@@ -88,14 +88,6 @@ function GitSyncKey({ repo, sync, verbs, primary, label, blocked = false }: {
   );
 }
 
-/** What the menu's rules read of the remembered sync: launching, unseen or this repo's own POST out all count as busy. */
-function quickSyncState(sync: GitSyncControl, repo: OkRepo): QuickCtx['syncState'] {
-  const phase = sync.phaseFor(repo);
-  if (phase?.kind === 'running') return 'running';
-  if (sync.starting === repo.toplevel || phase?.kind === 'launching' || phase?.kind === 'unseen') return 'busy';
-  return 'idle';
-}
-
 function GitSyncSplit({ repo, sync, verbs, primary, label, quick }: {
   repo: OkRepo;
   sync: GitSyncControl;
@@ -107,7 +99,7 @@ function GitSyncSplit({ repo, sync, verbs, primary, label, quick }: {
   const [open, setOpen] = useState(false);
   const caret = useRef<HTMLButtonElement | null>(null);
   const op = quick.runningFor(repo);
-  const syncState = quickSyncState(sync, repo);
+  const syncState = quickSyncState(sync.phaseFor(repo), sync.starting === repo.toplevel);
   const menu = quickMenu(repo, {
     writeAccess: sync.writeAccess, tokenRequired: sync.tokenRequired, tokenStored: quick.tokenStored, syncAvailable: sync.available, syncState,
     quickRunning: op !== null, syncPending: sync.pending,

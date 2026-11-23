@@ -110,3 +110,13 @@ export function codegraphKeyKinds(a: CodegraphAssessed): CodegraphRunKind[] {
   if (a.repo.run?.kind === 'reindex') reindex = true;
   return [...(sync ? ['sync' as const] : []), ...(reindex ? ['reindex' as const] : [])];
 }
+
+/** A rebuild in flight, whoever started it: ours, a terminal's, or one the server outlived (`rebuildLive` with a synthesised `run`). */
+export function isIndexing(a: CodegraphAssessed): boolean {
+  return a.repo.run?.kind === 'reindex' || a.repo.rebuildLive;
+}
+
+/** The repos Sync all behind would run: Worth a look for pending changes with no watcher, and nothing already running there (that would only 409). */
+export function behindRepos(ranked: readonly CodegraphAssessed[]): CodegraphAssessed[] {
+  return ranked.filter(a => a.level === 'look' && a.repo.run === null && a.problems.some(p => p.key === 'pending'));
+}

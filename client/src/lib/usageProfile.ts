@@ -449,3 +449,33 @@ export function forecastStats(opts: {
     }
   ];
 }
+
+/**
+ * Which of the five ramp steps a weight lands on.
+ *
+ * A weight of zero gets **no** step: it is a bare bordered cell, because "you
+ * never work this hour" is a different statement from "you work 15% of it", and
+ * a five-step ramp starting at 0 would render both as q1. Three visually
+ * distinct states, which is the point: empty = measured idle, hatched = no
+ * evidence, filled = measured active.
+ */
+export function profileStep(weight: number): string {
+  if (weight <= 0.02) return '';           // measured idle — the bare track
+  if (weight <= 0.2) return 'q1';
+  if (weight <= 0.4) return 'q2';
+  if (weight <= 0.6) return 'q3';
+  if (weight <= 0.8) return 'q4';
+  return 'q5';
+}
+
+/** Points spent, always as a subtraction. The minus is U+2212, not a hyphen. */
+export function fmtPts(n: number): string {
+  const v = Math.abs(n) < 0.05 ? 0 : n;
+  return `${v > 0 ? '−' : ''}${Math.abs(v).toFixed(1)}`;
+}
+
+/** Points left — negative past empty, and set in the same minus as `fmtPts`. */
+export function fmtLeft(n: number): string {
+  const v = Math.round(n);
+  return v < 0 ? `−${Math.abs(v)}` : String(v);
+}

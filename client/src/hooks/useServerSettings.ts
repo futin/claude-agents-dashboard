@@ -2,8 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 
 import { useAnswerToken } from './useAnswerToken';
 import { postWrite } from '../lib/postWrite';
-import { settingsSaveFailure } from '../lib/serverSettingsSave';
-import { refusalFlags } from '../lib/writeRefusal';
+import { addSavingKeys, removeSavingKeys, settingsSaveOutcome } from '../lib/serverSettingsSave';
 import type { NotifyPatch, ServerSettings, ServerSettingsPatch } from '../../../shared/types';
 
 /** What a caller can ask about: any key a save can carry, the notify policy included. */
@@ -44,12 +43,7 @@ export interface ServerSettingsControl {
  */
 export function useServerSettings(): ServerSettingsControl {
   const [state, setState] = useState<ServerSettings | null>(null);
-  /**
-   * The keys of every save still in flight, as a multiset — a key is pushed per
-   * request and removed per response. Held that way rather than as one key so
-   * that two overlapping saves (a fast double-toggle) can't have the first
-   * response clear the second's indicator.
-   */
+  /** The keys of every save still in flight, as a multiset (`addSavingKeys`). */
   const [savingKeys, setSavingKeys] = useState<readonly string[]>([]);
   const [needsToken, setNeedsToken] = useState(false);
   const [readOnly, setReadOnly] = useState(false);
@@ -73,32 +67,19 @@ export function useServerSettings(): ServerSettingsControl {
   const save = useCallback(async (patch: ServerSettingsPatch) => {
     // The patch names what is being saved, so the rows don't have to be told.
     const keys = Object.keys(patch);
-    setSavingKeys(prev => [...prev, ...keys]);
+    setSavingKeys(prev => addSavingKeys(prev, keys));
     try {
       const result = await postWrite('/api/settings', { token, body: patch });
       // A network failure is status 0: the row keeps the server's last number, and the page says why.
-      setSaveError(settingsSaveFailure(result.status));
-      if (result.refusal) {
-        const flags = refusalFlags(result.refusal);
-        setReadOnly(flags.readOnly);
-        setNeedsToken(flags.needsToken);
-      } else if (result.ok) {
-        setNeedsToken(false);
-        setReadOnly(false);
-        // Trust the response, not the request: the server clamps, so what it
-        // echoes back is what the hooks will actually read.
-        const body = result.body as ServerSettings | undefined;
-        if (typeof body?.idleSecs === 'number') setState(body);
+      const outcome = settingsSaveOutcome(result);
+      setSaveError(outcome.saveError);
+      if (outcome.flags) {
+        setReadOnly(outcome.flags.readOnly);
+        setNeedsToken(outcome.flags.needsToken);
       }
+      if (outcome.state) setState(outcome.state);
     } finally {
-      setSavingKeys(prev => {
-        const next = [...prev];
-        for (const key of keys) {
-          const at = next.indexOf(key);
-          if (at !== -1) next.splice(at, 1);
-        }
-        return next;
-      });
+      setSavingKeys(prev => removeSavingKeys(prev, keys));
     }
   }, [token]);
 

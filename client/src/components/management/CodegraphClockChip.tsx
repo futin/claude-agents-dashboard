@@ -3,7 +3,7 @@ import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import type { WriteAccess } from '../../../../shared/types';
 import type { CodegraphState } from '../../hooks/useCodegraph';
 import type { CodegraphRunControl } from '../../hooks/useCodegraphRun';
-import type { CodegraphAssessed } from '../../lib/codegraphLevels';
+import { behindRepos, type CodegraphAssessed } from '../../lib/codegraphLevels';
 import {
   CODEGRAPH_CLOCK_NAME, CODEGRAPH_KEY_NOW, CODEGRAPH_POP_LABEL, METER_READ, METER_READ_READING, METER_WATCHERS, ROW_REREAD, ROW_REREAD_SUB, ROW_SYNC_ALL,
   ROW_SYNC_ALL_NEEDS_TOKEN_SUB, ROW_SYNC_ALL_NONE_SUB, rowSyncAllSub, watchersValue,
@@ -13,11 +13,6 @@ import { READ_ONLY_TEXT } from '../../lib/writeRefusal';
 import Chevron from '../Chevron';
 import { useDismiss } from '../Popover';
 import { GitMeter } from './GitClockChip';
-
-/** The repos Sync all behind would run: Worth a look for pending changes with no watcher, and nothing already running there (that would only 409). */
-export function behindRepos(ranked: readonly CodegraphAssessed[]): CodegraphAssessed[] {
-  return ranked.filter(a => a.level === 'look' && a.repo.run === null && a.problems.some(p => p.key === 'pending'));
-}
 
 /** WATCHERS: indexed repos with a watcher over all indexed repos; amber while a Worth a look repo has none to catch its changes up. */
 function watchersReading(ranked: readonly CodegraphAssessed[]): MeterReading {
