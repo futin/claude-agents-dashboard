@@ -6,6 +6,9 @@
  * drop every phone answer with all of them green. Here the fake answers each `/wait` with a scripted status, and each decision case has a mirror (the same
  * hook, a status it must ignore, empty stdout) so a hook that printed its decision unconditionally would fail too.
  *
+ * The `/wait` body is the other half of that contract (#503): the fake records it and the body cases pin every key, `timeoutMs` in milliseconds included,
+ * and one case runs the ask hook against the real route table (`withServer`), so a body the real `serveQuestionWait` refuses fails here too.
+ *
  * The at-desk cases put a fake `ioreg` first on PATH. awk always prints a number, so "non-numeric idle" is the one string it can print that is not digits:
  * `inf` (or `+inf` under gawk), from an overflowing `HIDIdleTime`. The away case — the same fake, reporting 100 s idle — is what proves the fake is the
  * `ioreg` the hook ran: without it, an at-desk case would pass for any hook that never reached the wait.
@@ -22,12 +25,20 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { until, withServer } from '../api-harness.js';
+import { pendingSessionIds } from '../../server/lib/pending.js';
+
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 
 interface Recorded { method: string; path: string; body: Record<string, unknown>; }
 
-/** A dashboard with remote answering on that answers every `…/wait` POST with `wait`, any other POST `{}`, and records every request. */
-async function fakeDashboard(wait: Record<string, unknown> = { status: 'timeout' }): Promise<{ url: string; requests: Recorded[]; close: () => Promise<void> }> {
+/**
+ * A dashboard with remote answering on that answers every `…/wait` POST with `wait` (HTTP `waitStatus`), any other POST `{}`, and records every request —
+ * body included, so a case can pin the `/wait` body that is the hook-to-server contract. `answerSecs` is what its health probe reports.
+ */
+async function fakeDashboard(
+  wait: Record<string, unknown> = { status: 'timeout' }, { answerSecs = 1, waitStatus = 200 }: { answerSecs?: number; waitStatus?: number } = {}
+): Promise<{ url: string; requests: Recorded[]; close: () => Promise<void> }> {
   const requests: Recorded[] = [];
   const server = http.createServer((req, res) => {
     let raw = '';
@@ -36,8 +47,8 @@ async function fakeDashboard(wait: Record<string, unknown> = { status: 'timeout'
       const url = req.url ?? '';
       requests.push({ method: req.method ?? '', path: url, body: raw ? JSON.parse(raw) : {} });
       res.setHeader('Content-Type', 'application/json');
-      if (url === '/api/health') res.end(JSON.stringify({ remoteAnswer: true, answerSecs: 1 }));
-      else if (url.endsWith('/wait')) res.end(JSON.stringify(wait));
+      if (url === '/api/health') res.end(JSON.stringify({ remoteAnswer: true, answerSecs }));
+      else if (url.endsWith('/wait')) { res.statusCode = waitStatus; res.end(JSON.stringify(wait)); }
       else res.end('{}');
     });
   });
@@ -134,6 +145,69 @@ export async function run(): Promise<number> {
         } finally { await dash.close(); }
       }));
     }
+
+    // The `/wait` body is the hook-to-server contract: the fake above answers whatever it is sent, so without these a renamed key, or seconds sent for
+    // milliseconds, would keep every case green while the real server answers 400 or clamps the hold (#503).
+    for (const d of DECISIONS.slice(0, 2)) {
+      tally(await ok(`${d.script}: the ${d.waitPath} body carries sessionId, toolInput, timeoutMs = answerSecs × 1000 and permissionMode`, async () => {
+        const dash = await fakeDashboard({ status: d.ignores }, { answerSecs: 30 });
+        try {
+          const r = await runHook(d.script, d.payload, dash.url, home);
+          assert.strictEqual(r.code, 0);
+          const waits = posts(dash.requests).filter(q => q.path === d.waitPath);
+          assert.strictEqual(waits.length, 1, `expected one POST to ${d.waitPath}: ${JSON.stringify(dash.requests.map(q => q.path))}`);
+          const { tool_input, permission_mode } = d.payload as typeof ASK | typeof PLAN;
+          assert.deepStrictEqual(waits[0].body, { sessionId: 's1', toolInput: tool_input, timeoutMs: 30_000, permissionMode: permission_mode });
+        } finally { await dash.close(); }
+      }));
+    }
+
+    // Any non-2xx from the wait (feature flipped off mid-flight, server restarted) hands the question back to the terminal dialog: exit 0, nothing printed.
+    // The body carries an `answered` status on purpose, so a hook that read the body without checking the status would print a decision and fail.
+    for (const waitStatus of [404, 503]) {
+      tally(await ok(`ask-remote-hook.sh: wait → HTTP ${waitStatus} exits 0 and prints nothing`, async () => {
+        const dash = await fakeDashboard({ status: 'answered', reason: 'R' }, { waitStatus });
+        try {
+          const r = await runHook('ask-remote-hook.sh', ASK, dash.url, home);
+          assert.strictEqual(r.code, 0);
+          assert.ok(posts(dash.requests).some(q => q.path === '/api/questions/wait'), 'the hook never reached the wait');
+          assert.strictEqual(r.stdout, '');
+        } finally { await dash.close(); }
+      }));
+    }
+
+    tally(await ok('ask-remote-hook.sh: wait → answered with an empty reason prints nothing', async () => {
+      const dash = await fakeDashboard({ status: 'answered', reason: '' });
+      try {
+        const r = await runHook('ask-remote-hook.sh', ASK, dash.url, home);
+        assert.strictEqual(r.code, 0);
+        assert.ok(posts(dash.requests).some(q => q.path === '/api/questions/wait'), 'the hook never reached the wait');
+        assert.strictEqual(r.stdout, '');
+      } finally { await dash.close(); }
+    }));
+
+    // The fake cannot refuse a body the real `serveQuestionWait` would, so one case runs the hook against the real route table: a body it refuses (a
+    // renamed key, no usable questions) is a 400/404 with nothing registered, and `until` below times out instead of finding the held question.
+    tally(await ok('ask-remote-hook.sh against the real server: the question is held (2xx), and answering it prints the decision', async () => {
+      const ID = '11111111-1111-4111-8111-111111111111';
+      const toolInput = { questions: [{ header: 'Pick', question: 'Which way?', options: [{ label: 'left' }, { label: 'right' }] }] };
+      await withServer('SHOW_USAGE=false\nSKIP_PROC_SCAN=true\n', async h => {
+        h.plant(ID);
+        await h.req('/api/health'); // resets the transcript-listing cache, so the hook's own request sees the planted session
+        const hook = runHook('ask-remote-hook.sh', { session_id: ID, tool_name: 'AskUserQuestion', tool_input: toolInput, permission_mode: 'auto' },
+          h.base, h.home, { CLAUDE_DASHBOARD_ANSWER_TIMEOUT: '30' });
+        await until(() => pendingSessionIds().has(ID), 'the real server holds the hook\'s question', 10_000);
+        const pending = (await h.req(`/api/sessions/${ID}/question`)).json?.pending as { questionId: string };
+        const answer = await h.req(`/api/sessions/${ID}/answer`,
+          { method: 'POST', body: JSON.stringify({ questionId: pending.questionId, answers: [{ index: 0, selected: ['left'] }] }) });
+        assert.strictEqual(answer.status, 200, answer.raw);
+        const r = await hook;
+        assert.strictEqual(r.code, 0);
+        const out = JSON.parse(r.stdout) as { hookSpecificOutput: { permissionDecision: string; permissionDecisionReason: string } };
+        assert.strictEqual(out.hookSpecificOutput.permissionDecision, 'deny');
+        assert.ok(out.hookSpecificOutput.permissionDecisionReason.includes('left'), out.hookSpecificOutput.permissionDecisionReason);
+      });
+    }));
 
     const bins = fs.mkdtempSync(path.join(os.tmpdir(), 'hook-decisions-bin-'));
     try {
