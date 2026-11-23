@@ -28,8 +28,10 @@ const HOOK = path.join(REPO, 'scripts', 'stop-notify-hook.sh');
 
 interface Recorded { path: string; body: Record<string, unknown>; }
 
-/** A fake dashboard: health per `remoteAnswer`, every POST recorded, every wait answered `timeout` at once. */
-async function fakeDashboard(remoteAnswer: boolean): Promise<{ url: string; posts: Recorded[]; close: () => Promise<void> }> {
+/** A fake dashboard: health per `remoteAnswer` and `answerSecs`, every POST recorded, every wait answered `timeout` at once with HTTP `waitStatus`. */
+async function fakeDashboard(
+  remoteAnswer: boolean, { answerSecs = 1, waitStatus = 200 }: { answerSecs?: number; waitStatus?: number } = {}
+): Promise<{ url: string; posts: Recorded[]; close: () => Promise<void> }> {
   const posts: Recorded[] = [];
   const server = http.createServer((req, res) => {
     let raw = '';
@@ -37,11 +39,12 @@ async function fakeDashboard(remoteAnswer: boolean): Promise<{ url: string; post
     req.on('end', () => {
       res.setHeader('Content-Type', 'application/json');
       if (req.method === 'GET' && req.url === '/api/health') {
-        res.end(JSON.stringify({ remoteAnswer, answerSecs: 1 }));
+        res.end(JSON.stringify({ remoteAnswer, answerSecs }));
         return;
       }
       posts.push({ path: req.url ?? '', body: raw ? JSON.parse(raw) : {} });
-      res.end(req.url === '/api/messages/wait' ? JSON.stringify({ status: 'timeout' }) : '{}');
+      if (req.url === '/api/messages/wait') { res.statusCode = waitStatus; res.end(JSON.stringify({ status: 'timeout' })); }
+      else res.end('{}');
     });
   });
   await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
@@ -147,6 +150,36 @@ export async function run(): Promise<number> {
         assert.strictEqual(count(dash.posts, '/api/notify/event'), 1);
         assert.strictEqual(count(dash.posts, '/api/messages/wait'), 0);
       } finally { await dash.close(); }
+    })) p++; else f++;
+
+    // #503 — the `/wait` body is the hook-to-server contract. The fake answers whatever it is sent, so a renamed key or seconds sent for milliseconds would
+    // keep every other case green while the real server clamps the hold to its 5 s floor.
+    if (await ok('the /api/messages/wait body carries sessionId, timeoutMs = answerSecs × 1000, permissionMode and stopHookActive', async () => {
+      const dash = await fakeDashboard(true, { answerSecs: 30 });
+      try {
+        const r = await runHook(dash.url, home, undefined);
+        assert.strictEqual(r.code, 0);
+        const waits = dash.posts.filter(x => x.path === '/api/messages/wait');
+        assert.strictEqual(waits.length, 1);
+        const { headless, ...rest } = waits[0].body;
+        assert.strictEqual(typeof headless, 'boolean', 'headless depends on the TTY this suite runs under, so only its type is pinned here');
+        assert.deepStrictEqual(rest, { sessionId: 's1', timeoutMs: 30_000, permissionMode: 'auto', stopHookActive: false });
+      } finally { await dash.close(); }
+    })) p++; else f++;
+
+    // A non-2xx wait (feature flipped off mid-flight, server restarted) falls back to the plain push, so "finished" never regresses. The 200 row is the
+    // mirror: an ordinary `timeout` answer sends no push, so a hook that pushed after every wait would fail it.
+    if (await ok('wait → HTTP 404 or 503: exactly one /api/notify/event POST, exit 0; HTTP 200 timeout: none', async () => {
+      for (const [waitStatus, events] of [[404, 1], [503, 1], [200, 0]] as const) {
+        const dash = await fakeDashboard(true, { waitStatus });
+        try {
+          const r = await runHook(dash.url, home, undefined);
+          assert.strictEqual(r.code, 0, `HTTP ${waitStatus}: exit code`);
+          assert.strictEqual(r.stdout, '', `HTTP ${waitStatus}: stdout`);
+          assert.strictEqual(count(dash.posts, '/api/messages/wait'), 1, `HTTP ${waitStatus}: the hook never reached the wait`);
+          assert.strictEqual(count(dash.posts, '/api/notify/event'), events, `HTTP ${waitStatus}: fallback pushes`);
+        } finally { await dash.close(); }
+      }
     })) p++; else f++;
 
     // #178 — the dashboard's own token-renewal turn. Unlike one-shot it gets nothing at all: nobody started it, so even "finished" is noise.
