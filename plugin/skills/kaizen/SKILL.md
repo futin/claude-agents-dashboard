@@ -111,7 +111,7 @@ both embed it as `…/<uuid>/…` — or list candidates with
 
 There is no ground truth on disk, so label this a judgment. Use `errorSignals`:
 `toolErrors` (failed tool calls), `retries` (a tool re-run after it errored — rework), and
-`userCorrections` (a **noisy keyword lower bound**, not a score). Combine with your own read
+`userCorrections` (a **noisy keyword count** over human-typed turns, not a score). Combine with your own read
 of whether the session met its stated goal, stalled, or thrashed. Give a short, hedged verdict
 — not a fake percentage.
 
