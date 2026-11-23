@@ -25,6 +25,15 @@ export function blankCells(): UsageProfileCell[] {
   }));
 }
 
+/** The fail-open `GET /api/usage/profile` body: an empty grid and no walk, still dated with the host's offset. */
+export function blankUsageProfile(offsetMinutes: number): UsageProfileResponse {
+  return {
+    cells: blankCells(), offsetMinutes, globalMean: 1, confidence: 'none',
+    recording: false, walk: [], exhaustAt: null, walkAbsent: 'recording-off',
+    utilizationPct: null, resetsAt: null, dutyCycle: null
+  };
+}
+
 /**
  * Shape one `GET /api/usage/profile` body. Pure — no clock, no disk, no
  * timezone — so every calendar edge is testable (test/usage/usage-profile-api.test.ts).
@@ -82,6 +91,7 @@ export function shapeUsageProfile(opts: {
   if (absent !== null) {
     return {
       cells,
+      offsetMinutes,
       globalMean: profile.globalMean,
       confidence: recording ? confidenceOf(profile) : 'none',
       recording,
@@ -106,6 +116,7 @@ export function shapeUsageProfile(opts: {
   });
   return {
     cells,
+    offsetMinutes,
     globalMean: profile.globalMean,
     confidence: confidenceOf(profile),
     recording,

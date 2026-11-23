@@ -309,6 +309,18 @@ export function run(): number {
     assert.deepStrictEqual(scan.scanSessions({ ...projCfg, maxSessions: 5 }, { ...opts, projects: new Set(['wt-1a2b3c']) }).sessions, []);
   })) p++; else f++;
 
+  if (test('scanSessions rows carry pickerProject: the folder, the repo for a worktree, null for a Claude-owned dir', () => {
+    const now = 1_700_000_000_000;
+    const root = makeRoot([
+      { dirName: '-a-repo', id: 'm1', mtimeMs: now - 60 * 1000, records: [metaRec('/a/repo', 'main'), usageRec(1000)] },
+      { dirName: '-a-repo-wt', id: 'w1', mtimeMs: now - 2 * 60 * 1000, records: [metaRec('/a/repo/.claude/worktrees/wt-1a2b3c', 'main'), usageRec(1000)] },
+      { dirName: '-scratch-ws', id: 's1', mtimeMs: now - 3 * 60 * 1000, records: [metaRec('/scratch/ws-9f8e7d', 'main'), usageRec(1000)] }
+    ]);
+    const out = scan.scanSessions({ ...projCfg, maxSessions: 5 }, { root, now, skipProcScan: true, claudeRoots: ['/scratch'] });
+    assert.deepStrictEqual(out.sessions.map(s => [s.id, s.pickerProject]), [['m1', 'repo'], ['w1', 'repo'], ['s1', null]]);
+    for (const s of out.sessions) assert.ok(s.pickerProject === null || out.projects!.includes(s.pickerProject!), `${s.id} is offered by projects`);
+  })) p++; else f++;
+
   if (test('scanSessions projects leaves out the token-refresh cwd', () => {
     const now = 1_700_000_000_000;
     const home = fs.mkdtempSync(path.join(os.tmpdir(), 'cad-home-'));

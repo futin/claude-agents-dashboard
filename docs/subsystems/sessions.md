@@ -68,8 +68,9 @@ The atoms in `sessions/atoms.tsx`, in every view that has room for them:
   transcript's *first* `cwd` — where the session was launched, not where its shell has
   since wandered). Either way the row also carries its `gitBranch`. A session launched in a linked git worktree also carries `repo`, the main
   checkout's name (`server/lib/worktree-repo.ts`: the worktree's `.git` file, else the `.claude/worktrees/<n>` / `.worktrees/<n>` path shape once the
-  worktree is deleted). `project` stays the worktree folder — pins and the chat drawer key on it. The Project filter files the row under `repo ??
-  project` instead (`filterProjectOf`, mirroring the server's `pickerProjectOf`), and the List view's Project column shows `repo`.
+  worktree is deleted). `project` stays the worktree folder — pins and the chat drawer key on it. The Project filter files the row under
+  `pickerProject` instead, the server's `pickerProjectOf` answer per row (the repo for a worktree, `null` for a dir Claude made for itself);
+  `filterProjectOf` reads it and falls back to `repo ?? project` only for an older server. The List view's Project column shows `repo`.
 - **Model + CLI version** — what the session is running. Every view shows the model through `lib/modelLabel.ts` (`Opus 5.5`); only the chat drawer's
   facts panel keeps the full id, the one place with room for it.
 - **Surface pill** — where the session lives, when that isn't the obvious answer. A headless

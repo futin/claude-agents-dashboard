@@ -22,8 +22,8 @@ const KINDS: Array<{ kind: JobKind; title: string; line: string; small: string }
 /**
  * New job and Edit job (spec §UI, screens 4–5): one drawer over one text, shown as Form (`JobRows`, a summary row per setting, each control rewriting
  * only its own lines) or File (the raw textarea). The kind picker only fills a template. The text is checked against `/validate` as it is typed. An edit
- * whose file changed on disk since it was loaded (the row's `mtimeMs` moved) cannot be saved until it is reloaded, so a save never overwrites an edit
- * made elsewhere. A non-owner sees the file read-only.
+ * whose file changed on disk since it was loaded (the row's `mtimeMs` moved) cannot be saved until it is reloaded; the save also sends the loaded
+ * `mtimeMs`, so a change the last poll missed is the server's 409 `changed` rather than an overwrite. A non-owner sees the file read-only.
  */
 export default function JobDrawer({ mode, row, confirmDelete, existing, ctl, send, onClose, gone = false }: {
   mode: 'new' | 'edit';
@@ -111,7 +111,7 @@ export default function JobDrawer({ mode, row, confirmDelete, existing, ctl, sen
     setFailure(null);
     const r = mode === 'new'
       ? await send('Save', `save:${name}`, 'POST', '/api/routines', { name, text: serializeEnabled(text, enabled ?? true) }, true)
-      : await send('Save', `save:${row!.name}`, 'PUT', `/api/routines/${encodeURIComponent(row!.name)}`, { text }, true);
+      : await send('Save', `save:${row!.name}`, 'PUT', `/api/routines/${encodeURIComponent(row!.name)}`, { text, mtimeMs: loaded!.mtimeMs }, true);
     setSaving(false);
     if (r.ok) { onClose(); return; }
     // Still checked: a type is no proof of what an older server sends.

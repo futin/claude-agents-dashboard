@@ -140,16 +140,17 @@ export const DEFAULT_VIEW: View = {
 };
 
 /**
- * The project-picker name a session files under: its repo when it runs in a linked worktree, so picking the repo's chip brings its worktree sessions
- * with it, else its own `project`. Mirrors the server's `pickerProjectOf`, which builds the `projects` list the chips come from.
+ * The project-picker name a session files under, or null when it has no chip (a dir Claude made for itself): the server's `pickerProject`, the same
+ * answer that built the `projects` list the chips come from. A row from an older server lacks the field and files under `repo ?? project`.
  */
-export function filterProjectOf(s: Pick<Session, 'project' | 'repo'>): string {
-  return s.repo ?? s.project;
+export function filterProjectOf(s: Pick<Session, 'project' | 'repo' | 'pickerProject'>): string | null {
+  return s.pickerProject !== undefined ? s.pickerProject : s.repo ?? s.project;
 }
 
-/** Sorted unique picker names ({@link filterProjectOf}) present in the session list. */
+/** Sorted unique picker names ({@link filterProjectOf}) present in the session list; a row with no chip adds none. */
 export function distinctProjects(sessions: Session[]): string[] {
-  return Array.from(new Set(sessions.map(filterProjectOf))).sort((a, b) => a.localeCompare(b));
+  const names = sessions.map(filterProjectOf).filter((p): p is string => p !== null);
+  return Array.from(new Set(names)).sort((a, b) => a.localeCompare(b));
 }
 
 /**
@@ -206,7 +207,11 @@ const FILTER_KEYS: FilterKey[] = ['projects', 'statuses', 'window'];
 /** True = this row survives that one facet. The predicates `applyView` ANDs together. */
 function keeps(key: FilterKey, s: Session, view: View, nowMs: number): boolean {
   switch (key) {
-    case 'projects': return !view.projects.length || view.projects.includes(filterProjectOf(s));
+    case 'projects': {
+      // A row with no chip (null) can match no selection, so it shows only under "All projects".
+      const p = filterProjectOf(s);
+      return !view.projects.length || (p !== null && view.projects.includes(p));
+    }
     case 'statuses': return !view.statuses.length || view.statuses.includes(s.status);
     case 'window': {
       const win = ACTIVITY_WINDOWS.find(w => w.key === view.window);

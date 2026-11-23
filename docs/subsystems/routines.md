@@ -325,7 +325,7 @@ Write routes are gate-only writes ([who may write](remote-access.md#who-may-writ
 | `GET /api/routines` | `{machine, dir, owner, reconcile: {state, drift, error, at}, jobs}` | |
 | `GET /api/routines/runs?days=&job=&outcome=&runner=` | folded runs, newest first, plus `stats` for the window and the one before; `days` outside 7/30/90 reads as 30, stats ignore `outcome` | `400 bad outcome` |
 | `GET /api/routines/:name` | the raw text and the parsed job | `404 no such job` |
-| `PUT /api/routines/:name` | `{text}`: validate, write atomically, reconcile; `200 {job, reconcile}` | `422 {errors}`, `404`, `500 validate failed` (pins unreadable), `500 write failed` |
+| `PUT /api/routines/:name` | `{text, mtimeMs?}`: validate, write atomically, reconcile; `200 {job, reconcile}`. `mtimeMs` is the file's mtime when the editor opened it; a different mtime on disk refuses the write | `400` on a non-number `mtimeMs`, `409 {error: 'changed'}`, `422 {errors}`, `404`, `500 validate failed` (pins unreadable), `500 write failed` |
 | `POST /api/routines` | `{name, text}`, as PUT | `409 exists`, `422`, `500 validate failed`, `500 write failed` |
 | `PATCH /api/routines/:name` | `{enabled: boolean}`: rewrite only the `enabled:` line, reconcile; `200 {job, reconcile}` | `422` on an unparseable file, `404` |
 | `DELETE /api/routines/:name` | remove the file, reconcile, `200 {reconcile}`; the log stays | `404`, `500 delete failed` |
@@ -348,7 +348,8 @@ Cancel leave. A New job drawer counts as dirty from the start. Back re-arms afte
 A poll that lacks an open edit drawer's job (renamed or deleted on the other machine; a rename reads as a delete here) does not close it from
 `RoutinesView` (#434): the drawer stays mounted on the last row it saw with `gone` set, and decides by the same rule — clean, it closes on its own; dirty,
 it stays open with Save disabled and a note that the file is gone on disk, so the edits can be copied out before Cancel. A row that comes back clears
-`gone`, and the `diskChanged` mtime check covers any change.
+`gone`, and the `diskChanged` mtime check covers any change. That check only sees a change a poll has already delivered, so Save also sends the `mtimeMs` it
+opened with and the server answers `409 changed` when the file moved since (#510); the drawer prints `the file changed on disk since it was opened`.
 
 - **Jobs:** the stats band (`StatsBand`) and the ledger (`JobLedger`, one row per file, with `JobFold` for the unfolded stats and last three runs and
   `JobMenu` for Edit, Run now on one repo, Pause or Resume, Reveal in Finder, Copy launchd label and Delete).

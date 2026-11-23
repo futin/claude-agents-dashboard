@@ -68,10 +68,17 @@ export interface Session {
   projectPath: string | null;
   /**
    * Name of the main checkout when `projectPath` is a linked git worktree (`zen-joliot-19719c` → `backlog-manager`), else null. `project` stays the
-   * worktree folder, because pinned projects and the chat drawer key on it; the Sessions project filter files the row under `repo ?? project` instead
-   * (`filterProjectOf`), so a worktree comes with its repo's chip. See `server/lib/worktree-repo.ts`.
+   * worktree folder, because pinned projects and the chat drawer key on it; the Sessions project filter files the row under {@link pickerProject}
+   * instead, so a worktree comes with its repo's chip. See `server/lib/worktree-repo.ts`.
    */
   repo: string | null;
+  /**
+   * The name the Sessions project picker files this row under — `scan.ts` `pickerProjectOf`'s answer: the repo for a linked worktree, else the folder,
+   * and `null` for a dir Claude made for itself (scratchpad, scratch workspace, `~/.claude`), which has no chip and shows only under "All projects".
+   * Computed on the server because the rule needs its Claude roots and filesystem; the client reads it rather than re-deriving it. Absent from an
+   * older server, where the client falls back to `repo ?? project`.
+   */
+  pickerProject?: string | null;
   /** User-set custom title from Claude Code (custom-title record); null when unnamed. */
   sessionName: string | null;
   gitBranch: string | null;
@@ -266,6 +273,12 @@ export interface ForecastStep {
 /** `GET /api/usage/profile` — read-only. Never includes raw samples. */
 export interface UsageProfileResponse {
   cells: UsageProfileCell[];
+  /**
+   * The dashboard host's UTC offset at `nowMs`, minutes east — the one every `hourOfWeek` here was bucketed with. The client dates and labels the grid
+   * and the walk in it, so a browser in another zone reads the host's clock. Optional: an older server omits it and the client falls back to the
+   * browser's zone.
+   */
+  offsetMinutes?: number;
   /** Fallback weight for untrusted buckets. */
   globalMean: number;
   confidence: ForecastConfidence;
@@ -2277,7 +2290,8 @@ export interface SessionsResponse {
   /**
    * Every project with a transcript in the lookback window, sorted — what the Sessions toolbar's project picker offers. A linked worktree is listed
    * under its repo, and a dir Claude made for itself (scratchpad, scratch workspace, `~/.claude`) not at all (`scan.ts` `pickerProjectOf`). A superset
-   * of the projects in `sessions`: with `?project=` set, `sessions` holds only the chosen ones, and the picker still has to offer the rest. Absent on
+   * of every non-null `pickerProject` in `sessions`: with `?project=` set, `sessions` holds only the chosen ones, and the picker still has to offer the
+   * rest. Absent on
    * the error snapshot, where the client falls back to the projects of the rows it has.
    */
   projects?: string[];
@@ -2415,10 +2429,11 @@ export type RoutineRunConflict = 'already-running' | 'no-plugin' | 'invalid';
 
 /**
  * The `error` codes of the routine write routes (create, run, stop, delete, patch, reconcile) that the client words in `writeFailureText`: 409
- * `not-owner` from any write on a server that does not own the routines, 409 `not-running` from Stop, 409 `exists` from create, 400 `bad-only` and
- * 500 `spawn-failed` from Run now, plus Run now's {@link RoutineRunConflict}s.
+ * `not-owner` from any write on a server that does not own the routines, 409 `not-running` from Stop, 409 `exists` from create, 409 `changed` from
+ * an edit whose file moved on disk since the editor loaded it (PUT `{ text, mtimeMs }`), 400 `bad-only` and 500 `spawn-failed` from Run now, plus Run
+ * now's {@link RoutineRunConflict}s.
  */
-export type RoutineWriteError = 'not-owner' | 'not-running' | 'exists' | 'bad-only' | 'spawn-failed' | RoutineRunConflict;
+export type RoutineWriteError = 'not-owner' | 'not-running' | 'exists' | 'changed' | 'bad-only' | 'spawn-failed' | RoutineRunConflict;
 
 /** Reconcile's verdict, as the toolbar chip reads it; `not-owner` is what every server but the owner reports (spec §Owning server). */
 export type ReconcileState = 'in-sync' | 'drift' | 'failed' | 'pending' | 'not-owner' | 'no-plugin' | 'cron-down' | 'bad-machine' | 'no-claude';
