@@ -5,6 +5,7 @@ import { AsideStrip } from './sessions/AsideStrip';
 import { Toolbar } from './Toolbar';
 import { BoardView } from './sessions/BoardView';
 import { EmptyState } from './sessions/EmptyState';
+import { LoadBoundary } from './LoadBoundary';
 import { ListView } from './sessions/ListView';
 import { SplitView } from './sessions/SplitView';
 import { TilesView } from './sessions/TilesView';
@@ -211,20 +212,22 @@ export function SessionsView({ onLink }: {
           narrow={narrow}
         />
         {spawnOpen && (
-          <Suspense fallback={null}>
-            <SpawnPanel
-              onClose={() => setSpawnOpen(false)}
-              onLaunched={r => {
-                if (r.sessionId) setChatId(r.sessionId);
-                if (r.surface === 'desktop') setDesktopLaunched(true);
-                setSpawnOpen(false);
-              }}
-              spawnMaxPermission={remoteAnswer.state?.spawnMaxPermission}
-              spawnAvailable={remoteAnswer.state?.spawnAvailable}
-              desktopAvailable={remoteAnswer.state?.desktopAvailable}
-              launchSurfaceDefault={remoteAnswer.state?.launchSurfaceDefault}
-            />
-          </Suspense>
+          <LoadBoundary variant="float">
+            <Suspense fallback={null}>
+              <SpawnPanel
+                onClose={() => setSpawnOpen(false)}
+                onLaunched={r => {
+                  if (r.sessionId) setChatId(r.sessionId);
+                  if (r.surface === 'desktop') setDesktopLaunched(true);
+                  setSpawnOpen(false);
+                }}
+                spawnMaxPermission={remoteAnswer.state?.spawnMaxPermission}
+                spawnAvailable={remoteAnswer.state?.spawnAvailable}
+                desktopAvailable={remoteAnswer.state?.desktopAvailable}
+                launchSurfaceDefault={remoteAnswer.state?.launchSurfaceDefault}
+              />
+            </Suspense>
+          </LoadBoundary>
         )}
         {desktopLaunched && (
           <div className="spawn-done" role="status">
@@ -235,16 +238,18 @@ export function SessionsView({ onLink }: {
         <div className="s-body">{body}</div>
       </div>
       {chatSession && (
-        <Suspense fallback={null}>
-          {/* keyed by id: switching sessions remounts the tail cleanly */}
-          <ChatDrawer
-            key={chatSession.id}
-            session={chatSession}
-            onClose={() => { setChatId(null); setFetchedChat(null); }}
-            spawnAvailable={remoteAnswer.state?.spawnAvailable}
-            desktopAvailable={remoteAnswer.state?.desktopAvailable}
-          />
-        </Suspense>
+        <LoadBoundary variant="float">
+          <Suspense fallback={null}>
+            {/* keyed by id: switching sessions remounts the tail cleanly */}
+            <ChatDrawer
+              key={chatSession.id}
+              session={chatSession}
+              onClose={() => { setChatId(null); setFetchedChat(null); }}
+              spawnAvailable={remoteAnswer.state?.spawnAvailable}
+              desktopAvailable={remoteAnswer.state?.desktopAvailable}
+            />
+          </Suspense>
+        </LoadBoundary>
       )}
     </div>
   );

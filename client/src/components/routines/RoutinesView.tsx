@@ -13,6 +13,7 @@ import { deepLinkRun } from '../../lib/deepLink';
 import { chipClass, jobsSubtitle, launchdLabel, reconcileChip, reconcilePreview, type ReconcilePreview } from '../../lib/routines';
 import type { RoutineRunFilters } from '../../lib/settings';
 import { READ_ONLY_TEXT } from '../../lib/writeRefusal';
+import { LoadBoundary } from '../LoadBoundary';
 import type { RoutineCtl } from './ctl';
 import JobDrawer from './JobDrawer';
 import JobLedger from './JobLedger';
@@ -230,9 +231,11 @@ export default function RoutinesView() {
         />
       )}
       {chat && (
-        <Suspense fallback={null}>
-          <ChatDrawer key={chat.id} session={chat} onClose={() => setChat(null)} spawnAvailable={remote.state?.spawnAvailable === true} desktopAvailable={remote.state?.desktopAvailable === true} />
-        </Suspense>
+        <LoadBoundary variant="float">
+          <Suspense fallback={null}>
+            <ChatDrawer key={chat.id} session={chat} onClose={() => setChat(null)} spawnAvailable={remote.state?.spawnAvailable === true} desktopAvailable={remote.state?.desktopAvailable === true} />
+          </Suspense>
+        </LoadBoundary>
       )}
     </div>
   );

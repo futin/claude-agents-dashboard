@@ -2,6 +2,7 @@ import { lazy, Suspense, useEffect, useState } from 'react';
 import { useWhatsNew } from 'ui-kit';
 
 import { HeaderAccount } from './components/HeaderAccount';
+import { LoadBoundary } from './components/LoadBoundary';
 import { ReleasesDrawer } from './components/ReleasesDrawer';
 import { SideRail } from './components/SideRail';
 import { SessionsView } from './components/SessionsView';
@@ -107,6 +108,8 @@ function AppShell() {
           {!narrow && <div className="topstrip">{chip}</div>}
           <main className="main">
             <div className={wrap}>
+            {/* keyed by section: a chunk that failed to load is retried by moving to another section and back, not only by the Reload it offers */}
+            <LoadBoundary key={section}>
             {section === 'sessions' ? (
               <SessionsView onLink={setLink} />
             ) : section === 'routines' ? (
@@ -134,6 +137,7 @@ function AppShell() {
                 <SettingsView />
               </Suspense>
             )}
+            </LoadBoundary>
             </div>
           </main>
         </div>
