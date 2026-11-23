@@ -1,6 +1,6 @@
 /**
- * `scripts/stop-notify-hook.sh` — the `CLAUDE_DASHBOARD_ONESHOT` exemption, the `CLAUDE_DASHBOARD_REFRESH` exit (#178), and the HEADLESS classification
- * with the idle gate it feeds (#417).
+ * `scripts/stop-notify-hook.sh` — the `CLAUDE_DASHBOARD_ONESHOT` and `BM_ORCH_RUN` (#504) exemptions, the `CLAUDE_DASHBOARD_REFRESH` exit (#178), and the
+ * HEADLESS classification with the idle gate it feeds (#417).
  *
  * A session the dashboard launched as one-shot (the Git Sync button, or the spawn form's "Close when done") must end when its last turn does, instead of
  * sitting in the reply hold for `answerSecs`. The hook is driven the way the CLI drives it — one Stop payload on stdin, `CLAUDECODE=1` — against an
@@ -94,7 +94,7 @@ async function ok(name: string, fn: () => Promise<void>): Promise<boolean> {
 }
 
 export async function run(): Promise<number> {
-  console.log('\n=== stop-notify-hook.sh: CLAUDE_DASHBOARD_ONESHOT / CLAUDE_DASHBOARD_REFRESH / HEADLESS ===\n');
+  console.log('\n=== stop-notify-hook.sh: CLAUDE_DASHBOARD_ONESHOT / BM_ORCH_RUN / CLAUDE_DASHBOARD_REFRESH / HEADLESS ===\n');
   let p = 0, f = 0;
 
   for (const tool of ['jq', 'curl']) {
@@ -150,6 +150,35 @@ export async function run(): Promise<number> {
         assert.strictEqual(count(dash.posts, '/api/notify/event'), 1);
         assert.strictEqual(count(dash.posts, '/api/messages/wait'), 0);
       } finally { await dash.close(); }
+    })) p++; else f++;
+
+    // #504 — a session an orchestrator run owns (`BM_ORCH_RUN=<runId>`, backlog-manager bug-20) skips the hold and takes notify_fallback, or every
+    // unattended item idles for `answerSecs`. runHook clears the variable, so these are the only cases that set it; the unset and empty rows are the mirror
+    // that makes the first mean anything.
+    if (await ok('orchestrator run (BM_ORCH_RUN set): pushes "finished" once and never opens the reply hold', async () => {
+      const dash = await fakeDashboard(true);
+      try {
+        const r = await runHook(dash.url, home, undefined, false, { BM_ORCH_RUN: 'run-504' });
+        assert.strictEqual(r.code, 0);
+        assert.strictEqual(r.stdout, '');
+        assert.strictEqual(count(dash.posts, '/api/messages/wait'), 0, 'a run-owned session must not hold');
+        const events = dash.posts.filter(x => x.path === '/api/notify/event');
+        assert.strictEqual(events.length, 1);
+        assert.strictEqual(events[0].body.sessionId, 's1');
+        assert.strictEqual(events[0].body.event, 'stop');
+      } finally { await dash.close(); }
+    })) p++; else f++;
+
+    if (await ok('BM_ORCH_RUN unset or empty: the session holds, with no fallback push', async () => {
+      for (const v of [undefined, '']) {
+        const dash = await fakeDashboard(true);
+        try {
+          const r = await runHook(dash.url, home, undefined, false, v === undefined ? {} : { BM_ORCH_RUN: v });
+          assert.strictEqual(r.code, 0);
+          assert.strictEqual(count(dash.posts, '/api/messages/wait'), 1, `BM_ORCH_RUN=${JSON.stringify(v)} must hold`);
+          assert.strictEqual(count(dash.posts, '/api/notify/event'), 0, `BM_ORCH_RUN=${JSON.stringify(v)}: no fallback push`);
+        } finally { await dash.close(); }
+      }
     })) p++; else f++;
 
     // #503 — the `/wait` body is the hook-to-server contract. The fake answers whatever it is sent, so a renamed key or seconds sent for milliseconds would
