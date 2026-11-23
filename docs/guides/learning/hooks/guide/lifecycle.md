@@ -165,7 +165,7 @@ See [The Stop-hook chat loop](./stop-loop.md) for the rest of that mechanism.
 | `Notification` | yes, legacy fallback | Fires ~6s after a permission dialog opens, only on some engines |
 | `Stop` | yes | The turn-end reply window |
 | `PostToolUse` | **no** | Nothing to ask a human after a tool has already run |
-| `SessionStart` | **no** | The dashboard discovers sessions by scanning transcripts; no hook needed |
+| `SessionStart` | yes, on `compact`, `resume`, `clear` only | Re-prints the remote-decision banner after compaction, resume or `/clear` may have dropped the earlier copy; session discovery itself still needs no hook |
 | `SubagentStop` | **no** | A subagent finishing is not a moment a human is asked anything |
 | `PreCompact` | **no** | Same |
 

@@ -142,7 +142,7 @@ is evaluated last and behind a thunk, so a policy that does not use it never pay
 `ioreg` spawn. `test/notify/notify.test.ts` asserts that directly.
 
 The read is async (spec `2026-11-14-poll-path-probes-design.md` A1), so the predicate splits in two. `notifyGateOpen` is the synchronous part — every clause
-but `requireAfk` — and is all that the senders without an AFK clause (routines, usage, tick caps) and the remote-answer gate ever call. `shouldNotify` is
+but `requireAfk` — and is all that the senders without an AFK clause (routines, usage, tick caps) and their `usageCanSend` / `tickCanSend` probes ever call. `shouldNotify` is
 async and adds the `requireAfk` clause. `maybeSend` checks the gate inline; when the policy has `requireAfk`, or desk routing needs a reading, the send is
 deferred until the reading lands, and otherwise it goes out synchronously as before. Tests await `notifySettled()` for the deferred sends.
 
@@ -213,7 +213,7 @@ Silence is the bug this feature exists to fix, so every failure gets an explicit
 |---|---|---|
 | `ioreg` unreadable (Docker, non-macOS) | **push anyway** | Failing silent reintroduces the missed notification. Note this is the *opposite* of `ask-remote-hook.sh`, which treats unreadable idle as at-the-desk — there a wrong guess hides a dialog, here it costs one extra push |
 | `permissionMode` absent | **not auto-ish** | An unknown mode is not a known-auto mode |
-| ntfy request fails or times out | **swallow — except in the test** | 2s cap, never awaited, never fails the caller — `maybeSend` `void`s the promise and catches it, since an un-awaited rejection would escape the surrounding `try` and take the process down. `sendTest` is the one send that *does* await the answer, distinguishing a refusal (`<server> refused it (HTTP 404): …  — check NTFY_TOPIC`, the first line of ntfy's own body) from an unreachable server (`couldn't reach <server>: …`), because a button whose job is proving delivery must be able to fail |
+| ntfy request fails or times out | **swallow — except in the test** | 2s cap, never awaited by the caller, never fails it — `maybeSend` `void`s the promise and catches it (a deferred send catches it in its own continuation), since an un-awaited rejection would escape the surrounding `try` and take the process down. `sendTest` is the one send that *does* await the answer, distinguishing a refusal (`<server> refused it (HTTP 404): …  — check NTFY_TOPIC`, the first line of ntfy's own body) from an unreachable server (`couldn't reach <server>: …`), because a button whose job is proving delivery must be able to fail |
 | label lookup fails | **push with a short id** | A poor label beats no push |
 | settings file unreadable | **all switches off** | Same fail-open read as the rest of `settings.ts` |
 | hook POST rejected `403 bad token` | **swallowed by the hook — but the server says so** | The four entry routes sit behind `refuseWrite` like every other route behind the write gate — gate-only writes, so they keep working with remote answering off. A hook on loopback always passes; one pointed at a non-loopback `CLAUDE_DASHBOARD_URL` (or running in a container) reads the token from `~/.claude/hooks/dashboard-token` (`$CLAUDE_CONFIG_DIR/hooks/` when that variable is set). Missing or wrong there while the gate wants one, and every POST is refused before `maybeSend` runs; the hooks use `curl -sf`, so the 403 is still swallowed and the CLI itself never mentions it. What changed after this cost twelve silent hours: the gate now prints `[dashboard] rejected write: POST <path> from <peer> (bad or missing token)` (or `(read-only, no token set)`) once per path per minute, and `/api/health` carries `tokenRequired`, which `remote-decision-hook.sh` uses to refuse to claim remote answering is armed when the token file is absent. Neither carries the token. The Settings switches still read On and `notifyAvailable` still reports `true` — both describe the topic, not the token — so if nothing arrives and the test button works, read the server's output, then check the token file ([remote-answer-setup](../workflows/remote-answer-setup.md#failure-modes)) |
@@ -508,5 +508,5 @@ server write path. ntfy makes it unnecessary for now.
     - client/src/lib/deepLink.ts
     - client/src/components/settings/SettingsView.tsx
   kind: subsystem
-  verified: 96b0f64a8c117ae160ba90bfdd34ef357890a8a1
+  verified: 7b75ae1917c8e25249c5d0ab4e16f13da9a22b82
 -->

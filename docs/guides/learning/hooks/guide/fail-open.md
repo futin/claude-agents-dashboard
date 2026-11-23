@@ -140,15 +140,16 @@ hung for up to ten minutes.**
 **b) `notify.ts` — unknown idle → DO push.**
 
 ```ts
-// server/lib/notify.ts:79-86
-  if (policy.requireAfk) {
-    const idle = ctx.readIdle();
-    // Unreadable (Docker, non-macOS) → push anyway. Failing silent here would
-    // reintroduce the missed-notification bug this feature exists to fix, and a
-    // wrong guess costs one extra push rather than a hidden dialog — which is
-    // why this fails the opposite way to `ask-remote-hook.sh`.
-    if (idle !== null && idle < ctx.thresholdSecs) return false;
-  }
+// server/lib/notify.ts:89-97
+async function afkClausePasses(policy: NotifyPolicy, ctx: PredicateContext): Promise<boolean> {
+  if (!policy.requireAfk) return true;
+  const idle = await ctx.readIdle();
+  // Unreadable (Docker, non-macOS) → push anyway. Failing silent here would
+  // reintroduce the missed-notification bug this feature exists to fix, and a
+  // wrong guess costs one extra push rather than a hidden dialog — which is
+  // why this fails the opposite way to `ask-remote-hook.sh`.
+  return !(idle !== null && idle < ctx.thresholdSecs);
+}
 ```
 
 Cost of guessing wrong: **one unnecessary buzz.** The comment names the other call site

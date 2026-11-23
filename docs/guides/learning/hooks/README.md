@@ -19,7 +19,7 @@ what that trade cost.
 > and re-run `node docs/guides/learning/hooks/tools/build.mjs`; never edit `index.html` by hand.
 
 > Baseline: written against `scripts/` + the hook-facing `server/lib/` stores at commit
-> `092484b` (2026-08-17). Citations and the passages that had drifted refreshed against `c6662c0` on 2026-11-01.
+> `092484b` (2026-08-17). Citations and the passages that had drifted refreshed against `7b75ae1` on 2026-11-23.
 
 ---
 
@@ -62,14 +62,14 @@ control.
 
 | Script | Event | Matcher | Blocks? | Purpose |
 |---|---|---|---|---|
-| [`remote-decision-hook.sh`](../../../../scripts/remote-decision-hook.sh) | `UserPromptSubmit` | all | no (~1s) | Injects the "route decisions through AskUserQuestion" instruction |
+| [`remote-decision-hook.sh`](../../../../scripts/remote-decision-hook.sh) | `UserPromptSubmit` + `SessionStart` | all / `compact`, `resume`, `clear` | no (~1s) | Injects the "route decisions through AskUserQuestion" instruction, once per session and again after compaction, resume or `/clear` |
 | [`ask-remote-hook.sh`](../../../../scripts/ask-remote-hook.sh) | `PreToolUse` | `AskUserQuestion` | yes, ≤600s | Offer the question to your phone |
 | [`plan-remote-hook.sh`](../../../../scripts/plan-remote-hook.sh) | `PermissionRequest` | `ExitPlanMode` | yes, ≤600s | Offer a plan to your phone (reject-only) |
 | [`permission-notify-hook.sh`](../../../../scripts/permission-notify-hook.sh) | `PermissionRequest` + `Notification` | all | no (~1s) | Display-only: light up the `allow?` pill |
 | [`stop-notify-hook.sh`](../../../../scripts/stop-notify-hook.sh) | `Stop` | all | yes, ≤600s | Hold the finished turn open for a follow-up |
 
-Note what is **absent**: no `PostToolUse`, no `SessionStart`, no `SubagentStop`, no
-`PreCompact`. This project only hooks moments where **a human is about to be asked
+Note what is **absent**: no `PostToolUse`, no `SubagentStop`, no `PreCompact`, and `SessionStart` only to re-print the remote-decision banner after the
+context lost it. This project only hooks moments where **a human is about to be asked
 something**. That is the organizing principle, and it is why the set is five rather than
 fifteen.
 

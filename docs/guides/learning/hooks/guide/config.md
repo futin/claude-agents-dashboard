@@ -58,30 +58,31 @@ Every blocking script's header carries the same warning:
 ```bash
 # scripts/ask-remote-hook.sh:22-24
 # The timeout MUST exceed the wait window, or the CLI kills the hook first. The
-# window is Settings → "Answer window" (max 600s there for exactly this reason);
+# window is Settings → "Answer window" (600s default; it warns above 600 for this);
 # raising it past ~615s means raising this number too.
 ```
 
 If the CLI's `timeout` is smaller than the window, **the CLI kills the hook mid-wait** — which
 degrades to the terminal dialog. Even a misconfigured ladder fails safe.
 
-The UI enforces it from the other end, twice. First the field simply won't go higher:
+The UI guards it from the other end. The field takes the server's own bounds, mirrored in `client/src/lib/settingsBounds.ts`, so it offers
+every value the store keeps, up to 1800s:
 
 ```tsx
-// client/src/components/settings/SettingsView.tsx:343-349
-<NumberField
-  value={server.state.answerSecs}
-  min={5}
-  max={600}
-  unit="sec"
-  onCommit={answerSecs => void server.save({ answerSecs })}
-/>
+// client/src/components/settings/SettingsView.tsx:338-344
+                    <NumberField
+                      value={server.state.answerSecs}
+                      min={ANSWER_SECS_MIN}
+                      max={ANSWER_SECS_MAX}
+                      unit="sec"
+                      onCommit={answerSecs => void server.save({ answerSecs })}
+                    />
 ```
 
-And if a value above 600 arrives some other way, it names the exact number you would need:
+Above 600, it warns and names the exact number you would need:
 
 ```tsx
-// client/src/components/settings/SettingsView.tsx:381-390  (compacted here)
+// client/src/components/settings/SettingsView.tsx:359-368  (compacted here)
 {server.state.answerSecs > 600 && (
   <div className="set-warn">
     Above 600s the CLI kills the hook before the window closes, unless you also raise
@@ -94,18 +95,16 @@ And if a value above 600 arrives some other way, it names the exact number you w
 Meanwhile the server clamps to a *wider* bound:
 
 ```ts
-// server/lib/settings.ts:47-50
+// server/lib/settings.ts:50-53
 export const DEFAULT_ANSWER_SECS = 600;
 /** Mirrors `MIN_TIMEOUT_MS` / `MAX_TIMEOUT_MS` in `pending.ts` — the same window. */
 export const MIN_ANSWER_SECS = 5;
 export const MAX_ANSWER_SECS = 1800;
 ```
 
-**Why the UI caps at 600 but the store allows 1800.** This looks like an inconsistency and is
-deliberate layering: the *store* should not refuse a value that works perfectly well for
-someone who also raised their hook timeout, while the *UI* should not offer a value that
-silently breaks with the documented install. So the hard bound lives on the server and the
-advice lives in the UI — plus a warning for the gap between them.
+**Why the UI warns at 600 but accepts up to 1800.** The *store* should not refuse a value that works perfectly well for someone who also raised their
+hook timeout, so the hard bound lives on the server. The UI used to stop at 600, which left a value the server keeps unreachable from the field; since
+#487 it accepts the server's whole range and the advice lives in the warning instead, which names the hook `timeout` that makes the value safe.
 
 **The bad alternative** is making the server enforce 600 too:
 
@@ -151,7 +150,7 @@ Docker, CI, a second dashboard on another port. But a silently-losing UI control
 experience, so the server *detects* the override and the UI says so:
 
 ```ts
-// server/lib/settings.ts:241
+// server/lib/settings.ts:245
 export function detectEnvOverride(name: string, homeDir?: string): EnvOverride | null {
 ```
 
@@ -179,7 +178,7 @@ flowchart TD
 **Stack 1 — is the feature on?** ([`remoteState.ts`](../../../../../server/lib/remoteState.ts))
 
 ```ts
-// server/lib/remoteState.ts:52-60
+// server/lib/remoteState.ts:54-62
 export function getState(config: Config): RemoteAnswerState {
   if (cached === null) cached = readStored() ?? config.remoteAnswer;
   return {
@@ -213,20 +212,29 @@ works this run, and says so) means a read-only container doesn't lose the featur
 
 **Stack 2 — should *this* one wait?** The idle check, in the hook, per invocation. The server never makes this call, because the server can't
 see your keyboard from inside a container. It does read the same idle value for a different job: once a hold is open,
-[`idle.ts`](../../../../../server/lib/idle.ts)'s `backAtDesk()` (`idle.ts:45-53`) asks whether you came back, so the stores' shared 5s reaper can release the hold
+[`idle.ts`](../../../../../server/lib/idle.ts)'s `backAtDesk()` (`idle.ts:89-97`) asks whether you came back, so the stores' shared 5s reaper can release the hold
 early. An unreadable reading there means "stay held", never "release" — see [Fail-open §6](./fail-open.md).
 
 **Stack 3 — should it push?** ([`notify.ts`](../../../../../server/lib/notify.ts)) Orthogonal to the
 other two — it governs *notifications*, not waits:
 
 ```ts
-// server/lib/notify.ts:73-77
-export function shouldNotify(event: NotifyEvent, policy: NotifyPolicy, ctx: PredicateContext): boolean {
+// server/lib/notify.ts:76-86
+export function notifyGateOpen(
+  event: NotifyEvent,
+  policy: NotifyPolicy,
+  ctx: Pick<PredicateContext, 'remoteAnswer' | 'permissionMode'>
+): boolean {
   if (!policy.enabled) return false;
   if (!policy.events[event]) return false;
   if (policy.requireRemoteAnswer && !ctx.remoteAnswer) return false;
   if (policy.requireAutoMode && !AUTO_MODES.has(ctx.permissionMode ?? '')) return false;
+  return true;
+}
 ```
+
+`shouldNotify` is this gate `&&` the `requireAfk` clause, the only one that reads idle, so a push whose policy forces `requireAfk` off decides without
+waiting on `ioreg`.
 
 `requireAutoMode` is the reason `permissionMode` is threaded through every hook POST — you will
 see `--arg pm "$PERM_MODE"` in all four POSTing scripts, with the note *"Absent on older CLIs,
@@ -264,14 +272,14 @@ should mean. Turning the switch off releases what it owns; it does not orphan it
 
 | Constant | Value | Where |
 |---|---|---|
-| `DEFAULT_IDLE_SECS` | 60 | [`settings.ts:42`](../../../../../server/lib/settings.ts) |
-| `MAX_IDLE_SECS` | 3600 | `settings.ts:44` |
-| `DEFAULT_ANSWER_SECS` | 600 | `settings.ts:47` |
-| `MIN_ANSWER_SECS` / `MAX_ANSWER_SECS` | 5 / 1800 | `settings.ts:49-50` |
+| `DEFAULT_IDLE_SECS` | 60 | [`settings.ts:45`](../../../../../server/lib/settings.ts) |
+| `MAX_IDLE_SECS` | 3600 | `settings.ts:47` |
+| `DEFAULT_ANSWER_SECS` | 600 | `settings.ts:50` |
+| `MIN_ANSWER_SECS` / `MAX_ANSWER_SECS` | 5 / 1800 | `settings.ts:52-53` |
 | `DEFAULT_TIMEOUT_MS` | 600_000 | [`pending.ts:46`](../../../../../server/lib/pending.ts) |
 | `MIN_TIMEOUT_MS` / `MAX_TIMEOUT_MS` | 5_000 / 1_800_000 | `pending.ts:47-48` |
 | `PERMISSION_TTL_MS` | 30 min | [`permissions.ts:26`](../../../../../server/lib/permissions.ts) |
-| idle reaper interval | 5s | [`wait-store.ts:81`](../../../../../server/lib/wait-store.ts) |
+| idle reaper interval | 5s | [`wait-store.ts:93`](../../../../../server/lib/wait-store.ts) |
 | `TEXT_CAP` (follow-up) | 4000 | `messages.ts:27` |
 | `QUESTION_CAP` / `LABEL_CAP` / `DESCRIPTION_CAP` | 2000 / 200 / 500 | `pending.ts:39-41` |
 | CLI Stop-block cap | 8 | `CLAUDE_CODE_STOP_HOOK_BLOCK_CAP` |

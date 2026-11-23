@@ -13,7 +13,9 @@ the notes are ui-kit's own renderer), the chip's placement (the `.rel-chip` wrap
 ## `GET /api/releases`
 
 Answers `ReleasesResponse` (`shared/types.ts`): `current` is the newest release tag reachable from HEAD and how many commits HEAD is past it, `releases`
-every release tag, newest first. Parsing the tag messages (subject, notes, `Release-Type` / `Release-Scope` / `Release-PR` / `Release-Breaking` /
+every release tag, newest first. The client never sees that type at run time — ui-kit's `useWhatsNew` fetches the route and reads ui-kit's own
+`ReleasesResponse` — so `test/guards/contract-types.test.ts` checks the shared type is assignable to ui-kit's, and `pnpm typecheck` fails when they part.
+Parsing the tag messages (subject, notes, `Release-Type` / `Release-Scope` / `Release-PR` / `Release-Breaking` /
 `Release-Items` trailers) is [release-kit](https://github.com/futin/release-kit)'s `createReleasesReader`, pinned to an exact `vX.Y.Z` tag (`v1.4.0` as of 2026-10-29) — the second of the two packages `server/` may import
 (`test/guards/server-deps.test.ts`). It runs `git` and reads nothing else, so it adds no outbound call. A tag with no `Release-Type` trailer is the **baseline**:
 where numbering starts, not a release of anything.
@@ -87,5 +89,5 @@ the release workflow and are not read back.
     - client/src/components/SideRail.tsx
     - client/src/App.tsx
   kind: subsystem
-  verified: 24f8d773dd459e02b1e4ef4a093aed285939555c
+  verified: 7b75ae1917c8e25249c5d0ab4e16f13da9a22b82
 -->

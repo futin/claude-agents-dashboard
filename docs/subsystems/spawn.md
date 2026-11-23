@@ -198,7 +198,8 @@ same permission ladder and ceiling, prompt still stdin-only — with these diffe
      session started from a terminal, from a second dashboard, or before the last restart,
      none of which the store can see. It returns `null` when `ps` cannot run, and a `null`
      never refuses — the opposite direction from the live-cwd gate's fail-open, which only costs a
-     badge colour. Neither check can see a session whose argv carries no id at all.
+     badge colour. Neither check can see a session whose argv carries no id at all. It forks its own synchronous `ps` on each resume POST rather
+     than read the poll's shared probe, which can be up to 1 s old and miss a session launched inside that second.
 
   The client-side gate (`resumeEligible`, `client/src/lib/resume.ts`) hides the composer
   while anything is held, while `working`, whenever `Session.stopState` is present
@@ -684,9 +685,9 @@ one seam for it, and nothing about `launch`'s own contract changes. Three differ
 | The Board card's `+ New session` | rendered only when `spawnAvailable` is true on the one `/api/health` poll `SessionsView` already owns |
 | each view's phantom row | renders each `launching` entry at the head of its list — project, truncated prompt, `starting…` or (for `failed`) the error — and disappears on its own once the real row adopts the id; never interactive |
 | `sessionSurface` (`server/lib/scan.ts`) | maps the transcript's `entrypoint` → `Session.surface`; `sdk-cli` or `claude-agents-dashboard` ⇒ `dashboard`, everything else ⇒ `local` |
-| `client/src/components/ResumePanel.tsx` | the resume composer pinned in an ended dashboard session's chat drawer — textarea + mic + *resume session*, POSTing `useSpawn().launch({prompt, resume: id})`; Enter sends and Tab takes the last turn's suggested reply (`ComposerSuggestion.tsx`, see [chat](chat.md)) |
-| `client/src/lib/resume.ts` | `resumeEligible` — the pure gate deciding when the drawer offers that composer (dashboard surface, not `desktopOwned`, nothing pending, turn over, spawn available, no `stopState` or `processLive`); `handOverState`, `handOverErrorText` and `handOverFailedText` for the drawer's [hand-over button](chat.md); `stillRunningNote` and `resumeErrorText` for the [still-running note](#processlive-the-live-process-this-server-cannot-signal); unit-tested like every other client lib |
-| `client/src/lib/surface.ts` | the pill's label + tooltip, one copy shared by the session views (`sessions/atoms.tsx`) and the `ChatDrawer` header |
+| `client/src/components/ResumePanel.tsx` | the resume composer pinned in an ended dashboard session's chat drawer — textarea + mic + *resume session*, POSTing `useSpawn().launch({prompt, resume: id})`; Enter sends and Tab takes the last turn's suggested reply (`ComposerSuggestion.tsx`, see [chat](chat.md)); unsent text reports through `onDraft`, which keeps the drawer open against Escape, a scrim tap and Back ([chat](chat.md)) |
+| `client/src/lib/resume.ts` | `resumeEligible` — the pure gate deciding when the drawer offers that composer (dashboard surface, not `desktopOwned`, nothing pending, turn over, spawn available, no `stopState` or `processLive`); `handOverState`, `handOverErrorText` and `handOverFailedText` for the drawer's [hand-over button](chat.md); `stillRunningNote` and `resumeErrorText` for the [still-running note](#processlive-the-live-process-this-server-cannot-signal); the two server errors it words, `open failed` and `session is still running`, are typed by `shared/types.ts`'s `SpawnError`, which `server/api.ts` sends through too, so rewording one on either side fails the typecheck; unit-tested like every other client lib |
+| `client/src/lib/surface.ts` | the pill's label + tooltip, one copy shared by the session views (`sessions/atoms.tsx`) and the `ChatDrawer` sidecar's Surface fact |
 
 ## Endpoints
 
@@ -869,5 +870,5 @@ new reason:
     - client/src/lib/spawnOptions.ts
     - client/src/lib/surface.ts
   kind: subsystem
-  verified: 96b0f64a8c117ae160ba90bfdd34ef357890a8a1
+  verified: 7b75ae1917c8e25249c5d0ab4e16f13da9a22b82
 -->

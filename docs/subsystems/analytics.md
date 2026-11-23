@@ -141,8 +141,8 @@ line's project tag.
   transcript sits unchanged. A hit returns the stored `SessionAnalysis`; a miss re-runs it; a `null` is never stored, so an unreadable transcript is
   retried next request; entries for sessions the call did not look up are dropped. Only the analysis is memoised — `lessonStatus`, `lessonVerdict`
   and the rest are rebuilt from the log every call. `analyzeSession` itself reads and parses the main transcript once: the agent-launch reducer
-  (`agents.ts` `parseRecordEvents` / `applyEvent`) is fed from its own line loop. A miss still reads every subagent file in full; making that
-  cheaper is #411. `analysis` is `null` when the transcript is gone.
+  (`agents.ts` `parseRecordEvents` / `applyEvent`) is fed from its own line loop. A miss reads only the subagent bytes appended since the last
+  fold, through `session-spend.ts`'s cache (above). `analysis` is `null` when the transcript is gone.
 - **`reviewDue`** = lessons other than `none` ones exist AND no `review:` marker within 7 days
   (`REVIEW_INTERVAL_DAYS` in `analytics.ts`; `now` injectable for tests). An empty log, or one of only `none` lessons, is
   never "due". The client renders it twice over in the band: the `.an-review` chip
@@ -321,5 +321,5 @@ The live session meter (status line, `/compact` nudge, tool and subagent pane) u
     - client/src/hooks/useSettings.tsx
     - plugin/skills/kaizen/
   kind: subsystem
-  verified: f25cfb16ab62216a5d9e3f4d1de6f1b20343ad2e
+  verified: 7b75ae1917c8e25249c5d0ab4e16f13da9a22b82
 -->

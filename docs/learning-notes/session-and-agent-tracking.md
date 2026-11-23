@@ -152,12 +152,17 @@ Reading files alone has a blind spot: a killed/interrupted session's last record
 often has no `end_turn`, so on disk it looks "recent + pending = working" forever
 even though nothing runs.
 
-`scan.ts` `probeProcesses()` takes the pids of every running `claude` from `ps`, then asks `lsof` for their working directories:
+`scan.ts` `probeProcesses()` runs two `ps` reads in parallel, takes the pids of every running `claude` from the first, then asks `lsof` for their
+working directories:
 
 ```
 ps -Ao pid=,comm=
+ps -Ao pid=,args=
 lsof -p <pids> -a -d cwd -Fn
 ```
+
+It is async, each child under its own 2 s kill timer, and `lsof` runs only when `ps` named a claude pid. Every `/api/sessions` reader shares one probe
+through `scan-snapshot.ts`'s `sharedProcProbe`: a call joins a probe still running, or reuses one that finished within `PROBE_TTL_MS`.
 
 `composeLiveCwds` turns both outputs into the live-cwd set. A session is live when either its `originCwd` or its newest transcript `cwd` is in that set
 (bug-7: shell drift moves the transcript's cwd, entering a worktree moves the process's, so neither key alone is reliable). Otherwise it is forced to
@@ -173,11 +178,13 @@ lsof -p <pids> -a -d cwd -Fn
 - **Fail-open**: `composeLiveCwds` returns `null`, which skips the gate, when `ps` failed, `ps` matched no pid, `lsof` produced nothing usable, or pids
   matched but `lsof` named no cwd. A non-zero `lsof` exit still counts when it printed stdout (`usableLsofStdout`): lsof exits 1 on processes it may not
   inspect after printing the rest; a timeout or signal kill does not count. Injectable via `ScanOptions.liveCwds` for tests; `skipProcScan` also
-  disables it.
+  disables it (`sharedProcProbe` answers `null` without forking).
 
-`liveSessionIds()` is a second, per-session-id probe (`ps -Ao pid=,args=`); it backs the `processLive` flag and the resume guard, not the status dot.
+The `ps -Ao pid=,args=` read yields the session ids named in a live `claude` argv (`ProcProbe.liveSessionIds`); it backs the `processLive` flag, not
+the status dot. The resume guard asks the same question through the synchronous `liveSessionIds()`, which forks its own `ps` on each resume POST
+rather than reading the shared probe, because it must see a session launched a moment ago.
 
-`countClaudeProcs()` (from the same `ps` read) is a separate informational cross-check number in the response, not used for status.
+`countClaudeProcs()` (from the `comm=` read) is a separate informational cross-check number in the response, not used for status.
 
 ## Why it's built this way
 
