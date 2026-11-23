@@ -7,6 +7,7 @@ import {
   earliestWeightMs,
   forecastHeadline,
   forecastTiming,
+  hostZoneNote,
   nextOccurrenceMs,
   profileGlossary,
   profileProgress,
@@ -453,6 +454,51 @@ export function run(): number {
     assert.strictEqual(tiles[3].warn, undefined);
     assert.ok(tiles[4].sub.includes('0 carrying a weight'), tiles[4].sub);
     assert.ok(tiles[4].sub.includes('3 at the floor'), tiles[4].sub);
+  })) p++; else f++;
+
+  // The same helpers given the host's offset: calendar math in host time, so the answer is one instant whatever zone runs the test.
+  const NOV23_1030Z = Date.parse('2026-11-23T10:30:00Z');   // Mon 23 Nov 2026: host 12:30 at +120, host 05:30 at -300
+
+  if (test('nextOccurrenceMs with a host offset: host wall-clock hours, the same instant in every runner zone', () => {
+    assert.strictEqual(nextOccurrenceMs(hw(1, 14), NOV23_1030Z, 120), Date.parse('2026-11-23T12:00:00Z'), 'host Mon 14:00 is 12:00Z');
+    assert.strictEqual(nextOccurrenceMs(hw(1, 12), NOV23_1030Z, 120), Date.parse('2026-11-30T10:00:00Z'), 'the host hour in progress is a week out');
+    assert.strictEqual(nextOccurrenceMs(hw(1, 14), NOV23_1030Z, -300), Date.parse('2026-11-23T19:00:00Z'));
+    assert.strictEqual(nextOccurrenceMs(hw(0, 3), NOV23_1030Z, -300), Date.parse('2026-11-29T08:00:00Z'), 'host Sun 03:00');
+  })) p++; else f++;
+
+  if (test('nextWeekStartMs with a host offset: host-local Monday 00:00, expressed in UTC', () => {
+    assert.strictEqual(nextWeekStartMs(NOV23_1030Z, -300), Date.parse('2026-11-30T05:00:00Z'));
+    assert.strictEqual(nextWeekStartMs(NOV23_1030Z, 120), Date.parse('2026-11-29T22:00:00Z'));
+    // Sun 23:30Z is already Monday 01:30 for a +120 host, so its next week starts the Monday after.
+    assert.strictEqual(nextWeekStartMs(Date.parse('2026-11-29T23:30:00Z'), 120), Date.parse('2026-12-06T22:00:00Z'));
+  })) p++; else f++;
+
+  if (test('earliestWeightMs with a host offset: a stale host hour folds at its next host occurrence', () => {
+    const g = grid({ [hw(1, 14)]: { observedMin: TRUST_FLOOR_MIN, staleWeeks: 1 } });
+    assert.strictEqual(earliestWeightMs(g, NOV23_1030Z, 120), Date.parse('2026-11-23T12:00:00Z'));
+    assert.strictEqual(earliestWeightMs(g, NOV23_1030Z, -300), Date.parse('2026-11-23T19:00:00Z'));
+  })) p++; else f++;
+
+  if (test('forecastTiming and forecastStats with a host offset: the crossing and the reset read in host time', () => {
+    assert.strictEqual(forecastTiming(walkOf(3), '2026-11-23T10:00:00Z', -300), 'the week hits 100% Mon 05:00');
+    const tiles = forecastStats({
+      utilizationPct: 50, resetsAt: '2026-11-23T10:00:00Z', exhaustAt: '2026-11-23T08:00:00Z', dutyCycle: 0.5,
+      hoursLeft: 10, activeHours: 5, hasWalk: true,
+      progress: { touched: 12, totalMin: 300, atFloor: 3, trusted: 0 }, confidence: 'thin', nowMs: NOV23_1030Z - 4 * 3_600_000,
+      offsetMinutes: 120
+    });
+    assert.strictEqual(tiles[0].sub, 'resets Mon 12:00');
+    assert.strictEqual(tiles[1].value, 'Mon 10:00');
+  })) p++; else f++;
+
+  if (test('hostZoneNote: a line only when the host\'s offset differs from the browser\'s', () => {
+    const now = Date.parse('2026-11-23T10:30:00Z');
+    const browser = -new Date(now).getTimezoneOffset();
+    assert.strictEqual(hostZoneNote(undefined, now), null, 'an older server says nothing');
+    assert.strictEqual(hostZoneNote(browser, now), null, 'the same zone looks as it always did');
+    const east = browser === 330 ? 120 : 330;
+    assert.strictEqual(hostZoneNote(east, now), `Times are the dashboard host’s (UTC+${Math.floor(east / 60)}:${String(east % 60).padStart(2, '0')}).`);
+    assert.strictEqual(hostZoneNote(-300, now), browser === -300 ? null : 'Times are the dashboard host’s (UTC−5:00).');
   })) p++; else f++;
 
   console.log('\n  ' + p + ' passed, ' + f + ' failed');

@@ -330,6 +330,34 @@ export async function run(): Promise<number> {
     });
   }));
 
+  tally(await testAsync('PUT {text, mtimeMs}: the loaded mtime writes; a stale one → 409 changed and the outside edit stays; none writes; a non-number → 400', async () => {
+    await withRoutines('', true, async c => {
+      const file = writeJob(c, 'x', job());
+      const loaded = (await send(c.h, 'GET', '/api/routines/x')).json as unknown as RoutineFile;
+      const mine = job({ extra: ['model: sonnet'] });
+      const fresh = await send(c.h, 'PUT', '/api/routines/x', { text: mine, mtimeMs: loaded.mtimeMs });
+      assert.strictEqual(fresh.status, 200, fresh.raw);
+      assert.strictEqual(fs.readFileSync(file, 'utf8'), mine);
+
+      const opened = (await send(c.h, 'GET', '/api/routines/x')).json as unknown as RoutineFile;
+      const outside = job({ extra: ['model: haiku'] });
+      fs.writeFileSync(file, outside);
+      const later = new Date(opened.mtimeMs + 5_000);
+      fs.utimesSync(file, later, later);
+      const stale = await send(c.h, 'PUT', '/api/routines/x', { text: job({ extra: ['model: opus'] }), mtimeMs: opened.mtimeMs });
+      assert.strictEqual(stale.status, 409, stale.raw);
+      assert.deepStrictEqual(stale.json, { error: 'changed' });
+      assert.strictEqual(fs.readFileSync(file, 'utf8'), outside);
+
+      const blind = await send(c.h, 'PUT', '/api/routines/x', { text: mine });
+      assert.strictEqual(blind.status, 200, 'no mtimeMs keeps the unconditional replace');
+      assert.strictEqual(fs.readFileSync(file, 'utf8'), mine);
+
+      assert.strictEqual((await send(c.h, 'PUT', '/api/routines/x', { text: outside, mtimeMs: 'x' })).status, 400);
+      assert.strictEqual(fs.readFileSync(file, 'utf8'), mine);
+    });
+  }));
+
   tally(await testAsync('PUT, POST and /validate run checkPins against the current pins: an ambiguous foreach name is a 422 / an error', async () => {
     await withRoutines('', true, async c => {
       plantAmbiguousPins(c.h);

@@ -1,6 +1,6 @@
 import type { ForecastStep } from '../../../shared/types';
 
-import { fmtWalkHour, headroomOf } from './walkChart';
+import { fmtWalkHour, headroomOf, wallClock, wallDayKey } from './walkChart';
 
 /**
  * walkRows.ts — the same forward walk the chart draws, folded into day rows.
@@ -75,7 +75,7 @@ const HOUR_MS = 3_600_000;
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
 /**
- * Fold the walk into one row per local day.
+ * Fold the walk into one row per local day — the host's, given its `offsetMinutes` (`wallClock`).
  *
  * `startHead` is `100 − utilization`, the headroom the first slice starts from;
  * it comes from the response rather than from `walk[0]`, which already has one
@@ -83,7 +83,7 @@ const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
  */
 export function walkRows(
   walk: ForecastStep[],
-  opts: { resetsAt: string | null; startHead: number }
+  opts: { resetsAt: string | null; startHead: number; offsetMinutes?: number }
 ): WalkTable {
   const empty: WalkTable = {
     rows: [],
@@ -109,13 +109,13 @@ export function walkRows(
       ? Date.parse(walk[i + 1].t)
       : (Number.isFinite(endMs) ? endMs : d.getTime() + HOUR_MS);
     const hours = Math.max(0, (next - d.getTime()) / HOUR_MS);
-    const key = `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+    const key = wallDayKey(d.getTime(), opts.offsetMinutes);
 
     let row = byKey.get(key);
     if (row === undefined) {
       row = {
         key,
-        label: DAYS[d.getDay()],
+        label: DAYS[wallClock(d.getTime(), opts.offsetMinutes).day],
         isNow: rows.length === 0,
         hours: 0,
         activeHours: 0,
@@ -142,7 +142,7 @@ export function walkRows(
     if (crossed) unpayable += hours;
     if (!crossed && walk[i].cum >= 100) {
       crossed = true;
-      row.crossesAt = fmtWalkHour(walk[i].t);
+      row.crossesAt = fmtWalkHour(walk[i].t, opts.offsetMinutes);
     }
   }
 

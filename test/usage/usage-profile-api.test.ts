@@ -1,6 +1,6 @@
 import assert from 'node:assert';
 
-import { shapeUsageProfile } from '../../server/lib/usage-shape.js';
+import { blankUsageProfile, shapeUsageProfile } from '../../server/lib/usage-shape.js';
 import { emptyState } from '../../server/lib/usage-history.js';
 import { HOURS_PER_WEEK } from '../../server/lib/usage-forecast.js';
 import type { ProfileState } from '../../server/lib/usage-history.js';
@@ -155,7 +155,7 @@ export function run(): number {
     // named here, which is the moment to ask whether it discloses a sample.
     assert.deepStrictEqual(
       Object.keys(r).sort(),
-      ['cells', 'confidence', 'dutyCycle', 'exhaustAt', 'globalMean', 'recording',
+      ['cells', 'confidence', 'dutyCycle', 'exhaustAt', 'globalMean', 'offsetMinutes', 'recording',
         'resetsAt', 'utilizationPct', 'walk', 'walkAbsent']
     );
     assert.ok(!json.includes('.jsonl'), 'no log path may leak');
@@ -264,6 +264,25 @@ export function run(): number {
     });
     assert.ok(r.walk.length > 0);
     assert.strictEqual(r.walkAbsent, null);
+  })) p++; else f++;
+
+  if (test('offsetMinutes: the host offset the cells were bucketed with rides on the body, walk or no walk', () => {
+    const noWalk = shapeUsageProfile({ recording: true, state: emptyState(), weekly: null, nowMs: SUN_00, offsetMinutes: -300 });
+    assert.strictEqual(noWalk.offsetMinutes, -300);
+    const walked = shapeUsageProfile({
+      recording: true, state: emptyState(), nowMs: SUN_00, offsetMinutes: 120,
+      weekly: { utilization: 10, resetsAt: new Date(SUN_00 + 24 * H).toISOString(), ratePerHour: 1 } as never
+    });
+    assert.ok(walked.walk.length > 0, 'the walk ran');
+    assert.strictEqual(walked.offsetMinutes, 120);
+  })) p++; else f++;
+
+  if (test('blankUsageProfile: the fail-open body carries the offset too, as a number', () => {
+    const r = blankUsageProfile(60);
+    assert.strictEqual(r.offsetMinutes, 60);
+    assert.strictEqual(r.cells.length, HOURS_PER_WEEK);
+    assert.strictEqual(r.walk.length, 0);
+    assert.strictEqual(r.recording, false);
   })) p++; else f++;
 
   console.log('\n  ' + p + ' passed, ' + f + ' failed');

@@ -173,6 +173,20 @@ export function run(): number {
     }
   })) p++; else f++;
 
+  if (test('walkRows: with the host offset the day rows and the crossing are host days and host hours', () => {
+    const start = Date.parse('2026-11-23T20:00:00Z');
+    const w: ForecastStep[] = Array.from({ length: 6 }, (_, i) => ({
+      t: new Date(start + i * H).toISOString(), gain: 20, cum: 60 + 20 * i, weight: 1, learned: true, hourOfWeek: 0
+    }));
+    // +120: host Mon 22:00 and 23:00, then Tue 00:00–03:00; cum reaches 100 at index 2, host Tue 00:00.
+    const t = walkRows(w, { resetsAt: new Date(start + 6 * H).toISOString(), startHead: 40, offsetMinutes: 120 });
+    assert.deepStrictEqual(t.rows.map(r => [r.label, r.hours]), [['Mon', 2], ['Tue', 4]]);
+    assert.strictEqual(t.rows[1].crossesAt, 'Tue 00:00');
+    const west = walkRows(w, { resetsAt: new Date(start + 6 * H).toISOString(), startHead: 40, offsetMinutes: -300 });
+    assert.deepStrictEqual(west.rows.map(r => [r.label, r.hours]), [['Mon', 6]]);
+    assert.strictEqual(west.rows[0].crossesAt, 'Mon 17:00');
+  })) p++; else f++;
+
   console.log('\n  ' + p + ' passed, ' + f + ' failed');
   return f;
 }

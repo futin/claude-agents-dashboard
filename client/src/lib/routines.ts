@@ -330,7 +330,7 @@ export function withLate(line: string, late: boolean): string {
 
 /** The other routine write codes `writeFailureText` words, each checked against the shared union so a reworded code fails the typecheck here and in `server/api.ts`. */
 const WRITE_ERROR = {
-  notOwner: 'not-owner', notRunning: 'not-running', exists: 'exists', badOnly: 'bad-only', spawnFailed: 'spawn-failed',
+  notOwner: 'not-owner', notRunning: 'not-running', exists: 'exists', changed: 'changed', badOnly: 'bad-only', spawnFailed: 'spawn-failed',
 } as const satisfies Record<string, RoutineWriteError>;
 
 /** Run now's 409s, keyed by the shared union so a code the server adds fails the typecheck here. */
@@ -351,6 +351,7 @@ export function writeFailureText(what: string, status: number, body: unknown): s
   if (status === 409 && typeof error === 'string' && Object.hasOwn(RUN_CONFLICT_TEXT, error)) return RUN_CONFLICT_TEXT[error as RoutineRunConflict](what);
   if (status === 409 && error === WRITE_ERROR.notRunning) return `${what}: the job is not running.`;
   if (status === 409 && error === WRITE_ERROR.exists) return `${what}: a job with that name already exists.`;
+  if (status === 409 && error === WRITE_ERROR.changed) return `${what}: the file changed on disk since it was opened — reload it first.`;
   if (status === 404) return `${what}: no such job.`;
   if (status === 422) return `${what}: the file has errors.`;
   if (status === 400 && error === WRITE_ERROR.badOnly) return `${what}: the steps picked to run were not valid.`;

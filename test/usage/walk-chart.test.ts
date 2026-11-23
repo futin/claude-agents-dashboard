@@ -1,7 +1,7 @@
 import assert from 'node:assert';
 
 import {
-  absentText, crossingX, dayTicks, DEBT_CAP, headroomOf, headroomScale, headSegments, hitRect,
+  absentText, crossingX, dayTicks, DEBT_CAP, fmtWalkHour, headroomOf, headroomScale, headSegments, hitRect,
   joinPoints, maxDebt, pctX, pctY, pointsAttr, segAreaPath, stepTitle, VIEW_H, walkWidth,
   yHead, zeroY
 } from '../../client/src/lib/walkChart.js';
@@ -344,6 +344,25 @@ export function run(): number {
     }
     // The idle case is the one the old strip answered by vanishing.
     assert.ok(absentText('no-rate').includes('burn rate'));
+  })) p++; else f++;
+
+  if (test('fmtWalkHour: with the host offset the label is host time, whatever the runner\'s zone', () => {
+    assert.strictEqual(fmtWalkHour('2026-11-23T10:00:00Z', 120), 'Mon 12:00');
+    assert.strictEqual(fmtWalkHour('2026-11-23T10:00:00Z', -300), 'Mon 05:00');
+    assert.strictEqual(fmtWalkHour('2026-11-23T02:00:00Z', -300), 'Sun 21:00');
+  })) p++; else f++;
+
+  if (test('dayTicks: with the host offset a tick lands on the host\'s midnight', () => {
+    const w = walkOf(new Array(6).fill(true), { startMs: Date.parse('2026-11-23T20:00:00Z') });
+    // +120: host 22:00, 23:00, then Tue 00:00 at index 2.
+    assert.deepStrictEqual(dayTicks(w, 120), [{ x: 0, label: 'now', kind: 'now' }, { x: 2, label: 'Tue', kind: 'day' }]);
+    // -300: host 15:00 to 20:00, the same Monday throughout.
+    assert.deepStrictEqual(dayTicks(w, -300), [{ x: 0, label: 'now', kind: 'now' }]);
+  })) p++; else f++;
+
+  if (test('stepTitle: its hour line is host time when given the offset', () => {
+    const [s] = walkOf([true], { startMs: Date.parse('2026-11-23T10:00:00Z') });
+    assert.strictEqual(stepTitle(s, undefined, -300).split('\n')[0], 'Mon 05:00');
   })) p++; else f++;
 
   console.log('\n  ' + p + ' passed, ' + f + ' failed');

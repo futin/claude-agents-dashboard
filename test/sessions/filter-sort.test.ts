@@ -57,7 +57,8 @@ function sess(p: Partial<Session>): Session {
     version: null,
     kaizenLesson: p.kaizenLesson ?? null,
     tasks: null,
-    taskPlan: null
+    taskPlan: null,
+    ...('pickerProject' in p ? { pickerProject: p.pickerProject } : {})
   };
 }
 
@@ -96,6 +97,26 @@ export function run(): number {
     assert.deepStrictEqual(applyView(rows, view({ projects: ['dash'] }), NOW).map(s => s.id).sort(), ['main', 'wt']);
     assert.deepStrictEqual(applyView(rows, view({ projects: ['wt-1a2b3c'] }), NOW).map(s => s.id), [], 'the folder name is no chip');
     assert.deepStrictEqual(distinctProjects(rows), ['dash', 'other']);
+  })) p++; else f++;
+
+  if (test('project filter: the server\'s pickerProject wins, and a null one has no chip and shows only under All projects', () => {
+    const rows = [
+      sess({ id: 'a', project: 'a' }),
+      sess({ id: 'scratch', project: 'scratchpad', pickerProject: null }),
+      sess({ id: 'wt', project: 'wt-1a2b3c', repo: 'dash', pickerProject: 'dash' })
+    ];
+    assert.deepStrictEqual(distinctProjects(rows), ['a', 'dash']);
+    assert.deepStrictEqual(applyView(rows, view({ projects: ['a'] }), NOW).map(s => s.id), ['a']);
+    assert.deepStrictEqual(applyView(rows, view({ projects: ['scratchpad'] }), NOW).map(s => s.id), [], 'the folder name is no chip');
+    assert.deepStrictEqual(applyView(rows, view({ projects: [] }), NOW).map(s => s.id).sort(), ['a', 'scratch', 'wt']);
+    assert.deepStrictEqual(availableProjects({ sessions: rows }), ['a', 'dash'], 'the error-snapshot fallback offers no Claude-owned chip');
+  })) p++; else f++;
+
+  if (test('project filter: a row from an older server without pickerProject still files under repo ?? project', () => {
+    const rows = [sess({ id: 'wt', project: 'wt-1a2b3c', repo: 'dash' }), sess({ id: 'pad', project: 'scratchpad' })];
+    assert.strictEqual('pickerProject' in rows[0], false);
+    assert.deepStrictEqual(distinctProjects(rows), ['dash', 'scratchpad']);
+    assert.deepStrictEqual(applyView(rows, view({ projects: ['dash'] }), NOW).map(s => s.id), ['wt']);
   })) p++; else f++;
 
   if (test('status filter: keeps only matching', () => {
