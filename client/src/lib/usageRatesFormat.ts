@@ -44,12 +44,40 @@ export const CURRENT_DAY_FLOOR = 2;
  * the server marks a day `thin` — one of four reasons a day is `thin`, the others being
  * separation failures (`ModelThinReason`); the tip names it. `CURRENT_DAYS` is
  * `CURRENT_MS` in days — where the strip draws the current window's start.
- * All three are pinned by `test/guards/client-server-caps.test.ts`.
+ * All three are pinned by `test/guards/client-server-caps.test.ts`, and so is every constant in the next block.
  */
 export const DRIFT_BAND_PCT = 20;
 export const DAY_FLOOR_PTS = 5;
 export const CURRENT_DAYS = 3;
 const DAY_MS = 86_400_000;
+
+/**
+ * The rest of the server rules the card's copy states, under the same rule and pinned by the same suite (#509) — each one interpolated where the
+ * card says it, so no sentence types a number the server decides.
+ *
+ * From `server/lib/usage-rate.ts`: `DOMINANCE_PCT` is `DOMINANCE` as a percentage, the token share that makes a window one model's own;
+ * `CURRENT_MIN_WINDOWS` is `CURRENT_FLOORS.minIntervals`; `BASELINE_DAYS` is `BASELINE_MS` in days, the span the verdict is fitted over.
+ * From `server/lib/usage-boost.ts`: the weekday peak hours `PEAK_START_HOUR_ET`–`PEAK_END_HOUR_ET`, `BOOST_MIN_RATIO`, `BOOST_MIN_RUN_DAYS`,
+ * `WEEKEND_MIN_RUN_DAYS`, and `BOOST_DAYS`, which is `BOOST_MS` in days.
+ */
+export const DOMINANCE_PCT = 90;
+export const CURRENT_MIN_WINDOWS = 10;
+export const BASELINE_DAYS = 17;
+export const PEAK_START_HOUR_ET = 8;
+export const PEAK_END_HOUR_ET = 14;
+export const BOOST_MIN_RATIO = 1.5;
+export const BOOST_MIN_RUN_DAYS = 3;
+export const WEEKEND_MIN_RUN_DAYS = 2;
+export const BOOST_DAYS = 14;
+
+/** The weekday peak window, as the glossary prints it. */
+const PEAK_HOURS = `${etHourLabel(PEAK_START_HOUR_ET)}–${etHourLabel(PEAK_END_HOUR_ET)} ET`;
+
+/** The card's body while no model has a row yet (and the ledger is recording): every floor a row has to clear, named. */
+export const RATES_EMPTY_TEXT = `Nothing measurable yet. A model appears here once it has held at least ${DOMINANCE_PCT}% of the tokens in `
+  + `${CURRENT_MIN_WINDOWS} recorded windows that moved the limit by at least ${DAY_FLOOR_PTS} pts across ${CURRENT_DAY_FLOOR} separate days, or once `
+  + `${CURRENT_MIN_WINDOWS} windows of shared use meeting the same floors are enough to tell its cost apart from the models beside it — until then `
+  + 'every interval is still being collected.';
 
 /**
  * Tokens, at a magnitude a person can hold in their head. One decimal in the
@@ -499,13 +527,13 @@ export const RATES_GLOSSARY: readonly {
   {
     key: 'baseline',
     term: 'Baseline',
-    text: `The trailing 14 days before the last three. A verdict needs ${BASELINE_DAY_FLOOR} `
+    text: `The trailing ${BASELINE_DAYS - CURRENT_DAYS} days before the last ${CURRENT_DAYS}. A verdict needs ${BASELINE_DAY_FLOOR} `
       + 'separate days in it.'
   },
   {
     key: 'daily',
     term: 'By day',
-    text: `One cell per UTC day of the 17 the verdict is fitted over, coloured by how far that `
+    text: `One cell per UTC day of the ${BASELINE_DAYS} the verdict is fitted over, coloured by how far that `
       + "day's weighted rate sits from the model's baseline: red is fewer tokens per 1% "
       + `(pricier), cyan is more (cheaper), grey is within the ±${DRIFT_BAND_PCT}% band the `
       + `verdict uses. Hatched days moved under ${DAY_FLOOR_PTS} pts or could not be separated from other models' spend, and are shown but not `
@@ -528,18 +556,18 @@ export const RATES_GLOSSARY: readonly {
   {
     key: 'boost',
     term: 'Off-peak boost',
-    text: 'Watches for a time-of-day promotion — limits raised outside weekday peak hours (08:00–14:00 ET), as in March 2026. Each '
+    text: `Watches for a time-of-day promotion — limits raised outside weekday peak hours (${PEAK_HOURS}), as in March 2026. Each `
       + "weekday's off-peak tokens per 1% are compared against that same day's peak, on the one model with the most evidence, and "
-      + 'both the weighted and the raw rate must rise 1.5× for three days running. When it sees nothing it says nothing: no line '
+      + `both the weighted and the raw rate must rise ${BOOST_MIN_RATIO}× for ${BOOST_MIN_RUN_DAYS} days running. When it sees nothing it says nothing: no line `
       + 'under the headline means no boost was measured.'
   },
   {
     key: 'weekendBoost',
     term: 'Weekend boost',
     text: 'The weaker of the two readings. A weekend day has no peak hours of its own to compare against, so it is measured '
-      + 'against the weekday 08:00–14:00 ET rate pooled across every weekday of the last 14 days, not against the same day — a '
-      + 'weekend-long change in the work itself can move it where the weekday reading cannot. Two weekend days in a row must '
-      + 'both clear 1.5× on weighted and raw alike.'
+      + `against the weekday ${PEAK_HOURS} rate pooled across every weekday of the last ${BOOST_DAYS} days, not against the same day — a `
+      + `weekend-long change in the work itself can move it where the weekday reading cannot. ${WEEKEND_MIN_RUN_DAYS} weekend days in a row must `
+      + `each clear ${BOOST_MIN_RATIO}× on weighted and raw alike.`
   }
 ];
 

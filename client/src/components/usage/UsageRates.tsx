@@ -5,7 +5,7 @@ import { useUsageRates } from '../../hooks/useUsageRates';
 import {
   boostLine, coverageCaveat, coverageRows, cutFraction, DAY_FLOOR_PTS, dayLabel, dayStep, dayTip,
   DRIFT_BAND_PCT, figureTip, formatDeviation, formatShare, formatTok, ledgerReading,
-  measuredShare, movedLabel, movedTotal, pricedShare, RATES_GLOSSARY, ratesStats, SEPARATION_THIN_NOTE, sharedLine, showsDays,
+  measuredShare, movedLabel, movedTotal, pricedShare, RATES_EMPTY_TEXT, RATES_GLOSSARY, ratesStats, SEPARATION_THIN_NOTE, sharedLine, showsDays,
   spanText, surfaceText, thinNotes, verdictClass, verdictText, weekendBoostLine
 } from '../../lib/usageRatesFormat';
 import { InfoDot } from './ReadingAids';
@@ -295,10 +295,7 @@ export function UsageRates() {
         {models.length === 0 ? (
           <p className="note">
             {rates.recording
-              ? <>Nothing measurable yet. A model appears here once it has held at least 90% of
-                the tokens in ten recorded windows, or once ten windows of shared use are
-                enough to tell its cost apart from the models beside it — until then every
-                interval is still being collected.</>
+              ? RATES_EMPTY_TEXT
               : <>No ledger, so no rows.</>}
           </p>
         ) : (

@@ -122,7 +122,10 @@ export function quickMenu(repo: OkRepo, ctx: QuickCtx): { pull: QuickItem; push:
   return { pull: pullItem(repo, repo.branch), push: pushItem(repo, repo.branch), sync };
 }
 
-const TIMEOUT = 'git took over 60s and was stopped. Use Sync.';
+/** `server/lib/git-quick.ts` `QUICK_TIMEOUT_MS` in seconds; pinned by `test/guards/client-server-caps.test.ts`. */
+export const QUICK_TIMEOUT_SECS = 60;
+const TOOK_TOO_LONG = `took over ${QUICK_TIMEOUT_SECS}s and was stopped`;
+const TIMEOUT = `git ${TOOK_TOO_LONG}. Use Sync.`;
 const clause = (detail: string | null): string => (detail ? ` — ${detail}` : '');
 
 function okPhrase(p: Extract<GitQuickPart, { ok: true }>, short: boolean): string {
@@ -152,7 +155,7 @@ export function quickResultLine(res: GitQuickResponse): { text: string; tone: 'o
   const done = good.map((p, i) => okPhrase(p, i > 0)).join(', ');
   if (bad.length === 0) return say(`${done}.`, 'ok');
   const f = bad[0];
-  return say(`${done}; ${f.branch} ${f.timedOut ? 'took over 60s and was stopped' : `refused${clause(f.detail)}`}. Use Sync.`);
+  return say(`${done}; ${f.branch} ${f.timedOut ? TOOK_TOO_LONG : `refused${clause(f.detail)}`}. Use Sync.`);
 }
 
 export type QuickFailureKind = 'read-only' | 'bad-token' | 'failed';
