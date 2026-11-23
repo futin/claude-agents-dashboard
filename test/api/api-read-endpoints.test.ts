@@ -6,7 +6,7 @@
  * their own. What is covered *here* is the handler layer above them and the
  * routing below them: the scan-knob query params and their caps, the `ID_RE`
  * shape check, the not-found path staying a 404 rather than a 500, the
- * cursor validation, and — the reason these go over a socket at all — the
+ * cursor validation, the `?full=1` switch that lifts the chat caps, and — the reason these go over a socket at all — the
  * route-order rule that `:id/chat` must be matched before `:id`, which no unit
  * test of either handler can see.
  */
@@ -17,6 +17,7 @@ import path from 'node:path';
 
 import { testAsync, userRecord, withServer } from '../api-harness.js';
 import { appSessionsRoot, resetArchivedCache } from '../../server/lib/archived.js';
+import { TEXT_CAP } from '../../server/lib/chat.js';
 
 /** A session id that satisfies `ID_RE` and looks like a real transcript name. */
 const ID = '11111111-1111-4111-8111-111111111111';
@@ -196,6 +197,30 @@ export async function run(): Promise<number> {
       assert.equal(reply.status, 200);
       assert.ok(Array.isArray(reply.json?.messages), 'a chat page, not a detail payload');
       assert.equal(reply.json?.agents, undefined, "the detail regex must not have swallowed '/chat'");
+    });
+  }));
+
+  check(await testAsync('GET /api/sessions/:id/chat?full=1 lifts TEXT_CAP on the tail and the live tail; any other value keeps it', async () => {
+    await withServer(ENV, async h => {
+      const long = 'x'.repeat(TEXT_CAP + 500);
+      h.plant(ID, [userRecord('u-long', long, h.home)]);
+      const textOf = async (query: string): Promise<{ text: string; textTruncated: boolean }> => {
+        const reply = await h.req(`/api/sessions/${ID}/chat${query}`);
+        assert.equal(reply.status, 200, `${query || '(no query)'} must answer 200`);
+        const msgs = reply.json?.messages as Array<{ text: string; textTruncated: boolean }>;
+        assert.equal(msgs.length, 1, `${query || '(no query)'} must return the one message`);
+        return msgs[0];
+      };
+      for (const query of ['', '?full=0', '?full=true', '?after=0']) {
+        const capped = await textOf(query);
+        assert.equal(capped.text.length, TEXT_CAP, `${query || '(no query)'} must stay capped`);
+        assert.equal(capped.textTruncated, true);
+      }
+      for (const query of ['?full=1', '?after=0&full=1']) {
+        const full = await textOf(query);
+        assert.equal(full.text, long, `${query} must return the whole text`);
+        assert.equal(full.textTruncated, false);
+      }
     });
   }));
 

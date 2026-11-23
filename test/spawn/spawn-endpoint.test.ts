@@ -25,6 +25,8 @@ import path from 'node:path';
 import { serveSessionRow, serveSessionStop, serveSpawn, serveSpawnStop } from '../../server/api.js';
 import { loadConfig } from '../../server/lib/config.js';
 import { register as registerMessage, resetStore as resetMessages } from '../../server/lib/messages.js';
+import { register as registerQuestion, resetStore as resetQuestions } from '../../server/lib/pending.js';
+import { register as registerPlan, resetStore as resetPlans } from '../../server/lib/plans.js';
 import { resetState } from '../../server/lib/remoteState.js';
 import {
   LAUNCH_TTL_MS, MAX_LAUNCHING, adoptLaunched, launch, listLaunching, probeSpawn, resetLaunches,
@@ -364,6 +366,48 @@ export async function run(): Promise<number> {
     });
   }));
 
+  // The reply window above is one of three held-socket stores the alive check reads; a held question and a held plan are the other two.
+  for (const [what, hold] of [
+    ['question', () => void registerQuestion(RES_ID, [], 60_000, () => undefined)],
+    ['plan', () => void registerPlan(RES_ID, 'the plan', 60_000, () => undefined)]
+  ] as const) {
+    check(await testAsync(`resume while the session holds a ${what} is 409 — it is alive, not stale`, async () => {
+      await withResumeHome('CLAUDE_BIN=/bin/echo\n', async cfg => {
+        setSpawner(fakeSpawner());
+        try {
+          hold();
+          const reply = await post((req, res) => void serveSpawn(cfg, req, res), JSON.stringify({ prompt: 'continue', resume: RES_ID }));
+          assert.equal(reply.status, 409);
+          assert.equal(reply.json?.error, 'session is still running');
+          assert.equal(listLaunching().length, 0, 'nothing may have spawned');
+        } finally {
+          resetQuestions();
+          resetPlans();
+        }
+      });
+    }));
+  }
+
+  /** A dashboard-surface transcript for `NOCWD_ID` whose records carry no `cwd` at all, planted beside withResumeHome's two. */
+  const NOCWD_ID = '55555555-5555-4555-8555-555555555555';
+  function plantNoCwd(): void {
+    const rec = { entrypoint: 'sdk-cli', timestamp: '2026-08-22T10:00:00.000Z', message: { role: 'user', content: [{ type: 'text', text: 'hi' }] } };
+    fs.writeFileSync(path.join(process.cwd(), '.claude', 'projects', '-fake-proj', `${NOCWD_ID}.jsonl`), JSON.stringify(rec) + '\n');
+  }
+
+  check(await testAsync('a headless resume of a dashboard session with no cwd is 400 "session has no working directory" and launches nothing', async () => {
+    await withResumeHome('CLAUDE_BIN=/bin/echo\n', async cfg => {
+      const calls: unknown[] = [];
+      setSpawner(((...args: unknown[]) => { calls.push(args); return fakeSpawner()(...(args as Parameters<Spawner>)); }) as Spawner);
+      plantNoCwd();
+      const reply = await post((req, res) => void serveSpawn(cfg, req, res), JSON.stringify({ prompt: 'continue', resume: NOCWD_ID }));
+      assert.equal(reply.status, 400);
+      assert.equal(reply.json?.error, 'session has no working directory');
+      assert.equal(calls.length, 0, 'no child may be spawned without a folder to run it in');
+      assert.equal(listLaunching().length, 0);
+    });
+  }));
+
   check(await testAsync('a second resume of the same session while one is launching is 409', async () => {
     await withResumeHome('CLAUDE_BIN=/bin/echo\n', async cfg => {
       setSpawner(fakeSpawner());
@@ -680,6 +724,15 @@ export async function run(): Promise<number> {
       assert.equal(second.status, 409);
       assert.equal(second.json?.error, 'already resuming');
       assert.deepEqual(d.calls.map(c => c.args), [[`claude://resume?session=${RES_ID}`]]);
+    });
+  }));
+
+  check(await testAsync('a hand-over of a session with no cwd is 200 — the resume link names the session, not a folder', async () => {
+    await withDesktop('CLAUDE_BIN=/bin/echo\n', 'darwin', async (cfg, d) => {
+      plantNoCwd();
+      const reply = await spawnReq(cfg, { resume: NOCWD_ID, surface: 'desktop' });
+      assert.equal(reply.status, 200);
+      assert.deepEqual(d.calls.map(c => c.args), [[`claude://resume?session=${NOCWD_ID}`]]);
     });
   }));
 
