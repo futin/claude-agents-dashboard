@@ -5,12 +5,12 @@
 import assert from 'node:assert';
 
 import {
-  QUICK_NOTE_TTL_MS, quickFailureKind, quickFailureLine, quickMenu, quickNoteExpired, quickResultLine, syncPlanText,
+  QUICK_NOTE_TTL_MS, quickFailureKind, quickFailureLine, quickMenu, quickNoteExpired, quickResultLine, quickSyncState, syncPlanText,
   type QuickCtx,
 } from '../../client/src/lib/gitQuick.js';
 import type { OkRepo } from '../../client/src/lib/gitSync.js';
 import { READ_ONLY_TEXT } from '../../client/src/lib/writeRefusal.js';
-import type { GitQuickPart, GitQuickResponse } from '../../shared/types.js';
+import type { GitQuickPart, GitQuickResponse, Session } from '../../shared/types.js';
 
 function test(name: string, fn: () => void): boolean {
   try { fn(); console.log('  ✓ ' + name); return true; } catch (e) { console.log('  ✗ ' + name); console.log('    ' + (e as Error).message); return false; }
@@ -234,6 +234,34 @@ export async function run(): Promise<number> {
     assert.strictEqual(QUICK_NOTE_TTL_MS, 30_000);
     assert.strictEqual(quickNoteExpired(0, 30_000), false);
     assert.strictEqual(quickNoteExpired(0, 30_001), true);
+  }));
+
+  // quickSyncState: the remembered sync's phase, read into the menu's syncState
+  check(test('quickSyncState: no remembered run and no POST out is idle', () => assert.strictEqual(quickSyncState(null, false), 'idle')));
+  check(test('quickSyncState: an ended or failed run is idle', () => {
+    assert.strictEqual(quickSyncState({ kind: 'ended' }, false), 'idle');
+    assert.strictEqual(quickSyncState({ kind: 'failed', error: 'boom' }, false), 'idle');
+  }));
+  check(test('quickSyncState: a live session is running, even with a POST out', () => {
+    const session = { id: 's1' } as Session;
+    assert.strictEqual(quickSyncState({ kind: 'running', session }, false), 'running');
+    assert.strictEqual(quickSyncState({ kind: 'running', session }, true), 'running');
+  }));
+  check(test('quickSyncState: launching, unseen or this repo\'s own POST out is busy', () => {
+    assert.strictEqual(quickSyncState({ kind: 'launching' }, false), 'busy');
+    assert.strictEqual(quickSyncState({ kind: 'unseen' }, false), 'busy');
+    assert.strictEqual(quickSyncState(null, true), 'busy');
+    assert.strictEqual(quickSyncState({ kind: 'ended' }, true), 'busy');
+  }));
+  check(test('quickSyncState: running and busy both block quick pull and push; idle does not', () => {
+    const repo = ok({ trunkVsOrigin: { ahead: 1, behind: 1 } });
+    for (const phase of [{ kind: 'running' as const, session: { id: 's1' } as Session }, { kind: 'launching' as const }]) {
+      const m = quickMenu(repo, ctx({ syncState: quickSyncState(phase, false) }));
+      assert.deepStrictEqual([m.pull, m.push], [off('Sync is running'), off('Sync is running')]);
+    }
+    const idle = quickMenu(repo, ctx({ syncState: quickSyncState(null, false) }));
+    assert.notStrictEqual(idle.pull.sub, 'Sync is running');
+    assert.notStrictEqual(idle.push.sub, 'Sync is running');
   }));
 
   console.log(`\ngit-quick-client: ${pass}/${total} passed`);

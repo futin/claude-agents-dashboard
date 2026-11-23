@@ -7,7 +7,7 @@
 import type { GitQuickPart, GitQuickResponse, WriteAccess } from '../../../shared/types';
 import { gitPlural } from './gitLevels';
 import { pullParts, pushParts } from './gitMatrixCells';
-import type { OkRepo } from './gitSync';
+import type { OkRepo, SyncPhase } from './gitSync';
 import { READ_ONLY_TEXT, refusalKind } from './writeRefusal';
 
 export interface QuickItem {
@@ -105,6 +105,16 @@ export function syncPlanText(repo: OkRepo): string | null {
   if (steps.length === 0) return null;
   const text = steps.join(', ');
   return text[0].toUpperCase() + text.slice(1);
+}
+
+/**
+ * What the menu's rules read of the remembered sync: launching, unseen or this repo's own POST out (`starting`) all count as busy. Anything but `idle`
+ * blocks quick pull and push with "Sync is running" (`quickMenu`).
+ */
+export function quickSyncState(phase: SyncPhase | null, starting: boolean): QuickCtx['syncState'] {
+  if (phase?.kind === 'running') return 'running';
+  if (starting || phase?.kind === 'launching' || phase?.kind === 'unseen') return 'busy';
+  return 'idle';
 }
 
 /** The menu's three items for one repo. A disabled item always says why: the first reason in the spec's precedence order. */

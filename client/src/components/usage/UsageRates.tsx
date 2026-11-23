@@ -1,9 +1,9 @@
-import type { ModelDayRate, ModelRateRow } from '../../../../shared/types';
+import type { ModelRateRow } from '../../../../shared/types';
 import type { PinHandlers, TipHandlers } from '../../hooks/useFloatingTip';
 import { useFloatingTip } from '../../hooks/useFloatingTip';
 import { useUsageRates } from '../../hooks/useUsageRates';
 import {
-  boostLine, coverageCaveat, coverageRows, cutFraction, DAY_FLOOR_PTS, dayLabel, dayStep, dayTip,
+  boostLine, coverageCaveat, coverageRows, cutFraction, DAY_FLOOR_PTS, dayClass, dayLabel, dayTip,
   DRIFT_BAND_PCT, figureTip, formatDeviation, formatShare, formatTok, ledgerReading,
   measuredShare, movedLabel, movedTotal, pricedShare, RATES_EMPTY_TEXT, RATES_GLOSSARY, ratesStats, SEPARATION_THIN_NOTE, sharedLine, showsDays,
   spanText, surfaceText, thinNotes, verdictClass, verdictText, weekendBoostLine
@@ -67,18 +67,6 @@ import { Definitions, RowHead, Sheet, StatStrip } from './Sheet';
 
 /** The rates table's column count, so a full-width sub-row cannot drift from it. */
 const RATE_COLS = 9;
-
-/**
- * The class a day cell wears: its colour step when rated, otherwise its state,
- * which the stylesheet renders as texture. `none` is the bare cell.
- */
-function dayClass(day: ModelDayRate): string {
-  if (day.state === 'rated') {
-    const step = dayStep(day.deviationPct);
-    return step === 'unjudged' ? '' : step;
-  }
-  return day.state === 'none' ? '' : day.state;
-}
 
 /**
  * One model's days, as the sub-row under its own row in the table.
