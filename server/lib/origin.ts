@@ -5,22 +5,25 @@
  * Two consumers read the same answer: the toolbar badge (`GET /api/health`
  * `origin`) and the write gate in `server/api.ts`, which trusts `local` and,
  * behind the `trustTailnet` setting, `tailnet` (docs/subsystems/remote-access.md).
- * Because the gate depends on it, {@link resolvePeer} reads only what a remote
+ * Because the gate depends on it, {@link resolvePeer} trusts only what a remote
  * client cannot author: the socket address, and the `X-Forwarded-For` entries
- * that loopback proxies on this machine appended, walked from the right.
+ * that loopback proxies on this machine appended, walked from the right. The
+ * `Host` header is read too, but it can only take `local` away, never grant it.
  *
  * ⚠️ Never take the left-most forwarded entry. The client writes that one itself,
  * and a proxy only appends — so a left-to-right reader returns whatever verdict the
  * caller asks for.
  *
  * Pure and zero-dep, like the rest of `server/lib`: no `tailscale` binary, no
- * network, no config. With Tailscale absent the tailnet branches simply never
+ * network, no config; the one read of the machine is `os.hostname()` at load. With Tailscale absent the tailnet branches simply never
  * match and every client reads `local` or `lan`.
  */
 
 import type { IncomingHttpHeaders } from 'node:http';
+import os from 'node:os';
 
 import type { ConnectionOrigin } from '../../shared/types.js';
+import { hostname as hostOf } from './request-guard.js';
 
 /** Tailscale's IPv6 ULA range is fd7a:115c:a1e0::/48 — the first three hextets. */
 const TAILSCALE_V6 = ['fd7a', '115c', 'a1e0'];
@@ -134,25 +137,48 @@ export function classifyAddress(addr: string | undefined): ConnectionOrigin {
  *
  * An entry that is not an address, empty ones included, is `unknown` rather than
  * skipped: the gate fails closed. No header at all, or only loopback entries,
- * is `local`.
+ * is `local` — unless the `Host` header is a name a LAN peer can answer for
+ * ({@link rebindableHost}), which is `unknown` too.
  */
 export function resolvePeer(
   remoteAddress: string | undefined,
-  headers?: IncomingHttpHeaders
+  headers?: IncomingHttpHeaders,
+  ownNames: readonly string[] = OWN_NAMES
 ): ConnectionOrigin {
   const socket = classifyAddress(remoteAddress);
   if (socket !== 'local') return socket;
 
   const raw = headers?.['x-forwarded-for'];
-  if (raw === undefined) return 'local';
-  const hops = (Array.isArray(raw) ? raw.join(',') : raw).split(',');
-  for (let i = hops.length - 1; i >= 0; i--) {
-    const hop = hops[i].trim();
-    if (!isIpish(hop)) return 'unknown';
-    const kind = classifyAddress(hop);
-    if (kind !== 'local') return kind;
+  if (raw !== undefined) {
+    const hops = (Array.isArray(raw) ? raw.join(',') : raw).split(',');
+    for (let i = hops.length - 1; i >= 0; i--) {
+      const hop = hops[i].trim();
+      if (!isIpish(hop)) return 'unknown';
+      const kind = classifyAddress(hop);
+      if (kind !== 'local') return kind;
+    }
   }
-  return 'local';
+  return rebindableHost(headers?.host, ownNames) ? 'unknown' : 'local';
+}
+
+/** This machine's own name, bare and short: the OS resolves it locally (`/etc/hosts`, nss-myhostname, mDNSResponder), so no LAN peer can answer for it. */
+const OWN_NAMES: readonly string[] = (() => {
+  const full = os.hostname().toLowerCase();
+  return [full, full.split('.')[0]].filter(Boolean);
+})();
+
+/**
+ * Whether a loopback request's `Host` is a name a LAN peer could have re-pointed at 127.0.0.1: a `*.local` name (mDNS) or a single-label one
+ * (LLMNR/NetBIOS, which the Windows side of WSL2 consults), other than `localhost` and this machine's own name. `hostAllowed`
+ * (request-guard.ts) lets both through so LAN readers can browse by them, which is safe on a LAN socket; on a loopback socket it would hand a
+ * rebound page the token-free write `local` gets (audit 2026-11-23).
+ */
+export function rebindableHost(header: string | undefined, ownNames: readonly string[] = OWN_NAMES): boolean {
+  if (!header) return false;
+  const name = hostOf(header);
+  if (!name || name.includes(':') || /^\d{1,3}(\.\d{1,3}){3}$/.test(name)) return false;
+  if (name === 'localhost' || ownNames.includes(name)) return false;
+  return name.endsWith('.local') || !name.includes('.');
 }
 
 /** The badge's name for {@link resolvePeer}, kept so the badge and the gate can never disagree. */

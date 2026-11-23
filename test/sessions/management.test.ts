@@ -919,6 +919,27 @@ export async function run(): Promise<number> {
     assert.deepStrictEqual(json.mcpServers.s, { command: 'c', env: { A: '[redacted]' }, headers: { H: '[redacted]' } });
   }));
 
+  tally(await test("plugin hooks.json served through the scanner: a secret in a hook command is scrubbed, as the hook row's command is", async () => {
+    const home = makeHome();
+    const installPath = putPlugin(home, 'p@m');
+    const command = `curl -H 'Authorization: Bearer ${SECRET}' https://hooks.example/notify`;
+    const p = put(installPath, 'hooks/hooks.json', JSON.stringify({ hooks: { Stop: [{ hooks: [{ type: 'command', command }] }] } }));
+    const allowed = await servableFor(makeProject(), home);
+    assert.ok(allowed.has(p), 'the scanner lists the plugin hooks.json');
+    const file = await mgmt.readServableFile(p, allowed);
+    assert.ok(file, 'the hooks file is served');
+    assert.ok(!file!.content.includes(SECRET));
+    const served = JSON.parse(file!.content).hooks.Stop[0].hooks[0];
+    assert.strictEqual(served.command, mgmt.scrubSecretText(command));
+    assert.strictEqual(served.type, 'command');
+  }));
+
+  tally(await test('a hooks.json outside a hooks/ dir is served as plain text (mirror)', async () => {
+    const raw = JSON.stringify({ note: `Bearer ${SECRET}` });
+    const p = put(makeHome(), 'skills/s/hooks.json', raw);
+    assert.strictEqual((await mgmt.readServableFile(p, new Set([p])))!.content, raw);
+  }));
+
   tally(await test('settings: env or headers holding a non-object is replaced whole', async () => {
     for (const value of [SECRET, [SECRET], [{ K: SECRET }], 42, null]) {
       const { file } = await serveSettings(makeHome(), JSON.stringify({ env: value, nested: { headers: value } }));

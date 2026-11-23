@@ -72,6 +72,11 @@ the right**: loopback entries (another local hop) are skipped, the first other e
 closed). No header, or only loopback entries, is `local`. The right-most entry is the trustworthy one because each proxy *appends* the address of the socket
 it accepted (Vite's `xfwd`), so whatever a client forged sits to its left.
 
+A `local` verdict also needs a `Host` no LAN peer can answer for. A `*.local` name (mDNS) or a single-label one (LLMNR/NetBIOS, which the Windows side
+of WSL2 consults) other than `localhost` and this machine's own `os.hostname()` turns it into `unknown`: a LAN peer could re-point such a name at
+127.0.0.1, and its page would then post same-origin from your browser over loopback (`rebindableHost`, audit 2026-11-23). The `Host` can only take
+`local` away; every other verdict ignores it.
+
 | Path | socket | XFF at the API | peer |
 |---|---|---|---|
 | hook / curl on this machine → API | 127.0.0.1 | — | local |
@@ -123,7 +128,9 @@ the LAN/tailnet trust model above is unchanged — they stop a web page in *your
 - **Host allowlist (DNS rebinding).** A page on `evil.example` can re-point its own name at `127.0.0.1` and then read every open GET route as
   same-origin; the browser still sends `Host: evil.example`. Allowed without config: a missing `Host`, IP literals, single-label names (`localhost`, a
   tailnet short name, a LAN hostname), and `*.localhost`, `*.local`, `*.ts.net`. Anything else is a 403 naming `ALLOWED_HOSTS` — comma-separated exact
-  names, `.suffix` rules (which also match the apex) or `*` to switch the check off. This is the prod twin of the Vite guard described below.
+  names, `.suffix` rules (which also match the apex) or `*` to switch the check off. This is the prod twin of the Vite guard described below. The
+  `*.local` and single-label exemptions let LAN readers browse by those names; they are names a LAN peer can answer for, so on a loopback socket they
+  never earn `local` (see **Resolving the peer**).
 - **Cross-site writes (CSRF).** A trusted peer writes with no token and `readJsonBody` ignores Content-Type, so a `no-cors` `text/plain` POST from any
   site open in that browser would reach the write routes without a preflight. Any non-GET/HEAD/OPTIONS request is refused when `Sec-Fetch-Site` is present and
   is not `same-origin` or `none`, or — when it is absent — when `Origin` is present and its host differs from `Host` (`Origin: null` included). A request
