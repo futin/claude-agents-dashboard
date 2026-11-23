@@ -50,8 +50,11 @@ export function projectDir(path: string, home: string): string {
   return dir === '/' ? '' : dir;
 }
 
+/** `server/lib/management.ts` `OLDER_PROJECTS_DAYS`: the horizon of projects offered for pinning; pinned by `test/guards/client-server-caps.test.ts`. */
+export const OLDER_PROJECTS_DAYS = 30;
+
 export const PROJECTS_BAND_SUB =
-  'Every project with a session in the last 30 days. Pin one to keep it in the launch sheet whatever the lookback; pins are stored by the dashboard server, so they show up on every device.';
+  `Every project with a session in the last ${OLDER_PROJECTS_DAYS} days. Pin one to keep it in the launch sheet whatever the lookback; pins are stored by the dashboard server, so they show up on every device.`;
 
 /** The chip a dead pin wears where a live one shows its age; its sentence is `PROJECTS_MISSING`, the chip's tooltip. */
 export const PROJECTS_GONE_CHIP = 'Folder gone';
@@ -66,9 +69,9 @@ export function noPinsText(total: number): string {
 
 /** The offered group's empty state; `total` is the unfiltered count. */
 export function noOffersText(total: number): string {
-  return total === 0 ? 'Every project active in the last 30 days is already pinned.' : 'No project matches.';
+  return total === 0 ? `Every project active in the last ${OLDER_PROJECTS_DAYS} days is already pinned.` : 'No project matches.';
 }
 
 /** The Lists layout's sub-lines under each group heading. */
-export const LIST_SUB_OFFERS = 'a session in the last 30 days, gone from the launch sheet once it ages out';
+export const LIST_SUB_OFFERS = `a session in the last ${OLDER_PROJECTS_DAYS} days, gone from the launch sheet once it ages out`;
 export const LIST_SUB_PINNED = 'kept in the launch sheet whatever the lookback';

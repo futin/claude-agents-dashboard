@@ -22,6 +22,7 @@ import { READ_ONLY_TEXT } from '../../lib/writeRefusal';
 import { postWrite } from '../../lib/postWrite';
 import { pushTestText } from '../../lib/pushTest';
 import { ANSWER_SECS_MAX, ANSWER_SECS_MIN, IDLE_SECS_MAX } from '../../lib/settingsBounds';
+import { CHAT_MESSAGES_HINT } from '../../lib/textCaps';
 import { writeStatusLine } from '../../lib/writeStatus';
 import { EFFORTS, MODELS, PERMISSION_MODE_LABEL } from '../../lib/spawnOptions';
 import { LAUNCH_DEFAULT_DESKTOP_MISSING, LAUNCH_DEFAULT_DESKTOP_NOTE, LAUNCH_DEFAULT_HINT } from '../../lib/launchSurface';
@@ -544,7 +545,7 @@ export default function SettingsView() {
 
             <SettingsRow
               name="Chat messages"
-              hint="Truncated cuts a message at 2 000 characters and a tool body at 20 000 — enough to see what a session is doing. Full sends the whole thing (a page still reads at most one 512 KB window). Changing this re-tails an open drawer."
+              hint={CHAT_MESSAGES_HINT}
             >
               <Segmented
                 value={settings.chatFullText ? 'full' : 'cut'}

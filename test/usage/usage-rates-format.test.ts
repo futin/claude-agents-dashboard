@@ -30,6 +30,7 @@ import {
   thinNotes,
   spanText,
   pricedShare,
+  RATES_EMPTY_TEXT,
   RATES_GLOSSARY,
   ratesStats,
   formatShare,
@@ -647,6 +648,15 @@ export function run(): number {
     assert.strictEqual(g('window'),
       'One window is one 5-hour limit period in which this model spent tokens, alone or beside other models. '
       + 'pts are the utilization percentage points left to it once the other models\' spend is priced out.');
+  })) p++; else f++;
+
+  if (test('#509: empty state and glossary state the server rules from their pinned constants', () => {
+    for (const part of ['90%', '10 recorded windows', '5 pts', '2 separate days']) assert.ok(RATES_EMPTY_TEXT.includes(part), `${part}: ${RATES_EMPTY_TEXT}`);
+    const g = (k: string) => RATES_GLOSSARY.find(e => e.key === k)!.text;
+    for (const part of ['14 days', 'last 3']) assert.ok(g('baseline').includes(part), `${part}: ${g('baseline')}`);
+    assert.ok(g('daily').includes('of the 17 '), g('daily'));
+    for (const part of ['08:00–14:00 ET', '1.5×', '3 days running']) assert.ok(g('boost').includes(part), `${part}: ${g('boost')}`);
+    for (const part of ['08:00–14:00 ET', 'last 14 days', '2 weekend days', '1.5×']) assert.ok(g('weekendBoost').includes(part), `${part}: ${g('weekendBoost')}`);
   })) p++; else f++;
 
   // ── the off-peak boost lines ──
