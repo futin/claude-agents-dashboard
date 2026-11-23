@@ -81,7 +81,8 @@ failure clears on the next success or a server restart (the map is in memory).
 | All good | none of the above; pending changes **with** a watcher are quiet, since it picks them up in about a second |
 | Not indexed | `none` and `missing`: no graph, so nothing to be wrong with |
 
-Rank is level, then summed severity, then pin order. A live rebuild is a run, not a problem. `cli: 'missing'` ranks nothing: the view draws one sentence.
+Rank is level, then summed severity, then pin order. A live rebuild is a run, not a problem (`isIndexing`). The clock chip's Sync all behind posts to every
+Worth a look repo with pending changes and no run in flight (`behindRepos`), since a repo already running would only answer 409. `cli: 'missing'` ranks nothing: the view draws one sentence.
 
 ## Client
 
@@ -92,7 +93,8 @@ leaving the tab stops it. Each request carries `pollFetch`'s 30s bound, so a hun
 (`drawableCodegraphLayout`). The shapes are Git's, so the classes are too (`.git-dot`, `.git-chip`, `.git-sync`); only the kinds strip, the Inspector tiles and the Matrix's tighter gutters and 100 px name floor (`.cg-mx`, so its twelve columns and both keys fit the 1280 tier) are `cg-*`. Every string is in
 `codegraphText.ts`.
 
-Inbox has four filtering tiles, the loud repos as panels with a verdict and every problem's steps, then *All good* and *Not indexed* as dashed boxes. Matrix is one row per repo. Inspector
+Inbox has four filtering tiles, the loud repos as panels with a verdict and every problem's steps, then *All good* and *Not indexed* as dashed boxes. Matrix is one row per repo, its four check columns from
+`codegraphMatrixCells.ts`. Inspector
 is a list and a detail pane. Indexing is the user's call, so *Not indexed* repos have **no** Init key.
 
 ## Calls the author made
@@ -121,6 +123,7 @@ The 25 s TTL and the cap of 2 follow from those; `CODEGRAPH_STATUS_TIMEOUT_MS` (
     - client/src/lib/codegraphLayouts.ts
     - client/src/lib/codegraphText.ts
     - client/src/lib/codegraphPoll.ts
+    - client/src/lib/codegraphMatrixCells.ts
     - client/src/hooks/useCodegraph.ts
     - client/src/hooks/useCodegraphRun.ts
     - client/src/components/management/CodegraphView.tsx

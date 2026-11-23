@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react';
 
 import type { CodegraphRunKind, CodegraphStats } from '../../../../shared/types';
 import { codegraphRunKey, type CodegraphRunControl } from '../../hooks/useCodegraphRun';
-import { CODEGRAPH_LEVEL_DOT, codegraphKeyKinds, kindGroups, type CodegraphAssessed, type CodegraphLevel } from '../../lib/codegraphLevels';
+import { CODEGRAPH_LEVEL_DOT, codegraphKeyKinds, isIndexing, kindGroups, type CodegraphAssessed, type CodegraphLevel } from '../../lib/codegraphLevels';
 import {
   CODEGRAPH_CHIP_INDEXING, CODEGRAPH_CHIP_NO_WATCHER, CODEGRAPH_CHIP_WATCHING, CODEGRAPH_CONFIRM_CANCEL, CODEGRAPH_CONFIRM_LABEL, CODEGRAPH_KEY_REINDEX,
   CODEGRAPH_KEY_REINDEXING, CODEGRAPH_KEY_SYNC, CODEGRAPH_KEY_SYNCING, CODEGRAPH_KIND_LABELS, CODEGRAPH_UP_TO_DATE, codegraphChip, codegraphKeyAria,
@@ -34,11 +34,6 @@ export interface CodegraphLayoutProps {
 
 export function CodegraphDot({ level }: { level: CodegraphLevel }) {
   return <span className={`git-dot ${CODEGRAPH_LEVEL_DOT[level]}`} aria-hidden="true" />;
-}
-
-/** A rebuild in flight, whoever started it: ours, a terminal's, or one the server outlived (`rebuildLive` with a synthesised `run`). */
-export function isIndexing(a: CodegraphAssessed): boolean {
-  return a.repo.run?.kind === 'reindex' || a.repo.rebuildLive;
 }
 
 /**

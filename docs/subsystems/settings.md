@@ -188,7 +188,8 @@ true for whichever row is saving *and* for every other row that renders a `savin
 flipping a push toggle lit up the indicator next to `Away after` and `Answer window` — two rows
 the user never touched — while the row actually saving showed nothing. A new row wired to a
 shared flag reintroduces exactly that. The in-flight keys are held as a multiset so two
-overlapping saves can't have the first response clear the second's indicator.
+overlapping saves can't have the first response clear the second's indicator (`addSavingKeys` / `removeSavingKeys` in
+`client/src/lib/serverSettingsSave.ts`, beside `settingsSaveOutcome`, the 403 mapping).
 
 Hooks installed by **symlink** (the documented install) pick the new script up automatically.
 A copied hook must be re-copied.

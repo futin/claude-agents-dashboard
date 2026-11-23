@@ -429,6 +429,18 @@ export function dayStep(deviationPct: number | null): DayStep {
   return 'within';
 }
 
+/**
+ * The class a day cell wears: its colour step when rated, otherwise its state,
+ * which the stylesheet renders as texture. `none` is the bare cell.
+ */
+export function dayClass(day: ModelDayRate): string {
+  if (day.state === 'rated') {
+    const step = dayStep(day.deviationPct);
+    return step === 'unjudged' ? '' : step;
+  }
+  return day.state === 'none' ? '' : day.state;
+}
+
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 /** `2026-09-08` → `Sep 8`. UTC, like the date it is given. */
