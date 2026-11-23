@@ -93,7 +93,8 @@ one of them at random — the same two-state rule the Sessions board follows.
   sessions), so a repeat read with no new bytes reads nothing from `subagents/` and a grown file costs only its appended bytes. Like that poll, it assumes
   the transcripts are append-only: a shrunk file is re-read from the start, a same-size rewrite is not seen.
   A `resumed` row (a SendMessage resume, which `lib/agents.ts` lists as its own row) is left out of the sum: its runs write into the transcript the
-  original launch already claims. `kaizen.mjs` lists only `Task`/`Agent` launches, so it has no such row to skip.
+  original launch already claims. `kaizen.mjs` folds SendMessage resumes the same way and skips the same rows; both close a background launch on
+  any terminal `<status>` (completed, failed, killed or stopped) and close a run still open at its resume (#420, #506).
   A compaction replays earlier records verbatim; both sides count each `tool_use` id, `tool_result`, Agent launch and SendMessage once and add each
   subagent transcript once (#174, #226), and the parity tests include a replayed fixture.
   Both sides also skip Claude Code 2.1.302's `api-request-blob` records, which replay each request's turns with the same role and content: `analyze.ts`
