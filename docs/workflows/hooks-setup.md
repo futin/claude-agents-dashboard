@@ -105,7 +105,11 @@ Stop event*; that belongs behind a command someone chose to run, not behind `git
   is keyed on the command string, and a match is left exactly as it is.
 - **Anything else in `settings.json`.** Other people's hooks, your `permissions`, your
   `model`. The previous file is copied to `settings.json.bak.<stamp>` before any write, and
-  the new one is validated as JSON before it replaces anything.
+  the new one must be exactly one JSON object before it replaces anything.
+- **A `settings.json` it cannot merge into.** A file that is not exactly one JSON object — a trailing comma from a hand edit, a snippet pasted after the
+  original, a whitespace-only file — or a `hooks` block jq cannot walk (`"Stop": "oops"`, a string where a hook object belongs) is refused with a
+  `REFUSED` line and exit 1, in every mode (`--dry-run` and `--uninstall` included). The check runs before any link is made or removed, so a refused run
+  changes nothing: no link, no entry, no backup. Fix the file (`jq . ~/.claude/settings.json` shows where it breaks) and re-run.
 - **Your token.** `~/.claude/hooks/dashboard-token` (`$CLAUDE_CONFIG_DIR/hooks/` when that variable is set — the hooks read the same path) is written
   only if it does not exist
   *and* this checkout's `.env` has an `ANSWER_TOKEN` to copy. With no token anywhere it says

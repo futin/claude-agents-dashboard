@@ -143,6 +143,31 @@ settings_json() {
   if [ -s "$SETTINGS" ]; then cat "$SETTINGS"; else echo '{}'; fi
 }
 
+# The script runs under `set -u` alone, so a failed jq stops nothing by itself: on a malformed file it used to print nothing, the empty string passed the
+# old `jq empty` write guard, and settings.json was replaced by a newline — every user key gone, and every re-run wrote the newline again (#507). Hence
+# three refusals, all before anything is written: the file is checked up front, every row's jq exit code is read, and the write guard wants one object.
+#
+# Slurped (`-s`), because plain `jq -e` reads a stream and judges only its last value: two concatenated objects (a snippet pasted after the original)
+# would pass and be rewritten as two. A whitespace-only file slurps to `[]` and is refused too — it is what the old bug left behind, not an empty config.
+ONE_OBJECT='length == 1 and (.[0] | type) == "object"'
+
+refuse() {
+  echo "REFUSED  $SETTINGS — $1" >&2
+  echo "         settings.json was not written and no backup was made. Fix the file and re-run." >&2
+  exit 1
+}
+
+check_settings() {
+  [ -s "$SETTINGS" ] || return 0
+  jq -s -e "$ONE_OBJECT" "$SETTINGS" > /dev/null 2>&1 \
+    || refuse "it is not exactly one JSON object (a trailing comma from a hand edit, say). \`jq . \"$SETTINGS\"\` shows where."
+}
+
+# A valid object can still hold a hooks block jq cannot walk — `"Stop": "oops"`, or a string where a hook object belongs. jq then exits 5 with no output.
+merge_failed() {
+  refuse "jq could not read its hooks block while merging $1 (a value that is not the list or object Claude Code expects). \`jq .hooks \"$SETTINGS\"\` shows it."
+}
+
 # The literal `$HOME` (unexpanded — the CLI expands it) is what every existing
 # install and all five docs already carry, so keeping the string byte-identical
 # is what makes a re-run recognise an entry instead of adding a second one. A
@@ -192,6 +217,8 @@ drop_entry() {
 # and NOT a search for the command anywhere in the file. permission-notify.sh is
 # registered twice on purpose (PermissionRequest live, Notification legacy), so a
 # command-only test finds the first one and silently skips the second.
+#
+# It and has_entry return jq's own exit code: 0 present, 1 absent, anything else an error the caller must not read as "absent".
 entry_present() {
   jq -e --arg ev "$1" --arg m "$2" --arg cmd "$3" '
     any((.hooks[$ev] // [])[]; (.matcher // "") == $m and any(.hooks[]?; .command == $cmd))
@@ -208,7 +235,7 @@ has_entry() {
 
 write_settings() {
   new="$1"
-  printf '%s' "$new" | jq empty 2>/dev/null || { echo "refusing to write malformed settings.json" >&2; exit 1; }
+  printf '%s' "$new" | jq -s -e "$ONE_OBJECT" > /dev/null 2>&1 || refuse "the merged result is not one JSON object, so it was not written."
   if [ "$DRY" = "true" ]; then return 0; fi
   if [ -s "$SETTINGS" ]; then cp "$SETTINGS" "$SETTINGS.bak.$(date +%Y%m%d%H%M%S)"; fi
   tmp="$SETTINGS.tmp.$$"
@@ -227,6 +254,45 @@ say "  repo: $REPO"
 [ "$DRY" = "true" ] && say "  (dry run — nothing will be written)"
 say ""
 
+# The settings merge is worked out before any link is made, so every refusal above lands on an untouched install: a refused --uninstall that had already
+# removed the links would leave entries pointing at nothing. Its lines are held in $plan and printed in their usual place, after hooks/.
+check_settings
+current="$(settings_json)"
+changed=false
+plan=""
+plan_step() { plan="$plan  $*
+"; }
+while IFS= read -r row; do
+  [ -n "${row:-}" ] || continue
+  timeout="${row##*|}"; row="${row%|*}"
+  name="${row##*|}";    row="${row%|*}"
+  ev="${row%%|*}";      matcher="${row#*|}"
+  cmd="$(entry_cmd "$name")"
+  if [ "$UNINSTALL" = "true" ]; then
+    has_entry "$cmd"; rc=$?
+    if [ "$rc" -eq 0 ]; then
+      plan_step "remove   $ev${matcher:+ ($matcher)} -> $name"
+      current="$(printf '%s' "$current" | drop_entry "$cmd")" || merge_failed "$name"
+      changed=true
+    elif [ "$rc" -ne 1 ]; then
+      merge_failed "$name"
+    fi
+  else
+    printf '%s' "$current" | entry_present "$ev" "$matcher" "$cmd"; rc=$?
+    if [ "$rc" -eq 0 ]; then
+      plan_step "ok        $ev${matcher:+ ($matcher)} -> $name"
+    elif [ "$rc" -eq 1 ]; then
+      plan_step "add      $ev${matcher:+ ($matcher)} -> $name (timeout ${timeout}s)"
+      current="$(printf '%s' "$current" | add_entry "$ev" "$matcher" "$cmd" "$timeout")" || merge_failed "$name"
+      changed=true
+    else
+      merge_failed "$name"
+    fi
+  fi
+done <<EOF
+$ENTRIES
+EOF
+
 say "hooks/"
 [ "$DRY" = "true" ] || mkdir -p "$HOOK_DIR"
 echo "$LINKS" | while IFS='|' read -r src dest; do
@@ -236,33 +302,7 @@ done
 
 say ""
 say "settings.json"
-current="$(settings_json)"
-changed=false
-while IFS= read -r row; do
-  [ -n "${row:-}" ] || continue
-  timeout="${row##*|}"; row="${row%|*}"
-  name="${row##*|}";    row="${row%|*}"
-  ev="${row%%|*}";      matcher="${row#*|}"
-  cmd="$(entry_cmd "$name")"
-  if [ "$UNINSTALL" = "true" ]; then
-    if has_entry "$cmd"; then
-      step "remove   $ev${matcher:+ ($matcher)} -> $name"
-      current="$(printf '%s' "$current" | drop_entry "$cmd")"
-      changed=true
-    fi
-  else
-    if printf '%s' "$current" | entry_present "$ev" "$matcher" "$cmd"; then
-      step "ok        $ev${matcher:+ ($matcher)} -> $name"
-    else
-      step "add      $ev${matcher:+ ($matcher)} -> $name (timeout ${timeout}s)"
-      current="$(printf '%s' "$current" | add_entry "$ev" "$matcher" "$cmd" "$timeout")"
-      changed=true
-    fi
-  fi
-done <<EOF
-$ENTRIES
-EOF
-
+printf '%s' "$plan"
 if [ "$changed" = "true" ]; then
   write_settings "$current"
   [ "$DRY" = "true" ] || step "written (previous copy kept as settings.json.bak.<stamp>)"
