@@ -185,6 +185,8 @@ export async function run(): Promise<number> {
       { text: 'guide-manager: moved main forward 5 commits; fix/x refused — D. Use Sync.', tone: 'warn' });
     assert.deepStrictEqual(quickResultLine(res('pull', { parts: [okPart('ff', 'fix/x', 'origin/fix/x', 3), badPart('move', 'main', 'origin/main', 'D')] })),
       { text: 'guide-manager: pulled 3 commits into fix/x; main refused — D. Use Sync.', tone: 'warn' });
+    assert.deepStrictEqual(quickResultLine(res('pull', { parts: [okPart('ff', 'fix/x', 'origin/fix/x', 3), badPart('move', 'main', 'origin/main', '', true)] })),
+      { text: 'guide-manager: pulled 3 commits into fix/x; main took over 60s and was stopped. Use Sync.', tone: 'warn' });
     assert.deepStrictEqual(quickResultLine(res('pull', { parts: [badPart('ff', 'fix/x', 'origin/fix/x', ''), okPart('move', 'main', 'origin/main', 5)] })),
       { text: 'guide-manager: moved main forward 5 commits; fix/x refused. Use Sync.', tone: 'warn' });
   }));
