@@ -548,7 +548,8 @@ of a roughly 70 ms poll (431 of 527 transcripts older than 48 h, 2026-11-03, WSL
 `resolveTranscript` (session detail, spend, chat, `sessionExists`, PR, the routine-run resolve, the row endpoint), and every pin and project list —
 `pinOptions` carries the listing, so a pin toggle's membership check, `pins.json` snapshot and reply share one walk, and `git-stats.ts`,
 `git-fetch.ts`, `codegraph-store.ts` and `routine-store.ts` pass it to `listPinRows`. One pin toggle went from 43–55 ms warm to 7.5–14 ms
-(2026-11-15, WSL2, 656 transcripts). `listTranscripts` stays the raw walk; `test/guards/transcript-walks.test.ts` pins the few files that may call it.
+(2026-11-15, WSL2, 656 transcripts). `listTranscripts` stays the raw walk; `test/guards/transcript-walks.test.ts` pins the few files that may walk the whole tree — a
+`listTranscripts(` or `listUsageTranscripts(` call, or a `findTranscript(` given no refs.
 
 `resolveTranscript` takes the held refs for the id, stats each again so size and mtime are current, drops the gone ones and reduces with
 `newestPerId`; an id the listing lacks falls back to `findTranscript`'s name walk, so a session created after the listing is found on its first

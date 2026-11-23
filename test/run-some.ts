@@ -4,11 +4,13 @@ import './tmp-root.js';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
-let failed = 0;
-for (const file of process.argv.slice(2)) {
-  const mod = await import(pathToFileURL(path.resolve(file)).href) as { run: () => number | Promise<number> };
-  failed += await mod.run();
-}
+import { runSuites, type SuiteModule } from './suites.js';
+
+// runSuites, not a bare `failed += await mod.run()`: a run() returning no count would turn the total NaN, and `NaN > 0` reads as ALL PASS.
+const suites: { file: string; mod: SuiteModule }[] = [];
+for (const file of process.argv.slice(2)) suites.push({ file, mod: await import(pathToFileURL(path.resolve(file)).href) as SuiteModule });
+
+const failed = await runSuites(suites);
 
 console.log(failed > 0 ? `FAILED (${failed})` : 'ALL PASS');
 process.exit(failed > 0 ? 1 : 0);

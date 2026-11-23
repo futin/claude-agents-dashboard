@@ -68,6 +68,7 @@ config; a public tunnel's hostname needs `ALLOWED_HOSTS` (the DNS-rebinding guar
 - **ESM everywhere** (`"type": "module"`). Server imports use the `.js` suffix (resolves to
   `.ts` under Bundler resolution + tsx). Cross-boundary imports use `import type` — no
   runtime coupling, `shared/frontmatter.ts`, `shared/gitUpstream.ts`, `shared/cron.ts` and `shared/routine-file.ts` excepted.
+  `test/guards/boundary-imports.test.ts` pins it.
 - **Server is never compiled.** `tsx` in dev *and* prod. No `dist/` for the server.
 - **Dev vs prod page:** in dev Vite serves the HTML and Node answers API only; in prod Node
   static-serves `client/dist` and auto-opens the browser.
@@ -89,7 +90,8 @@ config; a public tunnel's hostname needs `ALLOWED_HOSTS` (the DNS-rebinding guar
   plugin's `run-routine.mjs` through `spawn.ts`'s `spawnProcess`; `lib/scan.ts` launches `ps` and `lsof` for session liveness; `lib/git-stats.ts`
   launches `git` for the Git view; `lib/usage.ts` launches `security` to read the keychain token; `lib/idle.ts` launches `ioreg` for the idle reading;
   `lib/transcribe.ts` launches the configured `ffmpeg` and whisper binaries; `server/index.ts` launches `open`, `xdg-open` or `cmd /c start` to open the
-  browser on `pnpm start`. `test/guards/outbound.test.ts` pins the list: every `server/` file that imports `node:child_process` must be named here.
+  browser on `pnpm start`. `test/guards/outbound.test.ts` pins the list: every `server/` file that imports `node:child_process` must be named here, and
+  every program a `server/` file launches by literal name is pinned per file there (`COMMANDS`) and must appear here in backticks.
   Two npm packages are allowed, by name, each with zero runtime deps of its own and pinned to a git tag: `lookout-widgets`, the Lookout contract producer
   behind `/api/hub/widgets`, and `release-kit`, whose reader is the one reader of the tag-message contract its release workflow writes (spec
   `docs/superpowers/specs/2026-10-15-release-pipeline-design.md` D7) and, as `createReleasesReader`, backs `/api/releases`; it uses Node built-ins only and launches `git`, so it is no
