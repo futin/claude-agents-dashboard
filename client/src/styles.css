@@ -1462,6 +1462,10 @@ code,kbd,samp,pre{font-family:inherit}
 .icon-refresh:hover{color:var(--ink);border-color:var(--ink3)}
 .an-empty{font-size:13px;color:var(--ink3);background:var(--strip);border-radius:16px;padding:40px 24px;text-align:center}
 .an-clear{font-family:var(--font);font-size:13px;color:var(--cyan);background:none;border:0;padding:0;cursor:pointer;text-decoration:underline}
+/* LoadBoundary's notice: a lazy chunk that failed to load. `float` stands in for a drawer or sheet, which would have drawn fixed over the page. */
+.load-failed{display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:12px;font-size:13px;color:var(--ink2);background:var(--strip);border-radius:16px;padding:24px;text-align:center}
+.load-failed button{font-family:var(--font);font-size:13px;font-weight:600;color:var(--ink);background:var(--strip-hi);border:0;border-radius:12px;padding:8px 14px;cursor:pointer}
+.load-failed.float{position:fixed;left:16px;right:16px;bottom:16px;z-index:50;max-width:560px;margin:0 auto;padding:14px 16px;border:1px solid var(--hairline);box-shadow:0 8px 24px var(--shadow2)}
 /* The scope pill's shape (`.set-scope`), in the amber the chip has always
    worn: a filled 24px capsule with a dot, centred on the title rather than
    sitting on its baseline. An outline chip read as a control you could press,

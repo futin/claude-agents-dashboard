@@ -330,6 +330,8 @@ client/src/
                   chip — identity + both rate windows, in the header band or the
                   phone nav bar; see subsystems/account-header.md), ReleasesDrawer (ui-kit's What's new
                   drawer behind the rail's version chip, plus the back gesture), Chevron (the one disclosure mark),
+                  LoadBoundary (around every lazy chunk: a chunk that fails to load — a tab left open across a rebuild — draws a Reload notice
+                  instead of unmounting the root; `test/guards/lazy-boundary.test.ts` pins it),
                   AsideBoard (clock, origin, counts, remote-answer switch, New session),
                   Toolbar (view switcher + filter/sort popovers; Popover is the shared
                   dismiss primitive), sessions/ (atoms, Expanded, SessionStopControl, EmptyState, AsideStrip

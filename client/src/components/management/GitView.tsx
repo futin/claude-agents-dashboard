@@ -15,6 +15,7 @@ import { DEFAULT_GIT_LAYOUT, drawableGitLayout, gitLayoutsFor, parseGitLayout, t
 import { quickNoteExpired } from '../../lib/gitQuick';
 import { SYNC_SCAN_LIMIT } from '../../lib/gitSync';
 import { GIT_BAND_SUB, GIT_NO_PINS, gitFirstLoadText } from '../../lib/gitStatsText';
+import { LoadBoundary } from '../LoadBoundary';
 import { Band } from '../usage/Sheet';
 import GitBranches from './GitBranches';
 import GitClockChip from './GitClockChip';
@@ -93,10 +94,12 @@ export default function GitView() {
       {folder.note && <div className="git-sync-note">{folder.note}</div>}
       <GitBody data={data} error={error} layout={layout} props={props} />
       {sync.chat && (
-        <Suspense fallback={null}>
-          {/* keyed by id, as in SessionsView: another sync's chat remounts the tail cleanly */}
-          <ChatDrawer key={sync.chat.id} session={sync.chat} onClose={sync.closeChat} spawnAvailable={sync.available} desktopAvailable={sync.desktopAvailable} />
-        </Suspense>
+        <LoadBoundary variant="float">
+          <Suspense fallback={null}>
+            {/* keyed by id, as in SessionsView: another sync's chat remounts the tail cleanly */}
+            <ChatDrawer key={sync.chat.id} session={sync.chat} onClose={sync.closeChat} spawnAvailable={sync.available} desktopAvailable={sync.desktopAvailable} />
+          </Suspense>
+        </LoadBoundary>
       )}
     </div>
   );
