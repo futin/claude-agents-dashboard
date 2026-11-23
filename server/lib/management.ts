@@ -888,7 +888,7 @@ export function resolveProject(config: Partial<Config>, dirName: string, options
  * project scopes. Exact membership only — secrets under the same roots
  * (~/.claude/.credentials.json, history.jsonl, project .env) are never
  * members because no scanner emits them. Settings files and plugin manifests
- * are members, and {@link readServableFile} redacts them on the way out.
+ * are members, and {@link readServableFile} redacts them, and plugin hooks.json files, on the way out.
  */
 export async function collectServablePaths(config: Partial<Config>, options: ProjectsOptions = {}): Promise<Set<string>> {
   const projects = listRecentProjects(config, options);
@@ -925,6 +925,11 @@ export async function collectServablePaths(config: Partial<Config>, options: Pro
 /** True for a settings file of either scope: a skill's own `settings.json` is not one. */
 function isSettingsPath(p: string): boolean {
   return SETTINGS_FILES.includes(path.basename(p)) && path.basename(path.dirname(p)) === '.claude';
+}
+
+/** True for a plugin's `hooks/hooks.json`: its hook commands are scrubbed in the scope payload, so the served file must be too. */
+function isPluginHooksPath(p: string): boolean {
+  return path.basename(p) === 'hooks.json' && path.basename(path.dirname(p)) === 'hooks';
 }
 
 /** True for a plugin's `.claude-plugin/plugin.json`, which can declare inline `mcpServers` (#408). */
@@ -970,7 +975,7 @@ export function redactSettings(v: unknown): unknown {
 
 /**
  * Serve one enumerated file. Null on any rejection (relative path, `..`
- * survivor, non-member, unreadable, a settings file or plugin manifest that does not parse) — the
+ * survivor, non-member, unreadable, a settings file, plugin manifest or plugin hooks.json that does not parse) — the
  * API layer distinguishes 403 vs 404 by re-checking membership itself.
  */
 export async function readServableFile(p: string, allowed: Set<string>, cap = FILE_CONTENT_CAP): Promise<FileContent | null> {
@@ -979,7 +984,7 @@ export async function readServableFile(p: string, allowed: Set<string>, cap = FI
   try {
     const stat = await fsp.stat(p);
     if (!stat.isFile()) return null;
-    if (isSettingsPath(p) || isPluginManifestPath(p)) {
+    if (isSettingsPath(p) || isPluginManifestPath(p) || isPluginHooksPath(p)) {
       // Parsed whole and never edited as text: a duplicate or escaped `env` key would slip past a text edit, and a cap applied first would cut the JSON.
       const text = Buffer.from(JSON.stringify(redactSettings(JSON.parse(await fsp.readFile(p, 'utf8'))), null, 2));
       return { path: p, content: text.subarray(0, cap).toString('utf8'), size: stat.size, truncated: text.length > cap };

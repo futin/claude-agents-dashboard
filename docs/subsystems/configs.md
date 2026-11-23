@@ -163,7 +163,7 @@ control (the type is a column now, not a collapsible header) and the
   reduces `env`/`headers` to key names so no value reaches the payload, and passes `args` through `redactArgs` and `url` through `redactUrl` (#408). (A plugin
   manifest with inline `mcpServers` stays servable as the Plugins row's file, through the same JSON redactor as a settings file, below.)
 - **⚠️ Settings files and plugin manifests are served redacted, to every peer (#355, #408).** `settings.json` and `settings.local.json` directly under a `.claude`
-  dir, and a plugin's `.claude-plugin/plugin.json`, stay viewable, but `readServableFile` parses them whole and re-serializes through `redactSettings`: every `env`,
+  dir, a plugin's `.claude-plugin/plugin.json` and a plugin's `hooks/hooks.json`, stay viewable, but `readServableFile` parses them whole and re-serializes through `redactSettings`: every `env`,
   `headers` and `apiKeyHelper` value, at any depth, becomes `[redacted]`, and an object under those keys keeps its key names. **It fails closed:** JSON that does not parse answers null (HTTP 404), never the raw text, and it never edits the raw text by
   pattern, because a duplicate or escaped `env` key would slip past that. The cap applies to the redacted text, so `truncated` describes that text while `size` stays
   the byte size on disk. The answer does not vary by peer: `resolvePeer` reads a tunnel without `X-Forwarded-For` as `local`, so a per-peer answer would rest the

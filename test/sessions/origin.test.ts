@@ -1,7 +1,9 @@
 import assert from 'node:assert';
 import type { IncomingHttpHeaders } from 'node:http';
 
-import { classifyAddress, classifyOrigin, normalizeAddress, resolvePeer } from '../../server/lib/origin.js';
+import os from 'node:os';
+
+import { classifyAddress, classifyOrigin, normalizeAddress, rebindableHost, resolvePeer } from '../../server/lib/origin.js';
 import type { ConnectionOrigin } from '../../shared/types.js';
 
 function test(name: string, fn: () => void): boolean {
@@ -181,6 +183,41 @@ export function run(): number {
   if (test('an unclassifiable socket stays unknown regardless of headers', () => {
     assert.strictEqual(classifyOrigin(undefined, xff('100.90.1.2')), 'unknown');
     assert.strictEqual(classifyOrigin('', xff('192.168.1.9')), 'unknown');
+  })) p++; else f++;
+
+  if (test('a loopback request whose Host a LAN peer can answer for is not local (DNS rebinding, audit 2026-11-23)', () => {
+    const own = ['mybox'];
+    const table: [string, IncomingHttpHeaders, ConnectionOrigin][] = [
+      // mDNS and LLMNR names re-pointed at 127.0.0.1, direct and through Vite's xfwd proxy.
+      ['127.0.0.1', { host: 'evil.local:4173' }, 'unknown'],
+      ['127.0.0.1', { host: 'EVIL.LOCAL.:4173' }, 'unknown'],
+      ['127.0.0.1', { host: 'evil:4173' }, 'unknown'],
+      ['::1', { host: 'evil' }, 'unknown'],
+      ['127.0.0.1', { host: 'evil.local:5174', 'x-forwarded-for': '127.0.0.1' }, 'unknown'],
+      // Names nobody else can answer stay local.
+      ['127.0.0.1', { host: 'localhost:4173' }, 'local'],
+      ['127.0.0.1', { host: 'app.localhost:4173' }, 'local'],
+      ['127.0.0.1', { host: '127.0.0.1:4173' }, 'local'],
+      ['127.0.0.1', { host: '[::1]:4173' }, 'local'],
+      ['127.0.0.1', { host: 'mybox:4173' }, 'local'],
+      ['127.0.0.1', { host: 'mybox.tail1234.ts.net' }, 'local'],
+      ['127.0.0.1', {}, 'local'],
+      // The Host only ever takes `local` away: other verdicts are untouched.
+      ['192.168.1.5', { host: 'evil.local:4173' }, 'lan'],
+      ['127.0.0.1', { host: 'mybox:4173', 'x-forwarded-for': '100.101.102.103' }, 'tailnet'],
+      ['127.0.0.1', { host: 'evil:4173', 'x-forwarded-for': '192.168.1.5' }, 'lan']
+    ];
+    for (const [socket, headers, want] of table) {
+      assert.strictEqual(resolvePeer(socket, headers, own), want, `${socket} + ${JSON.stringify(headers)} → ${want}`);
+    }
+    assert.strictEqual(rebindableHost(undefined, own), false);
+    assert.strictEqual(rebindableHost('', own), false);
+  })) p++; else f++;
+
+  if (test("this machine's own hostname, bare or short, stays local by default", () => {
+    const full = os.hostname().toLowerCase();
+    assert.strictEqual(resolvePeer('127.0.0.1', { host: `${full}:4173` }), 'local');
+    assert.strictEqual(resolvePeer('127.0.0.1', { host: `${full.split('.')[0]}:4173` }), 'local');
   })) p++; else f++;
 
   console.log(`\n  ${p} passed, ${f} failed`);
