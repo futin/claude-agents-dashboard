@@ -285,6 +285,17 @@ export function run(): number {
     assert.strictEqual(a.errorSignals.userCorrections, 1);
   })) p++; else f++;
 
+  if (test('userCorrections skips isMeta records (an injected skill body) and slash-command wrapper records (#505)', () => {
+    const file = fixture([
+      { ...humanRec("Base directory for this skill: /x\n\nDon't do that; use the tool instead. No exceptions.", '2026-07-01T10:00:00Z'), isMeta: true },
+      humanRec('<command-message>backlog-tick</command-message>\n<command-name>/backlog-tick</command-name>\n<command-args>no instead</command-args>', '2026-07-01T10:00:01Z'),
+      humanRec('<command-name>/clear</command-name>\n<command-message>clear</command-message>\n<command-args>undo</command-args>', '2026-07-01T10:00:02Z'),
+      humanRec('No, that is the wrong file', '2026-07-01T10:00:03Z')       // the one human correction
+    ]);
+    const a = analyzeSession(file)!;
+    assert.strictEqual(a.errorSignals.userCorrections, 1);
+  })) p++; else f++;
+
   if (test('unknown-token subagent → unknownTokenCount + note', () => {
     const file = fixture([
       usageRec({ input_tokens: 100 }, '2026-07-01T10:00:00Z'),

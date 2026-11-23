@@ -99,7 +99,8 @@ states: whole-session ≈ `combined` + `subagentTotals.tokens` (the subagent lin
 `errorSignals` (in `analyzeSession`'s result) carries `toolErrors` (exact: `is_error` or
 `<tool_use_error>`), `retries` (a tool re-run after it errored — a rework signal),
 and `userCorrections` (a keyword regex like *no/wrong/actually/revert*). The last
-is explicitly a "noisy lower bound, not a score." The skill therefore requires the
+is explicitly a noisy keyword count over human-typed turns, "not an accuracy score"
+(it was called a "lower bound" until #505 found meta records and slash-command wrappers inflating it). The skill therefore requires the
 accuracy read to be a hedged verdict, never a fake percentage — there is no ground
 truth on disk.
 

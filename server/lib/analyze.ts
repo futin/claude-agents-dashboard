@@ -87,10 +87,13 @@ function userText(msg: any): string {
 }
 
 /**
- * Looks like the human pushing back. Deliberately conservative and documented as
- * a noisy lower bound — the skill, not this heuristic, judges accuracy.
+ * Looks like the human pushing back. A keyword match, so noisy in both directions — the skill, not this heuristic, judges accuracy. Run only on
+ * human-typed turns (#505): an `isMeta` record (an injected skill body says "don't" and "instead" in nearly every paragraph) or a slash-command
+ * wrapper counted as pushback outnumbered real turns 193 to 8 over this machine's 150 newest transcripts (measured 2026-11-23).
  */
 const CORRECTION_RE = /\b(no|nope|wrong|incorrect|not (?:what|right|correct)|actually|instead|revert|undo|don'?t|that'?s not)\b/i;
+/** The record the CLI writes for a slash command: harness text, not the human pushing back. */
+const COMMAND_WRAPPER_RE = /<command-(?:name|message)>/;
 
 /**
  * Peak context that proves auto-compaction never fired. A 200k window compacts near 160k, so a turn above 250k can only come from a larger window
@@ -245,9 +248,10 @@ export function analyzeSession(filePath: string, id?: string): SessionAnalysis |
           }
         }
       }
-      // Correction heuristic — only on human-typed turns, never task-notifications or <agent-message> hand-backs (a subagent's report, not the user).
-      const t = userText(msg);
-      if (t && !t.includes('<task-notification>') && !t.includes('<agent-message') && CORRECTION_RE.test(t)) userCorrections++;
+      // Correction heuristic — only on human-typed turns: never an isMeta record, a slash-command wrapper, a task-notification or an <agent-message>
+      // hand-back (a subagent's report, not the user).
+      const t = rec.isMeta === true ? '' : userText(msg);
+      if (t && !t.includes('<task-notification>') && !t.includes('<agent-message') && !COMMAND_WRAPPER_RE.test(t) && CORRECTION_RE.test(t)) userCorrections++;
     }
   }
 
@@ -274,7 +278,7 @@ export function analyzeSession(filePath: string, id?: string): SessionAnalysis |
     'combined includes cache_read (replayed cached prompt, billed ~10%); lead with billableApprox for real cost.',
     'byTool.approxOutputTokens splits each turn\'s output tokens evenly across its tool calls — approximate; the transcript has no per-tool token field.',
     'byTool.resultTokens is what each tool injected into context: its tool_result text sized at chars ÷ 4, summed per call (not split), error text included, images not counted. The firmer per-tool figure and byTool\'s sort key — but it is context growth, not assistant output; cite both and never add them.',
-    'errorSignals.userCorrections is a keyword heuristic — a noisy lower bound, not an accuracy score.',
+    'errorSignals.userCorrections is a keyword heuristic over human-typed turns (meta records and slash-command wrappers skipped) — noisy both ways, not an accuracy score.',
     'perTurn.neverCompacted: true when the peak turn tops 250k combined (a 200k window compacts near 160k — the transcript records no window, so that part is inferred) and the session never compacted. Compaction is read from main-chain compact_boundary records; for transcripts without them, a turn below half the running peak counts as one.'
   ];
   if (subagentTotals.count > 0) {
