@@ -28,7 +28,7 @@ import { buildUsageHistory } from './lib/usage-history-series.js';
 import { ledgerStartMs, readLedgerSince } from './lib/usage-ledger.js';
 import { BASELINE_MS } from './lib/usage-rate.js';
 import { localOffsetMinutes } from './lib/usage-forecast.js';
-import { blankCells, emptyRates, shapeUsageProfile, shapeUsageRates } from './lib/usage-shape.js';
+import { blankUsageProfile, emptyRates, shapeUsageProfile, shapeUsageRates } from './lib/usage-shape.js';
 import {
   collectServablePaths, listOlderProjects, listPinRows, listRecentProjects, readGlobalScope, readProjectScope, readServableFile, resolveProject
 } from './lib/management.js';
@@ -85,7 +85,7 @@ import type {
   AnalyticsResponse, GitQuickRequest, ManagementIndex, MessageWaitResult, OpenFolderResponse, PinsResponse, PinsSavedError, PlanWaitResult, ScopeConfig,
   SessionMessage, SessionPlan, SessionPrInfo, SessionPrResponse, SessionQuestion, SessionsResponse, SessionChat, SessionDetail, SessionSpend, SpawnRequest,
   ProjectRef, ServerSettings, SpawnResponse,
-  UsageHistoryResponse, UsageProfileResponse, WaitResult, ConnectionOrigin, WriteAccess,
+  UsageHistoryResponse, WaitResult, ConnectionOrigin, WriteAccess,
   ReconcileReport, RoutineFile, RoutineJob, RoutineJobRow, RoutineRunsResponse, RoutinesResponse, RoutineValidateResponse, Session,
   AccountResponse, GitFetchResponse, HealthResponse, NotifyTestResponse, OkResponse, RemoteAnswerToggleResponse, RoutineErrorsResponse,
   RoutineWriteResponse, StopResponse, TranscribeResponse,
@@ -650,11 +650,7 @@ export function serveUsageProfile(res: ServerResponse): void {
       offsetMinutes: localOffsetMinutes(now)
     }));
   } catch {
-    sendJson(res, 200, {
-      cells: blankCells(), globalMean: 1, confidence: 'none',
-      recording: false, walk: [], exhaustAt: null, walkAbsent: 'recording-off',
-      utilizationPct: null, resetsAt: null, dutyCycle: null
-    } satisfies UsageProfileResponse);
+    sendJson(res, 200, blankUsageProfile(localOffsetMinutes(Date.now())));
   }
 }
 
@@ -1916,14 +1912,22 @@ export function serveRoutineRead(config: Config, name: string, res: ServerRespon
   sendJson(res, 200, stored satisfies RoutineFile);
 }
 
-/** `PUT /api/routines/:name` `{text}` — replace an existing job's file. Validated first; `422 {errors}` writes nothing. */
+/**
+ * `PUT /api/routines/:name` `{text, mtimeMs?}` — replace an existing job's file. Validated first; `422 {errors}` writes nothing. `mtimeMs` is the
+ * file's mtime when the editor loaded it: a file that has moved since (a git-sync pull, another device) is `409 {error: 'changed'}` and stays as it is.
+ * Without it the replace is unconditional, as for an older client.
+ */
 export async function serveRoutineWrite(config: Config, name: string, req: IncomingMessage, res: ServerResponse): Promise<void> {
   if (refuseWrite(config, req, res)) return;
   if (refuseRoutineWrite(res, name)) return;
-  const body = await readJsonBody(req) as { text?: unknown } | null;
-  if (!body || typeof body !== 'object' || typeof body.text !== 'string') return sendBadBody(res, { error: 'expected {text: string}' });
+  const body = await readJsonBody(req) as { text?: unknown; mtimeMs?: unknown } | null;
+  if (!body || typeof body !== 'object' || typeof body.text !== 'string' || (body.mtimeMs !== undefined && typeof body.mtimeMs !== 'number')) {
+    return sendBadBody(res, { error: 'expected {text: string, mtimeMs?: number}' });
+  }
   const dir = routineDirs(config).routines;
-  if (!readJobs(dir, machineName(config).name).some(s => s.name === name)) return sendJson(res, 404, { error: 'no such job' });
+  const stored = readJobs(dir, machineName(config).name).find(s => s.name === name);
+  if (!stored) return sendJson(res, 404, { error: 'no such job' });
+  if (body.mtimeMs !== undefined && body.mtimeMs !== stored.mtimeMs) return sendJson(res, 409, { error: 'changed' satisfies RoutineWriteError });
   const checked = validateOr500(config, name, body.text, res);
   if (!checked) return;
   const { job, errors } = checked;

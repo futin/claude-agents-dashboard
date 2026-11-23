@@ -483,7 +483,10 @@ Two things the grid alone cannot do:
     the crossing time printed beside it already says where inside that hour the window ran
     out.
 
-  Rows are grouped by the browser's local *date*, so a DST day is still exactly one row and
+  Rows are grouped by the host's local *date* when the response carries `offsetMinutes` (the host's UTC offset, the same one the
+  walk's `hourOfWeek` buckets use), else by the browser's: the chart's day ticks, the tooltip hours, the forecast's dates and the
+  "next Mon 00:00" all read that same clock, and a note under the heat grid names the host's zone when it differs from the
+  browser's (#510). Grouping by date means a DST day is still exactly one row and
   no hour is lost or double-counted (pinned in `test/usage/walk-rows.test.ts` across a 23-hour
   and a 25-hour day). A day past the crossing that spends nothing prints no deficit figure:
   repeating the number above it would read as a second finding.

@@ -296,30 +296,53 @@ export function crossingX(walk: ForecastStep[]): number | null {
  * seen twice. A date change fires exactly once per day whether that day is 23,
  * 24 or 25 hours long.
  */
-export function dayTicks(walk: ForecastStep[]): WalkTick[] {
+export function dayTicks(walk: ForecastStep[], offsetMinutes?: number): WalkTick[] {
   if (walk.length === 0) return [];
   const ticks: WalkTick[] = [{ x: 0, label: 'now', kind: 'now' }];
-  let prev = dayKey(new Date(walk[0].t));
+  let prev = wallDayKey(Date.parse(walk[0].t), offsetMinutes);
   for (let i = 1; i < walk.length; i++) {
-    const d = new Date(walk[i].t);
-    const key = dayKey(d);
+    const ms = Date.parse(walk[i].t);
+    const key = wallDayKey(ms, offsetMinutes);
     if (key === prev) continue;
     prev = key;
-    ticks.push({ x: i, label: DAYS[d.getDay()], kind: 'day' });
+    ticks.push({ x: i, label: DAYS[wallClock(ms, offsetMinutes).day], kind: 'day' });
   }
   return ticks;
 }
 
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
-function dayKey(d: Date): string {
-  return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+/**
+ * An instant's wall-clock fields: the browser's own zone when `offsetMinutes` is undefined, else that fixed UTC offset (minutes east) — the dashboard
+ * host's, `UsageProfileResponse.offsetMinutes`, which the server bucketed every `hourOfWeek` with. Reading in the host's zone keeps the labels on the
+ * same clock as the grid they describe when the browser sits in another one.
+ */
+export function wallClock(ms: number, offsetMinutes?: number): { year: number; month: number; date: number; day: number; hours: number } {
+  if (offsetMinutes === undefined) {
+    const d = new Date(ms);
+    return { year: d.getFullYear(), month: d.getMonth(), date: d.getDate(), day: d.getDay(), hours: d.getHours() };
+  }
+  const d = new Date(ms + offsetMinutes * 60_000);
+  return { year: d.getUTCFullYear(), month: d.getUTCMonth(), date: d.getUTCDate(), day: d.getUTCDay(), hours: d.getUTCHours() };
 }
 
-/** `Thu 14:00` — the walk's own hour label, local time. */
-export function fmtWalkHour(iso: string): string {
-  const d = new Date(iso);
-  return `${DAYS[d.getDay()]} ${String(d.getHours()).padStart(2, '0')}:00`;
+/** The calendar day `ms` falls on, as a comparable key, in the zone {@link wallClock} reads. */
+export function wallDayKey(ms: number, offsetMinutes?: number): string {
+  const w = wallClock(ms, offsetMinutes);
+  return `${w.year}-${w.month}-${w.date}`;
+}
+
+/** `toLocaleDateString` in the zone {@link wallClock} reads: the browser's, or the host's fixed offset. */
+export function fmtWallDate(ms: number, opts: Intl.DateTimeFormatOptions, offsetMinutes?: number): string {
+  return offsetMinutes === undefined
+    ? new Date(ms).toLocaleDateString(undefined, opts)
+    : new Date(ms + offsetMinutes * 60_000).toLocaleDateString(undefined, { ...opts, timeZone: 'UTC' });
+}
+
+/** `Thu 14:00` — the walk's own hour label: browser-local, or host time given the host's offset ({@link wallClock}). */
+export function fmtWalkHour(iso: string, offsetMinutes?: number): string {
+  const w = wallClock(Date.parse(iso), offsetMinutes);
+  return `${DAYS[w.day]} ${String(w.hours).padStart(2, '0')}:00`;
 }
 
 /**
@@ -331,11 +354,11 @@ export function fmtWalkHour(iso: string): string {
  * **assumed** where the weight is the fallback — a fallback 1.0 and a measured
  * 1.0 are the same number and completely different statements.
  */
-export function stepTitle(step: ForecastStep, cell: UsageProfileCell | undefined): string {
+export function stepTitle(step: ForecastStep, cell: UsageProfileCell | undefined, offsetMinutes?: number): string {
   const pct = `${Math.round(step.weight * 100)}%`;
   const head = headroomOf(step);
   const lines = [
-    fmtWalkHour(step.t),
+    fmtWalkHour(step.t, offsetMinutes),
     `−${step.gain.toFixed(1)} pts this hour`,
     head >= 0
       ? `${head.toFixed(1)} pts left`

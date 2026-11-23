@@ -1,5 +1,5 @@
 import type { ForecastConfidence, ForecastStep, UsageProfileCell } from '../../../shared/types';
-import { fmtWalkHour } from './walkChart';
+import { fmtWallDate, fmtWalkHour } from './walkChart';
 
 /**
  * usageProfile.ts — pure helpers for the duty-cycle inspector's status line and
@@ -65,7 +65,8 @@ export function profileProgress(cells: UsageProfileCell[]): ProfileProgress {
 export const HOURS_PER_WEEK = 168;
 
 /**
- * Local midnight starting the next ISO week (Monday), as ms epoch.
+ * Local midnight starting the next ISO week (Monday), as ms epoch — the host's midnight given its `offsetMinutes` (minutes east), the browser's
+ * without.
  *
  * **Not the earliest fold**, though it was used as one and read six days late:
  * a fold fires when a bucket is touched in an ISO week later than its *stamp*,
@@ -73,7 +74,15 @@ export const HOURS_PER_WEEK = 168;
  * be today. See {@link earliestFoldMs}. What this marks is the end of the
  * current ISO week — the boundary a bucket stamped *this* week has to clear.
  */
-export function nextWeekStartMs(nowMs: number): number {
+export function nextWeekStartMs(nowMs: number, offsetMinutes?: number): number {
+  if (offsetMinutes !== undefined) {
+    // A fixed offset has no DST, so the UTC setters on the shifted instant are the host's wall clock.
+    const shift = offsetMinutes * 60_000;
+    const h = new Date(nowMs + shift);
+    h.setUTCHours(0, 0, 0, 0);
+    h.setUTCDate(h.getUTCDate() + (8 - (h.getUTCDay() || 7)));
+    return h.getTime() - shift;
+  }
   const d = new Date(nowMs);
   d.setHours(0, 0, 0, 0);
   const isoDay = d.getDay() || 7;   // getDay(): Sunday is 0; ISO wants 7
@@ -82,7 +91,8 @@ export function nextWeekStartMs(nowMs: number): number {
 }
 
 /**
- * Local ms at which `hourOfWeek` next begins, strictly after `nowMs`.
+ * Local ms at which `hourOfWeek` next begins, strictly after `nowMs`. Given the host's `offsetMinutes`, the hour is the host's — the index the server
+ * bucketed the cell with — rather than the browser's.
  *
  * Strictly: an hour already in progress has had its chance this week — the fold
  * fires on the tick that enters the bucket, so a cell hovering at its own hour
@@ -91,7 +101,15 @@ export function nextWeekStartMs(nowMs: number): number {
  * Walks with `setHours` overflow rather than adding milliseconds, so a DST shift
  * lands on the same wall-clock hour — which is the hour the bucket indexes.
  */
-export function nextOccurrenceMs(hourOfWeek: number, nowMs: number): number {
+export function nextOccurrenceMs(hourOfWeek: number, nowMs: number, offsetMinutes?: number): number {
+  if (offsetMinutes !== undefined) {
+    const shift = offsetMinutes * 60_000;
+    const h = new Date(nowMs + shift);
+    h.setUTCMinutes(0, 0, 0);
+    let ahead = hourOfWeek - (h.getUTCDay() * 24 + h.getUTCHours());
+    if (ahead <= 0) ahead += HOURS_PER_WEEK;
+    return h.getTime() + ahead * 3_600_000 - shift;
+  }
   const d = new Date(nowMs);
   d.setMinutes(0, 0, 0);
   let delta = hourOfWeek - (d.getDay() * 24 + d.getHours());
@@ -121,17 +139,27 @@ export function nextOccurrenceMs(hourOfWeek: number, nowMs: number): number {
  * observed from its start. It answers "no sooner than", which is the question a
  * status line waiting on a slow model is actually being asked.
  */
-export function earliestWeightMs(cells: UsageProfileCell[], nowMs: number): number | null {
-  const weekEnd = nextWeekStartMs(nowMs);
+export function earliestWeightMs(cells: UsageProfileCell[], nowMs: number, offsetMinutes?: number): number | null {
+  const weekEnd = nextWeekStartMs(nowMs, offsetMinutes);
   let earliest = Infinity;
   for (const c of cells) {
     if (c.weight != null || c.observedMin <= 0) continue;
-    let at = nextOccurrenceMs(c.hourOfWeek, nowMs);
-    if (c.staleWeeks === 0 && at < weekEnd) at = nextOccurrenceMs(c.hourOfWeek, at);
+    let at = nextOccurrenceMs(c.hourOfWeek, nowMs, offsetMinutes);
+    if (c.staleWeeks === 0 && at < weekEnd) at = nextOccurrenceMs(c.hourOfWeek, at, offsetMinutes);
     at += Math.max(0, TRUST_FLOOR_MIN - c.observedMin) * 60_000;
     if (at < earliest) earliest = at;
   }
   return earliest === Infinity ? null : earliest;
+}
+
+/**
+ * The line under the grid saying its times are the dashboard host's, or null when the browser's offset at `nowMs` is the host's — the common case
+ * looks as it always did. Absent `offsetMinutes` (an older server) is null too: nothing is known to differ.
+ */
+export function hostZoneNote(offsetMinutes: number | undefined, nowMs: number): string | null {
+  if (offsetMinutes === undefined || offsetMinutes === -new Date(nowMs).getTimezoneOffset()) return null;
+  const abs = Math.abs(offsetMinutes);
+  return `Times are the dashboard host’s (UTC${offsetMinutes < 0 ? '−' : '+'}${Math.floor(abs / 60)}:${String(abs % 60).padStart(2, '0')}).`;
 }
 
 /** "30 min" / "2h 05m" — the observed-minutes total, read at a glance. */
@@ -238,11 +266,11 @@ export function forecastHeadline(confidence: ForecastConfidence): string {
  * that does not exist is the one wrong answer here. The walk panel's
  * `absentText` already says why there is no projection.
  */
-export function forecastTiming(walk: ForecastStep[], exhaustAt: string | null): string | null {
+export function forecastTiming(walk: ForecastStep[], exhaustAt: string | null, offsetMinutes?: number): string | null {
   if (walk.length === 0) return null;
   if (exhaustAt === null) return 'the week coasts to the reset';
   if (Number.isNaN(new Date(exhaustAt).getTime())) return null;
-  return `the week hits 100% ${fmtWalkHour(exhaustAt)}`;
+  return `the week hits 100% ${fmtWalkHour(exhaustAt, offsetMinutes)}`;
 }
 
 /** The seven terms the inspector's `How to read this` drawer defines, in order. */
@@ -360,8 +388,8 @@ export function fmtUntil(fromMs: number, toMs: number): string {
 }
 
 /** `11 Sep` — a date without the year, which the reader supplies. */
-function fmtDay(ms: number): string {
-  return new Date(ms).toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
+function fmtDay(ms: number, offsetMinutes?: number): string {
+  return fmtWallDate(ms, { day: 'numeric', month: 'short' }, offsetMinutes);
 }
 
 /** Whole hours, rounded — the unit every figure on the forecast strip counts in. */
@@ -400,8 +428,10 @@ export function forecastStats(opts: {
   progress: ProfileProgress;
   confidence: ForecastConfidence;
   nowMs: number;
+  /** The host's UTC offset (`UsageProfileResponse.offsetMinutes`): the times read in host time, as the grid does. Absent = the browser's zone. */
+  offsetMinutes?: number;
 }): StatTile[] {
-  const { utilizationPct, resetsAt, exhaustAt, dutyCycle, hasWalk, progress, confidence, nowMs } = opts;
+  const { utilizationPct, resetsAt, exhaustAt, dutyCycle, hasWalk, progress, confidence, nowMs, offsetMinutes } = opts;
   const resetMs = resetsAt ? Date.parse(resetsAt) : Number.NaN;
   const crossMs = exhaustAt ? Date.parse(exhaustAt) : Number.NaN;
 
@@ -410,17 +440,17 @@ export function forecastStats(opts: {
       key: 'window',
       label: 'Weekly window',
       value: utilizationPct === null ? '—' : `${Math.round(utilizationPct)}%`,
-      sub: Number.isFinite(resetMs) ? `resets ${fmtWalkHour(new Date(resetMs).toISOString())}` : '',
+      sub: Number.isFinite(resetMs) ? `resets ${fmtWalkHour(new Date(resetMs).toISOString(), offsetMinutes)}` : '',
       warn: utilizationPct !== null && utilizationPct >= 80
     },
     {
       key: 'crossing',
       label: 'Projected crossing',
-      value: !hasWalk ? '—' : Number.isFinite(crossMs) ? fmtWalkHour(new Date(crossMs).toISOString()) : 'none',
+      value: !hasWalk ? '—' : Number.isFinite(crossMs) ? fmtWalkHour(new Date(crossMs).toISOString(), offsetMinutes) : 'none',
       sub: !hasWalk
         ? 'nothing to project from'
         : Number.isFinite(crossMs)
-          ? `${fmtDay(crossMs)} · ${fmtUntil(nowMs, crossMs)} from now`
+          ? `${fmtDay(crossMs, offsetMinutes)} · ${fmtUntil(nowMs, crossMs)} from now`
           : 'the week coasts to its reset',
       warn: hasWalk && Number.isFinite(crossMs)
     },

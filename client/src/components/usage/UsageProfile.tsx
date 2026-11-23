@@ -5,11 +5,11 @@ import type { PinHandlers, TipHandlers } from '../../hooks/useFloatingTip';
 import { useFloatingTip } from '../../hooks/useFloatingTip';
 import { useUsageProfile } from '../../hooks/useUsageProfile';
 import {
-  cellTitle, DAY_ORDER, DAYS, earliestWeightMs, fmtLeft, fmtPts, forecastStats, nextWeekStartMs,
+  cellTitle, DAY_ORDER, DAYS, earliestWeightMs, fmtLeft, fmtPts, forecastStats, hostZoneNote, nextWeekStartMs,
   profileGlossary, profileProgress, profileStep, profileTip, TRUST_FLOOR_MIN, type ProfileTerm
 } from '../../lib/usageProfile';
 import {
-  absentText, crossingX, dayTicks, fmtWalkHour, headroomScale, headSegments, hitRect,
+  absentText, crossingX, dayTicks, fmtWalkHour, fmtWallDate, headroomScale, headSegments, hitRect,
   joinPoints, pctX, pctY, pointsAttr, segAreaPath, stepTitle, VIEW_H, walkWidth, yHead, zeroY,
   type HeadScale
 } from '../../lib/walkChart';
@@ -108,20 +108,22 @@ function hrs(n: number): string {
  *   line itself is a mouse-only affordance; `title` never fires on touch. Both
  *   matter more than usual here — this is read from a phone.
  */
-function HeadroomChart({ walk, exhaustAt, startHead, cells, scale, tipHandlers }: {
+function HeadroomChart({ walk, exhaustAt, startHead, cells, scale, tipHandlers, offsetMinutes }: {
   walk: UsageProfileResponse['walk'];
   exhaustAt: string | null;
   startHead: number;
   cells: UsageProfileCell[];
   scale: HeadScale;
   tipHandlers: (text: string) => TipHandlers;
+  /** The host's offset: every time label reads in host time, the clock the grid was bucketed on. */
+  offsetMinutes: number | undefined;
 }) {
   const n = walk.length;
   const w = walkWidth(n);
   const segs = headSegments(walk, scale);
   const above = joinPoints(segs.filter(s => !s.below));
   const cross = crossingX(walk);
-  const ticks = dayTicks(walk).filter(t => t.kind === 'day');
+  const ticks = dayTicks(walk, offsetMinutes).filter(t => t.kind === 'day');
   const zero = zeroY(scale);
 
   return (
@@ -157,7 +159,7 @@ function HeadroomChart({ walk, exhaustAt, startHead, cells, scale, tipHandlers }
           ))}
           {walk.map((step, i) => {
             const rect = hitRect(i, n);
-            const text = stepTitle(step, cells[step.hourOfWeek]);
+            const text = stepTitle(step, cells[step.hourOfWeek], offsetMinutes);
             return (
               <rect
                 key={step.t}
@@ -197,7 +199,7 @@ function HeadroomChart({ walk, exhaustAt, startHead, cells, scale, tipHandlers }
                 {/* The crossing *time*, not the word `empty`: the y label on
                     the rule already says empty, and the figure strip prints
                     this same string, so the mark and the claim are one reading. */}
-                {fmtWalkHour(exhaustAt)}
+                {fmtWalkHour(exhaustAt, offsetMinutes)}
               </span>
             )}
           </>
@@ -388,7 +390,7 @@ export function UsageProfile() {
 
   const {
     cells, globalMean, confidence, recording, walk, exhaustAt, walkAbsent,
-    utilizationPct, resetsAt, dutyCycle
+    utilizationPct, resetsAt, dutyCycle, offsetMinutes
   } = profile;
 
   const dot = (key: ProfileTerm, label: string) => (
@@ -397,7 +399,7 @@ export function UsageProfile() {
 
   const progress = profileProgress(cells);
   const startHead = utilizationPct === null ? 100 : 100 - utilizationPct;
-  const table = walkRows(walk, { resetsAt, startHead });
+  const table = walkRows(walk, { resetsAt, startHead, offsetMinutes });
   const scale = headroomScale(walk, startHead);
   const tiles = forecastStats({
     utilizationPct,
@@ -412,7 +414,8 @@ export function UsageProfile() {
     hasWalk: walk.length > 0,
     progress,
     confidence,
-    nowMs: Date.now()
+    nowMs: Date.now(),
+    offsetMinutes
   });
 
   // Dated from the cells, not the calendar: a bucket carrying last week's stamp
@@ -420,8 +423,9 @@ export function UsageProfile() {
   // With nothing recorded there is no occurrence to date, and the week boundary
   // is then the true floor — an hour has to be observed before it can fold.
   const now = Date.now();
-  const first = new Date(earliestWeightMs(cells, now) ?? nextWeekStartMs(now));
-  const when = first.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' });
+  const first = earliestWeightMs(cells, now, offsetMinutes) ?? nextWeekStartMs(now, offsetMinutes);
+  const when = fmtWallDate(first, { weekday: 'short', day: 'numeric', month: 'short' }, offsetMinutes);
+  const zoneNote = hostZoneNote(offsetMinutes, now);
 
   return (
     <div className="up">
@@ -460,6 +464,7 @@ export function UsageProfile() {
               cells={cells}
               scale={scale}
               tipHandlers={tipHandlers}
+              offsetMinutes={offsetMinutes}
             />
             <WalkLegend tip={dot} />
             {scale.clamped && (
@@ -549,6 +554,8 @@ export function UsageProfile() {
             <HourGrid wide={false} cells={cells} tipHandlers={tipHandlers} />
           </>
         )}
+
+        {zoneNote && <p className="note">{zoneNote}</p>}
 
         <div className="uplegend">
           <small>never</small>

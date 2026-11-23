@@ -625,7 +625,7 @@ export function liveSessionIds(): Set<string> | null {
 }
 
 /** What one row needs beyond its transcript: the clock, the activity window and the injected sets `scanSessions` documents on {@link ScanOptions}. */
-export interface RowOptions extends Pick<ScanOptions, 'homeDir' | 'pendingIds' | 'planIds' | 'messageIds' | 'permissionWaits' | 'stopStates' | 'desktopOwnedIds' | 'handOverFailedIds'> {
+export interface RowOptions extends Pick<ScanOptions, 'homeDir' | 'claudeRoots' | 'pendingIds' | 'planIds' | 'messageIds' | 'permissionWaits' | 'stopStates' | 'desktopOwnedIds' | 'handOverFailedIds'> {
   now: number;
   activeWindowMin: number;
   /** The live-cwd set; null fails open, as `skipProcScan` does. */
@@ -741,6 +741,8 @@ export function sessionFromRef(ref: TranscriptRef, opts: RowOptions): Session | 
     project,
     projectPath,
     repo: repoNameFor(projectPath),
+    // A row with no launch cwd is named only by its parsed `project`, which stands in.
+    pickerProject: projectPath === null ? project : pickerProjectOf(projectPath, opts.claudeRoots ?? defaultClaudeRoots(opts.homeDir)),
     sessionName: parsed.sessionName || null,
     gitBranch: parsed.gitBranch || null,
     model: parsed.model || '',
@@ -790,7 +792,8 @@ function projectNameOf(cwd: string): string {
 /**
  * The name the Sessions project picker files a cwd under, or null when it offers none: a linked worktree folds into its repo, so its sessions come with
  * the repo's chip instead of a chip of their own, and a dir Claude made for itself (a scratchpad, a scratch workspace, `~/.claude`) has no chip at all —
- * its sessions show only under "All projects". Must agree with the client's `filterProjectOf`.
+ * its sessions show only under "All projects". Every row carries the answer as `Session.pickerProject`, which the client's `filterProjectOf` reads
+ * instead of re-deriving the rule.
  */
 function pickerProjectOf(cwd: string, claudeRoots: readonly string[]): string | null {
   if (isClaudeOwned(cwd, claudeRoots)) return null;
@@ -839,8 +842,6 @@ export function scanSessions(config: Partial<Config>, options: ScanOptions = {})
     projectOf.set(t, cwd && normCwd(cwd) !== refresh ? pickerProjectOf(cwd, claudeRoots) ?? '' : null);
   }
   const wanted = options.projects && options.projects.size ? options.projects : null;
-  // A row with no launch cwd is named only by its parsed `project`, which stands in.
-  const rowPicker = (s: Session): string | null => s.projectPath === null ? s.project : pickerProjectOf(s.projectPath, claudeRoots);
   // Under a filter, matching and still-unknown transcripts each get a pool of their own: unknowns sharing one pool could fill it ahead of every
   // match, leaving a filtered board short of rows while matching transcripts exist. An unknown stays a candidate because the parsed row settles it.
   let candidates: TranscriptRef[];
@@ -870,7 +871,7 @@ export function scanSessions(config: Partial<Config>, options: ScanOptions = {})
     : cfg.showAnalytics === false ? null : readSessionAnalyticsLog();
 
   const rowOptions: RowOptions = {
-    homeDir: options.homeDir, now, activeWindowMin, liveCwds: live, liveSessionIds: liveIds, lessons, scanSkips: true,
+    homeDir: options.homeDir, claudeRoots, now, activeWindowMin, liveCwds: live, liveSessionIds: liveIds, lessons, scanSkips: true,
     pendingIds: options.pendingIds, planIds: options.planIds, messageIds: options.messageIds,
     permissionWaits: options.permissionWaits, stopStates: options.stopStates, desktopOwnedIds: options.desktopOwnedIds,
     handOverFailedIds: options.handOverFailedIds
@@ -879,11 +880,11 @@ export function scanSessions(config: Partial<Config>, options: ScanOptions = {})
   for (const c of candidates) {
     if (sessions.length >= maxSessions) break;   // the pool over-fetches; this is the cap
     const row = sessionFromRef(c, rowOptions);
-    if (row && (!wanted || wanted.has(rowPicker(row) ?? ''))) sessions.push(row);
+    if (row && (!wanted || wanted.has(row.pickerProject ?? ''))) sessions.push(row);
   }
 
   const projects = new Set<string>();
-  for (const s of sessions) { const p = rowPicker(s); if (p) projects.add(p); }
+  for (const s of sessions) if (s.pickerProject) projects.add(s.pickerProject);
   for (const p of projectOf.values()) if (p) projects.add(p);
 
   return {

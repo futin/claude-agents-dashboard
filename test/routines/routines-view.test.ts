@@ -346,6 +346,7 @@ export function run(): number {
     assert.strictEqual(writeFailureText('Save', 409, { error: 'not-owner' }), 'Another server owns the routines on this machine; this one only reads.');
     assert.strictEqual(writeFailureText('Run now', 409, { error: 'already-running' }), 'Run now: the job is already running.');
     assert.strictEqual(writeFailureText('Stop', 409, { error: 'not-running' }), 'Stop: the job is not running.');
+    assert.strictEqual(writeFailureText('Save', 409, { error: 'changed' }), 'Save: the file changed on disk since it was opened — reload it first.');
     assert.strictEqual(writeFailureText('Delete', 404, null), 'Delete: no such job.');
     assert.strictEqual(writeFailureText('Save', 422, { errors: [] }), 'Save: the file has errors.');
     assert.strictEqual(writeFailureText('Reveal', 0, null), 'Reveal failed: the server did not answer.');
