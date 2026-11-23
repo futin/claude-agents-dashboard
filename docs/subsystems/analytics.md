@@ -240,7 +240,11 @@ returned — no backend change, so the read-only invariant above still holds.
   `server/lib/tool-output-replay.ts` `extractResults` by a parity case in `test/analytics/analyze.test.ts` (results per tool and turns lived; token
   sizing differs — kaizen sizes by chars ÷ 4, the replay CLI by bytes), and tested in `plugin/skills/kaizen/test/context-lifetime.test.mjs`.
   That heuristic (`errorSignals.userCorrections`) also skips a user turn carrying `<agent-message`, on both sides: it is a subagent's hand-back
-  delivered as a user turn, not the user correcting anything (#302).
+  delivered as a user turn, not the user correcting anything (#302) — and, on both sides (#505), an `isMeta` record, a harness-written turn
+  (`<command-name>` / `<command-message>`, `<ci-monitor-event`, `<create-pr-command`, `<side-sessions-event`) and every `<system-reminder>` block in
+  front of a typed turn, which is cut before the regex runs: an injected skill body says "don't" and "instead" in nearly every paragraph, and before
+  #505 those records outnumbered real turns 193 to 8 over this machine's 150 newest transcripts (measured 2026-11-23). A drawer follow-up arrives as an
+  `isMeta` record too, so it is not counted — the figure is a keyword count over typed text, noisy both ways, never a lower bound.
 - **The lesson line's figures are data, not only prose.** `kaizen.mjs --trend [log]` reads the `<billable> billable (<ctx> ctx` prefix back out of
   every lesson line (`k` / `M` / `B` suffixes, decimals, thousands commas; trailing `, 231 turns` and the like ignored) and prints per-project and
   overall ctx series, which `/kaizen review` step 2 reports. Drift is the median ctx of a group's newest 3 sessions at ≥ 1.5× the median of all its

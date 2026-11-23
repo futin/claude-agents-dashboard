@@ -285,6 +285,30 @@ export function run(): number {
     assert.strictEqual(a.errorSignals.userCorrections, 1);
   })) p++; else f++;
 
+  if (test('userCorrections skips isMeta records (an injected skill body) and slash-command wrapper records (#505)', () => {
+    const file = fixture([
+      { ...humanRec("Base directory for this skill: /x\n\nDon't do that; use the tool instead. No exceptions.", '2026-07-01T10:00:00Z'), isMeta: true },
+      humanRec('<command-message>backlog-tick</command-message>\n<command-name>/backlog-tick</command-name>\n<command-args>no instead</command-args>', '2026-07-01T10:00:01Z'),
+      humanRec('<command-name>/clear</command-name>\n<command-message>clear</command-message>\n<command-args>undo</command-args>', '2026-07-01T10:00:02Z'),
+      humanRec('No, that is the wrong file', '2026-07-01T10:00:03Z')       // the one human correction
+    ]);
+    const a = analyzeSession(file)!;
+    assert.strictEqual(a.errorSignals.userCorrections, 1);
+  })) p++; else f++;
+
+  if (test('userCorrections reads only the human text: a <system-reminder> block is stripped, harness event records are skipped (#505)', () => {
+    const reminder = "<system-reminder>\nThe user started this session without choosing a project folder, so don't assume one; ask instead.\n</system-reminder>\n";
+    const file = fixture([
+      humanRec(reminder + 'hi', '2026-07-01T10:00:00Z'),                                   // keywords only in the reminder
+      humanRec(reminder + 'no, wrong file', '2026-07-01T10:00:01Z'),                       // the one human correction
+      humanRec('<ci-monitor-event>checks failed, no retry</ci-monitor-event>', '2026-07-01T10:00:02Z'),
+      humanRec('<create-pr-command>do not push instead</create-pr-command>', '2026-07-01T10:00:03Z'),
+      humanRec('<side-sessions-event>no change</side-sessions-event>', '2026-07-01T10:00:04Z')
+    ]);
+    const a = analyzeSession(file)!;
+    assert.strictEqual(a.errorSignals.userCorrections, 1);
+  })) p++; else f++;
+
   if (test('unknown-token subagent → unknownTokenCount + note', () => {
     const file = fixture([
       usageRec({ input_tokens: 100 }, '2026-07-01T10:00:00Z'),

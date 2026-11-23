@@ -1623,7 +1623,7 @@ export interface ErrorSignals {
   toolErrors: number;
   /** A tool re-invoked after it errored — a rough rework signal. */
   retries: number;
-  /** Human turns matching a correction keyword. Noisy lower bound, not a score. */
+  /** Human-typed turns matching a correction keyword (meta records, harness-written turns and system-reminder blocks skipped). Noisy both ways, not a score. */
   userCorrections: number;
 }
 

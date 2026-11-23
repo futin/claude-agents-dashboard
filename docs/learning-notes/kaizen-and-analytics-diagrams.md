@@ -171,7 +171,7 @@ What is exact vs approximate:
 | `byTool.count`, `errors`, `durationMs` | **exact** |
 | subagent `tokens` / `toolUses` / `durationMs` | **exact** |
 | `byTool.approxOutputTokens` | **approx** — even split of each turn's output across its tool calls; no per-tool field exists on disk |
-| `errorSignals.userCorrections` | **noisy** — keyword lower bound, not a score |
+| `errorSignals.userCorrections` | **noisy** — keyword count over human-typed turns, not a score |
 
 ---
 
