@@ -133,5 +133,5 @@ The 25 s TTL and the cap of 2 follow from those; `CODEGRAPH_STATUS_TIMEOUT_MS` (
     - client/src/components/management/CodegraphInspector.tsx
     - client/src/components/management/CodegraphClockChip.tsx
   kind: subsystem
-  verified: 24f8d773dd459e02b1e4ef4a093aed285939555c
+  verified: 7b75ae1917c8e25249c5d0ab4e16f13da9a22b82
 -->

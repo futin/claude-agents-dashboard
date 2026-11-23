@@ -1,8 +1,8 @@
 # Claude Agents Dashboard — working rules
 
-Live monitor for parallel Claude Code sessions: reads `~/.claude/projects/*/*.jsonl`
-transcripts off disk (no daemon, no hooks) and shows project, git branch, model, context
-usage and current tool activity per session. Polls every 3s.
+Live monitor for parallel Claude Code sessions: reads `~/.claude/projects/*/*.jsonl` transcripts off disk — the monitor itself needs no daemon and
+no hooks — and shows project, git branch, model, context usage and current tool activity per session. Polls every 3s. The hook scripts
+`pnpm hooks:install` adds are optional: they power the push notifications, remote answers and the kill guard.
 
 ## Orientation
 
@@ -164,5 +164,5 @@ filling them with nothing.
     - shared/gitUpstream.ts
     - package.json
   kind: index
-  verified: 24f8d773dd459e02b1e4ef4a093aed285939555c
+  verified: 7b75ae1917c8e25249c5d0ab4e16f13da9a22b82
 -->

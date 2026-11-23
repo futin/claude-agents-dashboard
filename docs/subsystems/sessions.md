@@ -438,8 +438,8 @@ spawning. Injectable via `ScanOptions.proc`, or per field via `ScanOptions.liveC
 `ps`/`lsof` inside it can never see the host's real `claude` CLI process, so the
 gate would force every session to `idle` even while genuinely working. `config.ts`
 `isDockerContainer()` detects `/.dockerenv` and defaults `skipProcScan: true` in that
-case (override with `SKIP_PROC_SCAN` env either way); `api.ts` passes
-`config.skipProcScan` into `scanSessions`. See [docker](../workflows/docker.md).
+case (override with `SKIP_PROC_SCAN` env either way); `sharedProcProbe` (`scan-snapshot.ts`) then answers `null` without forking, so the scan gets
+no `proc` and fails open. See [docker](../workflows/docker.md).
 
 **Empty-session filter:** `/clear` (and opening a new session) starts a fresh UUID
 transcript holding only `queue-operation`/`attachment`/meta records with no
@@ -725,5 +725,5 @@ Measured at the same scroll position in all three configurations: default `24 / 
     - client/src/hooks/useSessionDetail.ts
     - client/src/lib/filterSort.ts
   kind: subsystem
-  verified: 96b0f64a8c117ae160ba90bfdd34ef357890a8a1
+  verified: 7b75ae1917c8e25249c5d0ab4e16f13da9a22b82
 -->

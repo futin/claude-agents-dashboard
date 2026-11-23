@@ -69,7 +69,7 @@ docker run --rm --name ci-linux --user root -v "$PWD":/src-ro:ro node:22 bash -c
 ```
 
 Three container differences from the runner are undone on purpose: the local `node:22` image has no `git` (the git-state suites spawn it) and no
-`jq` (the hook suites print `⚠ SKIPPED` and pass without it — 83 cases on 2026-10-15), and `/.dockerenv` exists, which flips `loadConfig`'s Docker
+`jq` (the hook suites print `⚠ SKIPPED` and pass without it), and `/.dockerenv` exists, which flips `loadConfig`'s Docker
 detection. Its default-value test follows detection since #310, so it no longer fails there, but removing the marker keeps the container's defaults the
 runner's. The runner is a VM with git and jq, so none of these applies there. Compare the `✓` count with a macOS run.
 
@@ -135,5 +135,5 @@ A dispatch `sha` must be a commit on `main`; any other commit fails with `target
     - .github/workflows/release.yml
     - .github/pull_request_template.md
   kind: workflow
-  verified: 142439e51a92c5c5faebaf0c867bc5a36fef7c57
+  verified: 7b75ae1917c8e25249c5d0ab4e16f13da9a22b82
 -->

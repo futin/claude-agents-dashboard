@@ -21,10 +21,10 @@ flowchart LR
         SK -->|"step 1 runs"| MJ
     end
 
-    LOG[("~/.claude/session-analytics-log.md<br/>global · append-only · never rewritten<br/>3 line shapes: lesson · status · review<br/>only judgment is stored, never numbers")]
+    LOG[("~/.claude/session-analytics-log.md<br/>global · append-only · never rewritten<br/>4 line shapes: lesson · status · verdict · review<br/>only judgment is stored, never numbers")]
 
     subgraph C["Analytics tab — the consumer, read-only"]
-        SAL["sessionAnalyticsLog.ts<br/>parseLogEvents: status → review → lesson<br/>newest-first · dedupe by idPrefix · cap ANALYTICS_KEEP=5"]
+        SAL["sessionAnalyticsLog.ts<br/>parseLogEvents: verdict → status → review → lesson<br/>newest-first · dedupe by idPrefix · cap ANALYTICS_KEEP=5"]
         AN["analytics.ts<br/>prefix-match idPrefix against enumerated<br/>transcripts (ID_RE, never path-joined)<br/>then re-run analyzeSession() live<br/>+ reviewStatus(): 7-day sweep clock"]
         API["api.ts<br/>GET /api/analytics · fail-open"]
         AV["AnalyticsView card<br/>fetch on mount + manual refresh, no polling<br/>status badge · review-due chip"]
@@ -140,7 +140,7 @@ traffic, plus **233k** of subagent work.
 pie showData title Whole-session tokens (millions) — combined + subagentTotals
     "billableApprox = input + output + cacheCreation (real cost)" : 1.0
     "cacheRead (replayed cached prompt, billed at ~10%)" : 11.1
-    "subagentTotals (exact, separate bucket)" : 0.233
+    "subagentTotals (summed from subagent transcripts, separate bucket)" : 0.233
 ```
 
 Reading it: `combined` (billable + cacheRead = 12.1M) is a *context-pressure*
@@ -156,12 +156,13 @@ skip only ever fires on older transcripts):
 flowchart LR
     A["assistant line<br/>usage: input / output / cache_*"] -->|"summed"| T["totals<br/>billableApprox · combined"]
     B["assistant line<br/>isSidechain: true"] -.->|"skipped — already summarized<br/>into the parent turn;<br/>counting = double-count"| T
-    R["toolUseResult +<br/>task-notification tags<br/>(subagent_tokens / tool_uses / duration_ms)"] -->|"exact"| S["subagentTotals<br/>kept OUT of totals"]
+    R["subagents/agent-*.jsonl<br/>each subagent's own transcript,<br/>summed once per message.id"] -->|"summed"| S["subagentTotals<br/>kept OUT of totals"]
+    H["toolUseResult +<br/>task-notification tags<br/>(subagent_tokens = final context size)"] -.->|"fallback only — a lower bound,<br/>when no complete transcript"| S
 
     classDef exact fill:#E9EEF3,stroke:#2F5578,color:#23272B
     classDef skip fill:#FDFCF9,stroke:#8A8D91,color:#5E6570
     class A,T,R,S exact
-    class B skip
+    class B,H skip
 ```
 
 What is exact vs approximate:

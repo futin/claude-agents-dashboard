@@ -127,7 +127,7 @@ is the headless exemption, which is this store's alone.
    [the idle sweep](remote-answer.md#the-idle-sweep-coming-back-to-the-desk) for the
    threshold and both fail directions → no-op.
 3. Otherwise (`backAtDesk()` says you are back) → every open **terminal-backed** entry
-   settles as `released`; each hook's held `/api/messages/wait` call returns with that
+   settles as `released` — the reading is async, so only the ones still held when it lands; each hook's held `/api/messages/wait` call returns with that
    status, exits 0, and the session stops — within ~5s of the first keystroke.
 
 **Headless holds are exempt from the sweep.** "Back at the keyboard" ends a hold because
@@ -285,5 +285,5 @@ state, reset on a new `messageId`, never persisted.
     - client/src/hooks/usePendingMessage.ts
     - client/src/lib/holds.ts
   kind: subsystem
-  verified: 96b0f64a8c117ae160ba90bfdd34ef357890a8a1
+  verified: 7b75ae1917c8e25249c5d0ab4e16f13da9a22b82
 -->

@@ -80,7 +80,7 @@ notify_fallback() {
   [ "$SHA" = "true" ] && exit 0
   BODY=$(jq -cn --arg sid "$SESSION_ID" --arg pm "$PERM_MODE" \
     '{sessionId: $sid, event: "stop", permissionMode: $pm}') || exit 0
-  curl -sf -m 1 -X POST -H 'Content-Type: application/json' "${AUTH[@]}" \
+  dash_curl -sf -m 1 -X POST -H 'Content-Type: application/json' \
     -d "$BODY" "$DASH/api/notify/event" > /dev/null 2>&1 || true
   exit 0
 }
@@ -188,17 +188,20 @@ the module's header names it: every transcript already on disk carries the old w
 ask the same question to decide it:
 
 ```ts
-// server/lib/idle.ts:82-90
-export function backAtDesk(): boolean {
+// server/lib/idle.ts:89-97
+export async function backAtDesk(): Promise<boolean> {
   const thresholdSecs = getSettings().idleSecs;
   // Checked before the read, not inside `atDesk`: the reading costs an `ioreg`
   // spawn and a zero threshold makes the answer false regardless, so asking
   // would be ~40ms spent on a foregone conclusion. `atDesk` re-checks it anyway
   // for callers that already hold a reading.
   if (thresholdSecs === 0) return false;
-  return atDesk((idleReader ?? readIdleSecs)(), thresholdSecs);
+  return atDesk(await (idleReader ?? readIdleSecs)(), thresholdSecs);
 }
 ```
+
+It is async because the `ioreg` reading runs off the event loop: the server keeps answering while the spawn is in flight, which is also why every caller
+below `await`s it.
 
 **Why:** when you walk back to your desk, the right behaviour is for the session to go back to the terminal
 immediately — not to make you find a phone panel and dismiss it. Each store settles such a hold as `released`.
@@ -207,15 +210,17 @@ This policy first lived only in `messages.ts`, which is why held questions and p
 it, and [`wait-store.ts`](../../../../../server/lib/wait-store.ts) runs it: each store's `sweepIdle()` is a one-line call into the shared sweep.
 
 ```ts
-// server/lib/wait-store.ts:120-126
-    sweepIdle() {
+// server/lib/wait-store.ts:138-143
+    async sweepIdle() {
       const release = releasableEntries();
       if (release.length === 0) return 0; // nothing to release — don't spawn ioreg
-      if (!backAtDesk()) return 0;
-      for (const entry of release) settle(entry, opts.released);
-      return release.length;
+      if (!(await backAtDesk())) return 0;
+      return release.filter(entry => releaseIfHeld(entry)).length;
     },
 ```
+
+The await opens a window: you can answer a hold from the phone while the reading is in flight. `releaseIfHeld` settles an entry as `released` only if
+nothing settled it meanwhile, so an answer that lands during the read keeps its answer.
 
 What differs per store is an option. `messages.ts` is the one that passes it, because it skips headless holds:
 
@@ -232,16 +237,18 @@ And the reaper self-terminates. There is one, shared by all three stores. Each t
 release:
 
 ```ts
-// server/lib/wait-store.ts:76-83
+// server/lib/wait-store.ts:89-95
 function ensureReaper(): void {
   if (reaper) return;
   reaper = setInterval(() => {
-    reapIdle();
-    stopReaperIfEmpty();
+    void reapIdle().catch(() => 0).then(stopReaperIfEmpty);
   }, 5_000);
   reaper.unref();
 }
 ```
+
+`reapIdle` is async for the same reason, and a `reaping` flag makes a tick that fires while an earlier one is still awaiting its reading return 0 without
+reading, so ticks never overlap and never stack `ioreg` spawns.
 
 **The bad alternative** is a permanent 5-second interval started at boot:
 
@@ -258,7 +265,7 @@ Note the fail direction. It is the *same* as the hook's, never act on a guess. H
 the terminal:
 
 ```ts
-// server/lib/idle.ts:72-77
+// server/lib/idle.ts:79-84
  * Fail directions, both deliberately "stay held":
  *  - unreadable idle (Docker, non-macOS) → false. Never end a wait on a guess;
  *    the deadline timer is the reaper of last resort. Same direction

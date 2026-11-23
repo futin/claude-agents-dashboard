@@ -301,7 +301,7 @@ remote-control set above. The full picture is in [`docs/overview.md`](docs/overv
 pnpm dev         # API + Vite with hot reload on http://localhost:5174
 pnpm test        # node-assert tests over the domain logic, then the kaizen skill's suite
 pnpm typecheck   # tsc --noEmit
-pnpm test:skills # git-sync's own suite, ~4 min — only needed when you change plugin/skills/git-sync/
+pnpm test:skills # git-sync's own suite, the slow one — only needed when you change plugin/skills/git-sync/
 pnpm test:visual # screenshot/overflow/contrast suite, macOS only; --update-snapshots re-baselines (docs/subsystems/visual-tests.md)
 ```
 
@@ -327,5 +327,5 @@ remote-answers hook, push-notification and dictation setup, CI and releases) in 
     - scripts/
     - package.json
   kind: readme
-  verified: 96b0f64a8c117ae160ba90bfdd34ef357890a8a1
+  verified: 7b75ae1917c8e25249c5d0ab4e16f13da9a22b82
 -->
