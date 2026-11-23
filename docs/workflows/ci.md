@@ -27,7 +27,7 @@ they can break: a PR that touches only docs never needs `tsc` or `vite build` (n
 | docs — `docs/**` and any other `*.md` (`CLAUDE.md`, a `SKILL.md`, `backlog/**`)                                 | the `run-all.ts` suites (through `test/run-some.ts`) and kaizen `node --test` suites whose code names a changed file; no typecheck, no build |
 | anything else — `server/`, `client/`, `shared/`, `plugin/` code, configs, the lockfile, and always `scripts/**`, `test/**`, `.github/**` | everything: `pnpm typecheck`, `pnpm build`, `pnpm test`                                                          |
 
-- **Docs are not test-free.** `docs-links.test.ts` walks `docs/` for dead links, `plugin-manifest.test.ts` pins what lives under `plugin/`,
+- **Docs are not test-free.** `docs-links.test.ts` walks `docs/`, `README.md` and `.claude/CLAUDE.md` for dead links, `plugin-manifest.test.ts` pins what lives under `plugin/`,
   kaizen's `skill.test.mjs` reads its `SKILL.md`, and a handful more read `CLAUDE.md`. A docs-only PR still runs those, so a doc that breaks a guard is red
   on the PR, not on `main`.
 - **Which suites "name" a file** is found by scanning the suites' source at run time — no hand-kept list. A path piece counts when it is bounded by quotes or

@@ -3,6 +3,7 @@
  * counts as one: every `*.test.ts` under `test/`, sorted, never Playwright's `test/visual/`, never a helper or a runner.
  */
 import assert from 'node:assert';
+import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -86,6 +87,27 @@ export async function run(): Promise<number> {
     assert.strictEqual(got.failed, 2);
     assert.match(got.out, /✗ test\/s0\.test\.ts exports no run\(\)/);
     assert.match(got.out, /✗ test\/s1\.test\.ts exports no run\(\)/);
+  }));
+
+  r(await test('run-some.ts: a suite whose run() returns no count fails the run, and a clean suite passes it', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cad-run-some-'));
+    try {
+      const bad = path.join(dir, 'bad.test.ts');
+      const good = path.join(dir, 'good.test.ts');
+      fs.writeFileSync(bad, 'export function run() { return undefined; }\n');
+      fs.writeFileSync(good, 'export function run() { return 0; }\n');
+      const runSome = (...files: string[]) =>
+        spawnSync(process.execPath, ['--import', 'tsx', 'test/run-some.ts', ...files], { cwd: ROOT, encoding: 'utf8' });
+      const failing = runSome(good, bad);
+      assert.strictEqual(failing.status, 1, failing.stdout + failing.stderr);
+      assert.match(failing.stdout, /bad\.test\.ts run\(\) returned undefined, not a failure count/);
+      assert.match(failing.stdout, /FAILED \(1\)/);
+      const passing = runSome(good);
+      assert.strictEqual(passing.status, 0, passing.stdout + passing.stderr);
+      assert.match(passing.stdout, /ALL PASS/);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
   }));
 
   console.log(`\n  ${p}/${p + f} passed`);

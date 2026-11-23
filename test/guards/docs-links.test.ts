@@ -1,5 +1,6 @@
 /**
- * Resolves every relative markdown link under `docs/` against the real tree.
+ * Resolves every relative markdown link under `docs/`, in `README.md` and in `.claude/CLAUDE.md` against the real tree — moving a
+ * `docs/subsystems/*.md` file breaks the README's links as surely as any doc's.
  *
  * The repo root is found by walking up for `package.json` — never a fixed
  * `../..` hop count from this file, so moving the test cannot silently
@@ -25,6 +26,9 @@ export function findRepoRoot(from: string): string {
     dir = parent;
   }
 }
+
+/** Markdown files outside `docs/` whose relative links are checked too, repo-relative. */
+export const ROOT_DOCS = ['README.md', '.claude/CLAUDE.md'];
 
 /** Markdown files under `dir`, recursively, as absolute paths. */
 function markdownFiles(dir: string, out: string[] = []): string[] {
@@ -106,9 +110,17 @@ export function run(): number {
     assert.deepStrictEqual(extractLinks(src), [{ line: 1, target: '../real.md' }]);
   })) p++; else f++;
 
-  if (test('every relative link under docs/ resolves to a real path', () => {
+  if (test('README.md and .claude/CLAUDE.md exist and carry relative links to check', () => {
+    for (const rel of ROOT_DOCS) {
+      const abs = path.join(root, ...rel.split('/'));
+      assert.ok(fs.existsSync(abs), rel);
+      assert.ok(extractLinks(fs.readFileSync(abs, 'utf8')).length > 0, `${rel} has no relative links — a stale ROOT_DOCS entry checks nothing`);
+    }
+  })) p++; else f++;
+
+  if (test('every relative link under docs/, in README.md and in .claude/CLAUDE.md resolves to a real path', () => {
     const dead: string[] = [];
-    for (const abs of markdownFiles(docsDir)) {
+    for (const abs of [...markdownFiles(docsDir), ...ROOT_DOCS.map(rel => path.join(root, ...rel.split('/')))]) {
       const rel = path.relative(root, abs).split(path.sep).join('/');
       const dir = path.posix.dirname(rel);
       for (const { line, target } of extractLinks(fs.readFileSync(abs, 'utf8'))) {

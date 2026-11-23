@@ -73,6 +73,48 @@ export function scanLaunchers(files: Record<string, string>): string[] {
   return out.sort();
 }
 
+/** The callees whose first argument is a program to launch: child_process's own, and the runner seams server/ wraps them in. */
+const LAUNCH_CALLEES = ['execFile', 'execFileSync', 'spawn', 'spawnSync', 'exec', 'execSync', 'fork', 'nodeSpawn', 'run', 'runner', 'spawner', 'runProbeChild', 'spawnProcess'];
+const LAUNCH_CALL = new RegExp(`(?<![\\w$.])(?:${LAUNCH_CALLEES.join('|')})\\s*\\(\\s*(['"\`])([\\w./-]+)\\1`, 'g');
+/** `bin: 'gh'`, `bin = 'codegraph'` (a default), `const bin = opts.bin ?? 'git'`: a runner told which program to launch. */
+const BIN_LITERAL = /\bbin\s*(?::|=(?!=))\s*(?:[\w$.]+\s*\?\?\s*)?(['"])([\w./-]+)\1/g;
+
+/**
+ * Per file, the programs it names to launch: a string literal as the first argument of a launch call (`LAUNCH_CALLEES`) or as a runner's `bin`. A program
+ * named only through config (`config.claudeBin`, the whisper and ffmpeg bins) is not a literal and is not seen. Files naming none are absent.
+ */
+export function scanCommands(files: Record<string, string>): Record<string, string[]> {
+  const out: Record<string, string[]> = {};
+  for (const [rel, text] of Object.entries(files)) {
+    const src = stripComments(text);
+    const found = new Set<string>();
+    for (const m of src.matchAll(LAUNCH_CALL)) found.add(m[2]);
+    for (const m of src.matchAll(BIN_LITERAL)) found.add(m[2]);
+    if (found.size > 0) out[rel] = [...found].sort();
+  }
+  return out;
+}
+
+/**
+ * The programs each `server/` file launches by name. Adding one means naming it in `.claude/CLAUDE.md`'s zero-deps rule in the same change — the test
+ * below checks every name here appears there in backticks.
+ */
+const COMMANDS: Record<string, string[]> = {
+  'server/index.ts': ['cmd', 'open', 'xdg-open'], // opens the browser on `pnpm start`
+  'server/lib/codegraph.ts': ['codegraph'],
+  'server/lib/desktop.ts': ['open'], // a claude:// URL
+  'server/lib/git-fetch.ts': ['git'], // `makeFetchRunner`'s default; git-quick.ts launches through it
+  'server/lib/git-stats.ts': ['git'],
+  'server/lib/idle.ts': ['ioreg'],
+  'server/lib/open-folder.ts': ['open'],
+  'server/lib/pr-status.ts': ['gh'], // through git-fetch.ts's `makeFetchRunner`
+  'server/lib/routine-reconcile.ts': ['crontab', 'launchctl', 'pgrep'],
+  'server/lib/routine-store.ts': ['ps', 'sysctl'],
+  'server/lib/scan.ts': ['lsof', 'ps'],
+  'server/lib/token-refresh.ts': ['claude'],
+  'server/lib/usage.ts': ['security'],
+};
+
 /**
  * Every entry here is a network surface the docs must name. Adding one means updating README.md (intro + Dictation bullet), `.claude/CLAUDE.md` (the
  * zero-deps rule), `docs/overview.md` (the `lib/` map), `docs/subsystems/dictation.md` and `docs/subsystems/session-surfaces.md` in the same change.
@@ -130,6 +172,39 @@ export function run(): number {
       assert.deepStrictEqual(scanLaunchers({ 'a.ts': src }), want);
     })) p++; else f++;
   }
+
+  const commandCases: [string, string, Record<string, string[]>][] = [
+    ['a literal program in execFile counts', `execFile('ioreg', ['-c', 'IOHIDSystem'], cb);`, { 'a.ts': ['ioreg'] }],
+    ['a literal on the next line counts', `const c = execFile(\n  'security',\n  ['-w'],\n);`, { 'a.ts': ['security'] }],
+    ['a runner seam counts', `await runner('launchctl', ['print']); run('ps', ['-A']);`, { 'a.ts': ['launchctl', 'ps'] }],
+    ['a bin property, default and ?? fallback count', `makeFetchRunner({ bin: 'gh' });\nfunction r(bin = 'codegraph') {}\nconst bin = opts.bin ?? 'git';`, { 'a.ts': ['codegraph', 'gh', 'git'] }],
+    ['a program from a variable is not seen', `execFile(cmd, args); spawn(config.claudeBin, []);`, {}],
+    ['a regex .exec( does not count', `const m = /x/.exec('ps');`, {}],
+    ['a run( whose first argument is not a literal does not count', `await run(toplevel, ['push', 'origin']);`, {}],
+    ['a commented launch does not count', `// execFile('curl', [url])`, {}],
+  ];
+  for (const [name, src, want] of commandCases) {
+    if (test(`command scanner: ${name}`, () => {
+      assert.deepStrictEqual(scanCommands({ 'a.ts': src }), want);
+    })) p++; else f++;
+  }
+
+  if (test('server/**/*.ts launches only the programs COMMANDS names, file by file', () => {
+    const files: Record<string, string> = {};
+    for (const abs of tsFiles(path.join(root, 'server'))) {
+      files[path.relative(root, abs).split(path.sep).join('/')] = fs.readFileSync(abs, 'utf8');
+    }
+    assert.deepStrictEqual(scanCommands(files), COMMANDS, 'server/ launches a program COMMANDS does not name — add it there and to .claude/CLAUDE.md\'s zero-deps rule');
+  })) p++; else f++;
+
+  if (test('.claude/CLAUDE.md zero-deps rule names every program COMMANDS lists', () => {
+    const md = fs.readFileSync(path.join(root, '.claude/CLAUDE.md'), 'utf8').replace(/\s+/g, ' ');
+    const rule = md.slice(md.indexOf('Keep new deps out of'));
+    const head = rule.slice(0, rule.indexOf('`client/dist/`'));
+    const names = [...new Set(Object.values(COMMANDS).flat())].sort();
+    const missing = names.filter((name) => !new RegExp('`' + name.replace(/[.-]/g, '\\$&') + '[ `]').test(head));
+    assert.deepStrictEqual(missing, [], `programs missing from .claude/CLAUDE.md's zero-deps rule: ${missing.join(', ')}`);
+  })) p++; else f++;
 
   if (test('.claude/CLAUDE.md zero-deps rule names every server/ file that imports node:child_process', () => {
     const files: Record<string, string> = {};
