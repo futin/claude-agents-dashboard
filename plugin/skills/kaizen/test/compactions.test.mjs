@@ -112,6 +112,19 @@ test('an isMeta record (an injected skill body) and a slash-command wrapper are 
   assert.equal(a.errorSignals.userCorrections, 1)
 })
 
+test('only the human text is read: a <system-reminder> block is stripped and harness event records are skipped (#505)', () => {
+  const reminder = "<system-reminder>\nThe user started this session without choosing a project folder, so don't assume one; ask instead.\n</system-reminder>\n"
+  const a = analyze([
+    turn(0, 0, 100),
+    said(1, reminder + 'hi'),
+    said(2, reminder + 'no, wrong file'),
+    said(3, '<ci-monitor-event>checks failed, no retry</ci-monitor-event>'),
+    said(4, '<create-pr-command>do not push instead</create-pr-command>'),
+    said(5, '<side-sessions-event>no change</side-sessions-event>')
+  ])
+  assert.equal(a.errorSignals.userCorrections, 1)
+})
+
 // A compaction replays earlier records verbatim. Tool calls, their results and Agent launches must be counted once per id (#174).
 const call = (n, msgId, id, name, input = {}) => ({
   type: 'assistant', isSidechain: false, timestamp: ts(n),

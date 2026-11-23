@@ -284,8 +284,10 @@ function userText(msg) {
   return c.map(b => (b && b.type === 'text' && typeof b.text === 'string' ? b.text : '')).join('');
 }
 const CORRECTION_RE = /\b(no|nope|wrong|incorrect|not (?:what|right|correct)|actually|instead|revert|undo|don'?t|that'?s not)\b/i;
-// The record the CLI writes for a slash command: harness text, not the human pushing back (#505).
-const COMMAND_WRAPPER_RE = /<command-(?:name|message)>/;
+// Records the harness writes as user turns — a slash command's wrapper, a CI-monitor or side-session event, a PR command — and an injected reminder
+// riding in front of a typed turn: harness text, not the human pushing back (#505).
+const HARNESS_TURN_RE = /<command-(?:name|message)>|<ci-monitor-event|<create-pr-command|<side-sessions-event/;
+const SYSTEM_REMINDER_RE = /<system-reminder>[\s\S]*?<\/system-reminder>/g;
 
 // Peak context that proves auto-compaction never fired: a 200k window compacts near 160k, so only a larger one (1M puts compaction out of reach)
 // gets a turn past 250k — and every turn replays the whole context, so total input grows with the square of it. Inferred: the transcript records
@@ -477,10 +479,10 @@ export function analyzeSession(filePath, id) {
           } else if (err) { toolErrors++; }
         }
       }
-      // Only human-typed turns (#505): an isMeta record (an injected skill body) and a slash-command wrapper are harness text, and an
-      // <agent-message> is a subagent's hand-back delivered as a user turn — none of them is the user correcting anything.
-      const t = rec.isMeta === true ? '' : userText(msg);
-      if (t && !t.includes('<task-notification>') && !t.includes('<agent-message') && !COMMAND_WRAPPER_RE.test(t) && CORRECTION_RE.test(t)) userCorrections++;
+      // Only human-typed text (#505): an isMeta record (an injected skill body), a harness-written turn and a <system-reminder> block are harness
+      // text, and an <agent-message> is a subagent's hand-back delivered as a user turn — none of them is the user correcting anything.
+      const t = rec.isMeta === true ? '' : userText(msg).replace(SYSTEM_REMINDER_RE, '');
+      if (t && !t.includes('<task-notification>') && !t.includes('<agent-message') && !HARNESS_TURN_RE.test(t) && CORRECTION_RE.test(t)) userCorrections++;
     }
   }
 
@@ -529,7 +531,7 @@ export function analyzeSession(filePath, id) {
     'combined includes cache_read (replayed cached prompt, billed ~10%); lead with billableApprox for real cost.',
     "byTool.approxOutputTokens splits each turn's output tokens evenly across its tool calls — approximate; the transcript has no per-tool token field.",
     "byTool.resultTokens is what each tool injected into context: its tool_result text sized at chars ÷ 4, summed per call (not split), error text included, images not counted. The firmer per-tool figure and byTool's sort key — but it is context growth, not assistant output; cite both and never add them.",
-    'errorSignals.userCorrections is a keyword heuristic over human-typed turns (meta records and slash-command wrappers skipped) — noisy both ways, not an accuracy score.',
+    'errorSignals.userCorrections is a keyword heuristic over human-typed text (meta records, harness-written turns and system-reminder blocks skipped) — noisy both ways, not an accuracy score.',
     'perTurn.neverCompacted: true when the peak turn tops 250k combined (a 200k window compacts near 160k — the transcript records no window, so that part is inferred) and the session never compacted. Compaction is read from main-chain compact_boundary records; for transcripts without them, a turn below half the running peak counts as one.'
   ];
   if (subagentTotals.count > 0) notes.push("Subagent tokens are summed from each subagent's own transcript and are separate from main-agent totals; whole-session total = totals.combined + subagentTotals.tokens. subagentTotals.usage splits them by class — lead with its billableApprox for cost.");
