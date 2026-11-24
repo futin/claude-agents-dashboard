@@ -15,6 +15,10 @@
  * files in 74 subagent dirs, 2026-11-05), so a compacted session's total is a
  * minimum, which `compactions` reports.
  *
+ * The main figure is not followed here: it rides the agents-cache pass ({@link readSessionFold}), which folds the main transcript once for both the
+ * agents list and this tally, so this cache holds subagent tallies only and an Analytics sweep evicting it costs the drawer subagent bytes, never the
+ * main transcript's.
+ *
  * Only a transcript a launch claims is followed, so an orphan file never counts. The
  * harness's `AgentJob.tokens` is final context size, not spend: it is never added,
  * only compared, because a finished transcript summing below it has lost turns.
@@ -23,29 +27,19 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-import type { SessionSpend, TokenTotals } from '../../shared/types.js';
-import { readAgentsCached } from './agents-cache.js';
+import type { SessionSpend } from '../../shared/types.js';
+import { readSessionFold } from './agents-cache.js';
 import { createTail, followJsonl, type JsonlTail } from './jsonl-tail.js';
+import { billableOf, combinedOf, createTally, onSubagentRecord, totalsOf, type SpendTally } from './spend-tally.js';
 import { subagentDirOf, type SubagentFileUsage } from './subagent-usage.js';
-import { isConversationRecord } from './transcript.js';
-import { assistantUsage, type TokenCounts } from './usage-line.js';
 
-interface Tally {
+/** A subagent transcript's tally and how far into the file it has read. */
+interface Tally extends SpendTally {
   tail: JsonlTail;
-  seen: Set<string>;
-  input: number;
-  output: number;
-  cacheCreation: number;
-  cacheRead: number;
-  compactions: number;
 }
 
-/** Input + output + cache writes: the spend figure. */
-const billableOf = (t: Tally): number => t.input + t.output + t.cacheCreation;
-/** All four classes, the unit the harness figure is measured in. */
-const combinedOf = (t: Tally): number => billableOf(t) + t.cacheRead;
-
 interface CacheEntry {
+  /** Subagent transcript path to its tally. */
   files: Map<string, Tally>;
   /** Transcript name to launching tool_use id. A sidecar can appear after its transcript, so only hits are kept. */
   toolUseIds: Map<string, string>;
@@ -55,40 +49,10 @@ interface CacheEntry {
 const MAX_ENTRIES = 32;
 const cache = new Map<string, CacheEntry>();
 
-function addUsage(t: Tally, tok: TokenCounts): void {
-  t.input += tok.in; t.output += tok.out; t.cacheCreation += tok.cc; t.cacheRead += tok.cr;
-}
-
-function onMainRecord(t: Tally, rec: any): void {
-  if (!rec || rec.isSidechain === true) return;
-  if (rec.compactMetadata && typeof rec.compactMetadata === 'object') { t.compactions++; return; }
-  if (rec.isCompactSummary === true || !isConversationRecord(rec)) return;
-  const msg = rec.message;
-  if (!msg || msg.role !== 'assistant') return;
-  // `analyzeSession` spends a turn on its first record even when that record has no usage, so the id is read here, ahead of the usage parse.
-  const id = typeof msg.id === 'string' && msg.id ? msg.id : null;
-  const first = id === null || !t.seen.has(id);
-  if (id !== null) t.seen.add(id);
-  const line = first ? assistantUsage(rec) : null;
-  if (line) addUsage(t, line.tok);
-}
-
-function onSubagentRecord(t: Tally, rec: any): void {
-  if (!rec) return;
-  if (rec.compactMetadata && typeof rec.compactMetadata === 'object') t.compactions++;
-  const line = assistantUsage(rec);
-  if (!line) return;
-  if (line.id) {
-    if (t.seen.has(line.id)) return;
-    t.seen.add(line.id);
-  }
-  addUsage(t, line.tok);
-}
-
 function follow(files: Map<string, Tally>, filePath: string, size: number, onRecord: (t: Tally, rec: any) => void): Tally {
   let t = files.get(filePath);
   if (!t || size < t.tail.offset) {
-    t = { tail: createTail(), seen: new Set(), input: 0, output: 0, cacheCreation: 0, cacheRead: 0, compactions: 0 };
+    t = { ...createTally(), tail: createTail() };
     files.set(filePath, t);
   }
   if (size !== t.tail.offset || t.tail.partial.length > 0) {
@@ -131,14 +95,13 @@ function evictIfNeeded(): void {
 
 /** The session's spend so far, or null when its transcript can't be read. A later read failure on that transcript throws. */
 export function readSessionSpend(mainPath: string): Omit<SessionSpend, 'id' | 'error'> | null {
-  const agents = readAgentsCached(mainPath);
-  if (!agents) {
+  const fold = readSessionFold(mainPath);
+  if (!fold) {
     cache.delete(mainPath);
     return null;
   }
+  const { jobs: agents, main: mainTally } = fold;
   const entry = entryFor(mainPath);
-
-  const mainTally = follow(entry.files, mainPath, fs.statSync(mainPath).size, onMainRecord);
 
   // Names come from the directory listing, never from an id in the transcript, so a hostile agentId can't reach another path.
   const dir = subagentDirOf(mainPath);
@@ -221,13 +184,6 @@ export function readSubagentUsage(mainPath: string): SubagentFileUsage[] {
     out.push({ agentId, toolUseId, usage: totalsOf(t) });
   }
   return out;
-}
-
-function totalsOf(t: Tally): TokenTotals {
-  return {
-    input: t.input, output: t.output, cacheCreation: t.cacheCreation, cacheRead: t.cacheRead,
-    combined: combinedOf(t), billableApprox: billableOf(t)
-  };
 }
 
 /** Test hook. */

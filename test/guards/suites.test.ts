@@ -44,7 +44,7 @@ export async function run(): Promise<number> {
       assert.ok(file.endsWith('.test.ts'), file);
       assert.ok(!file.startsWith('test/visual/'), file);
     }
-    for (const helper of ['test/run-all.ts', 'test/run-some.ts', 'test/api-harness.ts', 'test/git-fixture.ts', 'test/tmp-root.ts', 'test/suites.ts']) {
+    for (const helper of ['test/run-all.ts', 'test/run-some.ts', 'test/api-harness.ts', 'test/fs-bytes.ts', 'test/git-fixture.ts', 'test/tmp-root.ts', 'test/suites.ts']) {
       assert.ok(!list.includes(helper), helper);
     }
     assert.ok(list.includes('test/guards/suites.test.ts'), 'this suite finds itself');

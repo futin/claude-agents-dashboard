@@ -175,7 +175,8 @@ export async function serveSessions(baseConfig: Config, res: ServerResponse, par
 
 /**
  * `GET /api/sessions/:id` — the subagents a session launched. First selection
- * reads the full transcript; while the session stays selected, the 3s detail
+ * reads the full transcript once, in a pass shared with the spend route
+ * (`readSessionFold`, agents-cache.ts); while the session stays selected, the 3s detail
  * poll goes through the incremental cache and costs O(new bytes) (see
  * agents-cache.ts). The list poll touches the same cache only through scan.ts
  * `subagentRunning`, and only for a session with a fresh, unfinished subagent.

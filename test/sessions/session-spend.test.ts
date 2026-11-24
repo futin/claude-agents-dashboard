@@ -4,7 +4,8 @@ import os from 'node:os';
 import path from 'node:path';
 
 import { analyzeSession } from '../../server/lib/analyze.js';
-import { _resetAgentsCache } from '../../server/lib/agents-cache.js';
+import { readAgents } from '../../server/lib/agents.js';
+import { readAgentsCached, _resetAgentsCache } from '../../server/lib/agents-cache.js';
 import { readSessionSpend, _resetSessionSpendCache } from '../../server/lib/session-spend.js';
 
 function test(name: string, fn: () => void): boolean {
@@ -258,6 +259,7 @@ export function run(): number {
     assert.equal(readSessionSpend(f.main)!.main, 66);
     fs.writeFileSync(f.main, line(M3));
     assert.equal(readSessionSpend(f.main)!.main, 15);
+    assert.deepStrictEqual(readAgentsCached(f.main), readAgents(f.main));
   });
 
   t('bytes already consumed are not read again', () => {

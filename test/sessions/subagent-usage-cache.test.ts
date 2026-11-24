@@ -6,6 +6,7 @@ import path from 'node:path';
 import { analyzeSession } from '../../server/lib/analyze.js';
 import { _resetAgentsCache } from '../../server/lib/agents-cache.js';
 import { readSessionSpend, readSubagentUsage, _resetSessionSpendCache } from '../../server/lib/session-spend.js';
+import { bytesRead as countBytes } from '../fs-bytes.js';
 
 function test(name: string, fn: () => void): boolean {
   _resetAgentsCache();
@@ -59,30 +60,8 @@ function writeAgent(f: Fixture, agentId: string, text: string): string {
   return file;
 }
 
-/**
- * Bytes `fs.readSync` returned for subagent transcripts (`subagents/…jsonl`) while `fn` ran. Wraps the default `node:fs` export, which is the object
- * `jsonl-tail.ts` reads through; an fd is attributed to a path at `openSync`.
- */
-function bytesRead<T>(fn: () => T): { result: T; bytes: number } {
-  const origOpen = fs.openSync, origRead = fs.readSync, origClose = fs.closeSync;
-  const watched = new Set<number>();
-  let bytes = 0;
-  const f = fs as any;
-  f.openSync = (...args: any[]) => {
-    const fd = (origOpen as any)(...args);
-    const p = String(args[0]);
-    if (p.includes(`${path.sep}subagents${path.sep}`) && p.endsWith('.jsonl')) watched.add(fd);
-    return fd;
-  };
-  f.readSync = (...args: any[]) => {
-    const n = (origRead as any)(...args);
-    if (watched.has(args[0])) bytes += n;
-    return n;
-  };
-  f.closeSync = (fd: number) => { watched.delete(fd); return origClose(fd); };
-  try { return { result: fn(), bytes }; }
-  finally { f.openSync = origOpen; f.readSync = origRead; f.closeSync = origClose; }
-}
+/** Bytes `fs.readSync` returned for subagent transcripts (`subagents/…jsonl`) while `fn` ran. */
+const bytesRead = <T>(fn: () => T) => countBytes(fn, p => p.includes(`${path.sep}subagents${path.sep}`) && p.endsWith('.jsonl'));
 
 const inputOf = (main: string, agentId: string): number | undefined => readSubagentUsage(main).find(s => s.agentId === agentId)?.usage.input;
 
