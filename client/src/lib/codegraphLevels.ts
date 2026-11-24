@@ -31,6 +31,10 @@ export const CODEGRAPH_LEVELS: { key: CodegraphLevel; label: string }[] = [
   { key: 'quiet', label: 'All good' },
   { key: 'none', label: 'Not indexed' },
 ];
+/** The Inbox's tile filter read back from storage: anything that is not `'all'` or a level reads as `'all'`. */
+export function codegraphInboxFilter(v: unknown): CodegraphLevel | 'all' {
+  return CODEGRAPH_LEVELS.find(l => l.key === v)?.key ?? 'all';
+}
 /** The modifier on `.git-dot`: the shape is Git's, so the classes are too. */
 export const CODEGRAPH_LEVEL_DOT: Record<CodegraphLevel, string> = { needs: 'needs', look: 'flight', quiet: 'quiet', none: 'dead' };
 export const CODEGRAPH_LEVEL_RANK: Record<CodegraphLevel, number> = { needs: 0, look: 1, quiet: 2, none: 3 };

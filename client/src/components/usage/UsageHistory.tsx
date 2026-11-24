@@ -4,8 +4,9 @@ import type { RefObject } from 'react';
 import type { UsageHistoryResponse } from '../../../../shared/types';
 import type { TipHandlers } from '../../hooks/useFloatingTip';
 import { useFloatingTip } from '../../hooks/useFloatingTip';
+import { usePersistedState } from '../../hooks/usePersistedState';
 import { useUsageHistory } from '../../hooks/useUsageHistory';
-import { dayTip, fmtHeld, fmtPct, historyFigures, weekRows } from '../../lib/usageHistory';
+import { HISTORY_RANGES, dayTip, fmtHeld, fmtPct, historyDays, historyFigures, weekRows } from '../../lib/usageHistory';
 import type { WeekDay, WeekRow } from '../../lib/usageHistory';
 import type { StatTile } from '../../lib/usageProfile';
 import { RowHead, Sheet, StatStrip } from './Sheet';
@@ -17,12 +18,6 @@ import { RowHead, Sheet, StatStrip } from './Sheet';
  * The chart is hand-drawn SVG at the measured pixel width, so strokes stay crisp at phone width without a chart dependency. The rows and their
  * day segments come from `weekRows`; this file only draws them.
  */
-
-const RANGES = [
-  { days: 7, label: '7d' },
-  { days: 30, label: '30d' },
-  { days: 90, label: '90d' }
-] as const;
 
 const ROW_H = 26;
 const ROW_GAP = 24;
@@ -40,7 +35,7 @@ function fmtWhen(ms: number): string {
 }
 
 function rangeLabel(days: number): string {
-  return RANGES.find(r => r.days === days)?.label ?? `${days}d`;
+  return HISTORY_RANGES.find(r => r.days === days)?.label ?? `${days}d`;
 }
 
 function historyTiles(history: UsageHistoryResponse): StatTile[] {
@@ -154,13 +149,14 @@ function WeekFill({ history, tip }: { history: UsageHistoryResponse; tip: (text:
 }
 
 export function UsageHistory() {
-  const [days, setDays] = useState(7);
+  const [stored, setDays] = usePersistedState<number>('usage.historyDays', 7);
+  const days = historyDays(stored); // guard a stale stored value
   const { history, loading, error } = useUsageHistory(days);
   const { tipRef, tipHandlers } = useFloatingTip();
 
   const rangeSwitch = (
     <div className="seg usg-hist-range" role="group" aria-label="History range">
-      {RANGES.map(r => (
+      {HISTORY_RANGES.map(r => (
         <button key={r.days} className={r.days === days ? 'on' : ''} aria-pressed={r.days === days} onClick={() => setDays(r.days)}>
           {r.label}
         </button>
