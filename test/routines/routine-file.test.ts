@@ -239,6 +239,7 @@ export function run(): number {
     const crlf = EXAMPLE.replace(/\n/g, '\r\n');
     assert.strictEqual(must('a', crlf).body, '/git-sync');
     assert.strictEqual(must('a', '﻿' + EXAMPLE).cron, '0 22 * * *');
+    assert.strictEqual(must('a', '\uFEFF' + EXAMPLE.replace(/\n/g, '\r\n')).foreach, 'pinned');
     assert.deepStrictEqual(errs('a', claude('foo: 1').replace(/\n/g, '\r\n')), [{ line: 4, message: 'unknown key foo' }]);
   })) p++; else f++;
 

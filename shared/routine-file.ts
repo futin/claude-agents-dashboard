@@ -5,7 +5,7 @@
  * no types module to load.
  */
 import { isManualCron, parseCron, toCalendarIntervals } from './cron.js';
-import { scalarEnd, writeFrontmatterLine } from './frontmatter.js';
+import { frontmatterFence, scalarEnd, writeFrontmatterLine } from './frontmatter.js';
 import type { RoutineJob } from './types.js';
 
 /** `line` is 1-based in the whole file (the opening `---` is line 1); 0 means the file as a whole. */
@@ -61,10 +61,11 @@ export function parseJob(name: string, text: string, machine: 'mac' | 'wsl'): Pa
   if (!NAME_RE.test(name)) push(0, 'name must match [a-z0-9-]+');
   else if (RESERVED.has(name)) push(0, 'name is reserved');
 
-  const lines = String(text ?? '').replace(/^﻿/, '').split(/\r?\n/);
-  if (lines[0] !== '---') { push(0, 'file must start with a --- frontmatter block'); return done(null); }
-  const end = lines.indexOf('---', 1);
+  const fence = frontmatterFence(String(text ?? ''));
+  if (!fence) { push(0, 'file must start with a --- frontmatter block'); return done(null); }
+  const end = fence.close;
   if (end === -1) { push(0, 'frontmatter is not closed with ---'); return done(null); }
+  const lines = fence.lines.map((l) => l.replace(/\r$/, ''));
 
   const seen = new Map<string, { value: string; line: number }>();
   // Keys whose block was already reported: present, but neither empty nor missing, so no second error is raised for them.
