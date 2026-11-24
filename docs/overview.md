@@ -283,7 +283,7 @@ server/
   lib/session-spend.ts  GET /api/sessions/:id/spend: main + claimed subagent transcripts, followed incrementally; also `readSubagentUsage`, every
                   subagent transcript's token classes for Analytics, through the same cache (LRU over 32 sessions)
   lib/usage-line.ts  the one parse of an assistant usage line (id, model, ts, four counts); usage-ledger, session-spend,
-                  analyze and scripts/lib/transcript-audit.ts each keep their own gates on it
+                  analyze, scripts/lib/transcript-audit.ts and scripts/check-token-weights.ts each keep their own gates on it
   lib/jsonl-tail.ts  byte-offset JSONL follower: foldLines, the chunked read loop of all seven followers (tasks.ts, pr-detect.ts,
                   usage-ledger.ts, routine-log.ts, routine-run.ts directly; agents-cache.ts and session-spend.ts through followJsonl)
   lib/sessionAnalyticsLog.ts  parses ~/.claude/session-analytics-log.md

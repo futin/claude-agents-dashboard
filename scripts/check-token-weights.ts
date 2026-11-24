@@ -23,9 +23,12 @@
  */
 
 import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import { listUsageTranscripts, projectsRoot } from '../server/lib/scan.js';
 import { CHECKED_MODEL_PREFIXES, longestPrefixMatch, weightsFor } from '../server/lib/usage-ledger.js';
+import { assistantUsage, tokenCount } from '../server/lib/usage-line.js';
 
 import { parseDays } from './lib/cli-args.js';
 
@@ -50,7 +53,7 @@ const TOLERANCE = 0.05;
  */
 const EVIDENCE_FLOOR = 1_000_000;
 
-interface ModelStats {
+export interface ModelStats {
   requests: number;
   /** Flat `cache_creation_input_tokens`, the field the ledger records. */
   flatCC: number;
@@ -64,9 +67,6 @@ function arg(name: string): string | undefined {
   return i === -1 ? undefined : process.argv[i + 1];
 }
 
-const ROOT = arg('root') ?? projectsRoot();
-const DAYS = parseDays(7);
-
 function emptyStats(): ModelStats {
   return { requests: 0, flatCC: 0, cc5m: 0, cc1h: 0, cr: 0 };
 }
@@ -76,9 +76,12 @@ function emptyStats(): ModelStats {
  *
  * Deduplicated by `message.id` — the same rule the recorder and `sumWindow`
  * apply, because one assistant message is written into as many transcripts as
- * reference it and counting it twice would double that model's tokens.
+ * reference it and counting it twice would double that model's tokens. The
+ * line is parsed by `assistantUsage`; the gates (model required, timestamp in
+ * the window, first copy of an id wins) are this script's own, pinned beside
+ * the other readers' in `test/usage/usage-line-callers.test.ts`.
  */
-function collect(root: string, sinceMs: number): { stats: Map<string, ModelStats>; files: number } {
+export function collect(root: string, sinceMs: number): { stats: Map<string, ModelStats>; files: number } {
   const stats = new Map<string, ModelStats>();
   const seen = new Set<string>();
   let files = 0;
@@ -91,31 +94,27 @@ function collect(root: string, sinceMs: number): { stats: Map<string, ModelStats
     try { text = fs.readFileSync(ref.file, 'utf8'); } catch { continue; }
     for (const line of text.split('\n')) {
       if (line.trim() === '') continue;
-      let rec: any;
+      let rec: unknown;
       try { rec = JSON.parse(line); } catch { continue; }
-      const msg = rec?.message;
-      if (!msg || msg.role !== 'assistant' || !msg.usage) continue;
-      const model = typeof msg.model === 'string' ? msg.model : '';
-      if (!model) continue;
-      const ts = typeof rec.timestamp === 'string' ? Date.parse(rec.timestamp) : Number.NaN;
-      if (!Number.isFinite(ts) || ts < sinceMs) continue;
-      const id = typeof msg.id === 'string' ? msg.id : '';
-      if (id) {
-        if (seen.has(id)) continue;
-        seen.add(id);
+      const a = assistantUsage(rec);
+      if (!a || !a.model) continue;
+      if (!Number.isFinite(a.ts) || a.ts < sinceMs) continue;
+      if (a.id) {
+        if (seen.has(a.id)) continue;
+        seen.add(a.id);
       }
-      const u = msg.usage;
+      const u = a.usage;
       // `cache_creation` is absent on older-format lines. Their tokens are real
       // and belong in the flat total, but they carry no TTL — leaving both
       // buckets untouched is what keeps them out of the blend, rather than
       // defaulting them into the 5m tier and failing the run on their account.
       const nested = u.cache_creation && typeof u.cache_creation === 'object' ? u.cache_creation : {};
-      const s = stats.get(model) ?? stats.set(model, emptyStats()).get(model)!;
+      const s = stats.get(a.model) ?? stats.set(a.model, emptyStats()).get(a.model)!;
       s.requests++;
-      s.flatCC += Number(u.cache_creation_input_tokens) || 0;
-      s.cc5m += Number(nested.ephemeral_5m_input_tokens) || 0;
-      s.cc1h += Number(nested.ephemeral_1h_input_tokens) || 0;
-      s.cr += Number(u.cache_read_input_tokens) || 0;
+      s.flatCC += a.tok.cc;
+      s.cc5m += tokenCount(nested.ephemeral_5m_input_tokens);
+      s.cc1h += tokenCount(nested.ephemeral_1h_input_tokens);
+      s.cr += a.tok.cr;
     }
   }
   return { stats, files };
@@ -125,69 +124,76 @@ function pct(n: number, d: number): string {
   return d <= 0 ? '   n/a' : (100 * n / d).toFixed(2) + '%';
 }
 
-const sinceMs = Date.now() - DAYS * DAY_MS;
-const { stats, files } = collect(ROOT, sinceMs);
+function main(): void {
+  const ROOT = arg('root') ?? projectsRoot();
+  const DAYS = parseDays(7);
 
-console.log(`token-weight check — last ${DAYS} day(s) under ${ROOT}`);
-console.log(`  transcripts read: ${files}`);
-console.log('');
+  const sinceMs = Date.now() - DAYS * DAY_MS;
+  const { stats, files } = collect(ROOT, sinceMs);
 
-const models = [...stats.keys()].sort();
-if (models.length === 0) {
-  console.log('  no assistant messages with usage in the window — nothing to check.');
+  console.log(`token-weight check — last ${DAYS} day(s) under ${ROOT}`);
+  console.log(`  transcripts read: ${files}`);
+  console.log('');
+
+  const models = [...stats.keys()].sort();
+  if (models.length === 0) {
+    console.log('  no assistant messages with usage in the window — nothing to check.');
+    process.exit(0);
+  }
+
+  const failures: string[] = [];
+  const warnings: string[] = [];
+
+  console.log('  model                              requests    cache-write     1h share   blended cc   configured');
+  for (const model of models) {
+    const s = stats.get(model)!;
+    const tiered = s.cc5m + s.cc1h;
+    const configured = weightsFor(model).cc;
+    const blended = tiered > 0 ? (WRITE_5M * s.cc5m + WRITE_1H * s.cc1h) / tiered : null;
+    console.log(
+      '  ' + model.padEnd(34)
+      + String(s.requests).padStart(8)
+      + s.flatCC.toLocaleString('en-US').padStart(15)
+      + pct(s.cc1h, tiered).padStart(13)
+      + (blended === null ? 'n/a' : blended.toFixed(4)).padStart(13)
+      + configured.toFixed(4).padStart(13)
+    );
+    if (tiered > 0 && tiered < s.flatCC) {
+      warnings.push(
+        `${model}: ${(s.flatCC - tiered).toLocaleString('en-US')} cache-write tokens carry no TTL breakdown `
+        + '(older transcript format); they are excluded from the blend.'
+      );
+    }
+    if (blended !== null && tiered >= EVIDENCE_FLOOR && Math.abs(blended - configured) > TOLERANCE) {
+      failures.push(
+        `${model}: measured cache-write multiplier ${blended.toFixed(4)} but TYPE_WEIGHTS.cc is `
+        + `${configured.toFixed(4)} (${tiered.toLocaleString('en-US')} tiered cache-write tokens, `
+        + `${pct(s.cc1h, tiered)} at the 1h tier).`
+      );
+    }
+    // Only models that carry priced volume. `<synthetic>` is Claude Code's
+    // placeholder for messages it generated itself, not a model anyone can price.
+    if (s.flatCC + s.cr > 0 && longestPrefixMatch(CHECKED_MODEL_PREFIXES, model) === undefined) {
+      warnings.push(
+        `${model}: not in CHECKED_MODEL_PREFIXES — its price ratios have never been checked, so it is `
+        + 'being weighted with the uniform set. Price it and add the prefix.'
+      );
+    }
+  }
+  console.log('');
+
+  for (const w of warnings) console.log('  ! ' + w);
+  if (warnings.length > 0) console.log('');
+
+  if (failures.length > 0) {
+    for (const f of failures) console.log('  ✗ ' + f);
+    console.log('');
+    console.log(`FAIL (${failures.length}) — see the provenance comment above TYPE_WEIGHTS in server/lib/usage-ledger.ts`);
+    process.exit(1);
+  }
+
+  console.log('OK — the configured weights still follow from the transcripts.');
   process.exit(0);
 }
 
-const failures: string[] = [];
-const warnings: string[] = [];
-
-console.log('  model                              requests    cache-write     1h share   blended cc   configured');
-for (const model of models) {
-  const s = stats.get(model)!;
-  const tiered = s.cc5m + s.cc1h;
-  const configured = weightsFor(model).cc;
-  const blended = tiered > 0 ? (WRITE_5M * s.cc5m + WRITE_1H * s.cc1h) / tiered : null;
-  console.log(
-    '  ' + model.padEnd(34)
-    + String(s.requests).padStart(8)
-    + s.flatCC.toLocaleString('en-US').padStart(15)
-    + pct(s.cc1h, tiered).padStart(13)
-    + (blended === null ? 'n/a' : blended.toFixed(4)).padStart(13)
-    + configured.toFixed(4).padStart(13)
-  );
-  if (tiered > 0 && tiered < s.flatCC) {
-    warnings.push(
-      `${model}: ${(s.flatCC - tiered).toLocaleString('en-US')} cache-write tokens carry no TTL breakdown `
-      + '(older transcript format); they are excluded from the blend.'
-    );
-  }
-  if (blended !== null && tiered >= EVIDENCE_FLOOR && Math.abs(blended - configured) > TOLERANCE) {
-    failures.push(
-      `${model}: measured cache-write multiplier ${blended.toFixed(4)} but TYPE_WEIGHTS.cc is `
-      + `${configured.toFixed(4)} (${tiered.toLocaleString('en-US')} tiered cache-write tokens, `
-      + `${pct(s.cc1h, tiered)} at the 1h tier).`
-    );
-  }
-  // Only models that carry priced volume. `<synthetic>` is Claude Code's
-  // placeholder for messages it generated itself, not a model anyone can price.
-  if (s.flatCC + s.cr > 0 && longestPrefixMatch(CHECKED_MODEL_PREFIXES, model) === undefined) {
-    warnings.push(
-      `${model}: not in CHECKED_MODEL_PREFIXES — its price ratios have never been checked, so it is `
-      + 'being weighted with the uniform set. Price it and add the prefix.'
-    );
-  }
-}
-console.log('');
-
-for (const w of warnings) console.log('  ! ' + w);
-if (warnings.length > 0) console.log('');
-
-if (failures.length > 0) {
-  for (const f of failures) console.log('  ✗ ' + f);
-  console.log('');
-  console.log(`FAIL (${failures.length}) — see the provenance comment above TYPE_WEIGHTS in server/lib/usage-ledger.ts`);
-  process.exit(1);
-}
-
-console.log('OK — the configured weights still follow from the transcripts.');
-process.exit(0);
+if (process.argv[1] && path.resolve(process.argv[1]) === path.resolve(fileURLToPath(import.meta.url))) main();

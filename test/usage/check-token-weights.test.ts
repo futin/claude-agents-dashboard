@@ -139,6 +139,28 @@ export function run(): number {
     assert.ok(out.includes('2,000,000'), 'the id appears twice but counts once: ' + out);
   })) p++; else f++;
 
+  // The usage line is read through `assistantUsage` (server/lib/usage-line.ts), so a count is a finite number or 0 and `usage` must be an object —
+  // the same reading every other caller gets. Shown through the unpriced-model warning, which fires only when the model carries cache volume.
+  if (test('a string cache_read_input_tokens adds 0, so an unpriced model with no other volume draws no warning', () => {
+    const usage = { input_tokens: 100, output_tokens: 10, cache_creation_input_tokens: 0, cache_read_input_tokens: '500' };
+    const root = fixture([JSON.stringify({
+      type: 'assistant', timestamp: new Date(now).toISOString(), message: { role: 'assistant', id: 'm1', model: 'claude-nonesuch-9', usage }
+    })]);
+    const { status, out } = runCheck(root);
+    assert.strictEqual(status, 0, out);
+    assert.ok(out.includes('claude-nonesuch-9'), 'the record is still counted: ' + out);
+    assert.ok(!out.includes('CHECKED_MODEL_PREFIXES'), 'a string count is not cache volume: ' + out);
+  })) p++; else f++;
+
+  if (test('a record whose usage is a string is skipped, not counted as a request', () => {
+    const root = fixture([JSON.stringify({
+      type: 'assistant', timestamp: new Date(now).toISOString(), message: { role: 'assistant', id: 'm1', model: 'claude-opus-5', usage: 'n/a' }
+    })]);
+    const { status, out } = runCheck(root);
+    assert.strictEqual(status, 0, out);
+    assert.ok(out.includes('nothing to check'), 'no request may be counted: ' + out);
+  })) p++; else f++;
+
   if (test('an empty tree checks nothing and passes', () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ctw-empty-'));
     const { status, out } = runCheck(root);
