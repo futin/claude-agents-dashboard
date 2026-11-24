@@ -151,8 +151,10 @@ the entries computed before the throw but pruning nothing until a read finishes.
 ## Worktrees and `FETCH_HEAD`
 
 - `%(worktreepath)` is set for a branch checked out in *any* worktree, the main one included. `worktreePath` is that path only when it differs from the **main
-  worktree**, compared by realpath; the main worktree is the common dir's parent, not `--show-toplevel`. For a pin that is itself a linked worktree those two
-  differ, so the pin's own branch gets the badge and the main worktree's branch does not.
+  worktree**, compared by realpath; the main worktree is the first record of `git worktree list --porcelain` (`null` when that record is bare), not
+  `--show-toplevel` and not the common dir's parent, which is wrong for a submodule or a `--separate-git-dir` repo; only a failed call falls back to that
+  guess. For a pin that is itself a linked worktree the main worktree and the toplevel differ, so the pin's own branch gets the badge and the main
+  worktree's branch does not.
 - A pin whose cwd is a linked worktree is dropped from the Projects list (`isListedProjectPath`) but is still read here like any other.
 - `FETCH_HEAD` is **per worktree**: a fetch run inside a linked worktree writes `<common-dir>/worktrees/<name>/FETCH_HEAD` and leaves `<common-dir>/FETCH_HEAD`
   alone. `fetchedAtMs` is the newest of all of them, since orchestrator runs fetch from linked worktrees and the main file alone would read "stale".

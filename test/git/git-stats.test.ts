@@ -580,6 +580,49 @@ export async function run(): Promise<number> {
     });
   }));
 
+  // #521: the main worktree was guessed as the common dir's parent, which is wrong whenever the git dir is not `<worktree>/.git`.
+  check(await test('worktree badge: a pinned submodule\'s own branch → null (common dir under <super>/.git/modules)', async () => {
+    await withGitFixture(async fx => {
+      const sup = cleanClone(fx);
+      const subOrigin = fx.bare('sub-origin.git');
+      fx.git(sup, ['-c', 'protocol.file.allow=always', 'submodule', 'add', '-q', subOrigin, 'sub']);
+      const sub = path.join(sup, 'sub');
+      fx.git(sub, ['checkout', '-q', '-b', 'feat']);
+      fx.commit(sub, 'in submodule');
+      const feat = ok(await read(sub)).branches.find(b => b.name === 'feat');
+      assert.ok(feat, 'feat is listed');
+      assert.strictEqual(feat.worktreePath, null);
+    });
+  }));
+
+  check(await test('worktree badge: a --separate-git-dir repo\'s own branch → null', async () => {
+    await withGitFixture(async fx => {
+      const sep = fx.p('sep');
+      fx.git(fx.root, ['clone', '-q', '--separate-git-dir', fx.p('sep-gitdir'), fx.bare('origin.git'), sep]);
+      fx.git(sep, ['checkout', '-q', '-b', 'feat']);
+      fx.commit(sep, 'in separate repo');
+      const feat = ok(await read(sep)).branches.find(b => b.name === 'feat');
+      assert.ok(feat, 'feat is listed');
+      assert.strictEqual(feat.worktreePath, null);
+    });
+  }));
+
+  check(await test('worktree badge: a failing `worktree list` falls back to the common dir\'s parent: the clone\'s own branch unbadged, a linked one badged', async () => {
+    await withGitFixture(async fx => {
+      const work = cleanClone(fx);
+      fx.git(work, ['checkout', '-q', '-b', 'feat']);
+      fx.commit(work, 'on feat');
+      const wt = fx.p('wt-side');
+      fx.git(work, ['worktree', 'add', '-q', '-b', 'side', wt]);
+      fx.commit(wt, 'on side');
+      const s = spy(async (cwd, args) => (args[0] === 'worktree' ? { code: 129, stdout: '', stderr: 'error: unknown switch' } : defaultGitRunner(cwd, args)));
+      const branches = ok(await read(work, s.run)).branches;
+      assert.ok(s.calls.some(a => a[0] === 'worktree'), 'the worktree list call was made');
+      assert.strictEqual(branches.find(b => b.name === 'feat')?.worktreePath, null);
+      assert.strictEqual(branches.find(b => b.name === 'side')?.worktreePath, fs.realpathSync(wt));
+    });
+  }));
+
   check(await test('trunkCheckedOutElsewhere: main checkout on main, pin on a linked worktree → true', async () => {
     await withGitFixture(async fx => {
       const work = cleanClone(fx);

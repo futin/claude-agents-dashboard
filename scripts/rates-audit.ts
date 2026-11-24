@@ -37,7 +37,7 @@
  *
  *   exit 0   the report ran (for `ledger`: and every gated row reconciles)
  *   exit 1   `ledger` found a row that does not reconcile
- *   exit 2   unknown subcommand
+ *   exit 2   usage: unknown subcommand, or `--days` is not a positive whole number, or has no value
  */
 
 import { projectsRoot } from '../server/lib/scan.js';
@@ -54,6 +54,7 @@ import {
   stratify, surfaceLabel, walkTranscripts
 } from './lib/transcript-audit.js';
 import type { Acc, AuditFile, AuditRecord, Bin, Covariate, LabelledBin } from './lib/transcript-audit.js';
+import { parseDays } from './lib/cli-args.js';
 
 function arg(name: string): string | undefined {
   const i = process.argv.indexOf('--' + name);
@@ -82,7 +83,7 @@ const SUB = subcommand();
 const ROOT = arg('root') ?? projectsRoot();
 const ROOTS = args('root').length > 0 ? args('root') : [ROOT];
 const DIR = arg('dir');
-const DAYS = Number(arg('days') ?? 7);
+const DAYS = parseDays(7);
 const MODEL = arg('model') ?? 'claude-opus-5';
 const TZ = arg('tz') ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
 const NOW = Date.now();

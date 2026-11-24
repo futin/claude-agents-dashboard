@@ -593,6 +593,42 @@ export function run(): number {
     assert.strictEqual(resume.status, 'done');
   })) p++; else f++;
 
+  // #521: the ack phrase in a sync result's text is a quote, not an ack — a structured result decides alone.
+  const quotedAck = 'Async agent launched successfully. agentId: aSync';
+  if (test('completed toolUseResult whose text quotes the ack phrase → done, not parked', () => {
+    const [a] = readAgents(fixture([
+      taskRec('toolu_q', 'Explore', 'read agents.ts', '2026-07-01T10:00:00Z', 'Agent'),
+      {
+        timestamp: '2026-07-01T10:00:40Z',
+        toolUseResult: { status: 'completed', agentId: 'aSync', totalTokens: 1234 },
+        message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'toolu_q', content: quotedAck }] }
+      }
+    ]))!;
+    assert.strictEqual(a.endedAt, '2026-07-01T10:00:40Z');
+    assert.strictEqual(a.status, 'done');
+    assert.strictEqual(a.tokens, 1234);
+  })) p++; else f++;
+
+  if (test('the same text with no toolUseResult → still an ack, parked under its agentId', () => {
+    const [a] = readAgents(fixture([
+      taskRec('toolu_q', 'Explore', 'read agents.ts', '2026-07-01T10:00:00Z', 'Agent'),
+      ackRec('toolu_q', 'aSync', '2026-07-01T10:00:00.030Z', { text: quotedAck })
+    ]))!;
+    assert.strictEqual(a.endedAt, null);
+    assert.strictEqual(a.status, 'running');
+    assert.strictEqual(a.agentId, 'aSync');
+  })) p++; else f++;
+
+  if (test('toolUseResult isAsync:true with text lacking the phrase → still an ack', () => {
+    const [a] = readAgents(fixture([
+      taskRec('toolu_q', 'Explore', 'look', '2026-07-01T10:00:00Z', 'Agent'),
+      ackRec('toolu_q', 'aa01', '2026-07-01T10:00:00.030Z', { structured: true, text: 'launched in the background' }),
+      notifyRec('aa01', 'completed', '2026-07-01T10:02:00Z', { tokens: 77, toolUses: 3, durationMs: 120000 })
+    ]))!;
+    assert.strictEqual(a.endedAt, '2026-07-01T10:02:00Z');
+    assert.strictEqual(a.tokens, 77);
+  })) p++; else f++;
+
   console.log('\nPassed: ' + p + '  Failed: ' + f + '\n');
   return f;
 }

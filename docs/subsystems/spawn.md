@@ -379,7 +379,9 @@ single source of truth, the same division that keeps `pending.ts`/`plans.ts`/
 - **A clean exit is left alone.** Exit code 0 before adoption doesn't mark the entry
   failed — a fast run (a one-line haiku prompt, say) can finish before the next scan
   ever sees it, and at that point the transcript is what matters, not the exit. The
-  entry just sits `launching` until adoption or the TTL catches it.
+  entry just sits `launching` until adoption or the TTL catches it — and both drop it
+  rather than promote it, since its child is already dead: a `running` entry for a dead
+  child was never removed, and kept the desktop hand-over waiting out `HANDOVER_MAX_MS` (#521).
 - **`PROMPT_PREVIEW_CAP` (120 chars) and `STDERR_TAIL_CAP` (2048 chars) bound the
   store's memory** regardless of prompt length or how much a crashing process writes to
   stderr. The full, untruncated prompt still reaches the child's stdin — only the
@@ -399,7 +401,8 @@ whole of the widening, and it is what makes a later stop possible at all.
 
 | From | To | Trigger |
 |---|---|---|
-| `launching` | `running` | `adoptLaunched(ids)` sees the id on disk — **non-resume launches only** |
+| `launching` | `running` | `adoptLaunched(ids)` sees the id on disk — **non-resume launches only**, **and the child is still alive** |
+| `launching` | deleted | `adoptLaunched(ids)` sees the id on disk with the child already gone (#521) |
 | `launching` | `running` | `listLaunching(now)` passes `LAUNCH_TTL_MS` **and the child is still alive** |
 | `launching` | deleted | past `LAUNCH_TTL_MS` with the child already gone |
 | `running` | deleted | the child's `'exit'`/`'close'`, whatever the code |

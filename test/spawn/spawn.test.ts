@@ -7,7 +7,7 @@ import path from 'node:path';
 import {
   FAIL_TTL_MS, LAUNCH_TTL_MS, NAME_CAP, PERMISSION_MODES, PROMPT_CAP, PROMPT_PREVIEW_CAP,
   DESKTOP_KICKOFF_PROMPT, STDERR_TAIL_CAP, STOP_GRACE_MS, adoptLaunched, buildSpawnArgs, clampPermission, escalateStop,
-  forceStopSession, launch, listLaunching, parseSpawnRequest, probeSpawn, resetLaunches,
+  forceStopSession, hasLiveChild, launch, launchEntryState, listLaunching, parseSpawnRequest, probeSpawn, resetLaunches,
   resetSpawnProbe, setGroupKiller, setSpawner, stopSession, stopStates
 } from '../../server/lib/spawn.js';
 import { toPermissionMode } from '../../server/lib/config.js';
@@ -585,6 +585,35 @@ export function run(): number {
       children[0].stderr.emit('data', Buffer.from('boom'));
       children[0].emit('exit', 2, null);
       assert.strictEqual(listLaunching().length, 0);
+    } finally { setSpawner(null); }
+  })) p++; else f++;
+
+  // #521: a child that exited 0 while `launching` has nothing to adopt — promoting it leaked a `running` entry for the process's life.
+  if (test('adoptLaunched drops a launch whose child already exited cleanly, and counts 0', () => {
+    resetLaunches();
+    const children: FakeChild[] = [];
+    setSpawner(fakeSpawner([], children));
+    try {
+      const id = launch(cfg(), REF, baseInput());
+      children[0].exitCode = 0;
+      children[0].emit('exit', 0, null);
+      assert.strictEqual(launchEntryState(id), 'launching');
+      assert.strictEqual(adoptLaunched([id]), 0);
+      assert.strictEqual(launchEntryState(id), null);
+      assert.strictEqual(hasLiveChild(id), false);
+      assert.strictEqual(listLaunching().length, 0);
+    } finally { setSpawner(null); }
+  })) p++; else f++;
+
+  if (test('adoptLaunched still promotes a launch whose child is alive', () => {
+    resetLaunches();
+    const children: FakeChild[] = [];
+    setSpawner(fakeSpawner([], children));
+    try {
+      const id = launch(cfg(), REF, baseInput());
+      assert.strictEqual(adoptLaunched([id]), 1);
+      assert.strictEqual(launchEntryState(id), 'running');
+      assert.strictEqual(hasLiveChild(id), true);
     } finally { setSpawner(null); }
   })) p++; else f++;
 
