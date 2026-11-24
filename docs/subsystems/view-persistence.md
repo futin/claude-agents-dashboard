@@ -8,7 +8,11 @@ section — though there it only *seeds* a plain `useState`, because the landing
 override it (see `dashboard.section` below).
 
 - `hooks/usePersistedState.ts` — generic `useState` replacement: lazy init reads+parses the
-  stored JSON once; an effect writes on every change. **Fail-open** — missing/bad JSON or a
+  stored JSON on mount; an effect writes on every change. While mounted it also follows the `storage` event another tab of the same origin fires when it
+  writes the key (or clears storage), re-reading through the same parse, so the last tab to write no longer undoes the others' changes — `SettingsProvider`'s
+  `update` patches the other tab's latest blob, and a Reset in one tab reaches the rest (#520). An event carrying exactly the JSON this holder last wrote is
+  ignored, and a value taken from another tab is never written back: it was merged over this build's fallback, so a tab on another build would read the
+  reordered keys as a change and the two would trade writes forever. The storage half is the React-free `lib/persistedValue.ts`. **Fail-open** — missing/bad JSON or a
   throwing `localStorage` (private mode / quota) falls back to the passed default, never crashes
   render. Object values are shallow-merged over the default (`{ ...fallback, ...parsed }`) so a
   value stored by an older release still gains any newly-added `View` field's default.
@@ -76,6 +80,11 @@ override it (see `dashboard.section` below).
   `management.codegraphLayout` (which of Management › CodeGraph's Inbox | Matrix | Inspector the switcher was left on, a bare string read through
   `parseCodegraphLayout`, default `inbox`; a phone draws Inbox for a stored `matrix` without overwriting it; an `OWNED_KEYS` entry, so Reset sweeps it —
   see [codegraph](codegraph.md));
+  `management.gitInboxFilter` and `management.codegraphInboxFilter` (which level tile the Git and CodeGraph Inboxes were left filtering on, read through
+  `gitInboxFilter` / `codegraphInboxFilter`, so anything but `all` or a level falls back to `all`; in `OWNED_KEYS` — see [git-stats](git-stats.md),
+  [codegraph](codegraph.md));
+  `usage.historyDays` (Usage › History's 7d / 30d / 90d range, read through `historyDays`, so any other value falls back to 7; in `OWNED_KEYS` — see
+  [usage-limits](usage-limits.md));
   `management.syncRuns` (the Git Sync runs this device launched, keyed by repo — see [git-stats](git-stats.md); live state, so Reset leaves it);
   `dashboard.releases.lastSeen` (the newest release this browser has seen, a raw version string, not JSON, that ui-kit's `useWhatsNew` reads and writes
   under `LAST_SEEN_KEY` from `lib/releases.ts` rather than through `usePersistedState` — see [releases](releases.md); in `OWNED_KEYS`, so Reset clears it, and the next load reseeds the newest without a dot).
@@ -158,6 +167,7 @@ override it (see `dashboard.section` below).
 <!-- docs-sync:
   sources:
     - client/src/hooks/usePersistedState.ts
+    - client/src/lib/persistedValue.ts
     - client/src/App.tsx
     - client/src/components/SessionsView.tsx
     - client/src/components/Toolbar.tsx

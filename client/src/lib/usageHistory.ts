@@ -7,6 +7,20 @@ import type { UsageHistoryPoint, UsageHistoryResponse, UsageHistoryWindow } from
  * across a quiet heartbeat stretch would draw a ramp that never happened (docs/subsystems/usage-limits.md §The history view).
  */
 
+/** The History range switch's choices, in days. */
+export const HISTORY_RANGES = [
+  { days: 7, label: '7d' },
+  { days: 30, label: '30d' },
+  { days: 90, label: '90d' }
+] as const;
+
+export type HistoryDays = (typeof HISTORY_RANGES)[number]['days'];
+
+/** A stored range read back: anything that is not one of `HISTORY_RANGES` (stale or hand-edited) reads as 7 days. */
+export function historyDays(v: unknown): HistoryDays {
+  return HISTORY_RANGES.find(r => r.days === v)?.days ?? 7;
+}
+
 const DAY_MS = 86_400_000;
 const MINUTE_MS = 60_000;
 /** A day that gained less than this many points of the week is not drawn. */

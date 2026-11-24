@@ -546,7 +546,7 @@ before `confidence` leaves `thin`, and no test substitutes for that.
 
 ### The history view
 
-Usage → **History** (`client/src/components/usage/UsageHistory.tsx`) answers "how full was the week last Tuesday": the weekly windows, each filled day by day, over the last 7d / 30d / 90d (component state, default 7d, not persisted), read back from `.usage-history.jsonl`.
+Usage → **History** (`client/src/components/usage/UsageHistory.tsx`) answers "how full was the week last Tuesday": the weekly windows, each filled day by day, over the last 7d / 30d / 90d (persisted per device as `usage.historyDays`, default 7d — see [view-persistence](view-persistence.md)), read back from `.usage-history.jsonl`.
 
 - **Endpoint.** `GET /api/usage/history?days=N` (`server/api.ts` `serveUsageHistory`; read-only, unpolled, no token). `days` is accepted only as digits, clamped
   to `[1, 365]`, and is 7 otherwise. The body is `UsageHistoryResponse` in `shared/types.ts`: downsampled utilization with ms-epoch times, never paths or token

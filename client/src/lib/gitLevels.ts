@@ -48,6 +48,10 @@ export const GIT_LEVELS: { key: GitLevel; label: string }[] = [
   { key: 'quiet', label: 'All good' },
   { key: 'dead', label: "Can't read" },
 ];
+/** The Inbox's tile filter read back from storage: anything that is not `'all'` or a level reads as `'all'`. */
+export function gitInboxFilter(v: unknown): GitLevel | 'all' {
+  return GIT_LEVELS.find(l => l.key === v)?.key ?? 'all';
+}
 export const GIT_LEVEL_STATUS: Record<GitLevel, string> = { needs: 'needs you', look: 'worth a look', quiet: 'all good', dead: "can't read" };
 /** The modifier on `.git-dot`; the `look` level keeps the shipped `flight` colour. */
 export const GIT_LEVEL_DOT: Record<GitLevel, string> = { needs: 'needs', look: 'flight', quiet: 'quiet', dead: 'dead' };

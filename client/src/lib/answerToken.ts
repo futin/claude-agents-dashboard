@@ -1,8 +1,8 @@
 /**
  * answerToken.ts — the one copy of the Answer token this dashboard holds.
  *
- * Every hook that sends a token used to own a private `usePersistedState('dashboard.answerToken')`, and that hook reads localStorage once on mount and only
- * writes after. So a token entered in one panel never reached the siblings mounted beside it: dictate (403), enter the token in the message panel, dictate
+ * Every hook that sends a token used to own a private `usePersistedState('dashboard.answerToken')`, and that hook then read localStorage once on mount and only
+ * wrote after. So a token entered in one panel never reached the siblings mounted beside it: dictate (403), enter the token in the message panel, dictate
  * again — still 403, until the drawer remounted (#200). One module-level store, read through `useAnswerToken`, means one write is seen by every reader.
  *
  * The stored shape stays the JSON string `usePersistedState` wrote, so a token saved by an older release still reads. A `storage` event for the key (another
