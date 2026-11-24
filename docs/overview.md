@@ -427,7 +427,9 @@ test/             node-assert tests over backend + client domain logic, one leve
 .github/workflows/  ci.yml (the PR gate) and release.yml (tags and publishes each release) — workflows/ci.md
 scripts/          install-hooks.sh (`pnpm hooks:install`), ask-remote-hook.sh,
                   plan-remote-hook.sh, permission-notify-hook.sh,
-                  remote-decision-hook.sh, stop-notify-hook.sh,
+                  remote-decision-hook.sh, stop-notify-hook.sh (all five source
+                  hook-common.sh beside their real path: DASH, TOKEN_FILE, dash_curl,
+                  autopilot_running; never linked itself),
                   kill-guard-hook.sh (refuses broad pkill/killall — see
                   workflows/hooks-setup.md), host-credentials.sh,
                   lan-ip.sh, env-value.ts (the one .env reader the installer and

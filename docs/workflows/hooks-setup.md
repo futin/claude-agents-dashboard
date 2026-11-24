@@ -35,6 +35,10 @@ hooks in place:
 | `scripts/remote-decision-hook.sh` | `remote-decision.sh` |
 | `scripts/kill-guard-hook.sh` | `kill-guard.sh` |
 
+`scripts/hook-common.sh` is not linked: the first five source it from beside their own real path (one `readlink` of the installed link), so it needs
+no link of its own and `--uninstall` has nothing more to remove. A checkout that predates it makes those five exit 0, like a missing hook. `kill-guard-hook.sh`
+does not use it and stays self-contained.
+
 **Eight entries** in `~/.claude/settings.json`:
 
 | Event | Matcher | Hook | Timeout |
