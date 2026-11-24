@@ -832,7 +832,10 @@ puts the size of the miss at roughly +38% on the pooled opus-5 rate.
 
 `joinIntervals` pairs consecutive history samples — same window under the same
 `sameWindow` slack, utilization not falling — and gathers the ledger's overlap
-with each pair. Then each interval is classified:
+with each pair. On a ledger sorted by `t` — file order, which is sorted in production — the gather binary-searches the first line ending after the pair's
+start and walks forward until a line ends at or past `toT + maxSpan` (`maxSpan` the longest line, so overlapping lines are never cut off); an unsorted
+ledger gets the full scan. Same lines, same order, so the sums are bit-identical either way. The full scan per interval cost ~2.3 s per rates request on
+this machine's 17,032 ledger lines (measured 2026-11-24, #540). Then each interval is classified:
 
 | Condition | Kind | Used for |
 |---|---|---|
