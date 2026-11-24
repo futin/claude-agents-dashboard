@@ -1,6 +1,6 @@
 import assert from 'node:assert';
 
-import { listenPersisted, readPersisted, writePersisted } from '../../client/src/lib/persistedValue.js';
+import { createPersistedSync, listenPersisted, readPersisted, writePersisted } from '../../client/src/lib/persistedValue.js';
 import { historyDays } from '../../client/src/lib/usageHistory.js';
 import { gitInboxFilter } from '../../client/src/lib/gitLevels.js';
 import { codegraphInboxFilter } from '../../client/src/lib/codegraphLevels.js';
@@ -26,15 +26,50 @@ function storageEvent(key: string | null, newValue: string | null): Event {
 }
 
 /**
- * What `usePersistedState` does with the module, without React: one in-memory value per holder, written through on every change, and — while `listen`
- * is on — following the stored value when another tab's event arrives on this holder's own `window`.
+ * A storage shared by several tabs, firing `storage` on every OTHER tab's target when a write changes the stored string — what the browser does. Events are
+ * queued and drained one by one, so a pair of tabs that keep answering each other shows up as a queue that never empties.
  */
-function holder<T>(storage: Storage, key: string, fallback: T, listen = true) {
+function sharedStorage() {
+  const data = new Map<string, string>();
+  const targets: EventTarget[] = [];
+  const queue: { target: EventTarget; event: Event }[] = [];
+  let writer: EventTarget | null = null;
+  const storage = {
+    getItem: (k: string) => data.get(k) ?? null,
+    setItem: (k: string, v: string) => {
+      if (data.get(k) === v) return;
+      data.set(k, v);
+      for (const t of targets) if (t !== writer) queue.push({ target: t, event: storageEvent(k, v) });
+    }
+  } as unknown as Storage;
+  /** Deliver queued events until none is left or `max` were delivered; returns how many were. */
+  const drain = (max = 50) => {
+    let n = 0;
+    while (queue.length > 0 && n < max) { const { target, event } = queue.shift()!; target.dispatchEvent(event); n++; }
+    return n;
+  };
+  return { data, storage, targets, queue, drain, as: (t: EventTarget | null) => { writer = t; } };
+}
+
+/**
+ * What `usePersistedState` does with the module, without React: one in-memory value per tab, `commit` on every change of it (the write effect), and —
+ * while `listen` is on — adopting the value another tab's event re-reads.
+ */
+function tab<T>(shared: ReturnType<typeof sharedStorage>, key: string, fallback: T, listen = true) {
   const target = new EventTarget();
-  const h = { target, value: readPersisted(() => storage, key, fallback), last: null as string | null, off: () => {} };
-  const write = (v: T) => { h.value = v; h.last = writePersisted(() => storage, key, v); };
-  if (listen) h.off = listenPersisted({ target, storage: () => storage, key, fallback: () => fallback, lastWritten: () => h.last, onValue: v => { h.value = v; } });
-  return { ...h, h, write };
+  shared.targets.push(target);
+  const storage = () => shared.storage;
+  const sync = createPersistedSync<T>(storage, key);
+  const t = { target, value: readPersisted(storage, key, fallback), off: () => {} };
+  const change = (v: T, adopt: boolean) => {
+    if (adopt) sync.adopt(v);
+    if (v === t.value) return; // React bails out on an identical value: no re-render, no effect
+    t.value = v;
+    shared.as(target); sync.commit(v); shared.as(null);
+  };
+  shared.as(target); sync.commit(t.value); shared.as(null); // the effect's first run, on mount
+  if (listen) t.off = listenPersisted({ target, storage, key, fallback: () => fallback, lastWritten: sync.lastWritten, onValue: v => change(v, true) });
+  return { t, set: (v: T) => change(v, false) };
 }
 
 export function run(): number {
@@ -120,25 +155,52 @@ export function run(): number {
 
   t('clobber regression: a patch in tab B lands on tab A’s latest settings instead of undoing them', () => {
     const fallback = { theme: 'graphite', fontScale: 100 };
-    const storage = fakeStorage();
-    const a = holder(storage, 'dashboard.settings', fallback);
-    const b = holder(storage, 'dashboard.settings', fallback);
-    a.write({ ...a.h.value, theme: 'dark' });
-    b.h.target.dispatchEvent(storageEvent('dashboard.settings', storage.data.get('dashboard.settings') ?? null));
-    b.write({ ...b.h.value, fontScale: 125 });
-    assert.deepStrictEqual(JSON.parse(storage.data.get('dashboard.settings') ?? 'null'), { theme: 'dark', fontScale: 125 });
-    a.h.off(); b.h.off();
+    const shared = sharedStorage();
+    const a = tab(shared, 'dashboard.settings', fallback);
+    const b = tab(shared, 'dashboard.settings', fallback);
+    shared.drain();
+    a.set({ ...a.t.value, theme: 'dark' });
+    shared.drain();
+    b.set({ ...b.t.value, fontScale: 125 });
+    shared.drain();
+    assert.deepStrictEqual(JSON.parse(shared.data.get('dashboard.settings') ?? 'null'), { theme: 'dark', fontScale: 125 });
+    assert.deepStrictEqual(a.t.value, { theme: 'dark', fontScale: 125 }, 'tab A follows B’s patch too');
   });
 
-  t('clobber regression, mirror: a holder that does not listen undoes the other tab’s change (what the listener fixes)', () => {
+  t('clobber regression, mirror: a tab that does not listen undoes the other tab’s change (what the listener fixes)', () => {
     const fallback = { theme: 'graphite', fontScale: 100 };
-    const storage = fakeStorage();
-    const a = holder(storage, 'dashboard.settings', fallback, false);
-    const b = holder(storage, 'dashboard.settings', fallback, false);
-    a.write({ ...a.h.value, theme: 'dark' });
-    b.h.target.dispatchEvent(storageEvent('dashboard.settings', storage.data.get('dashboard.settings') ?? null));
-    b.write({ ...b.h.value, fontScale: 125 });
-    assert.deepStrictEqual(JSON.parse(storage.data.get('dashboard.settings') ?? 'null'), { theme: 'graphite', fontScale: 125 });
+    const shared = sharedStorage();
+    const a = tab(shared, 'dashboard.settings', fallback, false);
+    const b = tab(shared, 'dashboard.settings', fallback, false);
+    a.set({ ...a.t.value, theme: 'dark' });
+    shared.drain();
+    b.set({ ...b.t.value, fontScale: 125 });
+    assert.deepStrictEqual(JSON.parse(shared.data.get('dashboard.settings') ?? 'null'), { theme: 'graphite', fontScale: 125 });
+  });
+
+  t('two builds whose fallbacks order the keys differently settle after one exchange instead of trading writes', () => {
+    const shared = sharedStorage();
+    const a = tab(shared, 'k', { a: 1, b: 1 });
+    const b = tab(shared, 'k', { a: 1, c: 1, b: 1 });
+    shared.drain();
+    a.set({ ...a.t.value, a: 2 });
+    const delivered = shared.drain();
+    assert.strictEqual(shared.queue.length, 0, 'the tabs are still answering each other');
+    assert.ok(delivered <= 2, `${delivered} events delivered`);
+    assert.strictEqual(b.t.value.a, 2);
+    assert.strictEqual(a.t.value.a, 2);
+  });
+
+  t('an adopted value is not written back, and the next own change is', () => {
+    const s = fakeStorage({ k: '{"b":1,"a":2}' });
+    const sync = createPersistedSync<{ a: number; b: number }>(() => s, 'k');
+    const v = readPersisted(() => s, 'k', { a: 1, b: 1 });
+    sync.adopt(v);
+    sync.commit(v);
+    assert.strictEqual(s.data.get('k'), '{"b":1,"a":2}', 'the other tab’s string is left as it was');
+    assert.strictEqual(sync.lastWritten(), '{"b":1,"a":2}');
+    sync.commit({ a: 3, b: 1 });
+    assert.strictEqual(s.data.get('k'), '{"a":3,"b":1}');
   });
 
   t('validators: an unknown stored value reads as the default, a valid one is kept', () => {

@@ -11,7 +11,8 @@ override it (see `dashboard.section` below).
   stored JSON on mount; an effect writes on every change. While mounted it also follows the `storage` event another tab of the same origin fires when it
   writes the key (or clears storage), re-reading through the same parse, so the last tab to write no longer undoes the others' changes — `SettingsProvider`'s
   `update` patches the other tab's latest blob, and a Reset in one tab reaches the rest (#520). An event carrying exactly the JSON this holder last wrote is
-  ignored. The storage half is the React-free `lib/persistedValue.ts`. **Fail-open** — missing/bad JSON or a
+  ignored, and a value taken from another tab is never written back: it was merged over this build's fallback, so a tab on another build would read the
+  reordered keys as a change and the two would trade writes forever. The storage half is the React-free `lib/persistedValue.ts`. **Fail-open** — missing/bad JSON or a
   throwing `localStorage` (private mode / quota) falls back to the passed default, never crashes
   render. Object values are shallow-merged over the default (`{ ...fallback, ...parsed }`) so a
   value stored by an older release still gains any newly-added `View` field's default.

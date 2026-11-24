@@ -62,3 +62,37 @@ export function listenPersisted<T>({ target, storage, key, fallback, lastWritten
   target?.addEventListener('storage', onStorage);
   return () => target?.removeEventListener('storage', onStorage);
 }
+
+export interface PersistedSync<T> {
+  /** The JSON last written by this holder, or last adopted from another tab — `listenPersisted`'s `lastWritten`. */
+  lastWritten(): string | null;
+  /** A value `listenPersisted` re-read from another tab: the holder is about to show it, and `commit` must not write it back. */
+  adopt(value: T): void;
+  /** Run on every change of the holder's value; writes it unless it is the value just adopted. */
+  commit(value: T): void;
+}
+
+/**
+ * The write side of one holder. An adopted value is never written back: `readPersisted` merges it over THIS tab's fallback, so a tab on another build,
+ * whose fallback orders the keys differently, would read our write-back as a change and answer with its own, and the two would trade writes forever.
+ */
+export function createPersistedSync<T>(storage: GetStorage, key: string): PersistedSync<T> {
+  let last: string | null = null;
+  let adopted: { value: T } | null = null;
+  return {
+    lastWritten: () => last,
+    adopt(value) {
+      adopted = { value };
+      try {
+        last = storage()?.getItem(key) ?? null;
+      } catch {
+        last = null;
+      }
+    },
+    commit(value) {
+      const skip = adopted !== null && adopted.value === value;
+      adopted = null;
+      if (!skip) last = writePersisted(storage, key, value);
+    }
+  };
+}
