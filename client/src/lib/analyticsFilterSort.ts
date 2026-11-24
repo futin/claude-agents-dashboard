@@ -68,6 +68,26 @@ export function drawableAnLayout(layout: AnLayout, narrow: boolean): AnLayout {
   return narrow && WIDE_ONLY_AN_LAYOUTS.includes(layout) ? 'tiles' : layout;
 }
 
+/** What the Analytics body draws in place of (or as) the report list. */
+export type AnBodyKind = 'loading' | 'error' | 'empty' | 'no-match' | 'list';
+
+/**
+ * Which body the Analytics section draws. `total` is every report in memory, `shown` the ones the filters keep. An error blanks the view only when
+ * nothing was ever loaded: a failed ↻ over a loaded list keeps that list (#519), and `analyticsStaleReload` says so in the band.
+ */
+export function analyticsBodyKind(s: { loading: boolean; error: boolean; total: number; shown: number }): AnBodyKind {
+  if (s.loading && !s.total) return 'loading';
+  if (s.error && !s.total) return 'error';
+  if (!s.total) return 'empty';
+  if (!s.shown) return 'no-match';
+  return 'list';
+}
+
+/** The list on screen is from an earlier load, because the latest reload failed. */
+export function analyticsStaleReload(s: { error: boolean; total: number }): boolean {
+  return s.error && s.total > 0;
+}
+
 export type AnSortKey = 'recency' | 'tokens' | 'project';
 
 /** Sort-key label in the toolbar's popover and its `Sort: <b>…</b>` readout. */

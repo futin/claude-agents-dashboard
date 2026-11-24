@@ -45,7 +45,9 @@ export function run(): number {
   });
 
   t('ChatDrawer: keepOpen is the OR of one draft flag per composer, each wired to its panel', () => {
-    assert.match(drawer, /keepOpen\.current = drafts\.current\.resume \|\| drafts\.current\.message \|\| drafts\.current\.plan;/);
+    assert.match(drawer, /const drafts = useRef\(\{ resume: false, message: false, plan: false, question: false \}\);/);
+    assert.match(drawer, /keepOpen\.current = drafts\.current\.resume \|\| drafts\.current\.message \|\| drafts\.current\.plan \|\| drafts\.current\.question;/);
+    assert.match(drawer, /<QuestionPanel state=\{question\} onDraft=\{onDraft\.question\} \/>/);
     assert.match(drawer, /<PlanPanel state=\{plan\} onDraft=\{onDraft\.plan\} \/>/);
     assert.match(drawer, /<MessagePanel state=\{message\} suggestion=\{suggestion\} onDraft=\{onDraft\.message\} \/>/);
     assert.match(drawer, /<ResumePanel session=\{session\} suggestion=\{suggestion\} onDraft=\{onDraft\.resume\} \/>/);
@@ -69,6 +71,15 @@ export function run(): number {
     const src = read('PlanPanel.tsx');
     assert.match(src, /const draft = !!pending && phase !== 'gone' && phase !== 'sent' && feedback\.trim\(\) !== '';/);
     assert.match(src, /useEffect\(\(\) => \{ onDraft\?\.\(draft\); return \(\) => onDraft\?\.\(false\); \}, \[draft, onDraft\]\);/);
+  });
+
+  // QuestionPanel renders a note or nothing once answered or gone, and returns early before its composer — so the report sits above those returns.
+  t('QuestionPanel reports its typed Other text through questionDraftHeld, above its early returns, and false on unmount', () => {
+    const src = read('QuestionPanel.tsx');
+    const effect = /useEffect\(\(\) => \{ onDraft\?\.\(held\); return \(\) => onDraft\?\.\(false\); \}, \[held, onDraft\]\);/;
+    assert.match(src, /const held = questionDraftHeld\(pending, phase, draft\);/);
+    assert.match(src, effect);
+    assert.ok(src.search(effect) < src.indexOf("if (phase === 'gone')"), 'the onDraft effect must run before the early returns');
   });
 
   console.log(`\n${p} passed, ${f} failed`);

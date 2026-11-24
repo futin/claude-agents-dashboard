@@ -4,6 +4,8 @@ import { useAnalytics } from '../../hooks/useAnalytics';
 import { useNarrow } from '../../hooks/useNarrow';
 import { usePersistedState } from '../../hooks/usePersistedState';
 import {
+  analyticsBodyKind,
+  analyticsStaleReload,
   applyAnalyticsView,
   clearAnalyticsFilters,
   drawableAnLayout,
@@ -73,18 +75,20 @@ export default function AnalyticsView() {
     });
   }
 
+  const kind = analyticsBodyKind({ loading, error, total: reports.length, shown: shown.length });
+  const stale = analyticsStaleReload({ error, total: reports.length });
   let body: React.ReactNode;
-  if (loading && !reports.length) {
+  if (kind === 'loading') {
     body = <div className="an-empty">Loading…</div>;
-  } else if (error) {
+  } else if (kind === 'error') {
     body = <div className="an-empty">Could not load reports.</div>;
-  } else if (!reports.length) {
+  } else if (kind === 'empty') {
     body = (
       <div className="an-empty">
         No sessions logged yet. Run <code>/kaizen</code> on a session to record one.
       </div>
     );
-  } else if (!shown.length) {
+  } else if (kind === 'no-match') {
     body = (
       <div className="an-empty">
         No reports match the current filters.{' '}
@@ -139,6 +143,7 @@ export default function AnalyticsView() {
           <code>/kaizen</code> runs.
           {data?.reviewDue && <> Lessons have piled up — run <code>/kaizen review</code>.</>}
         </div>
+        {stale && <div className="an-stale" role="status">Reload failed — showing the reports loaded earlier.</div>}
       </div>
 
       {reports.length > 0 && (

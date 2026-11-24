@@ -13,6 +13,15 @@ export interface AnalyticsState {
   error: boolean;
 }
 
+/**
+ * The state a settled fetch leaves. The server answers a failed listing with `{ reports: [], error: true }`; over a list already loaded that answer
+ * keeps the old data and only raises `error`, so a failed ↻ never blanks reports still in memory (#519).
+ */
+export function settleAnalytics(prev: AnalyticsResponse | null, data: AnalyticsResponse): AnalyticsState {
+  if (data.error === true) return { data: prev ?? data, loading: false, error: true };
+  return { data, loading: false, error: false };
+}
+
 export function useAnalytics() {
   const [state, setState] = useState<AnalyticsState>({ data: null, loading: true, error: false });
   const [refreshKey, setRefreshKey] = useState(0);
@@ -25,7 +34,7 @@ export function useAnalytics() {
     fetch('/api/analytics')
       .then(res => res.json() as Promise<AnalyticsResponse>)
       .then(data => {
-        if (alive) setState({ data, loading: false, error: data.error === true });
+        if (alive) setState(prev => settleAnalytics(prev.data, data));
       })
       .catch(() => {
         if (alive) setState(prev => ({ data: prev.data, loading: false, error: true }));
