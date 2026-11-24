@@ -1460,6 +1460,7 @@ code,kbd,samp,pre{font-family:inherit}
    beside it left the ↻ two characters of room on a phone. */
 .icon-refresh{font-family:var(--font);font-size:12px;line-height:1;color:var(--ink2);background:var(--strip);border:1px solid var(--hairline2);border-radius:999px;width:26px;height:26px;cursor:pointer;align-self:center;transition:color .15s,border-color .15s}
 .icon-refresh:hover{color:var(--ink);border-color:var(--ink3)}
+.an-stale{font-size:12px;color:var(--amber-ink)}
 .an-empty{font-size:13px;color:var(--ink3);background:var(--strip);border-radius:16px;padding:40px 24px;text-align:center}
 .an-clear{font-family:var(--font);font-size:13px;color:var(--cyan);background:none;border:0;padding:0;cursor:pointer;text-decoration:underline}
 /* LoadBoundary's notice: a lazy chunk that failed to load. `float` stands in for a drawer or sheet, which would have drawn fixed over the page. */
@@ -1731,6 +1732,7 @@ code,kbd,samp,pre{font-family:inherit}
 .md-path{font-size:12px;color:var(--ink2);border-bottom:1px dotted var(--hairline2);cursor:help}
 .md-list{padding-left:17px;display:flex;flex-direction:column;gap:3px}
 .md-list li::marker{color:var(--ink3)}
+.md-list .md-list{margin-top:3px}
 .md-quote{border-left:2px solid var(--hairline2);padding-left:9px;color:var(--ink3)}
 .md-hr{border-top:1px solid var(--hairline);margin:2px 0}
 /* Ledger rules, not a grid: horizontal rules only, no cell boxes and no fill

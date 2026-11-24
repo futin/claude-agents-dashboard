@@ -190,16 +190,16 @@ export default function ChatDrawer({ session, onClose, spawnAvailable, desktopAv
   /** Filter at last render — a change re-anchors instead of looking like a prepend. */
   const prevMode = useRef(mode);
 
-  // Every exit but ✕ reads this, as JobDrawer's does: a half-typed reply, follow-up or plan revision survives a stray key, tap or Back. The text lives
-  // in the leaf panels, so each reports its own draft and one panel clearing its flag never releases another's.
-  const drafts = useRef({ resume: false, message: false, plan: false });
+  // Every exit but ✕ reads this, as JobDrawer's does: a half-typed reply, follow-up, plan revision or "Other" answer survives a stray key, tap or Back.
+  // The text lives in the leaf panels, so each reports its own draft and one panel clearing its flag never releases another's.
+  const drafts = useRef({ resume: false, message: false, plan: false, question: false });
   const keepOpen = useRef(false);
   const onDraft = useMemo(() => {
     const report = (k: keyof typeof drafts.current) => (held: boolean) => {
       drafts.current[k] = held;
-      keepOpen.current = drafts.current.resume || drafts.current.message || drafts.current.plan;
+      keepOpen.current = drafts.current.resume || drafts.current.message || drafts.current.plan || drafts.current.question;
     };
-    return { resume: report('resume'), message: report('message'), plan: report('plan') };
+    return { resume: report('resume'), message: report('message'), plan: report('plan'), question: report('question') };
   }, []);
   const [backGen, setBackGen] = useState(0);
 
@@ -407,7 +407,7 @@ export default function ChatDrawer({ session, onClose, spawnAvailable, desktopAv
                 {/* The one full rendering of a held question: its tool_use lands in the
                     transcript ~1s into the hold, and that copy renders folded until the
                     hold ends (heldAsk). Pinned so it stays reachable while scrolling. */}
-                <QuestionPanel state={question} />
+                <QuestionPanel state={question} onDraft={onDraft.question} />
 
                 {/* Same deal for a proposed plan. The two stores are one-entry-per-
                     session and a session can only be parked on one thing at a time, so

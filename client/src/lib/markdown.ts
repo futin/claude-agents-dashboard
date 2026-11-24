@@ -33,6 +33,17 @@ export interface ListItem {
   /** Nesting level, 2 spaces per level. */
   depth: number;
   spans: Inline[];
+  /** Numbered (`1.`, `2)`) rather than a bullet. A list block holds both kinds once nested. */
+  ordered: boolean;
+  /** The number written on an ordered item; null for a bullet. */
+  n: number | null;
+}
+
+/** One list of a nested list tree (`listTree`): an ordered list numbers on from `start` (CommonMark), a bullet list has none. */
+export interface ListNode {
+  ordered: boolean;
+  start: number | null;
+  items: { spans: Inline[]; children: ListNode[] }[];
 }
 
 export type Block =
@@ -99,6 +110,46 @@ const FENCE_RE = /^\s*(```+|~~~+)\s*([^\s`]*)/;
 const HEADING_RE = /^(#{1,6})\s+(.*)$/;
 const HR_RE = /^\s*([-*_])(\s*\1){2,}\s*$/;
 const ITEM_RE = /^(\s*)([-*+]|\d+[.)])\s+(.*)$/;
+
+/** A list item line, or null — a rule such as `* * *` or `- - -` also matches `ITEM_RE`, and it is a rule, not a bullet. */
+function itemMatch(line: string): RegExpExecArray | null {
+  return HR_RE.test(line) ? null : ITEM_RE.exec(line);
+}
+
+/** An `ITEM_RE` match as a flat list item, its written number kept. */
+function listItem(m: RegExpExecArray): ListItem {
+  const ordered = /\d/.test(m[2]);
+  return { depth: Math.floor(m[1].length / 2), spans: parseInline(m[3]), ordered, n: ordered ? parseInt(m[2], 10) : null };
+}
+
+/**
+ * A list block's flat items as nested lists. A deeper item opens a child list under the item before it (one level down, however much deeper it is
+ * indented — no empty lists in between); a shallower one closes back to its level; an item of the other kind at the same level starts a sibling list
+ * there. Each ordered list starts at its first item's written number.
+ */
+export function listTree(items: ListItem[]): ListNode {
+  const open = (it: ListItem): ListNode => ({ ordered: it.ordered, start: it.ordered ? it.n : null, items: [] });
+  const root = open(items[0] ?? { depth: 0, spans: [], ordered: false, n: null });
+  const stack: { list: ListNode; depth: number }[] = [{ list: root, depth: items[0]?.depth ?? 0 }];
+  const top = () => stack[stack.length - 1];
+  for (const it of items) {
+    // Close deeper lists until this item's level — but never past a list whose parent sits shallower than the item.
+    while (stack.length > 1 && it.depth < top().depth && it.depth <= stack[stack.length - 2].depth) stack.pop();
+    const cur = top();
+    if (it.depth > cur.depth && cur.list.items.length) {
+      const child = open(it);
+      cur.list.items[cur.list.items.length - 1].children.push(child);
+      stack.push({ list: child, depth: it.depth });
+    } else if (it.ordered !== cur.list.ordered && stack.length > 1) {
+      const sibling = open(it);
+      const parent = stack[stack.length - 2].list;
+      parent.items[parent.items.length - 1].children.push(sibling);
+      stack[stack.length - 1] = { list: sibling, depth: cur.depth };
+    }
+    top().list.items.push({ spans: it.spans, children: [] });
+  }
+  return root;
+}
 const QUOTE_RE = /^\s*>\s?(.*)$/;
 const TABLE_SEP_RE = /^\s*\|?\s*:?-{1,}:?\s*(\|\s*:?-{1,}:?\s*)+\|?\s*$/;
 
@@ -207,11 +258,25 @@ export function parseMarkdown(src: string): Block[] {
     if (item) {
       flushPara();
       const ordered = /\d/.test(item[2]);
+      const base = listItem(item).depth;
+      // A list of the other kind at this list's own level is a separate block; nested deeper, it is a sub-list of this one (#519).
+      const ends = (it: ListItem) => it.depth <= base && it.ordered !== ordered;
       const items: ListItem[] = [];
       for (; i < lines.length; i++) {
-        const it = ITEM_RE.exec(lines[i]);
-        if (!it || /\d/.test(it[2]) !== ordered) break;
-        items.push({ depth: Math.floor(it[1].length / 2), spans: parseInline(it[3]) });
+        if (!lines[i].trim()) {
+          // Blank lines inside a list keep it going when an item follows them, so `1. a`, blank, `2. b` stays one list numbered 1, 2.
+          let j = i + 1;
+          while (j < lines.length && !lines[j].trim()) j++;
+          const next = j < lines.length ? itemMatch(lines[j]) : null;
+          if (!next || ends(listItem(next))) break;
+          i = j - 1;
+          continue;
+        }
+        const it = itemMatch(lines[i]);
+        if (!it) break;
+        const li = listItem(it);
+        if (ends(li)) break;
+        items.push(li);
       }
       i--;
       blocks.push({ t: 'list', ordered, items });

@@ -152,7 +152,8 @@ line's project tag.
   prose.
 - **No polling:** the list changes only when `/kaizen` runs. `AnalyticsView` is a
   `React.lazy` default export (own chunk); `useAnalytics` fetches on mount + manual ↻ and
-  is client-only.
+  is client-only. A failed ↻ — network or a server `error: true` answer — keeps the reports already loaded (`settleAnalytics`) and says so in a
+  `.an-stale` line under the band; "Could not load reports." shows only when nothing was ever loaded (`analyticsBodyKind`, #519).
 - **Toggles:** `SHOW_ANALYTICS=false` hides the tab, display cap `ANALYTICS_KEEP=<n>`
   (config.ts, default 5) — see [configuration](../workflows/configuration.md).
 

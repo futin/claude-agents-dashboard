@@ -135,9 +135,20 @@ export function Select({ children, ...props }: SelectHTMLAttributes<HTMLSelectEl
 }
 
 /**
+ * The number a NumberField's raw text holds, or null when it holds none: a blank box (or text `Number` cannot read) would otherwise commit
+ * `Number('') === 0`, which on "Away after" silently switches the away check off (#519).
+ */
+export function parseNumberDraft(raw: string): number | null {
+  if (raw.trim() === '') return null;
+  const n = Number(raw);
+  return Number.isFinite(n) ? n : null;
+}
+
+/**
  * A bounded integer input. Commits on blur so half-typed numbers never clamp
- * mid-keystroke. The unit sits inside the box, so the box is the wrapper and
- * the input inside it is borderless.
+ * mid-keystroke; a box left blank or unreadable reverts to the committed value
+ * instead. The unit sits inside the box, so the box is the wrapper and the
+ * input inside it is borderless.
  */
 export function NumberField({
   value, min, max, unit, onCommit
@@ -150,7 +161,12 @@ export function NumberField({
         min={min}
         max={max}
         key={value} /* re-seed when the value changes from elsewhere (e.g. Reset) */
-        onBlur={e => onCommit(Number(e.currentTarget.value))}
+        onBlur={e => {
+          const n = parseNumberDraft(e.currentTarget.value);
+          // `key={value}` cannot re-seed here — the value did not change — so put the committed one back by hand.
+          if (n === null) e.currentTarget.value = String(value);
+          else onCommit(n);
+        }}
         onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur(); }}
       />
       {unit && <span className="set-unit">{unit}</span>}
