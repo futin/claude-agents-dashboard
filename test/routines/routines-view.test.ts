@@ -261,6 +261,44 @@ export function run(): number {
     assert.deepStrictEqual(readForeach('---\nforeach: "pinned\'\n---\n'), { mode: 'cwd', picks: [] });
   });
 
+  t('readForeach: a BOM or CRLF file reads the way the server reads it', () => {
+    assert.deepStrictEqual(readForeach('﻿---\nrun: claude\nforeach: pinned\n---\n/x\n'), { mode: 'all', picks: [] });
+    assert.deepStrictEqual(readForeach('﻿---\r\nrun: claude\r\nforeach: [a, b]\r\n---\r\n/x\r\n'), { mode: 'pick', picks: ['a', 'b'] });
+  });
+
+  t('readForeach: a space before the colon is not the key (the server rejects that line), and an unclosed fence is cwd', () => {
+    assert.deepStrictEqual(readForeach('---\nrun: claude\nforeach : pinned\n---\n'), { mode: 'cwd', picks: [] });
+    assert.deepStrictEqual(readForeach('---\nrun: claude\nforeach: pinned\n'), { mode: 'cwd', picks: [] });
+  });
+
+  t('setRepos keeps a BOM and every byte it does not own', () => {
+    const out = setRepos('﻿---\ncron: "0 9 * * *"\nrun: claude\ncwd: ~/x\n---\n/x\n', 'all', []);
+    assert.strictEqual(out, '﻿---\ncron: "0 9 * * *"\nrun: claude\nforeach: pinned\n---\n/x\n');
+  });
+
+  t('readForeach agrees with parseJob on every spelling of the foreach line', () => {
+    const job = (line: string | null) => ['---', 'cron: "0 9 * * *"', 'run: claude', ...(line === null ? [] : [line]), '---', '/git-sync', ''].join('\n');
+    const variants: Array<[string, string]> = [
+      ['plain', job('foreach: pinned')],
+      ['BOM', '﻿' + job('foreach: pinned')],
+      ['CRLF', job('foreach: pinned').replace(/\n/g, '\r\n')],
+      ['BOM+CRLF', '﻿' + job('foreach: pinned').replace(/\n/g, '\r\n')],
+      ['quoted', job('foreach: "pinned"')],
+      ['comment', job('foreach: pinned # c')],
+      ['list', job('foreach: [a, b]')],
+      ['space before colon', job('foreach : pinned')],
+      ['indented', job('  foreach: pinned')],
+      ['no foreach', job(null)],
+    ];
+    for (const [label, text] of variants) {
+      const parsed = parseJob('a', text, 'mac').job;
+      const want = parsed === null || parsed.foreach === null
+        ? { mode: 'cwd', picks: [] }
+        : parsed.foreach === 'pinned' ? { mode: 'all', picks: [] } : { mode: 'pick', picks: parsed.foreach };
+      assert.deepStrictEqual(readForeach(text), want, label);
+    }
+  });
+
   t('readForeach agrees with parseJob on every spelling of pinned and of a list', () => {
     for (const value of ['pinned', '"pinned"', "'pinned'", '[a, b]', '"[a, b]"']) {
       const text = `---\ncron: "0 9 * * *"\nrun: claude\nforeach: ${value}\n---\n/git-sync\n`;

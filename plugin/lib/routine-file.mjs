@@ -5,7 +5,7 @@
  * no types module to load.
  */
 import { isManualCron, parseCron, toCalendarIntervals } from './cron.mjs';
-import { scalarEnd, writeFrontmatterLine } from './frontmatter.mjs';
+import { frontmatterFence, scalarEnd, writeFrontmatterLine } from './frontmatter.mjs';
 /** A routine's name: the filename, and a segment of its API routes. */
 export const NAME_RE = /^[a-z0-9-]+$/;
 /** Names a routine may not take: the `/api/routines/<x>` routes already spelled with them. */
@@ -51,16 +51,17 @@ export function parseJob(name, text, machine) {
         push(0, 'name must match [a-z0-9-]+');
     else if (RESERVED.has(name))
         push(0, 'name is reserved');
-    const lines = String(text ?? '').replace(/^﻿/, '').split(/\r?\n/);
-    if (lines[0] !== '---') {
+    const fence = frontmatterFence(String(text ?? ''));
+    if (!fence) {
         push(0, 'file must start with a --- frontmatter block');
         return done(null);
     }
-    const end = lines.indexOf('---', 1);
+    const end = fence.close;
     if (end === -1) {
         push(0, 'frontmatter is not closed with ---');
         return done(null);
     }
+    const lines = fence.lines.map((l) => l.replace(/\r$/, ''));
     const seen = new Map();
     // Keys whose block was already reported: present, but neither empty nor missing, so no second error is raised for them.
     const broken = new Set();

@@ -6,7 +6,7 @@
  * dashboard shows the clock of the machine the job runs on, which is the browser's in the single-machine case this page is built for).
  */
 import { isManualCron } from '../../../shared/cron';
-import { scalarEnd, writeFrontmatterLine } from '../../../shared/frontmatter';
+import { frontmatterFence, frontmatterKeyIndex, scalarEnd, writeFrontmatterLine } from '../../../shared/frontmatter';
 import { LABEL_PREFIX, NAME_RE, RESERVED, inlineList, unquote } from '../../../shared/routine-file';
 import type {
   ReconcileChange, RoutineJob, RoutineJobRow, RoutineRun, RoutineRunConflict, RoutineRunsQuery, RoutineStats, RoutineStep, RoutineWriteError,
@@ -206,22 +206,17 @@ export function foreachLine(mode: ForeachMode, picks: string[]): string {
   return '';
 }
 
-/** The frontmatter block of a job file, or '' when it has none. The first line must be `---`. */
-function frontmatterOf(text: string): string {
-  const m = /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/.exec(text);
-  return m ? m[1] : '';
-}
-
 /**
  * What the file's frontmatter says about its repos, the inverse of {@link foreachLine}: `foreach: pinned` → all, `foreach: [a, b]` → pick with the names,
  * anything else (a `cwd:` line, or neither) → cwd. A quoted value (`foreach: "pinned"`) reads like the bare one, as the validator reads it. Reads the first
  * `foreach:` line only and never looks past the frontmatter, so a prompt that quotes the key does not change the helper's reading.
  */
 export function readForeach(text: string): { mode: ForeachMode; picks: string[] } {
-  const line = frontmatterOf(text).split(/\r?\n/).find(l => /^foreach\s*:/.test(l));
-  if (line === undefined) return { mode: 'cwd', picks: [] };
+  const fence = frontmatterFence(text);
+  const at = fence ? frontmatterKeyIndex(fence, 'foreach') : -1;
+  if (!fence || at === -1) return { mode: 'cwd', picks: [] };
   // A trailing ` # comment` is not part of the value: the spec's example file carries one on this very line.
-  const raw = line.replace(/^foreach\s*:/, '').trim();
+  const raw = fence.lines[at].slice('foreach:'.length).trim();
   const value = unquote(raw.slice(0, scalarEnd(raw)));
   if (value === 'pinned') return { mode: 'all', picks: [] };
   const list = inlineList(value);
@@ -236,12 +231,10 @@ export function readForeach(text: string): { mode: ForeachMode; picks: string[] 
  * unchanged.
  */
 export function setRepos(text: string, mode: ForeachMode, picks: string[]): string {
-  const lines = text.split('\n');
-  const strip = (l: string): string => l.replace(/\r$/, '');
-  if (strip(lines[0] ?? '').replace(/^﻿/, '') !== '---') return text;
-  const end = lines.findIndex((l, i) => i >= 1 && strip(l) === '---');
-  if (end === -1) return text;
-  const drop = (key: string) => lines.filter((l, i) => !(i > 0 && i < end && new RegExp(`^${key}\\s*:`).test(l)));
+  const fence = frontmatterFence(text);
+  if (!fence || fence.close === -1) return text;
+  // Every `key:` line inside the fence goes, not just the first: a duplicated key is the validator's to report.
+  const drop = (key: string) => fence.lines.filter((l, i) => !(i > 0 && i < fence.close && l.startsWith(`${key}:`)));
   if (mode === 'cwd') return drop('foreach').join('\n');
   const kept = drop('cwd').join('\n');
   return writeFrontmatterLine(kept, 'foreach', foreachLine(mode, picks).replace(/^foreach: /, ''), 'run');

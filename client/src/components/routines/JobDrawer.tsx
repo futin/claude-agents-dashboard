@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 
 import { serializeEnabled, type JobError } from '../../../../shared/routine-file';
-import type { RoutineErrorsResponse, RoutineFile, RoutineJobRow, RoutineValidateResponse } from '../../../../shared/types';
+import type {
+  RoutineCreateRequest, RoutineErrorsResponse, RoutineFile, RoutineJobRow, RoutineValidateRequest, RoutineValidateResponse, RoutineWriteRequest,
+} from '../../../../shared/types';
 import { useAnswerToken } from '../../hooks/useAnswerToken';
 import { useBackClose } from '../../hooks/useBackClose';
 import type { RoutineWriteControl } from '../../hooks/useRoutineWrite';
@@ -80,7 +82,7 @@ export default function JobDrawer({ mode, row, confirmDelete, existing, ctl, sen
       fetch('/api/routines/validate', {
         method: 'POST',
         headers: authHeaders(token, { 'Content-Type': 'application/json' }),
-        body: JSON.stringify(fileName ? { text, name: fileName } : { text })
+        body: JSON.stringify(fileName ? { text, name: fileName } satisfies RoutineValidateRequest : { text } satisfies RoutineValidateRequest)
       })
         .then(res => (res.ok ? res.json() as Promise<RoutineValidateResponse> : null))
         .then(body => { if (mine === seq.current && body && Array.isArray(body.errors)) setCheck(body); })
@@ -110,8 +112,8 @@ export default function JobDrawer({ mode, row, confirmDelete, existing, ctl, sen
     setSaving(true);
     setFailure(null);
     const r = mode === 'new'
-      ? await send('Save', `save:${name}`, 'POST', '/api/routines', { name, text: serializeEnabled(text, enabled ?? true) }, true)
-      : await send('Save', `save:${row!.name}`, 'PUT', `/api/routines/${encodeURIComponent(row!.name)}`, { text, mtimeMs: loaded!.mtimeMs }, true);
+      ? await send('Save', `save:${name}`, 'POST', '/api/routines', { name, text: serializeEnabled(text, enabled ?? true) } satisfies RoutineCreateRequest, true)
+      : await send('Save', `save:${row!.name}`, 'PUT', `/api/routines/${encodeURIComponent(row!.name)}`, { text, mtimeMs: loaded!.mtimeMs } satisfies RoutineWriteRequest, true);
     setSaving(false);
     if (r.ok) { onClose(); return; }
     // Still checked: a type is no proof of what an older server sends.

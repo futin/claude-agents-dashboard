@@ -179,6 +179,7 @@ shared/types.ts   the API contract (SessionsResponse, Session, ManagementIndex,
                   SessionAnalysis, AnalyticsReport, …)
 shared/frontmatter.ts  zero-dep YAML-frontmatter subset parser — shared because
                   both sides parse it (lib/management.ts and configs/FileBlock.tsx)
+                  — plus `frontmatterFence` / `frontmatterKeyIndex`, the one fence and key reader every job-file reader and writer uses
 shared/gitUpstream.ts  zero-dep upstream rule (`gitUpstreamShown`) — shared so the Git view's chip and level
                   rule and the hub's Git pending tile cannot disagree about the same repo
 shared/cron.ts    zero-dep five-field cron parser: `parseCron`, next and last fire time, the launchd `StartCalendarInterval` expansion, a plain-words

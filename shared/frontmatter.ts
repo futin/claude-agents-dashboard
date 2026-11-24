@@ -81,25 +81,47 @@ export function scalarEnd(s: string): number {
   return s.slice(0, end).trimEnd().length;
 }
 
+/** A routine-style frontmatter block, found the one way every reader and writer of a job file finds it. */
+export interface FrontmatterFence {
+  /** The text split on `\n`; each line keeps its `\r`, so a caller that writes back preserves the file's bytes. */
+  lines: string[];
+  /** Index of the closing `---` line, or -1 when the block opens but never closes. */
+  close: number;
+  /** The file's line ending, read off the opening fence. */
+  nl: '\n' | '\r\n';
+}
+
+const stripCr = (l: string): string => l.replace(/\r$/, '');
+
+/** The frontmatter fence of `text`: null unless line 0, less one leading BOM and a trailing `\r`, is exactly `---`. */
+export function frontmatterFence(text: string): FrontmatterFence | null {
+  const lines = text.split('\n');
+  if (stripCr(lines[0]).replace(/^\uFEFF/, '') !== '---') return null;
+  const close = lines.findIndex((l, i) => i >= 1 && stripCr(l) === '---');
+  return { lines, close, nl: lines[0].endsWith('\r') ? '\r\n' : '\n' };
+}
+
+/**
+ * Index of the first top-level `key:` line inside the fence — no leading whitespace, no space before the colon, which is how the routine parser reads a
+ * key — or -1 when there is none or the fence never closes.
+ */
+export function frontmatterKeyIndex(fence: FrontmatterFence, key: string): number {
+  const prefix = `${key}:`;
+  for (let i = 1; i < fence.close; i++) if (fence.lines[i].startsWith(prefix)) return i;
+  return -1;
+}
+
 /**
  * Set `key: value` in the frontmatter, touching nothing else: an existing top-level line has only its value replaced (spacing and a trailing comment
  * stay), an absent key is inserted after `afterKey`'s line or, failing that, just before the closing fence. Text without a closed frontmatter block is
  * returned unchanged. The edited line keeps the file's own line ending.
  */
 export function writeFrontmatterLine(text: string, key: string, value: string, afterKey?: string): string {
-  const lines = text.split('\n');
-  const strip = (l: string): string => l.replace(/\r$/, '');
-  if (strip(lines[0] ?? '').replace(/^﻿/, '') !== '---') return text;
-  const end = lines.findIndex((l, i) => i >= 1 && strip(l) === '---');
-  if (end === -1) return text;
+  const fence = frontmatterFence(text);
+  if (!fence || fence.close === -1) return text;
+  const { lines } = fence;
 
-  const keyAt = (k: string): number => {
-    const prefix = `${k}:`;
-    for (let i = 1; i < end; i++) if (lines[i].startsWith(prefix)) return i;
-    return -1;
-  };
-
-  const at = keyAt(key);
+  const at = frontmatterKeyIndex(fence, key);
   if (at !== -1) {
     const cr = lines[at].endsWith('\r') ? '\r' : '';
     const line = lines[at].slice(0, lines[at].length - cr.length);
@@ -115,8 +137,8 @@ export function writeFrontmatterLine(text: string, key: string, value: string, a
     return lines.join('\n');
   }
 
-  const cr = lines[0].endsWith('\r') ? '\r' : '';
-  const after = afterKey === undefined ? -1 : keyAt(afterKey);
-  lines.splice(after === -1 ? end : after + 1, 0, `${key}: ${value}${cr}`);
+  const cr = fence.nl === '\r\n' ? '\r' : '';
+  const after = afterKey === undefined ? -1 : frontmatterKeyIndex(fence, afterKey);
+  lines.splice(after === -1 ? fence.close : after + 1, 0, `${key}: ${value}${cr}`);
   return lines.join('\n');
 }

@@ -4,8 +4,8 @@
  * owns, and says in plain words what it holds. React only renders these.
  */
 import { describeCron, isManualCron, parseCron } from '../../../shared/cron';
-import { scalarEnd, writeFrontmatterLine } from '../../../shared/frontmatter';
-import { DEFAULT_TIMEOUT_MS, PERMISSION_MODES, TIMEOUT_RE, type JobError } from '../../../shared/routine-file';
+import { frontmatterFence, frontmatterKeyIndex, scalarEnd, writeFrontmatterLine, type FrontmatterFence } from '../../../shared/frontmatter';
+import { DEFAULT_TIMEOUT_MS, PERMISSION_MODES, TIMEOUT_RE, unquote, type JobError } from '../../../shared/routine-file';
 import { readForeach, setRepos, type ForeachMode } from './routines';
 
 export type FormKind = 'shell' | 'claude' | null;
@@ -57,34 +57,23 @@ const strip = (l: string): string => l.replace(/\r$/, '');
 const isComment = (l: string): boolean => /^\s*#/.test(l);
 const isIndented = (l: string): boolean => /^\s+\S/.test(l) && !isComment(l);
 
-interface Doc { lines: string[]; end: number; nl: string }
+type Doc = FrontmatterFence;
 
-/** The file split on `\n` (each line keeps its `\r`), with the closing fence's index; null when the frontmatter can't be found. */
+/** The file's frontmatter fence (see `frontmatterFence`); null when there is none or it never closes. */
 function doc(text: string): Doc | null {
-  const lines = text.split('\n');
-  if (strip(lines[0] ?? '').replace(/^﻿/, '') !== '---') return null;
-  const end = lines.findIndex((l, i) => i >= 1 && strip(l) === '---');
-  if (end === -1) return null;
-  return { lines, end, nl: lines[0].endsWith('\r') ? '\r\n' : '\n' };
-}
-
-/** Index of the first top-level `key:` line inside the frontmatter, or -1. The same prefix test `writeFrontmatterLine` uses, so both find one line. */
-function keyIndex(d: Doc, key: string): number {
-  for (let i = 1; i < d.end; i++) if (d.lines[i].startsWith(`${key}:`)) return i;
-  return -1;
+  const d = frontmatterFence(text);
+  return d && d.close !== -1 ? d : null;
 }
 
 /** True when indented lines follow line `i` before the next key: a nested list or map the form cannot show. */
 function blockFollows(d: Doc, i: number): boolean {
-  for (let j = i + 1; j < d.end; j++) {
+  for (let j = i + 1; j < d.close; j++) {
     const l = strip(d.lines[j]);
     if (isIndented(l)) return true;
     if (l.trim() !== '' && !isComment(l)) return false;
   }
   return false;
 }
-
-const unquote = (v: string): string => v.replace(/^(["'])(.*)\1$/, '$2');
 
 export function frontmatterReadable(text: string): boolean {
   return doc(text) !== null;
@@ -94,7 +83,7 @@ export function frontmatterReadable(text: string): boolean {
 export function fmValue(text: string, key: string): { value: string; line: number } | null {
   const d = doc(text);
   if (!d) return null;
-  const at = keyIndex(d, key);
+  const at = frontmatterKeyIndex(d, key);
   if (at === -1) return null;
   const rest = strip(d.lines[at]).slice(key.length + 1).trimStart();
   return { value: unquote(rest.slice(0, scalarEnd(rest))), line: at + 1 };
@@ -107,18 +96,18 @@ export function fmValue(text: string, key: string): { value: string; line: numbe
 export function setKey(text: string, key: string, value: string | null): string {
   const d = doc(text);
   if (!d) return text;
-  const at = keyIndex(d, key);
+  const at = frontmatterKeyIndex(d, key);
   if (value === null) {
     if (at === -1) return text;
     return d.lines.filter((_, i) => i !== at).join('\n');
   }
   if (at !== -1) return writeFrontmatterLine(text, key, value);
-  let pos = d.end;
+  let pos = d.close;
   for (let k = KEY_ORDER.indexOf(key) - 1; k >= 0; k--) {
-    const anchor = keyIndex(d, KEY_ORDER[k]);
+    const anchor = frontmatterKeyIndex(d, KEY_ORDER[k]);
     if (anchor === -1) continue;
     pos = anchor + 1;
-    while (pos < d.end && (isIndented(strip(d.lines[pos])))) pos++;
+    while (pos < d.close && (isIndented(strip(d.lines[pos])))) pos++;
     break;
   }
   const lines = [...d.lines];
@@ -144,7 +133,7 @@ function scalar(text: string, key: string): Read<string | null> {
 function rawScalar(text: string, key: string): Read<string | null> {
   const d = doc(text);
   if (!d) return UNREADABLE;
-  const at = keyIndex(d, key);
+  const at = frontmatterKeyIndex(d, key);
   if (at === -1) return null;
   const v = strip(d.lines[at]).slice(key.length + 1).trim();
   if (/^[>|][+-]?$/.test(v) || (v === '' && blockFollows(d, at))) return UNREADABLE;
@@ -155,7 +144,7 @@ function rawScalar(text: string, key: string): Read<string | null> {
 function setRawKey(text: string, key: string, value: string | null): string {
   const d = doc(text);
   if (!d) return text;
-  const at = keyIndex(d, key);
+  const at = frontmatterKeyIndex(d, key);
   if (value === null || at === -1) return setKey(text, key, value);
   const lines = [...d.lines];
   lines[at] = `${key}: ${value}${lines[at].endsWith('\r') ? '\r' : ''}`;
@@ -192,7 +181,7 @@ function firstLine(v: string): string {
 
 /** The body after the closing fence, line endings normalised to `\n`. */
 function bodyLines(d: Doc): string[] {
-  return d.lines.slice(d.end + 1).map(strip);
+  return d.lines.slice(d.close + 1).map(strip);
 }
 
 /** The first ```` ```bash ```` fence of the body, as indices into the whole file, with the parser's own fence patterns; close is -1 when it never closes. */
@@ -201,7 +190,7 @@ function fence(d: Doc): { open: number; close: number } | null {
   const open = body.findIndex(l => /^```bash\s*$/.test(l));
   if (open === -1) return null;
   const close = body.findIndex((l, k) => k > open && /^```\s*$/.test(l));
-  return { open: d.end + 1 + open, close: close === -1 ? -1 : d.end + 1 + close };
+  return { open: d.close + 1 + open, close: close === -1 ? -1 : d.close + 1 + close };
 }
 
 export function formKind(text: string): FormKind {
@@ -233,7 +222,7 @@ const repos: FieldDef<Repos> = {
     const cwd = scalar(text, 'cwd');
     if (foreach === UNREADABLE || cwd === UNREADABLE) return UNREADABLE;
     const { mode, picks } = readForeach(text);
-    // readForeach reads anything it doesn't recognise as Single cwd; a foreach line it couldn't place is one the form can't show.
+    // A foreach value that is neither `pinned` nor an inline list (`foreach: everything`) reads as Single cwd: a line the form can't show.
     if (foreach !== null && mode === 'cwd') return UNREADABLE;
     return { mode, picks, cwd: cwd ?? '' };
   },
@@ -278,7 +267,7 @@ const script: FieldDef<Script> = {
     const cr = d.nl === '\r\n' ? '\r' : '';
     const inner = v === '' ? [] : v.split('\n').map(l => l + cr);
     if (f) return [...d.lines.slice(0, f.open + 1), ...inner, ...d.lines.slice(f.close)].join('\n');
-    const head = d.lines.slice(0, d.end + 1).join('\n');
+    const head = d.lines.slice(0, d.close + 1).join('\n');
     const sep = head.endsWith('\r') ? '\n' : d.nl;
     const body = bodyLines(d).join('\n').trimEnd();
     const block = ['```bash', ...v.split('\n'), '```'].join(d.nl) + d.nl;
@@ -300,7 +289,7 @@ const prompt: FieldDef<Prompt> = {
   write(text, v) {
     const d = doc(text);
     if (!d || prompt.read(text) === v) return text;
-    const head = d.lines.slice(0, d.end + 1).join('\n');
+    const head = d.lines.slice(0, d.close + 1).join('\n');
     const sep = head.endsWith('\r') ? '\n' : d.nl;
     const body = v.replace(/\r\n/g, '\n').trimEnd();
     return head + sep + (body === '' ? '' : body.split('\n').join(d.nl) + d.nl);
@@ -567,7 +556,7 @@ export function routeErrors(text: string, errors: JobError[], kind: FormKind): {
     if (err.message === 'cron is required') owner = 'schedule';
     else if (err.message === 'claude job needs a prompt') owner = 'prompt';
     else if (err.message === 'shell job needs a ```bash block') owner = 'script';
-    else if (d && err.line > 1 && err.line - 1 < d.end) {
+    else if (d && err.line > 1 && err.line - 1 < d.close) {
       const key = /^([A-Za-z0-9_-]+):/.exec(d.lines[err.line - 1])?.[1];
       owner = key === undefined ? undefined : OWNER[key];
     }

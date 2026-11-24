@@ -3,6 +3,7 @@ import { useCallback, useState } from 'react';
 import { useAnswerToken } from './useAnswerToken';
 import { postWrite, replyError } from '../lib/postWrite';
 import { READ_ONLY_TEXT, refusalFlags } from '../lib/writeRefusal';
+import type { SessionStopRequest } from '../../../shared/types';
 
 export interface StopControl {
   /**
@@ -38,7 +39,7 @@ export function useStopSession(): StopControl {
     setPending(true);
     setError(null);
     try {
-      const result = await postWrite(`/api/sessions/${encodeURIComponent(sessionId)}/stop`, { token, body: { force } });
+      const result = await postWrite(`/api/sessions/${encodeURIComponent(sessionId)}/stop`, { token, body: { force } satisfies SessionStopRequest });
       if (result.status === 0) {
         setError('Could not reach the server.');
         return false;

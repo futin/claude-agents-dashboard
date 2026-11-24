@@ -17,7 +17,7 @@ import type { Config } from './config.js';
 import { machineName, routineDirs, routineEnv } from './routine-config.js';
 import { createProbe, isOwner, readJobs, wrapperAlive } from './routine-store.js';
 import type { Probe, StoredJob } from './routine-store.js';
-import { LABEL_PREFIX } from '../../shared/routine-file.js';
+import { LABEL_PREFIX, NAME_RE } from '../../shared/routine-file.js';
 
 export { LABEL_PREFIX };
 export const CRON_START = '# >>> claude-dashboard routines >>>';
@@ -233,7 +233,6 @@ function badValue(values: Record<string, string>, cronOnly: Record<string, strin
   return null;
 }
 
-const SAFE_NAME = /^[a-z0-9-]+$/;
 /** Exit codes `launchctl bootout` gives for a label that is not loaded, which is success for a remove. */
 const NOT_LOADED = new Set([0, 3, 113]);
 
@@ -287,7 +286,7 @@ async function plan(config: Config): Promise<PlanContext | ReconcileReport> {
     for (const file of files.sort()) {
       if (!file.startsWith(LABEL_PREFIX) || !file.endsWith('.plist')) continue;
       const name = file.slice(LABEL_PREFIX.length, -'.plist'.length);
-      if (!SAFE_NAME.test(name)) continue;
+      if (!NAME_RE.test(name)) continue;
       try { plists.push({ name, text: fs.readFileSync(path.join(launchAgentsDir(), file), 'utf8') }); } catch { continue; }
     }
     // The prints run together; `installed` is still filled in filename order, which is the order the changes come out in.
@@ -296,7 +295,7 @@ async function plan(config: Config): Promise<PlanContext | ReconcileReport> {
     for (const file of files) {
       if (!file.startsWith(LEGACY_LABEL_PREFIX) || !file.endsWith('.plist')) continue;
       const name = file.slice(LEGACY_LABEL_PREFIX.length, -'.plist'.length);
-      if (SAFE_NAME.test(name)) legacyFound.push(name);
+      if (NAME_RE.test(name)) legacyFound.push(name);
     }
   } else {
     cronDown = (await runner('pgrep', ['-x', 'cron|crond'])).stdout.trim() === '';

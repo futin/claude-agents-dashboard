@@ -1,6 +1,6 @@
 import assert from 'node:assert';
 
-import { parseFrontmatter, writeFrontmatterLine } from '../../shared/frontmatter.js';
+import { frontmatterFence, frontmatterKeyIndex, parseFrontmatter, writeFrontmatterLine } from '../../shared/frontmatter.js';
 
 function test(name: string, fn: () => void): boolean {
   try { fn(); console.log('  ✓ ' + name); return true; }
@@ -122,6 +122,49 @@ export function run(): number {
     assert.strictEqual(writeFrontmatterLine('# md\nenabled: true\n', 'enabled', 'false'), '# md\nenabled: true\n');
     assert.strictEqual(writeFrontmatterLine('---\nenabled: true\n', 'enabled', 'false'), '---\nenabled: true\n');
     assert.strictEqual(writeFrontmatterLine('', 'enabled', 'false'), '');
+  })) p++; else f++;
+
+  if (test('frontmatterFence: LF block → closing index, LF, lines as split', () => {
+    const f = frontmatterFence('---\nrun: shell\n---\nbody');
+    assert.ok(f);
+    assert.strictEqual(f.close, 2);
+    assert.strictEqual(f.nl, '\n');
+    assert.strictEqual(f.lines[1], 'run: shell');
+  })) p++; else f++;
+
+  if (test('frontmatterFence: BOM + CRLF → CRLF, each line keeps its \\r', () => {
+    const f = frontmatterFence('﻿---\r\nrun: shell\r\n---\r\n');
+    assert.ok(f);
+    assert.strictEqual(f.close, 2);
+    assert.strictEqual(f.nl, '\r\n');
+    assert.strictEqual(f.lines[1], 'run: shell\r');
+  })) p++; else f++;
+
+  if (test('frontmatterFence: no opening fence → null', () => {
+    assert.strictEqual(frontmatterFence('run: shell\n'), null);
+    assert.strictEqual(frontmatterFence(''), null);
+    assert.strictEqual(frontmatterFence(' ---\n---\n'), null);
+  })) p++; else f++;
+
+  if (test('frontmatterFence: an unclosed block is close -1; an empty one closes at 1', () => {
+    assert.strictEqual(frontmatterFence('---\nrun: shell\n')?.close, -1);
+    assert.strictEqual(frontmatterFence('---\n---\n')?.close, 1);
+  })) p++; else f++;
+
+  if (test('frontmatterKeyIndex: only a top-level `key:` line inside the fence matches, the first of two', () => {
+    const at = (text: string, key = 'foreach'): number => {
+      const fence = frontmatterFence(text);
+      assert.ok(fence);
+      return frontmatterKeyIndex(fence, key);
+    };
+    assert.strictEqual(at('---\nrun: claude\nforeach: pinned\n---\n'), 2);
+    assert.strictEqual(at('---\nrun: claude\n  foreach: pinned\n---\n'), -1);
+    assert.strictEqual(at('---\nrun: claude\nforeach : pinned\n---\n'), -1);
+    assert.strictEqual(at('---\nrun: claude\nforeachx: 1\n---\n'), -1);
+    assert.strictEqual(at('---\nrun: claude\n---\nforeach: pinned\n'), -1);
+    assert.strictEqual(at('---\nforeach: pinned\n'), -1);
+    assert.strictEqual(at('---\nrun: claude\n', 'run'), -1);
+    assert.strictEqual(at('---\nforeach: [a]\nrun: claude\nforeach: pinned\n---\n'), 1);
   })) p++; else f++;
 
   console.log(`\nfrontmatter: ${p} passed, ${f} failed`);

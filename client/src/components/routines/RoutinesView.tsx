@@ -1,6 +1,8 @@
 import { Suspense, lazy, useCallback, useMemo, useRef, useState } from 'react';
 
-import type { RoutineJobRow, Session } from '../../../../shared/types';
+import type {
+  RoutineJobRow, RoutinePatch, RoutineReconcileRequest, RoutineRevealRequest, RoutineRunRequest, Session,
+} from '../../../../shared/types';
 import { useAnswerToken } from '../../hooks/useAnswerToken';
 import { useNarrow, useShellNarrow } from '../../hooks/useNarrow';
 import { usePins } from '../../hooks/usePins';
@@ -83,12 +85,12 @@ export default function RoutinesView() {
     days,
     phone,
     pins: pins?.pinned ?? [],
-    runNow: (name, only) => { void send('Run now', `run:${name}`, 'POST', `/api/routines/${enc(name)}/run`, only !== undefined ? { only } : {}); },
+    runNow: (name, only) => { void send('Run now', `run:${name}`, 'POST', `/api/routines/${enc(name)}/run`, only !== undefined ? { only } satisfies RoutineRunRequest : {} satisfies RoutineRunRequest); },
     stop: name => { void send('Stop', `run:${name}`, 'POST', `/api/routines/${enc(name)}/stop`); },
-    toggle: (name, enabled) => { void send(enabled ? 'Resume' : 'Pause', `toggle:${name}`, 'PATCH', `/api/routines/${enc(name)}`, { enabled }); },
+    toggle: (name, enabled) => { void send(enabled ? 'Resume' : 'Pause', `toggle:${name}`, 'PATCH', `/api/routines/${enc(name)}`, { enabled } satisfies RoutinePatch); },
     openSession,
     edit: (name, confirmDelete = false) => setDrawer({ mode: 'edit', name, confirmDelete }),
-    reveal: name => { void send('Reveal', `reveal:${name}`, 'POST', '/api/routines/reveal', { name }); },
+    reveal: name => { void send('Reveal', `reveal:${name}`, 'POST', '/api/routines/reveal', { name } satisfies RoutineRevealRequest); },
     copyLabel: name => {
       const label = launchdLabel(name);
       void navigator.clipboard?.writeText(label)
@@ -100,11 +102,11 @@ export default function RoutinesView() {
 
   // Reconcile can boot jobs out, so the first click only plans (no `apply`) and shows the diff; Apply re-plans on the server and applies (spec §Reconcile).
   const previewReconcile = async (): Promise<void> => {
-    const r = await send('Reconcile', 'reconcile', 'POST', '/api/routines/reconcile', {});
+    const r = await send('Reconcile', 'reconcile', 'POST', '/api/routines/reconcile', {} satisfies RoutineReconcileRequest);
     setPlan(r.ok ? reconcilePreview(r.body) : null);
   };
   const applyPlan = async (): Promise<void> => {
-    const r = await send('Reconcile', 'reconcile', 'POST', '/api/routines/reconcile', { apply: true });
+    const r = await send('Reconcile', 'reconcile', 'POST', '/api/routines/reconcile', { apply: true } satisfies RoutineReconcileRequest);
     if (r.ok) setPlan(null);
   };
 

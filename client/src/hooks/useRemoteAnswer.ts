@@ -4,7 +4,7 @@ import { useAnswerToken } from './useAnswerToken';
 import { createPollSeq, pollFetch } from '../lib/pollSeq';
 import { postWrite } from '../lib/postWrite';
 import { refusalFlags } from '../lib/writeRefusal';
-import type { HealthResponse, RemoteAnswerState } from '../../../shared/types';
+import type { HealthResponse, RemoteAnswerRequest, RemoteAnswerState } from '../../../shared/types';
 
 /** Slow poll: the switch only changes when someone flips it. */
 const POLL_MS = 15_000;
@@ -60,7 +60,7 @@ export function useRemoteAnswer(): RemoteAnswerControl {
     setBusy(true);
     try {
       // A network failure leaves the pill as it was; the poll will re-sync.
-      const result = await postWrite('/api/remote-answer', { token, body: { enabled: !state.enabled } });
+      const result = await postWrite('/api/remote-answer', { token, body: { enabled: !state.enabled } satisfies RemoteAnswerRequest });
       if (result.refusal) {
         const flags = refusalFlags(result.refusal);
         setReadOnly(flags.readOnly);
