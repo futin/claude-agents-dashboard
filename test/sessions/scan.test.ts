@@ -353,17 +353,21 @@ export function run(): number {
       { dirName: '-a-launched', id: 'stub', records: [{ type: 'queue-operation' }, metaRec('/a/launched', 'main')] }
     ]);
     if (test('launchRowIds returns an id whose transcript has a user and an assistant message', () => {
-      assert.deepStrictEqual(scan.launchRowIds(['talked'], { root }), ['talked']);
+      assert.deepStrictEqual(scan.launchRowIds(['talked'], { root, refs: scan.listTranscripts(root) }), ['talked']);
     })) p++; else f++;
     if (test('launchRowIds leaves out an id whose transcript has no conversational message (the scanSkips gate)', () => {
-      assert.deepStrictEqual(scan.launchRowIds(['stub', 'talked'], { root }), ['talked']);
+      assert.deepStrictEqual(scan.launchRowIds(['stub', 'talked'], { root, refs: scan.listTranscripts(root) }), ['talked']);
     })) p++; else f++;
     if (test('launchRowIds leaves out an id with no transcript on disk', () => {
-      assert.deepStrictEqual(scan.launchRowIds(['nowhere'], { root }), []);
+      assert.deepStrictEqual(scan.launchRowIds(['nowhere'], { root, refs: scan.listTranscripts(root) }), []);
     })) p++; else f++;
     if (test('launchRowIds of no ids is [] and reads nothing', () => {
       const refs = scan.listTranscripts(root);
       assert.deepStrictEqual(scan.launchRowIds([], { root: path.join(root, 'no-such-dir'), refs }), []);
+    })) p++; else f++;
+    if (test('launchRowIds never walks: an empty listing adopts nothing though the transcript is on disk', () => {
+      assert.ok(fs.existsSync(path.join(root, '-a-launched', 'talked.jsonl')));
+      assert.deepStrictEqual(scan.launchRowIds(['talked'], { root, refs: [] }), []);
     })) p++; else f++;
     if (test('launchRowIds resolves from a given listing without walking the root', () => {
       const refs = scan.listTranscripts(root);
@@ -1458,12 +1462,16 @@ export function run(): number {
   const lookupRoot = () => makeRoot(Array.from({ length: 20 }, (_, i) => ({
     dirName: `-repo-${i % 3}`, id: `sess-${i}`, mtimeMs: 1_700_000_000_000 + i * 1000, records: [usageRec(i + 1)]
   })));
-  /** The `fs.statSync` calls `fn` makes on paths under `root`; scan.ts calls it through this same default export. */
+  /**
+   * The `fs.statSync` calls `fn` makes on transcript files under `root`; scan.ts calls it through this same default export. Directory stats are
+   * `dir-cache.ts`'s one-per-dir freshness check (#541), not transcript stats, so they are not counted.
+   */
   const countStats = <T>(root: string, fn: () => T): { stats: number; result: T } => {
     const real = fs.statSync;
     let stats = 0;
     (fs as any).statSync = (...args: Parameters<typeof fs.statSync>) => {
-      if (String(args[0]).startsWith(root + path.sep)) stats++;
+      const p = String(args[0]);
+      if (p.startsWith(root + path.sep) && p.endsWith('.jsonl')) stats++;
       return real(...args);
     };
     try { return { result: fn(), stats }; }
@@ -1696,6 +1704,132 @@ export function run(): number {
   if (test('subagent: a dead process still reads idle over a fresh unfinished subagent', () => {
     const { root } = subRoot('subdead', '/a/subdead', syncParent(), subBusy, 60 * 1000);
     assert.strictEqual(subScan(root, { skipProcScan: false, liveCwds: new Set(['/a/other']) }), 'idle');
+  })) p++; else f++;
+
+
+  // #541: the walks read each directory through dir-cache.ts and still stat every file.
+  /** Every dir under (and including) `dir` gets its mtime moved 10 s into the past, so its listing is cacheable. */
+  const ageTree = (dir: string): void => {
+    for (const e of fs.readdirSync(dir, { withFileTypes: true })) if (e.isDirectory()) ageTree(path.join(dir, e.name));
+    const t = (Date.now() - 10_000) / 1000;
+    fs.utimesSync(dir, t, t);
+  };
+  /** The real `fs.readdirSync` calls `fn` makes on `root` or below it — every reader goes through this same default export. */
+  const countReaddirs = <T>(root: string, fn: () => T): { readdirs: number; result: T } => {
+    const real = fs.readdirSync;
+    let readdirs = 0;
+    (fs as any).readdirSync = (...args: Parameters<typeof fs.readdirSync>) => {
+      const p = String(args[0]);
+      if (p === root || p.startsWith(root + path.sep)) readdirs++;
+      return (real as any)(...args);
+    };
+    try { return { result: fn(), readdirs }; }
+    finally { (fs as any).readdirSync = real; }
+  };
+
+  if (test('dir cache: an append to an existing transcript shows on the next listTranscripts with no readdir', () => {
+    const root = makeRoot([
+      { dirName: '-a-one', id: 'one', records: [metaRec('/a/one', 'main')] },
+      { dirName: '-a-two', id: 'two', records: [metaRec('/a/two', 'main')] }
+    ]);
+    ageTree(root);
+    assert.strictEqual(countReaddirs(root, () => scan.listTranscripts(root)).readdirs, 3, 'cold: the root and both project dirs');
+    const file = path.join(root, '-a-one', 'one.jsonl');
+    fs.appendFileSync(file, '\n' + JSON.stringify(usageRec(7)));
+    const st = fs.statSync(file);
+    const { readdirs, result } = countReaddirs(root, () => scan.listTranscripts(root));
+    const ref = result.find(t => t.id === 'one')!;
+    assert.strictEqual(ref.size, st.size);
+    assert.strictEqual(ref.mtimeMs, st.mtimeMs);
+    assert.strictEqual(readdirs, 0, 'an append must not cost a readdir');
+  })) p++; else f++;
+
+  if (test('dir cache: a transcript created in a warm project dir is listed on the next listTranscripts', () => {
+    const root = makeRoot([{ dirName: '-a-one', id: 'one', records: [metaRec('/a/one', 'main')] }]);
+    ageTree(root);
+    scan.listTranscripts(root);
+    fs.writeFileSync(path.join(root, '-a-one', 'fresh.jsonl'), JSON.stringify(metaRec('/a/one', 'main')));
+    assert.deepStrictEqual(scan.listTranscripts(root).map(t => t.id).sort(), ['fresh', 'one']);
+  })) p++; else f++;
+
+  /** Two project dirs; `s1` has two subagent files, `s2` is a session dir with no `subagents/`. */
+  const usageRoot = (): string => {
+    const root = makeRoot([
+      { dirName: '-a-p1', id: 's1', records: [usageRec(1)] },
+      { dirName: '-a-p2', id: 's2', records: [usageRec(2)] }
+    ]);
+    const sub = path.join(root, '-a-p1', 's1', 'subagents');
+    fs.mkdirSync(sub, { recursive: true });
+    fs.writeFileSync(path.join(sub, 'agent-a.jsonl'), JSON.stringify(usageRec(3)));
+    fs.writeFileSync(path.join(sub, 'agent-b.jsonl'), JSON.stringify(usageRec(4)));
+    fs.mkdirSync(path.join(root, '-a-p2', 's2'));
+    return root;
+  };
+  /** The pre-#541 enumeration, rebuilt with plain readdirs: what listUsageTranscripts must still return. */
+  const naiveUsage = (root: string) => {
+    const out: { file: string; id: string; parentId: string | null }[] = [];
+    for (const d of fs.readdirSync(root)) {
+      for (const e of fs.readdirSync(path.join(root, d), { withFileTypes: true })) {
+        if (e.isFile() && e.name.endsWith('.jsonl')) out.push({ file: path.join(root, d, e.name), id: e.name.slice(0, -6), parentId: null });
+      }
+    }
+    for (const d of fs.readdirSync(root)) {
+      for (const e of fs.readdirSync(path.join(root, d), { withFileTypes: true })) {
+        if (!e.isDirectory()) continue;
+        const sub = path.join(root, d, e.name, 'subagents');
+        if (!fs.existsSync(sub)) continue;
+        for (const n of fs.readdirSync(sub)) if (n.endsWith('.jsonl')) out.push({ file: path.join(sub, n), id: n.slice(0, -6), parentId: e.name });
+      }
+    }
+    return out;
+  };
+  const key = (r: { file: string; id: string; parentId: string | null }) => `${r.file}|${r.id}|${r.parentId}`;
+  const usageKeys = (root: string) => scan.listUsageTranscripts(root).map(key).sort();
+
+  if (test('dir cache: listUsageTranscripts returns the same refs as the plain enumeration, and a warm second call reads no dir', () => {
+    const root = usageRoot();
+    ageTree(root);
+    const want = naiveUsage(root).map(key).sort();
+    assert.strictEqual(want.length, 4);
+    assert.deepStrictEqual(usageKeys(root), want);
+    const warm = countReaddirs(root, () => usageKeys(root));
+    assert.deepStrictEqual(warm.result, want);
+    assert.strictEqual(warm.readdirs, 0, 'a warm tree costs 0 readdirs');
+  })) p++; else f++;
+
+  if (test('dir cache: a subagent file written into a warm subagents/ dir appears with its parent id', () => {
+    const root = usageRoot();
+    ageTree(root);
+    scan.listUsageTranscripts(root);
+    fs.writeFileSync(path.join(root, '-a-p1', 's1', 'subagents', 'agent-x.jsonl'), JSON.stringify(usageRec(5)));
+    const x = scan.listUsageTranscripts(root).find(t => t.id === 'agent-x');
+    assert.ok(x, 'agent-x listed');
+    assert.strictEqual(x!.parentId, 's1');
+  })) p++; else f++;
+
+  if (test('subagentRunning reuses an unchanged subagent file\'s verdict and re-reads it once it changes', () => {
+    const { root, parentFile } = subRoot('subcache', '/a/subcache', bgParent(), subBusy, 60 * 1000);
+    const reads = () => scan.subagentCheckStats().reads;
+    const r0 = reads();
+    assert.strictEqual(scan.subagentRunning(parentFile, 'subcache', subNow), true);
+    assert.strictEqual(reads(), r0 + 1);
+    assert.strictEqual(scan.subagentRunning(parentFile, 'subcache', subNow), true);
+    assert.strictEqual(reads(), r0 + 1, 'unchanged file served from the verdict cache');
+    fs.appendFileSync(path.join(root, '-a-subcache', 'subcache', 'subagents', 'agent-a0b1c2d3.jsonl'),
+      '\n' + JSON.stringify({ ...assistantDone(), isSidechain: true }));
+    assert.strictEqual(scan.subagentRunning(parentFile, 'subcache', subNow), false);
+    assert.strictEqual(reads(), r0 + 2);
+  })) p++; else f++;
+
+  if (test('subagentRunning skips a subagent file past SUBAGENT_STALL_MS without reading it, and drops its held verdict', () => {
+    const { root, parentFile } = subRoot('substale', '/a/substale', bgParent(), subBusy, 60 * 1000);
+    assert.strictEqual(scan.subagentRunning(parentFile, 'substale', subNow), true);
+    const { reads, entries } = scan.subagentCheckStats();
+    const t = (subNow - scan.SUBAGENT_STALL_MS - 60 * 1000) / 1000;
+    fs.utimesSync(path.join(root, '-a-substale', 'substale', 'subagents', 'agent-a0b1c2d3.jsonl'), t, t);
+    assert.strictEqual(scan.subagentRunning(parentFile, 'substale', subNow), false);
+    assert.strictEqual(scan.subagentCheckStats().reads, reads);
+    assert.strictEqual(scan.subagentCheckStats().entries, entries - 1);
   })) p++; else f++;
 
   // #368: the usage-limit record Claude Code appends to the session and to each of its subagents.

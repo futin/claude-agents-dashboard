@@ -276,6 +276,9 @@ Invariants:
 
 - **Coverage never expires** — transcripts are append-only, so "already searched" stays
   true forever. A file that *shrank* was rotated or truncated and drops its entry.
+- **An append that outruns the tail window searches only the gap** (#541): `[size − RECORD_SLACK, tailStart)` against the remembered size, stitched onto the
+  covered range — a hit there is newer than anything remembered, a miss keeps the remembered answer. The `RECORD_SLACK` overlap re-reaches a record that was
+  still being written at the old size, whose partial line was never parsed. Only a file with no entry, or one that shrank, is scanned from byte 0.
 - **A tail hit wins outright** over anything remembered: the tail is the newest bytes, so
   a rename takes effect on the next poll.
 - **Chunks overlap by a whole record**, not by the marker's length. The first boundary is
@@ -543,13 +546,24 @@ directory mtime loses rows: an append does not move it, and in 87 of 92 project 
 knowing a file is still old takes a stat, because any old file can be appended to, so skipping needs a cache with a re-check interval or file watchers: about 3 ms saved
 of a roughly 70 ms poll (431 of 527 transcripts older than 48 h, 2026-11-03, WSL2), in exchange for a resumed old session appearing up to one interval late.
 
+**The readdirs are cached by directory mtime** (`server/lib/dir-cache.ts`, #541). Re-reading directories that had not changed, not the stats, was most of
+the walk: on 2026-11-24 (macOS, 366 project dirs, 3,477 top-level transcripts) `listTranscripts` took 57 ms warm, 32 ms of it the `readdirSync` of every project
+dir and 8.7 ms the stats. A directory's mtime does move when an entry is added, removed or renamed, so `cachedEntries(dir)` stats the dir and serves the held
+entry list while its `mtimeMs` and `ino` are unchanged — and only when that list was read at least `RACY_MS` (2 s) after the mtime, git's "racily clean" rule,
+so a coarse-mtime filesystem (1 s on HFS+ and some WSL or network mounts) cannot hide an entry created in the same tick as the read. Re-reading a dir drops
+the held lists of child dirs it no longer names. Every file is still stat-ed every walk, so an append to an old file shows on the next poll exactly as before.
+After, on the same machine (2026-11-24, macOS, 367 project dirs, 3,480 top-level transcripts): `listTranscripts` 52 → 16 ms warm median, and
+`findTranscript`'s no-refs name walk 35 → 1.2 ms. Two smaller per-poll costs went with it: `subagentRunning` keeps each subagent file's verdict against
+its `mtimeMs` and `size` and re-parses only a file that changed (entries leave once the file passes `SUBAGENT_STALL_MS`), and launch adoption's
+`launchRowIds` takes the poll's own listing (`sharedListing`, required by its type) instead of walking the tree per launching id.
+
 **Every other request path reads the poll's listing** (`server/lib/transcript-listing.ts`, #472). `scanSnapshot` walks fresh and hands its listing to
 `publishListing`; the module holds the newest listing of one root and the time it was taken. `sharedListing(root)` serves it while it is at most
 `LISTING_MAX_AGE_MS` (3 s, the default poll interval) old, otherwise walks once and holds that. Its readers: the `api.ts` id lookups through
 `resolveTranscript` (session detail, spend, chat, `sessionExists`, PR, the routine-run resolve, the row endpoint), and every pin and project list —
 `pinOptions` carries the listing, so a pin toggle's membership check, `pins.json` snapshot and reply share one walk, and `git-stats.ts`,
 `git-fetch.ts`, `codegraph-store.ts` and `routine-store.ts` pass it to `listPinRows`. One pin toggle went from 43–55 ms warm to 7.5–14 ms
-(2026-11-15, WSL2, 656 transcripts). `listTranscripts` stays the raw walk; `test/guards/transcript-walks.test.ts` pins the few files that may walk the whole tree — a
+(2026-11-15, WSL2, 656 transcripts). `listTranscripts` stays the fresh walk (every file stat-ed, readdirs gated by `dir-cache.ts`); `test/guards/transcript-walks.test.ts` pins the few files that may walk the whole tree — a
 `listTranscripts(` or `listUsageTranscripts(` call, or a `findTranscript(` given no refs.
 
 `resolveTranscript` takes the held refs for the id, stats each again so size and mtime are current, drops the gone ones and reduces with

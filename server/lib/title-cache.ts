@@ -9,7 +9,7 @@
  * search and its remembered byte range live in `record-cache.ts`.
  */
 
-import { createRecordCache } from './record-cache.js';
+import { createRecordCache, type RecordCache } from './record-cache.js';
 
 export { CHUNK_BYTES, RECORD_SLACK } from './record-cache.js';
 
@@ -50,7 +50,7 @@ export function resetTitleCache(): void {
   titles.reset();
 }
 
-/** Test seam: how many times we went to disk below the tail window. */
-export function titleCacheStats(): { entries: number; fullScans: number } {
+/** Test seam: how many times, and how many bytes, we went to disk below the tail window (`record-cache.ts`'s `stats`). */
+export function titleCacheStats(): ReturnType<RecordCache<unknown>['stats']> {
   return titles.stats();
 }

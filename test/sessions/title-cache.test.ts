@@ -188,6 +188,72 @@ export function run(): number {
     assert.strictEqual(tr.readTranscript(file)!.sessionName, 'Chunk straddler');
   })) p++; else f++;
 
+  // #541: an append that outruns the tail window searches only the gap it opened, never the whole file again.
+  /** Resolve once and return the title plus how many bytes that one resolve read below the tail window. */
+  const resolveCounting = (file: string) => {
+    const before = tc.titleCacheStats().bytesScanned;
+    const title = tr.readTranscript(file)!.sessionName;
+    return { title, bytes: tc.titleCacheStats().bytesScanned - before };
+  };
+
+  if (test('gap scan: an append past the tail window reads only the gap, not the file', () => {
+    tc.resetTitleCache();
+    const file = writeFixture(TITLE('Old name') + padding(DEEP));
+    assert.strictEqual(tr.readTranscript(file)!.sessionName, 'Old name');
+    assert.strictEqual(tc.titleCacheStats().fullScans, 1);
+    const appended = padding(DEEP);
+    fs.appendFileSync(file, appended);
+    const { title, bytes } = resolveCounting(file);
+    assert.strictEqual(title, 'Old name');
+    const st = tc.titleCacheStats();
+    assert.strictEqual(st.fullScans, 1);
+    assert.strictEqual(st.gapScans, 1);
+    const gap = Buffer.byteLength(appended) - tr.DEFAULT_TAIL_BYTES;
+    assert.ok(bytes <= gap + 4 * tc.RECORD_SLACK, `read ${bytes} bytes for a ${gap}-byte gap`);
+    assert.ok(bytes < fs.statSync(file).size / 4, 'well under the file size');
+  })) p++; else f++;
+
+  if (test('gap scan: a newer title in the gap wins over the remembered one', () => {
+    tc.resetTitleCache();
+    const file = writeFixture(TITLE('Old name') + padding(DEEP));
+    assert.strictEqual(tr.readTranscript(file)!.sessionName, 'Old name');
+    fs.appendFileSync(file, TITLE('New name') + padding(DEEP));
+    assert.strictEqual(tr.readTranscript(file)!.sessionName, 'New name');
+    assert.strictEqual(tc.titleCacheStats().fullScans, 1);
+  })) p++; else f++;
+
+  if (test('gap scan: a remembered miss stays a miss over a title-less gap without a full re-scan', () => {
+    tc.resetTitleCache();
+    const file = writeFixture(padding(DEEP));
+    assert.strictEqual(tr.readTranscript(file)!.sessionName, null);
+    assert.strictEqual(tc.titleCacheStats().fullScans, 1);
+    fs.appendFileSync(file, padding(DEEP));
+    assert.strictEqual(tr.readTranscript(file)!.sessionName, null);
+    assert.strictEqual(tc.titleCacheStats().fullScans, 1);
+    assert.strictEqual(tc.titleCacheStats().gapScans, 1);
+  })) p++; else f++;
+
+  if (test('gap scan: a title record half-written at the old size is read once it is finished', () => {
+    tc.resetTitleCache();
+    const whole = TITLE('Finished later');
+    const cut = whole.indexOf(tc.TITLE_MARKER) + tc.TITLE_MARKER.length + 4;   // the written half carries the marker
+    const file = writeFixture(padding(DEEP) + whole.slice(0, cut));
+    assert.strictEqual(tr.readTranscript(file)!.sessionName, null);
+    fs.appendFileSync(file, whole.slice(cut) + padding(DEEP));
+    assert.strictEqual(tr.readTranscript(file)!.sessionName, 'Finished later');
+    assert.strictEqual(tc.titleCacheStats().fullScans, 1);
+  })) p++; else f++;
+
+  if (test('a file that shrank drops its entry and is scanned from byte 0 again', () => {
+    tc.resetTitleCache();
+    const file = writeFixture(TITLE('Before') + padding(DEEP) + padding(DEEP));
+    assert.strictEqual(tr.readTranscript(file)!.sessionName, 'Before');
+    assert.strictEqual(tc.titleCacheStats().fullScans, 1);
+    fs.writeFileSync(file, TITLE('After') + padding(DEEP));
+    assert.strictEqual(tr.readTranscript(file)!.sessionName, 'After');
+    assert.strictEqual(tc.titleCacheStats().fullScans, 2);
+  })) p++; else f++;
+
   console.log('\n  ' + p + ' passed, ' + f + ' failed');
   return f;
 }

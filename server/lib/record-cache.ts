@@ -19,6 +19,10 @@
  * "already searched" never expires; a file that shrank was rotated or truncated
  * and drops its entry.
  *
+ * When appends outrun the tail window and open a gap, only the gap is searched — from `RECORD_SLACK` below the remembered size up to the window —
+ * and the result is stitched onto the covered range. Safe because the file is append-only (nothing below the old size changed) and the overlap
+ * re-reaches a record that was still being written at the old size, whose partial line was never parsed then.
+ *
  * Each lookup is one `createRecordCache(marker, extract)` instance: `marker` is
  * a cheap ASCII substring every wanted record contains, `extract` turns a
  * parsed record into the answer or null. The marker also matches ordinary
@@ -56,13 +60,17 @@ export interface RecordCache<T> {
   resolve(filePath: string, tailHit: T | null, tailStart: number, size: number): T | null;
   /** Test seam: drop everything remembered. */
   reset(): void;
-  /** Test seam: entries held, and how many times we went to disk below the tail window. */
-  stats(): { entries: number; fullScans: number };
+  /**
+   * Test seam: entries held; scans below the tail window from byte 0 (`fullScans`) and over an append gap only (`gapScans`); bytes those scans read.
+   */
+  stats(): { entries: number; fullScans: number; gapScans: number; bytesScanned: number };
 }
 
 export function createRecordCache<T>(marker: string, extract: (rec: any) => T | null): RecordCache<T> {
   const cache = new Map<string, Entry<T>>();
   let fullScans = 0;
+  let gapScans = 0;
+  let bytesScanned = 0;
 
   /**
    * Recover the whole record containing a marker hit and extract from it.
@@ -78,7 +86,7 @@ export function createRecordCache<T>(marker: string, extract: (rec: any) => T | 
     const len = end - start;
     if (len <= 0) return null;
     const buf = Buffer.alloc(len);
-    try { fs.readSync(fd, buf, 0, len, start); } catch { return null; }
+    try { bytesScanned += fs.readSync(fd, buf, 0, len, start); } catch { return null; }
 
     const rel = markerOffset - start;
     const from = buf.lastIndexOf(0x0a, rel);           // -1 ⇒ line starts at `start`
@@ -89,8 +97,8 @@ export function createRecordCache<T>(marker: string, extract: (rec: any) => T | 
   }
 
   /**
-   * Newest match in [0, upTo), walking backwards a chunk at a time and
-   * stopping at the first hit.
+   * Newest match in [from, upTo), walking backwards a chunk at a time and
+   * stopping at the first hit. `from` is 0 for a full scan, the gap's start for a gap scan.
    *
    * Chunks overlap upward by a whole `RECORD_SLACK`, not merely by the marker
    * length: a record can straddle any boundary we pick, and the first boundary
@@ -102,14 +110,14 @@ export function createRecordCache<T>(marker: string, extract: (rec: any) => T | 
    * char per byte, so string indices stay byte-exact regardless of what UTF-8
    * sits around them. Decoding as utf8 here would desync every offset.
    */
-  function scanBack(fd: number, size: number, upTo: number): T | null {
+  function scanBack(fd: number, size: number, upTo: number, from = 0): T | null {
     let end = Math.min(upTo, size);
-    while (end > 0) {
-      const start = Math.max(0, end - CHUNK_BYTES);
+    while (end > from) {
+      const start = Math.max(from, end - CHUNK_BYTES);
       const readEnd = Math.min(size, end + RECORD_SLACK);
       const len = readEnd - start;
       const buf = Buffer.alloc(len);
-      try { fs.readSync(fd, buf, 0, len, start); } catch { return null; }
+      try { bytesScanned += fs.readSync(fd, buf, 0, len, start); } catch { return null; }
       const text = buf.toString('latin1');
 
       let idx = text.lastIndexOf(marker);
@@ -155,9 +163,31 @@ export function createRecordCache<T>(marker: string, extract: (rec: any) => T | 
       return entry.value;
     }
 
-    // Either nothing remembered, or appends opened a gap wider than the tail
-    // window. Re-establish coverage from byte 0 — simpler than stitching ranges,
-    // and it happens at most once per file in the common case.
+    // Appends opened a gap wider than the tail window. Search only the gap —
+    // [entry.size - RECORD_SLACK, tailStart) — and stitch it onto the covered
+    // range: a hit there is newer than anything remembered, a miss leaves the
+    // remembered answer the newest. The slack re-reaches a record whose marker
+    // sat just below the old size while its line was still being written.
+    if (entry) {
+      let fd: number | undefined;
+      let found: T | null = null;
+      try {
+        fd = fs.openSync(filePath, 'r');
+        gapScans++;
+        found = scanBack(fd, size, tailStart, Math.max(0, entry.size - RECORD_SLACK));
+      } catch {
+        return entry.value;   // unreadable now — keep what we had
+      } finally {
+        if (fd !== undefined) {
+          try { fs.closeSync(fd); } catch { /* ignore */ }
+        }
+      }
+      const value = found !== null ? found : entry.value;
+      cache.set(filePath, { value, scannedFrom: entry.scannedFrom, size });
+      return value;
+    }
+
+    // Nothing remembered: establish coverage from byte 0, once per file.
     if (tailStart <= 0) {
       // The tail already was the whole file; the miss is authoritative.
       cache.set(filePath, { value: null, scannedFrom: 0, size });
@@ -171,7 +201,7 @@ export function createRecordCache<T>(marker: string, extract: (rec: any) => T | 
       fullScans++;
       found = scanBack(fd, size, tailStart);
     } catch {
-      return entry ? entry.value : null;   // unreadable now — keep what we had
+      return null;
     } finally {
       if (fd !== undefined) {
         try { fs.closeSync(fd); } catch { /* ignore */ }
@@ -185,7 +215,7 @@ export function createRecordCache<T>(marker: string, extract: (rec: any) => T | 
   return {
     findInLines,
     resolve,
-    reset() { cache.clear(); fullScans = 0; },
-    stats() { return { entries: cache.size, fullScans }; }
+    reset() { cache.clear(); fullScans = 0; gapScans = 0; bytesScanned = 0; },
+    stats() { return { entries: cache.size, fullScans, gapScans, bytesScanned }; }
   };
 }

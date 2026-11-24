@@ -13,7 +13,7 @@
  * remembered the same way as the custom title (see `record-cache.ts`).
  */
 
-import { createRecordCache } from './record-cache.js';
+import { createRecordCache, type RecordCache } from './record-cache.js';
 
 export const MODEL_MARKER = '"type":"model"';
 
@@ -47,7 +47,7 @@ export function resetModelIdentityCache(): void {
   identities.reset();
 }
 
-/** Test seam: how many times we went to disk below the tail window. */
-export function modelIdentityCacheStats(): { entries: number; fullScans: number } {
+/** Test seam: how many times, and how many bytes, we went to disk below the tail window (`record-cache.ts`'s `stats`). */
+export function modelIdentityCacheStats(): ReturnType<RecordCache<unknown>['stats']> {
   return identities.stats();
 }

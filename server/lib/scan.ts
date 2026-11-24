@@ -10,6 +10,7 @@ import { execFile, execFileSync } from 'node:child_process';
 
 import { launchCwd, readTranscript } from './transcript.js';
 import { readAgentsCached } from './agents-cache.js';
+import { cachedEntries } from './dir-cache.js';
 import { SUBAGENT_DIR } from './subagent-usage.js';
 import { refreshCwd } from './token-refresh.js';
 import { DASHBOARD_ENTRYPOINT, HEADLESS_ENTRYPOINT } from './entrypoint.js';
@@ -175,25 +176,15 @@ export function restatRef(ref: TranscriptRef): TranscriptRef | null {
   return statRef(ref.file, ref.dirName);
 }
 
-/** Directory entry names ending `.jsonl`, or [] when the dir is unreadable. */
+/** Directory entry names ending `.jsonl`, or [] when the dir is unreadable. Read through `dir-cache.ts`, so an unchanged dir costs one stat. */
 function jsonlNames(dir: string): string[] {
-  try {
-    return fs.readdirSync(dir).filter(name => name.endsWith('.jsonl'));
-  } catch {
-    return [];
-  }
+  return cachedEntries(dir).filter(e => e.name.endsWith('.jsonl')).map(e => e.name);
 }
 
 /** Visit every `.jsonl` name in every project dir, statting nothing. An unreadable root visits nothing and an unreadable dir is skipped. */
 function forEachJsonlName(root: string, visit: (name: string, dir: string, dirName: string) => void): void {
-  let dirs: fs.Dirent[];
-  try {
-    dirs = fs.readdirSync(root, { withFileTypes: true });
-  } catch {
-    return;
-  }
-  for (const d of dirs) {
-    if (!d.isDirectory()) continue;
+  for (const d of cachedEntries(root)) {
+    if (!d.isDir) continue;
     const dir = path.join(root, d.name);
     for (const name of jsonlNames(dir)) visit(name, dir, d.name);
   }
@@ -201,7 +192,8 @@ function forEachJsonlName(root: string, visit: (name: string, dir: string, dirNa
 
 /**
  * List every `.jsonl` transcript with its mtime, across all project dirs.
- * Directory mtime cannot narrow this: an append does not move it, so a session still writing to an old file would lose its row.
+ * Directory mtime cannot narrow the **stats**: an append does not move it, so a session still writing to an old file would lose its row — every file is
+ * stat-ed on every walk. It does gate the **readdir**: an entry added, removed or renamed moves it, so each dir is re-read only then (`dir-cache.ts`).
  */
 export function listTranscripts(root: string): TranscriptRef[] {
   const results: TranscriptRef[] = [];
@@ -237,31 +229,27 @@ export interface UsageTranscriptRef extends TranscriptRef {
  * the CLI writes; nothing deeper is walked.
  */
 export function listUsageTranscripts(root: string): UsageTranscriptRef[] {
-  const results: UsageTranscriptRef[] = listTranscripts(root).map(ref => ({ ...ref, parentId: null }));
-  let dirs: fs.Dirent[];
-  try {
-    dirs = fs.readdirSync(root, { withFileTypes: true });
-  } catch {
-    return results;
-  }
-  for (const d of dirs) {
-    if (!d.isDirectory()) continue;
-    let sessions: fs.Dirent[];
-    try {
-      sessions = fs.readdirSync(path.join(root, d.name), { withFileTypes: true });
-    } catch {
-      continue;
-    }
-    for (const s of sessions) {
-      if (!s.isDirectory()) continue;
-      const agentDir = path.join(root, d.name, s.name, SUBAGENT_DIR);
+  const top: UsageTranscriptRef[] = [];
+  const nested: UsageTranscriptRef[] = [];
+  // One pass per project dir: its cached entries give both the top-level `.jsonl` names and the session dirs.
+  for (const d of cachedEntries(root)) {
+    if (!d.isDir) continue;
+    const dir = path.join(root, d.name);
+    for (const e of cachedEntries(dir)) {
+      if (!e.isDir) {
+        if (!e.name.endsWith('.jsonl')) continue;
+        const ref = statRef(path.join(dir, e.name), d.name);
+        if (ref) top.push({ ...ref, parentId: null });
+        continue;
+      }
+      const agentDir = path.join(dir, e.name, SUBAGENT_DIR);
       for (const name of jsonlNames(agentDir)) {
         const ref = statRef(path.join(agentDir, name), d.name);
-        if (ref) results.push({ ...ref, parentId: s.name });
+        if (ref) nested.push({ ...ref, parentId: e.name });
       }
     }
   }
-  return results;
+  return top.concat(nested);
 }
 
 /**
@@ -350,6 +338,24 @@ export function lastMessageMs(root: string, sessionId: string, refs?: readonly T
 export const SUBAGENT_STALL_MS = 15 * 60 * 1000;
 
 /**
+ * Each subagent file's last verdict, keyed by path: reused while its `mtimeMs` and `size` hold, so an unchanged file is not re-parsed every poll.
+ * Entries go when their file passes {@link SUBAGENT_STALL_MS}, which bounds the map to files written in the last 15 minutes.
+ */
+const subagentVerdicts = new Map<string, { mtimeMs: number; size: number; unfinished: boolean }>();
+let subagentReads = 0;
+
+/** Test seam: how many subagent files {@link subagentRunning} actually parsed since the last reset. */
+export function subagentCheckStats(): { reads: number; entries: number } {
+  return { reads: subagentReads, entries: subagentVerdicts.size };
+}
+
+/** Test seam: forget every held subagent verdict and zero the counter. */
+export function resetSubagentCheckCache(): void {
+  subagentVerdicts.clear();
+  subagentReads = 0;
+}
+
+/**
  * Is a subagent of this session still running? The status ladder's evidence for
  * a parent parked on a dispatched agent (bug-25): the parked parent writes
  * nothing while it waits, so its own transcript reads finished (background
@@ -357,24 +363,31 @@ export const SUBAGENT_STALL_MS = 15 * 60 * 1000;
  *
  * True only when all three hold, cheapest first:
  *  1. an `agent-*.jsonl` under `<dir>/<sessionId>/subagents/` was written within
- *     {@link SUBAGENT_STALL_MS} — no directory is the common case, one `readdir`;
- *  2. that file's newest message is mid-turn (a finished subagent ends `end_turn` or on an API-error record);
+ *     {@link SUBAGENT_STALL_MS} — no directory is the common case, one `stat` (the listing goes through `dir-cache.ts`);
+ *  2. that file's newest message is mid-turn (a finished subagent ends `end_turn` or on an API-error record) — parsed only when its size or mtime moved
+ *     since the last call;
  *  3. the parent still has a launch `running` per `readAgentsCached` — the veto
  *     for an interrupted run, where Esc gives the parent a `tool_result` but
  *     leaves the subagent file fresh and mid-turn.
  */
 export function subagentRunning(parentFile: string, sessionId: string, nowMs: number): boolean {
-  const dir = path.join(path.dirname(parentFile), sessionId, 'subagents');
-  let names: string[];
-  try { names = fs.readdirSync(dir); } catch { return false; }
-  const unfinished = names.some(name => {
+  const dir = path.join(path.dirname(parentFile), sessionId, SUBAGENT_DIR);
+  const unfinished = cachedEntries(dir).some(({ name }) => {
     if (!name.startsWith('agent-') || !name.endsWith('.jsonl')) return false;
     const file = path.join(dir, name);
-    let mtimeMs: number;
-    try { mtimeMs = fs.statSync(file).mtimeMs; } catch { return false; }
-    if (nowMs - mtimeMs > SUBAGENT_STALL_MS) return false;
+    let stat: fs.Stats;
+    try { stat = fs.statSync(file); } catch { subagentVerdicts.delete(file); return false; }
+    if (nowMs - stat.mtimeMs > SUBAGENT_STALL_MS) {
+      subagentVerdicts.delete(file);
+      return false;
+    }
+    const seen = subagentVerdicts.get(file);
+    if (seen && seen.mtimeMs === stat.mtimeMs && seen.size === stat.size) return seen.unfinished;
+    subagentReads++;
     const sub = readTranscript(file);
-    return !!sub && sub.hasMessages && !sub.turnComplete;
+    const verdict = !!sub && sub.hasMessages && !sub.turnComplete;
+    subagentVerdicts.set(file, { mtimeMs: stat.mtimeMs, size: stat.size, unfinished: verdict });
+    return verdict;
   });
   if (!unfinished) return false;
   const jobs = readAgentsCached(parentFile);
@@ -775,8 +788,10 @@ export function sessionFromRef(ref: TranscriptRef, opts: RowOptions): Session | 
  * The launch ids whose transcript already makes a row under the list's own skips, whatever project filter the poll carries. Adoption asks this for the
  * launches the served rows did not cover: a filtered-out launch never reaches `sessions`, and without it would read `launching` until its TTL (#471).
  * `scanSkips` keeps adoption at the poll where the row is a real conversation, so an unfiltered board never loses the phantom before its row arrives.
+ * `refs` is required: the caller passes the listing the poll already took (`sharedListing`), so adoption never walks the tree; a launch whose
+ * transcript appears after that listing is adopted on the next poll.
  */
-export function launchRowIds(ids: readonly string[], opts: { root: string; refs?: readonly TranscriptRef[]; homeDir?: string }): string[] {
+export function launchRowIds(ids: readonly string[], opts: { root: string; refs: readonly TranscriptRef[]; homeDir?: string }): string[] {
   const rowOptions: RowOptions = { homeDir: opts.homeDir, now: Date.now(), activeWindowMin: 1, liveCwds: null, lessons: null, scanSkips: true };
   return ids.filter(id => {
     const ref = findTranscript(opts.root, id, opts.refs);
