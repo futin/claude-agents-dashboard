@@ -120,6 +120,9 @@ ANDs them) is an error when the validating machine is `mac` (`parseJob(name, tex
 writer and the validator are `shared/routine-file.ts` and `shared/cron.ts`, which the server, the client and the wrapper all run; the wrapper's copies are
 generated (`pnpm plugin:gen` writes `plugin/lib/*.mjs`, and `test/guards/plugin-manifest.test.ts` regenerates and compares, so an edit to the `.ts` without
 regenerating fails CI).
+Every reader of a job file's frontmatter — `parseJob`, the drawer's form (`client/src/lib/routineForm.ts`) and the Repos helper (`readForeach`, `setRepos`)
+— finds the fence and a key line through `frontmatterFence` and `frontmatterKeyIndex` in `shared/frontmatter.ts`, so a BOM, CRLF or `foreach : pinned`
+reads the same in the drawer as the server runs it.
 
 A `foreach` name that is not pinned on the running machine is skipped there (`skipped: not pinned`). A pin that is unlisted or has no path is skipped with
 `pin unlisted`. No `pins.json` ends a fan-out run before its first step with `end.error` `no pins snapshot`.
@@ -388,7 +391,8 @@ All class names are `.rtn-` prefixed and colours are theme tokens.
 - `bypassPermissions` is rejected by the validator and again by the wrapper.
 - A plist's `ProgramArguments` are absolute paths and the job name, and a crontab line quotes every value; nothing from a file body reaches a shell line.
   A shell body runs as a file through `bash -e <tmpfile>`, never `sh -c` interpolation.
-- Names are checked against `[a-z0-9-]+` before they touch a path, and the routines folder and the wrapper's path come from config and the installed
+- Names are checked against `[a-z0-9-]+` (`NAME_RE` in `shared/routine-file.ts`, the one copy: `test/guards/routine-name.test.ts`) before they
+  touch a path, and the routines folder and the wrapper's path come from config and the installed
   plugin, never from a request.
 - Launching `launchctl`, `crontab`, `pgrep`, `ps`, `sysctl`, `open` and the wrapper are local launches, not a new outbound kind;
   `test/guards/outbound.test.ts` is unchanged.

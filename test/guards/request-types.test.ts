@@ -27,6 +27,14 @@ export function requestTypeNames(sharedSrc: string): string[] {
   return [...sharedSrc.matchAll(/^export (?:interface|type) (\w+(?:Request|Patch))\b/gm)].map(m => m[1]);
 }
 
+/**
+ * The inline optional-unknown object casts (`as { x?: unknown }`, the shape may span lines) left in `src`'s code, comments stripped. A body cast this way
+ * names no shared type, so a field renamed on either side still compiles (#542).
+ */
+export function inlineBodyCasts(src: string): string[] {
+  return [...stripComments(src).matchAll(/\bas\s*\{[^}]*\?:\s*unknown[^}]*\}/g)].map(m => m[0].replace(/\s+/g, ' '));
+}
+
 /** The names no file's code (comments stripped) mentions as a whole word, in declaration order. */
 export function unreferenced(names: string[], files: Record<string, string>): string[] {
   const code = Object.values(files).map(stripComments);
@@ -54,7 +62,12 @@ export function run(): number {
   let p = 0, f = 0;
 
   if (test('shared/types.ts declares the request bodies this guard is about', () => {
-    for (const n of ['NotifyPatch', 'NotifyEventRequest', 'OpenFolderRequest', 'CodegraphRunRequest', 'GitQuickRequest', 'SpawnRequest']) {
+    for (const n of [
+      'NotifyPatch', 'NotifyEventRequest', 'OpenFolderRequest', 'CodegraphRunRequest', 'GitQuickRequest', 'SpawnRequest',
+      'RemoteAnswerRequest', 'HookWaitRequest', 'MessageWaitRequest', 'PermissionNotifyRequest', 'SessionStopRequest', 'PinWriteRequest', 'PinOrderRequest',
+      'RoutineWriteRequest', 'RoutineCreateRequest', 'RoutinePatch', 'RoutineReconcileRequest', 'RoutineRunRequest', 'RoutineRevealRequest',
+      'RoutineValidateRequest',
+    ]) {
       assert.ok(names.includes(n), `${n} not found by requestTypeNames`);
     }
   })) p++; else f++;
@@ -71,6 +84,17 @@ export function run(): number {
   if (test('a mention inside a comment is not a reference', () => {
     assert.deepStrictEqual(unreferenced(['FooRequest'], { 'a.ts': '/** reads a FooRequest */\n// FooRequest\nconst x = 1;' }), ['FooRequest']);
     assert.deepStrictEqual(unreferenced(['FooRequest'], { 'a.ts': 'const b = body as Unvalidated<FooRequest>;' }), []);
+  })) p++; else f++;
+
+  if (test('server/api.ts casts no request body to an inline { x?: unknown } shape', () => {
+    assert.deepStrictEqual(inlineBodyCasts(files[path.join('server', 'api.ts')]), []);
+  })) p++; else f++;
+
+  if (test('an inline optional-unknown cast is caught on one line or across lines; an Unvalidated<T> cast and a comment are not', () => {
+    assert.strictEqual(inlineBodyCasts('const b = x as { x?: unknown } | null;').length, 1);
+    assert.strictEqual(inlineBodyCasts('const b = x as\n    { a?: unknown; b?: unknown } | null;').length, 1);
+    assert.deepStrictEqual(inlineBodyCasts('const b = x as Unvalidated<FooRequest> | null;'), []);
+    assert.deepStrictEqual(inlineBodyCasts('// was: as { x?: unknown }\nconst y = 1;'), []);
   })) p++; else f++;
 
   console.log(`\n  ${p} passed, ${f} failed`);
