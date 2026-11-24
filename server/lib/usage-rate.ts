@@ -176,8 +176,15 @@ export function dominantModel(tok: Record<string, TokenCounts>): string | null {
  * minutes, and it is their *ratio* the two-term fit measures. A fractional
  * count is unbiased under the same uniform-spend assumption the tokens already
  * make, and bounded by the same two ticks per interval.
+ *
+ * **A sorted ledger is walked, not scanned** (#540): the full scan made the rates route O(samples × ledger lines), ~2.3 s of `joinIntervals` on this
+ * machine's 17,032 ledger lines (2026-11-24). With `index.sorted`, the walk starts at the first line with `t > fromT` — a line ending at or before `fromT`
+ * cannot overlap — and stops at the first with `t >= toT + index.maxSpan`, since from there every line began at or after `toT`. The bound is
+ * `toT + maxSpan`, not `toT`: lines may overlap, and one ending past `toT` can still have begun inside the interval. Inside the window every line takes the
+ * same test and arithmetic as the scan, in ledger order, so every float sums in the same order. An unsorted ledger (a hand-made fixture,
+ * `scripts/rates-audit.ts`' rebuilt lines) gets the full scan; sorting a copy would reorder the sums.
  */
-function gather(ledger: LedgerLine[], fromT: number, toT: number): {
+export function gather(ledger: LedgerLine[], index: LedgerIndex, fromT: number, toT: number): {
   tok: Record<string, TokenCounts>;
   req: Record<string, number>;
   reqUsable: boolean;
@@ -190,7 +197,20 @@ function gather(ledger: LedgerLine[], fromT: number, toT: number): {
   const sur: Record<string, Partial<Record<ModelRateSurface, TokenCounts>>> = {};
   let reqUsable = true;
   let coveredMs = 0;
-  for (const line of ledger) {
+  let start = 0;
+  let stopT = Infinity;
+  if (index.sorted) {
+    let hi = ledger.length;
+    while (start < hi) {
+      const mid = (start + hi) >>> 1;
+      if (ledger[mid].t <= fromT) start = mid + 1;
+      else hi = mid;
+    }
+    stopT = toT + index.maxSpan;
+  }
+  for (let i = start; i < ledger.length; i++) {
+    const line = ledger[i];
+    if (line.t >= stopT) break;
     const span = line.t - line.prevT;
     if (span <= 0) continue;
     const overlapMs = Math.min(toT, line.t) - Math.max(fromT, line.prevT);
@@ -216,6 +236,26 @@ function gather(ledger: LedgerLine[], fromT: number, toT: number): {
     }
   }
   return { tok, req, reqUsable, sur, coveredMs };
+}
+
+/** What {@link gather} needs to walk a window instead of scanning: built once per join call, never cached across calls. */
+export interface LedgerIndex {
+  /** `t` never decreases along the ledger. A `NaN` reads as unsorted, so it gets the scan. */
+  sorted: boolean;
+  /** The longest `t - prevT` over lines with a positive span; 0 when there are none. */
+  maxSpan: number;
+}
+
+export function indexLedger(ledger: LedgerLine[]): LedgerIndex {
+  let sorted = true;
+  let maxSpan = 0;
+  for (let i = 0; i < ledger.length; i++) {
+    const line = ledger[i];
+    if (i > 0 && !(ledger[i - 1].t <= line.t)) sorted = false;
+    const span = line.t - line.prevT;
+    if (span > maxSpan) maxSpan = span;
+  }
+  return { sorted, maxSpan };
 }
 
 /**
@@ -325,6 +365,7 @@ export function joinIntervals(
   samples: UsageSample[], ledger: LedgerLine[], ledgerStartMs: number | null = null
 ): Interval[] {
   const out: Interval[] = [];
+  const index = indexLedger(ledger);
   for (let i = 1; i < samples.length; i++) {
     const from = samples[i - 1];
     const to = samples[i];
@@ -334,7 +375,7 @@ export function joinIntervals(
     const dUtil = to.utilization - from.utilization;
     if (dUtil < 0) continue;
 
-    const { tok, req, reqUsable, sur, coveredMs } = gather(ledger, from.t, to.t);
+    const { tok, req, reqUsable, sur, coveredMs } = gather(ledger, index, from.t, to.t);
     const kind = classify(dUtil, tok, coveredMs, durationMs, to.t, ledgerStartMs);
     out.push(withSurface({ fromT: from.t, toT: to.t, dUtil, tok, req, reqUsable, kind }, tok, sur));
   }
@@ -393,6 +434,7 @@ export function joinWeeklyIntervals(
   /** The sample the current run opened at — the last one that *changed* the weekly reading. */
   let held: UsageSample | null = null;
   let heldWeek: NonNullable<UsageSample['week']> | null = null;
+  const index = indexLedger(ledger);
 
   for (const sample of samples) {
     const week = sample.week;
@@ -422,7 +464,7 @@ export function joinWeeklyIntervals(
     // an earlier instant than the one it already holds.
     if (durationMs <= 0) continue;
 
-    const { tok, req, reqUsable, sur, coveredMs } = gather(ledger, held.t, sample.t);
+    const { tok, req, reqUsable, sur, coveredMs } = gather(ledger, index, held.t, sample.t);
     const kind = classify(
       dUtil, tok, coveredMs, durationMs, sample.t, ledgerStartMs,
       EXTERNAL_WEIGHTED_MAX_WEEKLY

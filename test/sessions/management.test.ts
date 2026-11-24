@@ -1272,6 +1272,97 @@ export async function run(): Promise<number> {
     assert.strictEqual(await mgmt.readServableFile(manifest, new Set([manifest])), null);
   }));
 
+  /* ------------------------------------------------- servable-set memo (#540) */
+
+  /** A home with one skill and one recent project: the fixture every memo case starts from. */
+  function memoFixture() {
+    const NOW = Date.parse('2026-07-12T12:00:00Z');
+    const home = makeHome();
+    const skill = put(home, '.claude/skills/s/SKILL.md', SKILL_MD);
+    const proj = makeProject();
+    const root = makeProjectsRoot([{ dirName: '-p', id: 'p1', cwd: proj, mtimeMs: NOW - 1000 }]);
+    return { NOW, home, skill, proj, root, config: { lookbackHours: 24 }, options: { root, now: NOW, homeDir: home } };
+  }
+
+  tally(await test('servablePathsFor: a member path within the TTL is answered from the same Set (#540)', async () => {
+    mgmt.resetServablePathsMemo();
+    const { NOW, skill, config, options } = memoFixture();
+    const first = await mgmt.servablePathsFor(skill, config, options, NOW);
+    assert.ok(first.has(skill));
+    assert.strictEqual(await mgmt.servablePathsFor(skill, config, options, NOW + mgmt.SERVABLE_TTL_MS - 1), first);
+  }));
+
+  tally(await test('servablePathsFor: a path missing from the cached set rebuilds it, so a new file is never a stale 403 (#540)', async () => {
+    mgmt.resetServablePathsMemo();
+    const { NOW, home, skill, config, options } = memoFixture();
+    const first = await mgmt.servablePathsFor(skill, config, options, NOW);
+    const added = put(home, '.claude/skills/s/reference.md', '# more\n');
+    assert.ok(!first.has(added));
+    const second = await mgmt.servablePathsFor(added, config, options, NOW + 1);
+    assert.ok(second.has(added));
+    assert.notStrictEqual(second, first);
+  }));
+
+  tally(await test('servablePathsFor: a hit within the TTL stays stale; past the TTL it rebuilds (#540)', async () => {
+    mgmt.resetServablePathsMemo();
+    const { NOW, home, skill, config, options } = memoFixture();
+    const first = await mgmt.servablePathsFor(skill, config, options, NOW);
+    const added = put(home, '.claude/skills/s/reference.md', '# more\n');
+    const hit = await mgmt.servablePathsFor(skill, config, options, NOW + 1);
+    assert.strictEqual(hit, first);
+    assert.ok(!hit.has(added));
+    const expired = await mgmt.servablePathsFor(skill, config, options, NOW + mgmt.SERVABLE_TTL_MS);
+    assert.notStrictEqual(expired, first);
+    assert.ok(expired.has(added));
+  }));
+
+  tally(await test('servablePathsFor: a new recent project or another home is a new key, even within the TTL (#540)', async () => {
+    mgmt.resetServablePathsMemo();
+    const { NOW, skill, config, root, options } = memoFixture();
+    const first = await mgmt.servablePathsFor(skill, config, options, NOW);
+    const proj2 = makeProject();
+    const projSkill = put(proj2, '.claude/skills/t/SKILL.md', SKILL_MD);
+    // The same transcript shape makeProjectsRoot writes, in a second dir of the SAME root, pointing at proj2.
+    const lines = fs.readFileSync(path.join(root, '-p', 'p1.jsonl'), 'utf8').split('\n').map(l => {
+      const rec = JSON.parse(l) as { cwd?: string };
+      if (rec.cwd) rec.cwd = proj2;
+      return JSON.stringify(rec);
+    });
+    const q1 = put(root, '-q/q1.jsonl', lines.join('\n'));
+    fs.utimesSync(q1, (NOW - 500) / 1000, (NOW - 500) / 1000);
+    // Asked for an OLD member: only the key change, never the miss rule, can make this rebuild.
+    const roster = await mgmt.servablePathsFor(skill, config, options, NOW + 1);
+    assert.notStrictEqual(roster, first);
+    assert.ok(roster.has(projSkill));
+    const otherHome = makeHome();
+    const otherSkill = put(otherHome, '.claude/skills/o/SKILL.md', SKILL_MD);
+    const moved = await mgmt.servablePathsFor(skill, config, { ...options, homeDir: otherHome }, NOW + 2);
+    assert.ok(moved.has(otherSkill) && !moved.has(skill));
+  }));
+
+  tally(await test('servablePathsFor: planted secrets stay out after a miss rebuild, and readServableFile still refuses them (#540)', async () => {
+    mgmt.resetServablePathsMemo();
+    const { NOW, home, proj, skill, config, options } = memoFixture();
+    await mgmt.servablePathsFor(skill, config, options, NOW);
+    const creds = put(home, '.claude/.credentials.json', '{"secret":true}');
+    const envFile = put(proj, '.env', 'API_KEY=hush');
+    for (const secret of [creds, envFile]) {
+      const set = await mgmt.servablePathsFor(secret, config, options, NOW + 1);
+      assert.ok(!set.has(secret));
+      assert.strictEqual(await mgmt.readServableFile(secret, set), null);
+    }
+  }));
+
+  tally(await test('servablePathsFor: concurrent cold calls share one build (#540)', async () => {
+    mgmt.resetServablePathsMemo();
+    const { NOW, skill, config, options } = memoFixture();
+    const [a, b] = await Promise.all([
+      mgmt.servablePathsFor(skill, config, options, NOW),
+      mgmt.servablePathsFor(skill, config, options, NOW)
+    ]);
+    assert.strictEqual(a, b);
+  }));
+
   console.log(`\nmanagement: ${p} passed, ${f} failed`);
   return f;
 }

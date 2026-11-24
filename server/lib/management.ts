@@ -367,7 +367,7 @@ let claudeJsonMemo: { path: string; mtimeMs: number; size: number; json: JsonObj
 
 /**
  * Parse `~/.claude.json` at most once per (path, mtimeMs, size): the file is large and
- * `collectServablePaths` reads a scope per recent project on every file request. Missing,
+ * `collectServablePaths` reads a scope per recent project on every build of the servable set. Missing,
  * unreadable or malformed → `{}`, never throws.
  */
 async function readClaudeJson(homeDir?: string): Promise<JsonObject> {
@@ -891,10 +891,14 @@ export function resolveProject(config: Partial<Config>, dirName: string, options
  * are members, and {@link readServableFile} redacts them, and plugin hooks.json files, on the way out.
  */
 export async function collectServablePaths(config: Partial<Config>, options: ProjectsOptions = {}): Promise<Set<string>> {
-  const projects = listRecentProjects(config, options);
+  return servablePathsOf(listRecentProjects(config, options), options.homeDir);
+}
+
+/** {@link collectServablePaths} over a roster already listed, so {@link servablePathsFor} builds from exactly the roster its key names. */
+async function servablePathsOf(projects: ProjectRef[], homeDir: string | undefined): Promise<Set<string>> {
   const scopes = await Promise.all([
-    readGlobalScope(options.homeDir),
-    ...projects.map(p => readProjectScope(p.path, p.dirName, options.homeDir))
+    readGlobalScope(homeDir),
+    ...projects.map(p => readProjectScope(p.path, p.dirName, homeDir))
   ]);
 
   const allowed = new Set<string>();
@@ -971,6 +975,51 @@ export function redactSettings(v: unknown): unknown {
   if (typeof v === 'string') return scrubSecretText(v);
   if (!isObject(v)) return v;
   return Object.fromEntries(Object.entries(v).map(([k, val]) => [k, redactEntry(k, val)]));
+}
+
+/** How long {@link servablePathsFor} answers a member path from one build (#540). */
+export const SERVABLE_TTL_MS = 10_000;
+
+let servableMemo: { key: string; set: Set<string>; builtAt: number } | null = null;
+let servableBuild: { key: string; promise: Promise<Set<string>> } | null = null;
+
+/** Test seam: forget the memoized servable set and any build in flight. */
+export function resetServablePathsMemo(): void {
+  servableMemo = null;
+  servableBuild = null;
+}
+
+/**
+ * {@link collectServablePaths}, memoized for `GET /api/configs/file`: rebuilding on every click re-read every scope, ~110 ms with 3 recent projects and
+ * 467 servable paths (measured 2026-11-24, #540).
+ *
+ * Keyed by the Claude home and the recent-project roster (each project's `path` and `dirName`, in order), listed per call — a pin, an unpin, a lookback
+ * change or a project ageing out is a new key, so a set never answers for a roster it was not built from. Not keyed by directory mtimes: a file added
+ * inside a skill's subdirectory moves no mtime the key could watch.
+ *
+ * A path **missing** from a cached set rebuilds it once and answers from the fresh set, so a file the scanner enumerates is servable on the very next
+ * request — never a stale 403. The cost is that a non-member (a planted secret, a typo) rebuilds on every call, as every call did before. A cached set
+ * answers a **member** for {@link SERVABLE_TTL_MS} from `builtAt`, so a stale grant covers only a path the scanner enumerated within the TTL under the same
+ * roster, and {@link readServableFile} still stats and reads it — a deleted file is a 404. Membership stays exact; the memo changes when the set is built,
+ * never what it holds. Concurrent builds for one key share one promise; a failed build is not cached.
+ */
+export async function servablePathsFor(
+  p: string, config: Partial<Config>, options: ProjectsOptions = {}, nowMs: number = Date.now()
+): Promise<Set<string>> {
+  const projects = listRecentProjects(config, options);
+  const key = JSON.stringify([claudeHome(options.homeDir), projects.map(r => [r.path, r.dirName])]);
+  const memo = servableMemo;
+  if (memo && memo.key === key && nowMs - memo.builtAt < SERVABLE_TTL_MS && memo.set.has(p)) return memo.set;
+  if (servableBuild?.key === key) return servableBuild.promise;
+  const build = { key, promise: servablePathsOf(projects, options.homeDir) };
+  servableBuild = build;
+  try {
+    const set = await build.promise;
+    servableMemo = { key, set, builtAt: nowMs };
+    return set;
+  } finally {
+    if (servableBuild === build) servableBuild = null;
+  }
 }
 
 /**

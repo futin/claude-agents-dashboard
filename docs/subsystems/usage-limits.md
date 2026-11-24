@@ -553,8 +553,9 @@ Usage → **History** (`client/src/components/usage/UsageHistory.tsx`) answers "
 - **Served with recording off.** Switching `recordUsageHistory` off stops new samples; it does not hide the past. The body carries `recording`, and the view
   says "Recording is off — the history ends at …" rather than going blank. (`/api/usage/rates` does go empty with recording off, because its fit also needs the
   ledger; this view needs only the log.)
-- **Reading.** `readSamplesSince` in `lib/usage-history.ts` grows a tail read from 256 KB, doubling until the oldest sample predates the range or the read covers
-  the file, bounded by the 32 MB cap. Measured on this machine 2026-10-01: about 18 KB/day, so a 90-day view reads roughly 1.6 MB.
+- **Reading.** `readSamplesSince` in `lib/usage-history.ts` reads backwards from the end in 256 KB chunks, each byte read and parsed once, and stops after
+  the first chunk holding a sample older than the range, at the top of the file, or at the 32 MB cap (#540). Measured on this machine 2026-10-01: about
+  18 KB/day, so a 90-day view reads roughly 1.6 MB.
 - **Series** (`lib/usage-history-series.ts`, pure). The 5-hour series is every sample; the weekly series is only the samples that carry `week` — absent is not 0%.
   A window's identity is its **observed `resetsAt`** only, split wherever `classifyInterval` says `reset` (a stamp change beyond `sameWindow`'s 2-minute slack, or
   a drop of more than 0.5 points). No 5-hour or 7-day length is assumed, because weekly resets have not always been 7 days apart.
@@ -832,7 +833,10 @@ puts the size of the miss at roughly +38% on the pooled opus-5 rate.
 
 `joinIntervals` pairs consecutive history samples — same window under the same
 `sameWindow` slack, utilization not falling — and gathers the ledger's overlap
-with each pair. Then each interval is classified:
+with each pair. On a ledger sorted by `t` — file order, which is sorted in production — the gather binary-searches the first line ending after the pair's
+start and walks forward until a line ends at or past `toT + maxSpan` (`maxSpan` the longest line, so overlapping lines are never cut off); an unsorted
+ledger gets the full scan. Same lines, same order, so the sums are bit-identical either way. The full scan per interval cost ~2.3 s per rates request on
+this machine's 17,032 ledger lines (measured 2026-11-24, #540). Then each interval is classified:
 
 | Condition | Kind | Used for |
 |---|---|---|
