@@ -219,7 +219,8 @@ request for it and `/api/sessions/:id/chat` knows nothing of it. Three behaviour
   before the first-uuid check).
 - **Markdown:** message text *is* markdown, so `lib/markdown.ts` (pure, unit-tested, zero
   deps) parses the subset transcripts actually use — headings, `**bold**`, `*italic*`,
-  inline code, fenced code, GFM tables, bullet/numbered lists, blockquotes, rules, links —
+  inline code, fenced code, GFM tables, bullet/numbered lists (nested as real sub-lists by `listTree`; a numbered list keeps its written numbers across
+  blank lines and starts at its first one), blockquotes, rules, links —
   into a block/inline tree that `components/Markdown.tsx` turns into elements. **No
   `dangerouslySetInnerHTML` anywhere**, so transcript content can't inject markup; only
   `http(s)`/`mailto`/`#` become `<a>`, and any other target (repo-relative paths like
@@ -268,7 +269,8 @@ request for it and `/api/sessions/:id/chat` knows nothing of it. Three behaviour
   nothing. If `pushState` throws (Safari's throttle, `file://`) the arm goes inert and the
   drawer behaves exactly as it did before — teardown must never `back()` in that state.
 - **An unsent draft holds the drawer open (#434).** While any composer it renders holds non-whitespace text — `ResumePanel`'s follow-up,
-  `MessagePanel`'s reply or `PlanPanel`'s revision feedback — Escape, the scrim and Back leave it open, silently, and only ✕ closes it: the job drawer's
+  `MessagePanel`'s reply, `PlanPanel`'s revision feedback or `QuestionPanel`'s typed "Other" answer (#519; a picked option alone is no draft,
+  `questionDraftHeld`) — Escape, the scrim and Back leave it open, silently, and only ✕ closes it: the job drawer's
   rule (#376, [routines](routines.md)). Each panel reports its own draft through an `onDraft` prop, `false` again once no composer shows the text (sent,
   dismissed, window gone) or the panel unmounts; `ChatDrawer` ORs one flag per panel into a `keepOpen` ref, so one panel clearing never releases another's.
   A refused Back re-arms through `useBackClose`'s `rearm`, since that press spent the history entry. No `window.confirm`: a dialog on a phone is worse

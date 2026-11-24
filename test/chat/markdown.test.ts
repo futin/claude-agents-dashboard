@@ -1,6 +1,6 @@
 import assert from 'node:assert';
 
-import { parseInline, parseMarkdown, type Block, type Inline } from '../../client/src/lib/markdown.js';
+import { listTree, parseInline, parseMarkdown, type Block, type Inline, type ListNode } from '../../client/src/lib/markdown.js';
 
 function test(name: string, fn: () => void): boolean {
   try { fn(); console.log('  ✓ ' + name); return true; }
@@ -164,10 +164,77 @@ export function run(): number {
   if (test('bullet and numbered lists, with nesting depth', () => {
     const ul = parseMarkdown('- one\n- two\n  - nested')[0] as Extract<Block, { t: 'list' }>;
     assert.strictEqual(ul.ordered, false);
-    assert.deepStrictEqual(ul.items.map(i => [i.depth, flat(i.spans)]), [[0, 'one'], [0, 'two'], [1, 'nested']]);
+    assert.deepStrictEqual(ul.items.map(i => [i.depth, flat(i.spans), i.ordered, i.n]), [[0, 'one', false, null], [0, 'two', false, null], [1, 'nested', false, null]]);
     const ol = parseMarkdown('1. first\n2. second')[0] as Extract<Block, { t: 'list' }>;
     assert.strictEqual(ol.ordered, true);
-    assert.strictEqual(ol.items.length, 2);
+    assert.deepStrictEqual(ol.items.map(i => [i.ordered, i.n]), [[true, 1], [true, 2]]);
+  })) p++; else f++;
+
+  // #519: numbered lists keep their numbers across blank lines and nest instead of renumbering.
+  const listOf = (src: string, at = 0) => parseMarkdown(src)[at] as Extract<Block, { t: 'list' }>;
+  const texts = (n: ListNode) => n.items.map(i => flat(i.spans));
+
+  if (test('a blank line between numbered items keeps one list', () => {
+    const bs = parseMarkdown('1. a\n\n2. b');
+    assert.deepStrictEqual(bs.map(b => b.t), ['list']);
+    assert.deepStrictEqual((bs[0] as Extract<Block, { t: 'list' }>).items.map(i => [i.ordered, i.n]), [[true, 1], [true, 2]]);
+  })) p++; else f++;
+
+  if (test('a numbered list broken by a paragraph resumes at its written number', () => {
+    const bs = parseMarkdown('1. a\n\npara\n\n2. b');
+    assert.deepStrictEqual(bs.map(b => b.t), ['list', 'p', 'list']);
+    assert.strictEqual(listTree((bs[2] as Extract<Block, { t: 'list' }>).items).start, 2);
+  })) p++; else f++;
+
+  if (test('an ordered list starts at its first written number', () => {
+    assert.strictEqual(listTree(listOf('3. a\n4. b').items).start, 3);
+  })) p++; else f++;
+
+  if (test('a bullet nested under a numbered item stays in the one list, as a child', () => {
+    const bs = parseMarkdown('1. a\n   - x\n2. b');
+    assert.deepStrictEqual(bs.map(b => b.t), ['list']);
+    const tree = listTree((bs[0] as Extract<Block, { t: 'list' }>).items);
+    assert.strictEqual(tree.ordered, true);
+    assert.deepStrictEqual(texts(tree), ['a', 'b']);
+    assert.strictEqual(tree.items[0].children.length, 1);
+    assert.strictEqual(tree.items[0].children[0].ordered, false);
+    assert.deepStrictEqual(texts(tree.items[0].children[0]), ['x']);
+  })) p++; else f++;
+
+  if (test('numbered items nested under a bullet form an ordered child list', () => {
+    const bs = parseMarkdown('- a\n  1. x\n  2. y\n- b');
+    assert.deepStrictEqual(bs.map(b => b.t), ['list']);
+    const tree = listTree((bs[0] as Extract<Block, { t: 'list' }>).items);
+    assert.strictEqual(tree.ordered, false);
+    assert.deepStrictEqual(texts(tree), ['a', 'b']);
+    const child = tree.items[0].children[0];
+    assert.strictEqual(child.ordered, true);
+    assert.ok(child.start === 1 || child.start === null, `start ${child.start}`);
+    assert.deepStrictEqual(texts(child), ['x', 'y']);
+  })) p++; else f++;
+
+  if (test('nested numbered sub-items are not numbered as siblings of their parent', () => {
+    const tree = listTree(listOf('1. a\n  1. x\n  2. y\n2. b').items);
+    assert.deepStrictEqual(texts(tree), ['a', 'b']);
+    assert.strictEqual(tree.items[0].children[0].ordered, true);
+    assert.deepStrictEqual(texts(tree.items[0].children[0]), ['x', 'y']);
+  })) p++; else f++;
+
+  if (test('blank lines followed by a non-item still end the list', () => {
+    assert.deepStrictEqual(parseMarkdown('- a\n\n\nnot an item').map(b => b.t), ['list', 'p']);
+  })) p++; else f++;
+
+  if (test('a rule after a list is a rule, not an item — after a blank line or straight after', () => {
+    assert.deepStrictEqual(parseMarkdown('- a\n\n* * *').map(b => b.t), ['list', 'hr']);
+    assert.deepStrictEqual(parseMarkdown('- a\n\n- - -\nfoo').map(b => b.t), ['list', 'hr', 'p']);
+    assert.deepStrictEqual(parseMarkdown('- a\n* * *').map(b => b.t), ['list', 'hr']);
+  })) p++; else f++;
+
+  if (test('an item more than one level deeper attaches one level down, with no empty list between', () => {
+    const tree = listTree(listOf('- a\n      - deep').items);
+    assert.deepStrictEqual(texts(tree), ['a']);
+    assert.strictEqual(tree.items[0].children.length, 1);
+    assert.deepStrictEqual(texts(tree.items[0].children[0]), ['deep']);
   })) p++; else f++;
 
   if (test('a bullet list and a numbered list are separate blocks', () => {

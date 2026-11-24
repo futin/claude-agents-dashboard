@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 
-import { parseMarkdown, type Block, type Inline } from '../lib/markdown';
+import { listTree, parseMarkdown, type Block, type Inline, type ListNode } from '../lib/markdown';
 
 /** Inline spans → elements. Recursive for strong/em/link children. */
 function Spans({ spans }: { spans: Inline[] }) {
@@ -30,6 +30,19 @@ function Spans({ spans }: { spans: Inline[] }) {
   );
 }
 
+/** One list of a list tree, each child list inside its parent item — nesting gives the indent, and `start` keeps the written numbers (#519). */
+function ListView({ node }: { node: ListNode }) {
+  const items = node.items.map((it, i) => (
+    <li key={i}>
+      <Spans spans={it.spans} />
+      {it.children.map((c, j) => <ListView key={j} node={c} />)}
+    </li>
+  ));
+  return node.ordered
+    ? <ol className="md-list" start={node.start ?? undefined}>{items}</ol>
+    : <ul className="md-list">{items}</ul>;
+}
+
 function BlockView({ b }: { b: Block }) {
   switch (b.t) {
     case 'p':
@@ -43,18 +56,8 @@ function BlockView({ b }: { b: Block }) {
       return <div className="md-hr" />;
     case 'quote':
       return <blockquote className="md-quote"><Spans spans={b.spans} /></blockquote>;
-    case 'list': {
-      const Tag = b.ordered ? 'ol' : 'ul';
-      return (
-        <Tag className="md-list">
-          {b.items.map((it, i) => (
-            <li key={i} style={it.depth ? { marginLeft: it.depth * 14 } : undefined}>
-              <Spans spans={it.spans} />
-            </li>
-          ))}
-        </Tag>
-      );
-    }
+    case 'list':
+      return <ListView node={listTree(b.items)} />;
     case 'table':
       return (
         <div className="md-table-wrap">
