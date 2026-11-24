@@ -126,6 +126,21 @@ export async function run(): Promise<number> {
     });
   }));
 
+  check(await testAsync('GET /api/configs/file serves a file created after a first request, never a stale 403 (#540)', async () => {
+    await withServer(ENV, async h => {
+      h.plant(ID);
+      const claudeMd = path.join(h.home, '.claude', 'CLAUDE.md');
+      fs.writeFileSync(claudeMd, '# fake rules\n');
+      assert.equal((await h.req(`/api/configs/file?path=${encodeURIComponent(claudeMd)}`)).status, 200);
+      const skill = path.join(h.home, '.claude', 'skills', 'late', 'SKILL.md');
+      fs.mkdirSync(path.dirname(skill), { recursive: true });
+      fs.writeFileSync(skill, '---\nname: late\ndescription: added after the first request\n---\n# body\n');
+      const reply = await h.req(`/api/configs/file?path=${encodeURIComponent(skill)}`);
+      assert.equal(reply.status, 200);
+      assert.match(String(reply.json?.content), /name: late/);
+    });
+  }));
+
   check(await testAsync('GET /api/configs/file is 403 for a real file outside the servable set', async () => {
     await withServer(ENV, async h => {
       h.plant(ID);

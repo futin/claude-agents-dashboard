@@ -741,7 +741,7 @@ export function run(): number {
     assert.strictEqual(observedActiveMs(MON_09, MON_09 + MIN), 0, 'idle, but observed');
   })) p++; else f++;
 
-  if (test('readSamplesSince: grows the tail read past 256 KB, filters to t >= sinceMs', () => {
+  if (test('readSamplesSince: reads past 256 KB, filters to t >= sinceMs', () => {
     const dir = fs.mkdtempSync(path.join(tmp, 'since-'));
     const pad = 'x'.repeat(100);
     const lines: string[] = [];
@@ -753,6 +753,80 @@ export function run(): number {
     assert.strictEqual(all[0].t, 0);
     assert.strictEqual(readSamplesSince(1_990 * MIN, dir).length, 10);
     assert.deepStrictEqual(readSamplesSince(0, fs.mkdtempSync(path.join(tmp, 'since-empty-'))), []);
+  })) p++; else f++;
+
+  // ~1 MB, sorted by t: four chunks of TAIL_BYTES and a bit, so the backward read crosses several chunk boundaries (#540).
+  const sinceDir = fs.mkdtempSync(path.join(tmp, 'since-mb-'));
+  const sinceLines: string[] = [];
+  for (let i = 0; i < 7000; i++) sinceLines.push(JSON.stringify({ t: i * MIN, utilization: i % 100, resetsAt: R1, pad: 'p'.repeat(90 + (i % 37)) }));
+  const sinceText = sinceLines.join('\n') + '\n';
+  fs.writeFileSync(path.join(sinceDir, HISTORY_FILE), sinceText, 'utf8');
+  const sinceSize = Buffer.byteLength(sinceText);
+  /** The index of the line whose bytes span `offset` — the one a backward chunk read cuts in two. */
+  const lineAt = (lines: string[], offset: number): number => {
+    let pos = 0;
+    for (let i = 0; i < lines.length; i++) {
+      const end = pos + Buffer.byteLength(lines[i]) + 1;
+      if (offset > pos && offset < end) return i;
+      pos = end;
+    }
+    throw new Error('no line spans ' + offset);
+  };
+
+  if (test('readSamplesSince: equals readRecentSamples over the whole file, filtered, at every cutoff (#540)', () => {
+    assert.ok(sinceSize > 1_000_000 && sinceSize < MAX_HISTORY_BYTES);
+    const straddle = lineAt(sinceLines, sinceSize - 262_144 * 2);
+    const whole = readRecentSamples(sinceDir, sinceSize);
+    assert.strictEqual(whole.length, 7000);
+    for (const sinceMs of [0, 1, straddle * MIN, (straddle + 1) * MIN, 6999 * MIN, 7000 * MIN]) {
+      assert.deepStrictEqual(readSamplesSince(sinceMs, sinceDir), whole.filter((x) => x.t >= sinceMs), `sinceMs ${sinceMs / MIN} min`);
+    }
+  })) p++; else f++;
+
+  if (test('readSamplesSince: reads each byte of the file at most once (#540)', () => {
+    const real = fs.readSync;
+    let bytes = 0;
+    (fs as { readSync: unknown }).readSync = (...args: Parameters<typeof fs.readSync>) => {
+      const n = (real as (...a: Parameters<typeof fs.readSync>) => number)(...args);
+      bytes += n;
+      return n;
+    };
+    try {
+      assert.strictEqual(readSamplesSince(0, sinceDir).length, 7000);
+    } finally {
+      (fs as { readSync: unknown }).readSync = real;
+    }
+    assert.ok(bytes <= sinceSize, `read ${bytes} bytes of a ${sinceSize}-byte file`);
+  })) p++; else f++;
+
+  if (test('readSamplesSince: the byte cap drops the partial first line, as readRecentSamples does (#540)', () => {
+    const cap = 300 * 1024;
+    const capped = readSamplesSince(0, sinceDir, cap);
+    assert.deepStrictEqual(capped, readRecentSamples(sinceDir, cap));
+    assert.ok(capped.length > 0 && capped[0].t > 0);
+  })) p++; else f++;
+
+  if (test('readSamplesSince: malformed and blank lines are skipped, one at a chunk boundary included (#540)', () => {
+    const dir = fs.mkdtempSync(path.join(tmp, 'since-bad-'));
+    const lines = sinceLines.slice();
+    const size = Buffer.byteLength(lines.join('\n') + '\n');
+    const cut = lineAt(lines, size - 262_144);
+    lines[cut] = 'x'.repeat(Buffer.byteLength(lines[cut])); // same length, so the boundary still falls inside it
+    lines[cut - 3] = '';
+    lines[cut + 40] = '{"t": "not a number"}';
+    lines[200] = '   ';
+    fs.writeFileSync(path.join(dir, HISTORY_FILE), lines.join('\n') + '\n', 'utf8');
+    const got = readSamplesSince(0, dir);
+    assert.strictEqual(got.length, 7000 - 4);
+    assert.deepStrictEqual(got, readRecentSamples(dir, size));
+    assert.ok(got.some((x) => x.t === (cut - 1) * MIN) && got.some((x) => x.t === (cut + 1) * MIN), 'the neighbours survive');
+  })) p++; else f++;
+
+  if (test('readSamplesSince: a missing or empty file returns [] (#540)', () => {
+    const dir = fs.mkdtempSync(path.join(tmp, 'since-none-'));
+    assert.deepStrictEqual(readSamplesSince(0, dir), []);
+    fs.writeFileSync(path.join(dir, HISTORY_FILE), '', 'utf8');
+    assert.deepStrictEqual(readSamplesSince(0, dir), []);
   })) p++; else f++;
 
   if (test('DASHBOARD_STATE_DIR set: history and profile go there when no dir is passed (#407)', () => {

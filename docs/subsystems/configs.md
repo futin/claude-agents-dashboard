@@ -155,7 +155,9 @@ control (the type is a column now, not a collapsible header) and the
   paths present in `collectServablePaths()` — the exact set the scanner itself
   enumerated. **Never replace this with prefix/subtree checks**: `~/.claude` also holds
   `.credentials.json`/`history.jsonl`/`session-data/`, and project roots hold `.env` —
-  exact set membership is what keeps those unservable. `dirName` is resolved against the
+  exact set membership is what keeps those unservable. The route asks `servablePathsFor`, which memoizes that set per (Claude home, recent-project
+  roster) for 10 s and rebuilds it whenever the requested path is missing, so a newly enumerated file is never a stale 403 and a non-member still
+  costs a fresh build; the memo changes when the set is built, never what it holds — membership is still exact (#540). `dirName` is resolved against the
   enumerated recent-or-pinned project list, never joined into a path (same philosophy as
   `serveSessionDetail`). Content capped at 256 KB (`truncated` flag). `~/.claude.json`
   (large, private) is read for its two `mcpServers` locations and nothing else, parsed at most once per (path, mtime, size),

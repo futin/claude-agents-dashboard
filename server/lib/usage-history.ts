@@ -584,23 +584,54 @@ export function readRecentSamples(dir?: string, maxBytes: number = TAIL_BYTES): 
 /**
  * Every parseable sample with `t >= sinceMs`, oldest first — the history view's read.
  *
- * Grows a tail read rather than reading the whole file: a 90-day view is about 1.6 MB at this machine's density (18 KB/day, measured 2026-10-01), and
- * the doubling stops as soon as the oldest sample read predates `sinceMs` or the read covers the file. {@link MAX_HISTORY_BYTES} bounds the worst case.
+ * Reads **backwards** from the end in {@link TAIL_BYTES} chunks, each byte read and parsed once, the way `readLedgerSince` reads the ledger: a 90-day
+ * view is about 1.6 MB at this machine's density (18 KB/day, measured 2026-10-01), and the read stops after the first chunk holding a sample older than
+ * `sinceMs`, at the top of the file, or at `maxBytes` — where, as in {@link readRecentSamples}, the window's partial first line is dropped. The doubling
+ * tail read this replaced re-read every byte at each step, about twice the bytes it kept (#540).
  */
-export function readSamplesSince(sinceMs: number, dir?: string): UsageSample[] {
-  let size: number;
+export function readSamplesSince(sinceMs: number, dir?: string, maxBytes: number = MAX_HISTORY_BYTES): UsageSample[] {
+  let fd: number | undefined;
   try {
-    size = fs.statSync(historyPath(dir)).size;
+    fd = fs.openSync(historyPath(dir), 'r');
+    const { size } = fs.fstatSync(fd);
+    const floor = size > maxBytes ? size - maxBytes : 0;
+    const newestFirst: UsageSample[] = [];
+    let end = size;
+    // Carried as bytes, never as a string, so a multi-byte character split across the chunk boundary survives.
+    let carry: Buffer<ArrayBufferLike> = Buffer.alloc(0);
+    let done = false;
+    while (end > floor && !done) {
+      const start = Math.max(floor, end - TAIL_BYTES);
+      const buf = Buffer.alloc(end - start);
+      fs.readSync(fd, buf, 0, buf.length, start);
+      const combined = Buffer.concat([buf, carry]);
+      const segments: Buffer<ArrayBufferLike>[] = [];
+      let idx = 0;
+      for (let nl = combined.indexOf(0x0a, idx); nl !== -1; nl = combined.indexOf(0x0a, idx)) {
+        segments.push(combined.subarray(idx, nl));
+        idx = nl + 1;
+      }
+      if (idx < combined.length) segments.push(combined.subarray(idx));
+      // Below the top of the file the first segment may be cut; it is finished by the next chunk, or dropped at the cap.
+      carry = start > 0 && segments.length > 0 ? segments.shift() as Buffer<ArrayBufferLike> : Buffer.alloc(0);
+      for (let i = segments.length - 1; i >= 0; i--) {
+        const line = segments[i].toString('utf8');
+        if (line.trim() === '') continue;
+        const sample = parseSample(line);
+        if (!sample) continue;
+        if (sample.t < sinceMs) done = true;
+        else newestFirst.push(sample);
+      }
+      end = start;
+    }
+    return newestFirst.reverse();
   } catch {
-    return [];
+    return []; // absent / unreadable — no history is not an error
+  } finally {
+    if (fd !== undefined) {
+      try { fs.closeSync(fd); } catch { /* ignore */ }
+    }
   }
-  let bytes = TAIL_BYTES;
-  let samples = readRecentSamples(dir, bytes);
-  while (bytes < size && bytes < MAX_HISTORY_BYTES && (samples.length === 0 || samples[0].t >= sinceMs)) {
-    bytes = Math.min(bytes * 2, MAX_HISTORY_BYTES);
-    samples = readRecentSamples(dir, bytes);
-  }
-  return samples.filter(sample => sample.t >= sinceMs);
 }
 
 /**
