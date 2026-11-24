@@ -1,0 +1,356 @@
+/**
+ * agents.ts — enumerate the subagents a session launched, from its transcript.
+ *
+ * The main agent launches a subagent with the `Task` tool (stock Claude Code) or
+ * `Agent` tool (some harnesses). Two completion patterns exist:
+ *
+ *  - Synchronous: the assistant `tool_use` (id `toolu_…`) is answered by a user
+ *    `tool_result` with the matching `tool_use_id` — that result IS the agent's
+ *    output. The record also carries a top-level `toolUseResult` with the exact
+ *    `totalDurationMs` / `totalToolUseCount`, the subagent's `agentId`, and
+ *    `totalTokens` — which is the subagent's final context size, not its spend
+ *    (analyze.ts sums the spend from the subagent's own transcript; bug-27).
+ *
+ *  - Background (async): the immediate `tool_result` is only a launch ack
+ *    (`toolUseResult.isAsync`, or — only for a record with no `toolUseResult` —
+ *    the text "Async agent launched … agentId: <hex>"). The
+ *    real completion arrives later as a `<task-notification>` keyed by that
+ *    `<hex>` agentId (not the tool_use_id), carrying a terminal `<status>` —
+ *    `completed`, `failed`, `killed` or `stopped` (`TERMINAL_STATUSES`) — and,
+ *    usually only when completed, a `<usage>` block with the same metrics. That notification is a user
+ *    message only when it lands between turns; landing mid-turn it is absorbed
+ *    into the running turn as message-less `queue-operation` / `attachment`
+ *    records — see `notificationText`.
+ *
+ *  - Resumed: `SendMessage` to a stopped subagent wakes it for another run. Its
+ *    result carries `toolUseResult.resumedAgentId`, and that run completes like a
+ *    background one — a `<task-notification>` keyed by the same agentId. Each
+ *    resume is its own row (`resumed: true`) so a parent parked on round 2 of a
+ *    fix loop reads as running; the run it resumes keeps its own figures, and is
+ *    closed at the resume time if no terminal notification had closed it (#420).
+ *
+ * Both are derived from the PARENT transcript alone. The interpretation is split
+ * into a pure per-record event parser (`parseRecordEvents`) and a reducer over
+ * `ScanState` (`applyEvent`), so the whole-file `readAgents` (the oracle) and
+ * the incremental cache (agents-cache.ts) share the exact same logic. A
+ * compaction can replay earlier records verbatim, ids included, so the reducer
+ * drops a launch or SendMessage whose tool_use id it has already seen (#174) —
+ * without that a replayed launch reads as a second row. Unlike
+ * transcript.ts (256KB tail, newest tool only) `readAgents` walks the WHOLE
+ * file, so it never runs in the 3s poll loop itself: the list poll reaches it
+ * only through the incremental cache, and only for a session with a fresh,
+ * unfinished subagent file (`subagentRunning` in scan.ts).
+ */
+import fs from 'node:fs';
+/**
+ * A subagent launch tool_use? `Task` (stock) or `Agent` (FleetView); both carry
+ * a `subagent_type`. Fall back to that field so a future rename still matches.
+ */
+function isAgentLaunch(b) {
+    if (!b || b.type !== 'tool_use')
+        return false;
+    if (b.name === 'Task' || b.name === 'Agent')
+        return true;
+    return !!(b.input && typeof b.input.subagent_type === 'string');
+}
+function isSendMessage(b) {
+    return !!b && b.type === 'tool_use' && b.name === 'SendMessage';
+}
+/** Flatten a message.content (array of blocks | string) into plain text. */
+function contentText(content) {
+    if (typeof content === 'string')
+        return content;
+    if (!Array.isArray(content))
+        return '';
+    let out = '';
+    for (const b of content) {
+        if (typeof b === 'string')
+            out += b;
+        else if (b && b.type === 'text' && typeof b.text === 'string')
+            out += b.text;
+        else if (b && b.type === 'tool_result')
+            out += toolResultText(b);
+    }
+    return out;
+}
+/** Text of a tool_result block (its content is itself string | block[]). */
+function toolResultText(b) {
+    if (typeof b.content === 'string')
+        return b.content;
+    if (Array.isArray(b.content)) {
+        return b.content.map((x) => (x && typeof x.text === 'string' ? x.text : '')).join('');
+    }
+    return '';
+}
+const AGENT_ID_RE = /agentId:\s*([A-Za-z0-9]+)/;
+const RESUMED_ID_RE = /"resumedAgentId"\s*:\s*"([A-Za-z0-9]+)"/;
+const TASK_ID_RE = /<task-id>\s*([A-Za-z0-9]+)\s*<\/task-id>/;
+const STATUS_RE = /<status>\s*([a-z_]+)\s*<\/status>/i;
+const SUBAGENT_TOKENS_RE = /<subagent_tokens>\s*(\d+)\s*<\/subagent_tokens>/;
+const TOOL_USES_RE = /<tool_uses>\s*(\d+)\s*<\/tool_uses>/;
+const DURATION_MS_RE = /<duration_ms>\s*(\d+)\s*<\/duration_ms>/;
+/**
+ * Every place a `<task-notification>` payload can sit, joined for one scan.
+ *
+ * Delivered while the parent is idle it is an ordinary user message. Delivered
+ * while the parent is mid-turn, Claude Code queues it and absorbs it into the
+ * running turn — those records carry NO `message` at all: the payload rides in
+ * a top-level `content` string (`type: "queue-operation"`, enqueue then remove
+ * with `reason: "absorbed_mid_turn"`) and in `attachment.prompt`
+ * (`type: "attachment"`). Reading only `message.content` left such an agent
+ * parked in `byAgentId` forever, reported as running with a duration that never
+ * stopped climbing (bug-11).
+ *
+ * The three records repeat one payload, which costs nothing: `applyEvent` drops
+ * the agentId from `byAgentId` on the first notify, so the repeats are no-ops
+ * and the earliest timestamp — the closest to the real finish — is the one kept.
+ */
+function notificationText(rec, content) {
+    let out = contentText(content);
+    if (typeof rec.content === 'string')
+        out += '\n' + rec.content;
+    const prompt = rec.attachment && rec.attachment.prompt;
+    if (typeof prompt === 'string')
+        out += '\n' + prompt;
+    return out;
+}
+/**
+ * The `<status>` values that end a run: the four seen in real data (2026-11-14). Any
+ * other status leaves the run open, so a future non-terminal one cannot end a live run
+ * early. Closing only on `completed` left every failed, killed or stopped run reading
+ * as running forever (#420).
+ */
+const TERMINAL_STATUSES = new Set(['completed', 'failed', 'killed', 'stopped']);
+function finiteOrNull(v) {
+    return typeof v === 'number' && Number.isFinite(v) ? v : null;
+}
+function intFromMatch(text, re) {
+    const m = text.match(re);
+    return m ? parseInt(m[1], 10) : null;
+}
+/**
+ * Extract agent events from one parsed JSONL record. Pure; shared by
+ * `readAgents` and the incremental cache.
+ */
+export function parseRecordEvents(rec) {
+    if (!rec || typeof rec !== 'object')
+        return [];
+    const content = rec.message ? rec.message.content : undefined;
+    const ts = typeof rec.timestamp === 'string' ? rec.timestamp : null;
+    const events = [];
+    // Background completion: a task-notification keyed by agentId — and it is not
+    // always a user message, so this scan must run before the `message` guard.
+    const flat = notificationText(rec, content);
+    if (flat.includes('<task-notification>')) {
+        const idM = flat.match(TASK_ID_RE);
+        const stM = flat.match(STATUS_RE);
+        if (idM && stM) {
+            events.push({
+                kind: 'notify',
+                agentId: idM[1],
+                terminal: TERMINAL_STATUSES.has(stM[1].toLowerCase()),
+                ts,
+                tokens: intFromMatch(flat, SUBAGENT_TOKENS_RE),
+                toolUses: intFromMatch(flat, TOOL_USES_RE),
+                exactDurationMs: intFromMatch(flat, DURATION_MS_RE)
+            });
+        }
+    }
+    if (!Array.isArray(content))
+        return events;
+    // The record-level toolUseResult describes the record's tool_result (records
+    // carry at most one in practice; apply it to the first).
+    let tur = rec.toolUseResult;
+    for (const b of content) {
+        if (!b || typeof b !== 'object')
+            continue;
+        if (isAgentLaunch(b) && typeof b.id === 'string') {
+            const input = b.input || {};
+            events.push({
+                kind: 'launch',
+                id: b.id,
+                type: typeof input.subagent_type === 'string' ? input.subagent_type : '',
+                description: typeof input.description === 'string' ? input.description : '',
+                ts
+            });
+        }
+        else if (isSendMessage(b) && typeof b.id === 'string') {
+            const input = b.input || {};
+            events.push({ kind: 'send', id: b.id, summary: typeof input.summary === 'string' ? input.summary : '', ts });
+        }
+        else if (b.type === 'tool_result' && typeof b.tool_use_id === 'string') {
+            const text = toolResultText(b);
+            const t = tur && typeof tur === 'object' ? tur : null;
+            tur = undefined; // first tool_result consumes it
+            // A structured result decides alone: a sync report may quote the ack phrase (#521). The text is the fallback for records without one.
+            const isAsyncAck = t
+                ? t.isAsync === true || t.status === 'async_launched'
+                : /Async agent launched/i.test(text);
+            // Both shapes name the subagent: an ack so its completion can be paired,
+            // a sync result so its own transcript (`subagents/agent-<id>.jsonl`) can be.
+            let agentId = t && typeof t.agentId === 'string' ? t.agentId : null;
+            if (isAsyncAck && !agentId) {
+                const m = text.match(AGENT_ID_RE);
+                agentId = m ? m[1] : null;
+            }
+            let resumedAgentId = t && typeof t.resumedAgentId === 'string' ? t.resumedAgentId : null;
+            if (!resumedAgentId) {
+                const m = text.match(RESUMED_ID_RE);
+                resumedAgentId = m ? m[1] : null;
+            }
+            events.push({
+                kind: 'result',
+                toolUseId: b.tool_use_id,
+                ts,
+                isAsyncAck: !!isAsyncAck,
+                agentId,
+                resumedAgentId,
+                tokens: isAsyncAck ? null : finiteOrNull(t?.totalTokens),
+                toolUses: isAsyncAck ? null : finiteOrNull(t?.totalToolUseCount),
+                exactDurationMs: isAsyncAck ? null : finiteOrNull(t?.totalDurationMs)
+            });
+        }
+    }
+    return events;
+}
+export function createScanState() {
+    return { launches: [], byToolUseId: new Map(), byAgentId: new Map(), sends: new Map(), seen: new Set() };
+}
+/**
+ * Fold one event into the state. First result / first notification wins. A replayed launch or send is dropped; its replayed
+ * result and notification then find nothing armed to settle, so they need no guard of their own.
+ */
+export function applyEvent(state, ev) {
+    if (ev.kind === 'launch' || ev.kind === 'send') {
+        if (state.seen.has(ev.id))
+            return;
+        state.seen.add(ev.id);
+    }
+    if (ev.kind === 'launch') {
+        const l = {
+            id: ev.id, type: ev.type, description: ev.description,
+            startedAt: ev.ts, endedAt: null, exactDurationMs: null, tokens: null, toolUses: null, agentId: null, resumed: false
+        };
+        state.launches.push(l);
+        if (!state.byToolUseId.has(ev.id))
+            state.byToolUseId.set(ev.id, l);
+        return;
+    }
+    if (ev.kind === 'send') {
+        if (!state.sends.has(ev.id))
+            state.sends.set(ev.id, { summary: ev.summary, ts: ev.ts });
+        return;
+    }
+    if (ev.kind === 'result') {
+        const l = state.byToolUseId.get(ev.toolUseId);
+        if (!l) {
+            const send = state.sends.get(ev.toolUseId);
+            if (!send)
+                return;
+            state.sends.delete(ev.toolUseId);
+            if (ev.resumedAgentId)
+                applyResume(state, ev.toolUseId, ev.resumedAgentId, send, ev.ts);
+            return;
+        }
+        state.byToolUseId.delete(ev.toolUseId);
+        l.agentId = ev.agentId;
+        if (ev.isAsyncAck) {
+            // Launch ack, not completion; completion (if any) is a later
+            // task-notification keyed by agentId. Unparsable id → stays running.
+            if (ev.agentId && !state.byAgentId.has(ev.agentId))
+                state.byAgentId.set(ev.agentId, l);
+        }
+        else {
+            l.endedAt = ev.ts;
+            l.tokens = ev.tokens;
+            l.toolUses = ev.toolUses;
+            l.exactDurationMs = ev.exactDurationMs;
+        }
+        return;
+    }
+    // notify — only a timestamped terminal status resolves the launch.
+    if (!ev.terminal || !ev.ts)
+        return;
+    const l = state.byAgentId.get(ev.agentId);
+    if (!l)
+        return;
+    state.byAgentId.delete(ev.agentId);
+    l.endedAt = ev.ts;
+    l.tokens = ev.tokens;
+    l.toolUses = ev.toolUses;
+    l.exactDurationMs = ev.exactDurationMs;
+}
+/**
+ * Open a row for a SendMessage resume, pending the task-notification for its
+ * agentId. It inherits the resumed launch's type, and its description unless the
+ * SendMessage carried a summary. It takes over `byAgentId`: a resume proves the
+ * previous run stopped, so the next notification for that id is this run's. A previous
+ * run still open there — no terminal notification seen — is closed at the resume time
+ * (the SendMessage's ts, else the resume result's), with no figures of its own; left
+ * open, nothing could ever close it (#420).
+ */
+function applyResume(state, id, agentId, send, resultTs) {
+    const prev = state.byAgentId.get(agentId);
+    if (prev && prev.endedAt === null)
+        prev.endedAt = send.ts ?? resultTs;
+    const origin = state.launches.find(x => x.agentId === agentId && !x.resumed);
+    const l = {
+        id, type: origin ? origin.type : '', description: send.summary || (origin ? origin.description : ''),
+        startedAt: send.ts, endedAt: null, exactDurationMs: null, tokens: null, toolUses: null, agentId, resumed: true
+    };
+    state.launches.push(l);
+    state.byAgentId.set(agentId, l);
+}
+/** Materialize AgentJob[] (newest-first) from state. Non-destructive. */
+export function toAgentJobs(state) {
+    const agents = state.launches.map(l => {
+        const startMs = l.startedAt ? Date.parse(l.startedAt) : NaN;
+        const endMs = l.endedAt ? Date.parse(l.endedAt) : NaN;
+        const diff = Number.isFinite(startMs) && Number.isFinite(endMs) ? endMs - startMs : null;
+        return {
+            id: l.id,
+            type: l.type,
+            description: l.description,
+            status: l.endedAt ? 'done' : 'running',
+            startedAt: l.startedAt,
+            endedAt: l.endedAt,
+            durationMs: l.exactDurationMs ?? diff,
+            tokens: l.tokens,
+            toolUses: l.toolUses,
+            agentId: l.agentId,
+            ...(l.resumed ? { resumed: true } : {})
+        };
+    });
+    agents.reverse(); // file order is oldest→newest; return newest-first
+    return agents;
+}
+/**
+ * Read a transcript and return its subagents, newest-first.
+ * Returns null if the file can't be read. Whole-file pure pass — the
+ * cold-start / fallback / test oracle for the incremental cache.
+ */
+export function readAgents(filePath) {
+    let text;
+    try {
+        text = fs.readFileSync(filePath, 'utf8');
+    }
+    catch {
+        return null;
+    }
+    const state = createScanState();
+    for (const line of text.split('\n')) {
+        const trimmed = line.trim();
+        if (!trimmed)
+            continue;
+        let rec;
+        try {
+            rec = JSON.parse(trimmed);
+        }
+        catch {
+            continue;
+        }
+        for (const ev of parseRecordEvents(rec))
+            applyEvent(state, ev);
+    }
+    return toAgentJobs(state);
+}
