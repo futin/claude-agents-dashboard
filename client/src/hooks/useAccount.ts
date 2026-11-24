@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 
+import { createPollSeq, pollFetch } from '../lib/pollSeq';
 import type { AccountResponse } from '../../../shared/types';
 
 /**
@@ -14,6 +15,8 @@ import type { AccountResponse } from '../../../shared/types';
  * endpoint fails open, so a *thrown* fetch means the server is gone, which is
  * not a statement about the account. `useSessions` already owns saying the link
  * is down.
+ *
+ * Follows the `pollSeq` rule: a tick is skipped while a request is out, and only the newest answer is applied.
  */
 export const ACCOUNT_POLL_MS = 30_000;
 
@@ -22,14 +25,18 @@ export function useAccount(): AccountResponse | null {
 
   useEffect(() => {
     let alive = true;
+    // The default 30s bound equals the interval, so a hung request costs one skipped tick at most.
+    const seq = createPollSeq();
 
     async function poll(): Promise<void> {
+      const n = seq.next(false);
+      if (n === null) return;
       try {
-        const res = await fetch('/api/account');
+        const res = await pollFetch('/api/account');
         const body = await res.json() as AccountResponse;
-        if (alive && body && typeof body === 'object') setData(body);
+        if (seq.settle(n) && alive && body && typeof body === 'object') setData(body);
       } catch {
-        /* keep what is on screen */
+        seq.settle(n); // keep what is on screen
       }
     }
 

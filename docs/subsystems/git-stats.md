@@ -300,7 +300,8 @@ disabled; a `working` or `question` row is "Syncing" (no "open" suffix: the cyan
 forgotten (`reconcileRuns` in `client/src/lib/gitSyncRuns.ts`), and each payload that forgets any run re-polls git stats once. A row missing from the
 payload is not an end, since the scan caps rows by recency and a sync parked on its question writes nothing, so absence ends a run only 24h after launch
 once its row has shown, or 10 min after launch if it never has: a launch that failed while no tab watched leaves no trace once the server drops it.
-That sessions poll runs only while a run is remembered or the drawer is open, and asks for the server's maximum of 50 rows. A refused launch (no Answer
+Sync reads the sessions payload `GitView` already polls for the session join (`useSessions({limit: 50})`, the server's maximum), so the view makes one
+`/api/sessions` request per tick. A refused launch (no Answer
 token), a launch error, or a launch the server reports failed leaves one amber line under the band; a reply that cannot be read (`UNREADABLE_LAUNCH_REPLY`)
 drops that line's "couldn't start", since the sync may be running (`syncLaunchErrorText`). One launch at a time: every pill disables while one is
 in flight, and only the clicked one reads "Starting…". The runs key is not a setting, so Settings › Reset leaves it alone.

@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { useAnswerToken } from './useAnswerToken';
+import { createPollSeq, pollFetch } from '../lib/pollSeq';
 import { postWrite } from '../lib/postWrite';
 import { refusalFlags } from '../lib/writeRefusal';
 import type { HealthResponse, RemoteAnswerState } from '../../../shared/types';
@@ -23,7 +24,8 @@ export interface RemoteAnswerControl {
  * flips it with `POST /api/remote-answer`.
  *
  * Polled (not just fetched once) because the other surface can flip it — your
- * phone turning it on should show up on the laptop without a reload.
+ * phone turning it on should show up on the laptop without a reload. The read follows the `pollSeq` rule, and a successful toggle forces one that
+ * supersedes any read still in flight, so a health answer sent before the flip cannot put the old state back.
  */
 export function useRemoteAnswer(): RemoteAnswerControl {
   const [state, setState] = useState<HealthResponse | null>(null);
@@ -31,21 +33,26 @@ export function useRemoteAnswer(): RemoteAnswerControl {
   const [needsToken, setNeedsToken] = useState(false);
   const [readOnly, setReadOnly] = useState(false);
   const [token] = useAnswerToken();
+  const readRef = useRef<(force: boolean) => void>(() => {});
 
   useEffect(() => {
     let live = true;
-    async function read(): Promise<void> {
+    const seq = createPollSeq();
+    async function read(force: boolean): Promise<void> {
+      const n = seq.next(force);
+      if (n === null) return;
       try {
-        const res = await fetch('/api/health');
+        const res = await pollFetch('/api/health');
         const body = (await res.json()) as HealthResponse;
-        if (live && typeof body?.remoteAnswer === 'boolean') setState(body);
+        if (seq.settle(n) && live && typeof body?.remoteAnswer === 'boolean') setState(body);
       } catch {
-        /* keep the last snapshot; the next tick retries */
+        seq.settle(n); // keep the last snapshot; the next tick retries
       }
     }
-    void read();
-    const timer = setInterval(() => void read(), POLL_MS);
-    return () => { live = false; clearInterval(timer); };
+    readRef.current = force => void read(force);
+    void read(false);
+    const timer = setInterval(() => void read(false), POLL_MS);
+    return () => { live = false; readRef.current = () => {}; clearInterval(timer); };
   }, []);
 
   const toggle = useCallback(async () => {
@@ -65,6 +72,8 @@ export function useRemoteAnswer(): RemoteAnswerControl {
         // health-only fields (origin) would blank out until the next poll.
         const body = result.body as RemoteAnswerState | undefined;
         if (body) setState(prev => ({ ...(prev ?? { ok: true as const }), ...body }));
+        // A read sent before the flip may answer after it; the forced read settles it as stale and brings the post-toggle health.
+        readRef.current(true);
       }
     } finally {
       setBusy(false);

@@ -267,7 +267,9 @@ then turn tailnet trust off and use the token; behind a *public* tunnel it is th
   "switch"` + `aria-checked` carry the same distinction to a screen reader. Polled every
   15s, not fetched once,
   because the *other* surface can flip it — turning it on from your phone should show up
-  on the laptop without a reload. Renders as an inert `<span>` (not a disabled button)
+  on the laptop without a reload. The read follows the `pollSeq` rule (a tick skipped while one is out, only the newest
+  answer applied), and a successful toggle forces a read that supersedes one in flight, so a health answer sent before the
+  flip cannot put the old state back. Renders as an inert `<span>` (not a disabled button)
   when `available` is false, so a config kill switch can't look like a stuck control. Its
   wording is "remote answers", never a device word: the answering surface is any browser
   — laptop, tablet, another tab on this machine — and the switch governs plan send-backs

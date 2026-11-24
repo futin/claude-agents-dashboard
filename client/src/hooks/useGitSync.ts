@@ -1,15 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-import type { RepoGitStats, Session, WriteAccess } from '../../../shared/types';
+import type { RepoGitStats, Session, SessionsResponse, WriteAccess } from '../../../shared/types';
 import {
-  SYNC_NEEDS_TOKEN, SYNC_SCAN_LIMIT, canSync, parseSyncRuns, runFor, syncFailedText, syncLaunchErrorText, syncPhase, syncRequest,
+  SYNC_NEEDS_TOKEN, canSync, parseSyncRuns, runFor, syncFailedText, syncLaunchErrorText, syncPhase, syncRequest,
   type OkRepo, type SyncPhase,
 } from '../lib/gitSync';
 import { reconcileRuns } from '../lib/gitSyncRuns';
 import { READ_ONLY_TEXT } from '../lib/writeRefusal';
 import { usePersistedState } from './usePersistedState';
 import { useRemoteAnswer } from './useRemoteAnswer';
-import { useSessions } from './useSessions';
 import { useSettings } from './useSettings';
 import { useSpawn } from './useSpawn';
 
@@ -38,11 +37,11 @@ export interface GitSyncControl {
 }
 
 /**
- * Management › Git's Sync button (git-stats spec §9). Runs are remembered per device under their repo's toplevel; the sessions poll runs only while one
- * is remembered or its drawer is open, and asks for every row the server allows so a sync parked on its question rarely falls off the list. A run that
- * ends is forgotten and `onEnded` re-polls git stats, once per payload however many ended.
+ * Management › Git's Sync button (git-stats spec §9). Runs are remembered per device under their repo's toplevel; the hook polls nothing itself but reads
+ * the sessions payload `GitView` already polls at the server's row cap (`SYNC_SCAN_LIMIT`), so a sync parked on its question rarely falls off the list and
+ * the view makes one `/api/sessions` request per tick. A run that ends is forgotten and `onEnded` re-polls git stats, once per payload however many ended.
  */
-export function useGitSync(onEnded: () => void): GitSyncControl {
+export function useGitSync(onEnded: () => void, sessions: SessionsResponse | null): GitSyncControl {
   const { settings } = useSettings();
   const remote = useRemoteAnswer();
   const { launch, pending, error, needsToken, readOnly } = useSpawn();
@@ -52,8 +51,7 @@ export function useGitSync(onEnded: () => void): GitSyncControl {
   const [chatId, setChatId] = useState<string | null>(null);
   const [lastChat, setLastChat] = useState<Session | null>(null);
   const [note, setNote] = useState<string | null>(null);
-  const hasRuns = Object.keys(runs).length > 0;
-  const { data } = useSessions({ enabled: hasRuns || chatId !== null, limit: SYNC_SCAN_LIMIT });
+  const data = sessions;
 
   const onEndedRef = useRef(onEnded);
   onEndedRef.current = onEnded;

@@ -331,7 +331,8 @@ the field to supply ([remote-access](remote-access.md)).
 ## Tokens spent
 
 The drawer's second card under Context is the session's running spend (`useSessionSpend`, `lib/sessionSpend.ts`), read from
-`GET /api/sessions/:id/spend` (`server/lib/session-spend.ts`) on the Settings refresh interval, while the drawer is open. Context falls when a compaction runs;
+`GET /api/sessions/:id/spend` (`server/lib/session-spend.ts`) on the Settings refresh interval, while the drawer is open. The poll follows the `pollSeq` rule: it
+skips a tick while a request is out and applies only the newest answer, so a late, older answer can never step the figure back. Context falls when a compaction runs;
 this figure does not, because transcripts are append-only, a replayed turn dedupes by `message.id` and the summary record is skipped.
 
 - **Figure:** `billableApprox` (input + output + cache writes; cache reads are out), by the same rules as the session analysis: main like `analyzeSession`,

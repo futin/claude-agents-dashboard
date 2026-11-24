@@ -40,7 +40,10 @@ const ChatDrawer = lazy(() => import('../ChatDrawer'));
 export default function GitView() {
   const stats = useGitStats();
   const { data, error } = stats;
-  const sync = useGitSync(stats.refresh);
+  // One sessions poll for the view: the layouts' session join and Sync's run scan both read it.
+  const sessionsState = useSessions({ limit: SYNC_SCAN_LIMIT });
+  const sessions = sessionsState.data?.sessions ?? [];
+  const sync = useGitSync(stats.refresh, sessionsState.data);
   const fetchCtl = useGitFetch(sync.tokenRequired, sync.writeAccess, stats.refresh);
   const quick = useGitQuick(sync.tokenRequired, sync.writeAccess, stats.refresh);
   const { note: quickNote, clearNote: clearQuickNote } = quick;
@@ -54,8 +57,6 @@ export default function GitView() {
   const narrow = useNarrow();
   const [stored, setStored] = usePersistedState<string>('management.gitLayout', DEFAULT_GIT_LAYOUT);
   const layout = drawableGitLayout(parseGitLayout(stored), narrow);
-  const sessionsState = useSessions({ limit: SYNC_SCAN_LIMIT });
-  const sessions = sessionsState.data?.sessions ?? [];
   const pins = usePins();
   const [unpinNote, setUnpinNote] = useState<string | null>(null);
   const folder = useOpenFolder();
