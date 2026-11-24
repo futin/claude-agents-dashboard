@@ -229,8 +229,9 @@ only process that runs a job. In order:
    file it appends a `refused` record and exits 0, because the dashboard may have been down when the file changed. A manual run of a disabled
    file is allowed (that is Run now on a paused job); the other two refuse manually too.
 2. Take `locks/<job>.lock` by linking a complete temp file into place (it fails on an existing lock, and no reader sees it empty), pid and boot id inside.
-   A live pid from this boot whose command line is `run-routine <job>` makes it append
-   `refused` (`running`) and exit **75**; any other lock is stale and taken over, and the reader shows that run as lost. The boot id is the seconds of
+   A live pid from this boot whose command line is `run-routine <job>` (or the pre-rename `run-schedule <job>`) makes it append
+   `refused` (`running`) and exit **75**; any other lock is stale and taken over, and the reader shows that run as lost. That test and the boot comparison
+   are `isWrapperCommand` and `sameBoot` in `shared/routine-file.ts`, the same two the server's lock sweep runs. The boot id is the seconds of
    `sysctl -n kern.boottime` on mac and `/proc/sys/kernel/random/boot_id` on WSL.
 3. A scheduled fire more than 10 minutes after its slot is marked `late` (never a manual one).
 4. Compute the steps, append `start`, then per step: run the `when:` gate if the job has one (`bash -c` in the step's cwd and env, its own process
