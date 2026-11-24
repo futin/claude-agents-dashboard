@@ -38,7 +38,8 @@
 #     `eval`, `xargs -r`, stacked or not (`sudo timeout 5 /usr/bin/pkill …`)
 #   …inside a shell's command string: `sh -c '…'`, `bash -lc "…"`, likewise
 #     `zsh`, `dash`, `ksh` with any flag carrying `c`
-#   xargs pkill -f        — with no operand: the pattern comes from stdin
+#   xargs pkill -f …      — with or without an operand, anchored or not: xargs
+#                           appends stdin as further patterns, which pkill ORs
 # What is allowed:
 #   kill <pid>            — never matched here; killing a pid you hold is right
 #   pkill -f "$PWD/…"     — a pattern anchored to an absolute path under the
@@ -49,7 +50,8 @@
 #                           that directory instead); a literal path under the
 #                           cwd is allowed either way. Never with a `|` inside
 #                           the pattern: `-f` reads an extended regex, so
-#                           "$PWD/x|vite" also matches every vite on the machine
+#                           "$PWD/x|vite" also matches every vite on the machine.
+#                           Never behind `xargs` (see above)
 #
 # Known false positive: a `pkill <pattern>` written at the start of a line
 # inside a heredoc — documenting the thing rather than doing it — parses here as
@@ -151,7 +153,7 @@ norm() {
 # duration, and `chrt` a priority and `taskset` a mask, before the command.
 strip_wrappers() {
   local -a w
-  local n i vflags skip j found
+  local n i vflags skip j found wrap
   read -ra w <<< "$1"
   n=${#w[@]}
   i=0
@@ -168,7 +170,7 @@ strip_wrappers() {
                vflags="$vflags--other-user --chroot --command-timeout " ;;
       doas)    vflags=' -u -C ' ;;
       exec)    vflags=' -a ' ;;
-      env)     vflags=' -u -C -S --unset --chdir --split-string ' ;;
+      env)     vflags=' -u -C --unset --chdir ' ;;
       nice)    vflags=' -n --adjustment ' ;;
       ionice)  vflags=' -c -n -p --class --classdata --pid ' ;;
       stdbuf)  vflags=' -i -o -e --input --output --error ' ;;
@@ -202,8 +204,15 @@ strip_wrappers() {
           *) break ;;
         esac ;;
     esac
+    wrap=$NORM
     i=$((i + 1))
     while [ "$i" -lt "$n" ]; do
+      # `env -S` splits its value into the command it runs, so that value is
+      # the next word to judge — bare (`-S 'pkill …'`) or attached to the flag.
+      case "$wrap:${w[$i]}" in
+        env:-S?*) w[$i]=${w[$i]#-S}; break ;;
+        env:--split-string=*) w[$i]=${w[$i]#--split-string=}; break ;;
+      esac
       case "${w[$i]}" in
         -*) case "$vflags" in *" ${w[$i]} "*) i=$((i + 2)) ;; *) i=$((i + 1)) ;; esac ;;
         *) break ;;
@@ -307,7 +316,9 @@ while IFS= read -r segment; do
   OPERANDS=$(operands_of "$segment")
   [ -n "$OPERANDS" ] || [ -n "$VIA_XARGS" ] || continue
 
-  if [ "$verb" = "pkill" ] && [ -n "$OPERANDS" ] && anchored_to_cwd "$OPERANDS"; then
+  # Never behind `xargs`: it appends stdin to the patterns written, and pkill
+  # ORs them, so `… | xargs pkill -f "$PWD/x"` is `pkill -f <cwd>/x vite`.
+  if [ "$verb" = "pkill" ] && [ -z "$VIA_XARGS" ] && [ -n "$OPERANDS" ] && anchored_to_cwd "$OPERANDS"; then
     continue
   fi
 

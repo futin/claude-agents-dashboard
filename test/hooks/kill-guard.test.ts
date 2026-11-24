@@ -147,7 +147,15 @@ const DENIED: string[] = [
   "zsh -c 'pkill node'",
   // `xargs` supplies the pattern from stdin, so a missing operand is the normal
   // shape of a real kill here, not the prose the bare-verb pass exists for.
-  'echo vite | xargs pkill -f'
+  'echo vite | xargs pkill -f',
+  // …and it appends stdin to any pattern written, and pkill ORs its patterns,
+  // so an anchored one no longer bounds what dies.
+  'echo vite | xargs pkill -f "$PWD/x"',
+  `echo vite | xargs pkill -f ${CWD}/x`,
+  // `env -S` splits its value into the command it runs.
+  "env -S 'pkill -f vite'",
+  "env --split-string='pkill -f vite'",
+  "env -S'pkill -f vite'"
 ];
 
 const ALLOWED: string[] = [
