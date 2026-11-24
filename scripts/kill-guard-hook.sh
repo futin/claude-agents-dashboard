@@ -31,6 +31,14 @@
 # What is refused:
 #   pkill <anything>      — with or without -f, patterns match machine-wide
 #   killall <anything>    — kills every process of that name, by definition
+#   …under any spelling of the name: `/usr/bin/pkill`, `\pkill`, `'pkill'`
+#   …behind a wrapper, its own options and operands included: `sudo -u root`,
+#     `doas`, `exec`, `env -i`, `nohup`, `time`, `timeout -s KILL 5`,
+#     `nice -n 5`, `ionice -c3`, `setsid`, `stdbuf -oL`, `chrt`, `taskset`,
+#     `eval`, `xargs -r`, stacked or not (`sudo timeout 5 /usr/bin/pkill …`)
+#   …inside a shell's command string: `sh -c '…'`, `bash -lc "…"`, likewise
+#     `zsh`, `dash`, `ksh` with any flag carrying `c`
+#   xargs pkill -f        — with no operand: the pattern comes from stdin
 # What is allowed:
 #   kill <pid>            — never matched here; killing a pid you hold is right
 #   pkill -f "$PWD/…"     — a pattern anchored to an absolute path under the
@@ -49,6 +57,12 @@
 # alternative is a shell parser in bash, which would be a worse trade. Prose
 # that merely NAMES the tool is fine, however common the shape: see the bare-verb
 # branch below for why that had to be handled rather than tolerated.
+#
+# Known limits — what still gets through by design, because judging it would
+# take a shell parser: a command held in a variable (`$K -f vite`), one run
+# from a script file (`bash kill.sh`), and `find … -exec pkill …`. In the other
+# direction, an anchored pattern inside `sh -c '…'` may be refused: the outer
+# quote tears the operand, which then never reads as anchored — the safe side.
 #
 # Install:
 #   ln -s "$PWD/scripts/kill-guard-hook.sh" ~/.claude/hooks/kill-guard.sh
@@ -103,24 +117,96 @@ SEGMENTS=$(printf '%s\n' "$CMD" | sed -e 's/&&/\
 /g' -e 's/[;|&()`]/\
 /g')
 
-# Words that can precede the real command without changing which command it is.
+# The program a command word names, as the shell resolves it: `/usr/bin/pkill`,
+# `\pkill` (the backslash only skips aliases) and `'pkill'` are all `pkill`, and
+# so is the `'pkill` a shell's quoted command string leaves once the shell is
+# stripped below. Sets NORM rather than printing, so a caller in a loop pays no
+# subshell per word.
+norm() {
+  NORM=${1#\\}
+  NORM=${NORM//\'/}
+  NORM=${NORM//\"/}
+  NORM=${NORM##*/}
+}
+
+# Words that can precede the real command without changing which command it is,
+# together with their own options and operands: `sudo -u root pkill` runs
+# `pkill`, not `-u`. Leaves the rest of the segment in STRIPPED, and sets
+# VIA_XARGS when an `xargs` was among them (the operand then comes from stdin).
+#
 # The control keywords are on the list because `if cd /Users; then …` and
-# `if pkill …; then …` are a `cd` and a `pkill` all the same.
-# `env` is handled by the VAR=value case below it, since `env FOO=1 pkill …` and
-# `FOO=1 pkill …` are the same command wearing different clothes.
+# `if pkill …; then …` are a `cd` and a `pkill` all the same. `env FOO=1 pkill`
+# and `FOO=1 pkill` are the same command wearing different clothes, so a
+# VAR=value word is skipped wherever it stands in the run. A shell is a wrapper
+# only with a `-c` flag (alone or combined, `-lc`): `bash script.sh` runs a file
+# this hook cannot read, and is judged as `bash`. `command -v` looks a name up
+# instead of running it, so nothing after it is a command.
+#
+# Value-taking flags are listed per wrapper so their value is skipped with them
+# (`timeout -s KILL`, `nice -n 5`); a value attached to its flag (`-oL`, `-c3`,
+# `--signal=KILL`) is one word and needs no entry. `timeout` then takes a
+# duration, and `chrt` a priority and `taskset` a mask, before the command.
 strip_wrappers() {
-  seg="$1"
-  while :; do
-    first=$(printf '%s' "$seg" | awk '{print $1}')
-    case "$first" in
-      sudo|exec|nohup|time|command|builtin|env|xargs|if|elif|while|until|then|do|else|!|'{')
-        seg=$(printf '%s' "$seg" | sed -E 's/^[[:space:]]*[^[:space:]]+[[:space:]]*//') ;;
-      *=*)
-        seg=$(printf '%s' "$seg" | sed -E 's/^[[:space:]]*[^[:space:]]+[[:space:]]*//') ;;
-      *) printf '%s' "$seg"; return ;;
+  local -a w
+  local n i vflags skip j found
+  read -ra w <<< "$1"
+  n=${#w[@]}
+  i=0
+  while [ "$i" -lt "$n" ]; do
+    norm "${w[$i]}"
+    vflags=
+    skip=
+    case "$NORM" in
+      if|elif|while|until|then|do|else|'!'|'{'|eval|nohup|builtin)
+        i=$((i + 1)); continue ;;
+      command)
+        case "${w[$((i + 1))]}" in -v|-V) STRIPPED=; return ;; esac ;;
+      sudo)    vflags=' -u -g -C -D -h -p -r -t -U -R -T ' ;;
+      doas)    vflags=' -u -C ' ;;
+      exec)    vflags=' -a ' ;;
+      env)     vflags=' -u -C -S ' ;;
+      nice)    vflags=' -n ' ;;
+      ionice)  vflags=' -c -n -p ' ;;
+      stdbuf)  vflags=' -i -o -e ' ;;
+      timeout) vflags=' -s -k '; skip=duration ;;
+      chrt|taskset) skip=operand ;;
+      xargs)   vflags=' -I -L -n -P -s -d -E -a -J -R -S '; VIA_XARGS=1 ;;
+      time|setsid) ;;
+      sh|bash|zsh|dash|ksh)
+        j=$((i + 1)); found=
+        while [ "$j" -lt "$n" ]; do
+          case "${w[$j]}" in
+            --*) j=$((j + 1)) ;;
+            -*c*) found=1; j=$((j + 1)) ;;
+            -*) j=$((j + 1)) ;;
+            *) break ;;
+          esac
+        done
+        [ -n "$found" ] || break
+        i=$j; continue ;;
+      *)
+        case "${w[$i]}" in
+          -*) break ;;
+          *=*) i=$((i + 1)); continue ;;
+          *) break ;;
+        esac ;;
     esac
-    [ -n "$seg" ] || { printf '%s' ""; return; }
+    i=$((i + 1))
+    while [ "$i" -lt "$n" ]; do
+      case "${w[$i]}" in
+        -*) case "$vflags" in *" ${w[$i]} "*) i=$((i + 2)) ;; *) i=$((i + 1)) ;; esac ;;
+        *) break ;;
+      esac
+    done
+    if [ "$i" -lt "$n" ]; then
+      case "$skip" in
+        duration) case "${w[$i]}" in [0-9]*|.[0-9]*) i=$((i + 1)) ;; esac ;;
+        operand) i=$((i + 1)) ;;
+      esac
+    fi
   done
+  STRIPPED=
+  [ "$i" -lt "$n" ] && STRIPPED="${w[*]:$i}"
 }
 
 # The arguments of a segment that are not flags — what `pkill` would actually
@@ -188,8 +274,11 @@ deny() {
 MOVED=
 while IFS= read -r segment; do
   [ -n "$segment" ] || continue
-  segment=$(strip_wrappers "$segment")
-  verb=$(printf '%s' "$segment" | awk '{print $1}')
+  VIA_XARGS=
+  strip_wrappers "$segment"
+  segment=$STRIPPED
+  norm "$(printf '%s' "$segment" | awk '{print $1}')"
+  verb=$NORM
   case "$verb" in
     pkill|killall) ;;
     cd|pushd|popd) MOVED=1; continue ;;
@@ -202,11 +291,12 @@ while IFS= read -r segment; do
   # substitution), so every markdown sentence that mentions `pkill` or writes
   # `pkill -f` in inline code arrives here looking exactly like a command. This
   # change's own commit message and documentation both tripped the guard before
-  # this branch existed.
+  # this branch existed. Behind `xargs` the pass does not apply: the pattern
+  # arrives on stdin, so `… | xargs pkill -f` is a real kill with no operand.
   OPERANDS=$(operands_of "$segment")
-  [ -n "$OPERANDS" ] || continue
+  [ -n "$OPERANDS" ] || [ -n "$VIA_XARGS" ] || continue
 
-  if [ "$verb" = "pkill" ] && anchored_to_cwd "$OPERANDS"; then
+  if [ "$verb" = "pkill" ] && [ -n "$OPERANDS" ] && anchored_to_cwd "$OPERANDS"; then
     continue
   fi
 
