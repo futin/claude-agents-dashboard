@@ -79,7 +79,7 @@ One module, Node built-ins only.
 | Question                       | How                                                                                     |
 | ------------------------------ | --------------------------------------------------------------------------------------- |
 | Does the folder exist          | `fs.stat` before any git call. Missing or not a directory → `missing`, with no git run.   |
-| Is this a repo, where is it    | `rev-parse --show-toplevel --path-format=absolute --git-common-dir`. A non-zero exit → `not-git`. The main worktree is the common dir's parent. |
+| Is this a repo, where is it    | `rev-parse --show-toplevel --path-format=absolute --git-common-dir`. A non-zero exit → `not-git`. The main worktree: see §Worktree badge. |
 | Current branch                 | `symbolic-ref -q --short HEAD` → `branch`. Failure = detached: `branch: null`, `detachedSha` = `rev-parse --short HEAD`. |
 | Uncommitted files              | `status --porcelain=v1 -z`, default untracked mode. Counted the way `git status` lists them (see below).                 |
 | Local branches                 | `for-each-ref refs/heads` with name, sha, committer date and `%(worktreepath)`.          |
@@ -95,9 +95,9 @@ directory counts once, not once per file, because that is how the default untrac
 **Unborn HEAD** (a fresh `git init`, no commits yet): `branch` is the name HEAD points at, there are no branches, and trunk is `null`.
 
 **Worktree badge.** `%(worktreepath)` is set for every branch checked out in *any* worktree, the main one included (checked on git 2.50.1).
-`worktreePath` is that path when it differs from the **main worktree**, comparing realpaths, and `null` otherwise. The main worktree is the common dir's
-parent, not `--show-toplevel`; for a pin that is itself a linked worktree, those two differ. Only branches checked out in a *linked* worktree get the D10
-badge.
+`worktreePath` is that path when it differs from the **main worktree**, comparing realpaths, and `null` otherwise. The main worktree is git's first
+`worktree list` entry, not `--show-toplevel`; for a pin that is itself a linked worktree, those two differ. Only branches checked out in a *linked* worktree
+get the D10 badge. (Amended by #521: this first said "the common dir's parent", which is wrong for a submodule or a `--separate-git-dir` repo.)
 
 **Fetched age.** `FETCH_HEAD` is per worktree: a fetch run inside a linked worktree writes `.git/worktrees/<name>/FETCH_HEAD` and leaves `.git/FETCH_HEAD`
 alone (checked on git 2.50.1). The newest one across all worktrees is when this repo's remote-tracking refs were last refreshed. Orchestrator runs fetch

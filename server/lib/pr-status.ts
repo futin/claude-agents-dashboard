@@ -3,7 +3,8 @@
  *
  * `gh` does the network call and the auth; this module only launches it (no shell, 10s timeout, update notifier and prompts off) and folds its JSON. Only a
  * URL matching `GH_PR_RE` ever reaches argv, so a transcript cannot smuggle a flag in. Results are cached per URL: a busy PR (checks running, merge state not
- * yet computed) or a failure for 20s, a settled open one for 60s, a merged or closed one for good. Concurrent callers share the launch in flight.
+ * yet computed) or a failure for 20s, a settled open one for 60s, a closed one for 60s too (a closed PR can be reopened), a merged one for good. Concurrent
+ * callers share the launch in flight.
  *
  * Design: docs/superpowers/specs/2026-10-24-chat-pr-card-design.md §Live status.
  */
@@ -107,7 +108,9 @@ async function launch(url: string, cwd: string | null): Promise<Status> {
 
 function windowFor(s: Status): number {
   if (!s.live) return FAILURE_MS;
-  if (s.live.state === 'merged' || s.live.state === 'closed') return Infinity;
+  // Merged is terminal on GitHub; closed is not — a closed PR can be reopened (#521).
+  if (s.live.state === 'merged') return Infinity;
+  if (s.live.state === 'closed') return SETTLED_MS;
   return (s.live.checks?.running ?? 0) > 0 || s.live.merge === 'unknown' ? BUSY_MS : SETTLED_MS;
 }
 

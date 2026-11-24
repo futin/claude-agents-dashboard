@@ -198,6 +198,20 @@ export async function run(): Promise<number> {
     assert.strictEqual(s.calls.length, 1);
   }));
 
+  // #521: closed is not terminal on GitHub — a reopened PR must reach the card without a server restart.
+  tally(await test('S14b. a closed PR is re-read after 60s, so a reopen shows', async () => {
+    let state = 'CLOSED';
+    const s = spy(() => ok(view(state === 'CLOSED' ? { state, closedAt: '2026-10-24T10:00:01Z' } : {})));
+    setup(s.run);
+    assert.strictEqual((await readPrStatus(URL7, dir)).live?.state, 'closed');
+    state = 'OPEN';
+    clock += 61_000;
+    const live = (await readPrStatus(URL7, dir)).live;
+    assert.strictEqual(live?.state, 'open');
+    assert.strictEqual(live?.endedAt, null);
+    assert.strictEqual(s.calls.length, 2);
+  }));
+
   tally(await test('S15. a failure is kept for 20s, then retried', async () => {
     const s = spy(() => ({ code: 1, stdout: '', stderr: 'boom', timedOut: false }));
     setup(s.run);
