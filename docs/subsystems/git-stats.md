@@ -151,7 +151,7 @@ the entries computed before the throw but pruning nothing until a read finishes.
 ## Worktrees and `FETCH_HEAD`
 
 - `%(worktreepath)` is set for a branch checked out in *any* worktree, the main one included. `worktreePath` is that path only when it differs from the **main
-  worktree**, compared by realpath; the main worktree is the first record of `git worktree list --porcelain -z` (`null` when that record is bare), not
+  worktree**, compared by realpath; the main worktree is the first record of `git worktree list --porcelain` (`null` when that record is bare), not
   `--show-toplevel` and not the common dir's parent, which is wrong for a submodule or a `--separate-git-dir` repo; only a failed call falls back to that
   guess. For a pin that is itself a linked worktree the main worktree and the toplevel differ, so the pin's own branch gets the badge and the main
   worktree's branch does not.

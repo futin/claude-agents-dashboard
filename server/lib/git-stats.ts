@@ -290,12 +290,15 @@ export function stripUserinfo(url: string): string | null {
   return url;
 }
 
-/** The main worktree's realpath from `git worktree list --porcelain -z`'s first record; `null` when that record is bare. */
+/**
+ * The main worktree's realpath from `git worktree list --porcelain`'s first record; `null` when that record is bare. No `-z`: it needs git 2.36, and an
+ * older git refusing it would land every read on the fallback guess, the one that is wrong for a submodule.
+ */
 async function readMainWorktree(git: (dir: string, args: string[]) => Promise<{ code: number; stdout: string }>, toplevel: string, commonDir: string): Promise<string | null> {
-  const r = await git(toplevel, ['worktree', 'list', '--porcelain', '-z']);
+  const r = await git(toplevel, ['worktree', 'list', '--porcelain']);
   if (r.code !== 0) return realpathOr(path.dirname(commonDir));
-  // `-z` ends every attribute with NUL and every record with one more, so the first record is everything before the first empty field.
-  const fields = r.stdout.split('\0');
+  // One attribute per line, records separated by a blank line, so the first record is everything before the first empty line.
+  const fields = r.stdout.split('\n');
   const end = fields.indexOf('');
   const first = end === -1 ? fields : fields.slice(0, end);
   const wt = first.find(f => f.startsWith('worktree '));

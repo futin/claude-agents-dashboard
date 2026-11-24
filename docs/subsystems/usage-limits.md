@@ -1825,9 +1825,9 @@ Accepted limitations:
 
 ## Invariants
 
-- **Fail-open everywhere:** no token / expired / network error / non-2xx / unparseable →
-  `usage: null` → the header simply omits the bars. Never throws into `scanSessions`
-  (which stays pure).
+- **Fail-open everywhere:** no token / expired / signed-out → `usage: null` at once → the header simply omits the bars. A network error, non-2xx
+  (the 429s) or unparseable body keeps the last good reading as `ok` for up to `STALE_MAX_MS` (10 min), then `usage: null`. Never throws into
+  `scanSessions` (which stays pure).
 - **We never write credentials ourselves — we make the CLI do it.** Direct OAuth refresh
   is still rejected: undocumented endpoint, and taking a rotated refresh token and then
   dropping it can log the CLI out.

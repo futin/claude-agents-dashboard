@@ -401,7 +401,8 @@ whole of the widening, and it is what makes a later stop possible at all.
 
 | From | To | Trigger |
 |---|---|---|
-| `launching` | `running` | `adoptLaunched(ids)` sees the id on disk — **non-resume launches only** |
+| `launching` | `running` | `adoptLaunched(ids)` sees the id on disk — **non-resume launches only**, **and the child is still alive** |
+| `launching` | deleted | `adoptLaunched(ids)` sees the id on disk with the child already gone (#521) |
 | `launching` | `running` | `listLaunching(now)` passes `LAUNCH_TTL_MS` **and the child is still alive** |
 | `launching` | deleted | past `LAUNCH_TTL_MS` with the child already gone |
 | `running` | deleted | the child's `'exit'`/`'close'`, whatever the code |
