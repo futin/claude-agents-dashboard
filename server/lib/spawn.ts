@@ -820,6 +820,13 @@ export function adoptLaunched(ids: string[]): number {
     // and otherwise leave through `stopSession` or a failure.
     const entry = entries.get(id);
     if (!entry || entry.resume || entry.state !== 'launching') continue;
+    // A child that exited 0 while launching was left for adoption to settle (the `'exit'` handler). Promoting it would leak a `running` entry nothing
+    // ever removes, and keep `launchEntryState` answering `running` for a dead child (#521) — drop it, as the TTL promotion in `listLaunching` does.
+    if (!childAlive(entry.child)) {
+      if (entry.escalateTimer) clearTimeout(entry.escalateTimer);
+      entries.delete(id);
+      continue;
+    }
     entry.state = 'running';
     n++;
   }

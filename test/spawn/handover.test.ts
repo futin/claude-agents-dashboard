@@ -15,7 +15,7 @@ import {
   HANDOVER_MAX_MS, HANDOVER_POLL_MS, handOverFailedIds, markHandOverFailed, overrideHandOverTimer, resetHandOvers, stepHandOver, watchHandOver, watchedHandOvers,
   type HandOverWatch
 } from '../../server/lib/handover.js';
-import { launch, resetLaunches, setSpawner } from '../../server/lib/spawn.js';
+import { adoptLaunched, launch, resetLaunches, setSpawner } from '../../server/lib/spawn.js';
 import type { Config } from '../../server/lib/config.js';
 import type { ChildProcess } from 'node:child_process';
 
@@ -156,6 +156,17 @@ export async function run(): Promise<number> {
     assert.equal(await stepHandOver(w), 'gave-up');
     assert.deepEqual(f.opened, []);
     assert.equal(handOverFailedIds().has(w.id), false, 'no turn ended, so the promise never came due');
+  }));
+
+  // #521: adoption used to promote a dead child to `running`, so this watch answered `wait` until HANDOVER_MAX_MS (2 h).
+  check(await test('a child that exited 0 before adoption, with no finished turn, is given up on the next poll', async f => {
+    const w = launched(f);
+    write(f, w.id, [user, toolUse]);
+    f.children[0].exitCode = 0;
+    f.children[0].emit('exit', 0, null);
+    adoptLaunched([w.id]);
+    assert.equal(await stepHandOver(w, w.startedAtMs + 10_000), 'gave-up');
+    assert.deepEqual(f.opened, []);
   }));
 
   check(await test('a child gone after finishing its turn is still handed over: the transcript, not the process, decides', async f => {

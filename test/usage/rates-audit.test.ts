@@ -356,6 +356,41 @@ export function run(): number {
     assert.ok(/verdict: /.test(two.out), two.out);
   })) p++; else f++;
 
+  // `Number('7d')` is NaN, every `mtime < sinceMs` test against it is false,
+  // and the ledger used to scan the whole history under a "NaN complete UTC
+  // days" header, exit 0 — the bug #488 fixed in check-token-weights.ts only.
+  const ledgerDays = (...days: string[]): { status: number; stdout: string; stderr: string } => {
+    const root = tmp('ra-days-root-'), dir = tmp('ra-days-dir-');
+    const r = spawnSync('npx', ['tsx', SCRIPT, 'ledger', '--root', root, '--dir', dir, '--days', ...days], {
+      cwd: REPO, encoding: 'utf8'
+    });
+    return { status: r.status ?? -1, stdout: r.stdout ?? '', stderr: r.stderr ?? '' };
+  };
+
+  if (test('--days 7d is refused with exit 2, names the value, and prints no ledger header', () => {
+    const { status, stdout, stderr } = ledgerDays('7d');
+    assert.strictEqual(status, 2, stdout + stderr);
+    assert.ok(stderr.includes('"7d"'), stderr);
+    assert.ok(!stdout.includes('ledger —'), stdout);
+  })) p++; else f++;
+
+  if (test('--days 0, -3 and 1.5 are refused with exit 2', () => {
+    for (const d of ['0', '-3', '1.5']) assert.strictEqual(ledgerDays(d).status, 2, `--days ${d}`);
+  })) p++; else f++;
+
+  if (test('--days followed by another flag is refused with exit 2 as "got nothing"', () => {
+    const root = tmp('ra-days-root-'), dir = tmp('ra-days-dir-');
+    const r = spawnSync('npx', ['tsx', SCRIPT, 'ledger', '--dir', dir, '--days', '--root', root], { cwd: REPO, encoding: 'utf8' });
+    assert.strictEqual(r.status, 2, (r.stdout ?? '') + r.stderr);
+    assert.ok(r.stderr.includes('got nothing'), r.stderr);
+  })) p++; else f++;
+
+  if (test('--days 7 still runs the ledger and exits 0', () => {
+    const { status, stdout, stderr } = ledgerDays('7');
+    assert.strictEqual(status, 0, stdout + stderr);
+    assert.ok(stdout.includes('ledger — 7 complete UTC days'), stdout);
+  })) p++; else f++;
+
   console.log(`\n  ${p} passed, ${f} failed`);
   return f;
 }
