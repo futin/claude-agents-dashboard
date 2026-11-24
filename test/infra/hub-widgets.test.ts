@@ -96,7 +96,13 @@ export async function run(): Promise<number> {
     const sync = await read(() => rows);
     const async_ = await read(async () => rows);
     assert.equal(async_?.status, 200);
-    assert.deepStrictEqual(async_?.json, sync?.json);
+    // Each render stamps updatedAt from the wall clock, so the two bodies differ whenever a millisecond ticks between them (#545): compare the rows.
+    type Body = { rows: unknown[]; updatedAt: unknown };
+    const [s, a] = [sync?.json as Body, async_?.json as Body];
+    assert.deepStrictEqual(a.rows, s.rows);
+    assert.equal(a.rows.length, 2);
+    assert.equal(typeof s.updatedAt, 'string');
+    assert.equal(typeof a.updatedAt, 'string');
   }));
 
   check(await testAsync('showUsage false serves only sessions; usage is 404', async () => {
