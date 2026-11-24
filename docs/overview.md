@@ -372,7 +372,7 @@ client/src/
                   useCodegraph (the CodeGraph sub-view's 30s visible-only poll, 3s while a run is live), useCodegraphRun (its Sync / Reindex keys),
                   useRoutines / useRoutineRuns (the Routines sub-view's 3s polls, one `createPollSeq` each) and useRoutineWrite (its one write helper),
                   useGitStats (the Git sub-view's 30s visible-only poll), useGitSync (its
-                  Sync button: runs per device, a sessions poll only while one is live),
+                  Sync button: runs per device, read off the sessions payload GitView polls),
                   useDraft (an input's typed text, kept local until it is whole),
                   usePersistedState, useAnswerToken (the page's one Answer token copy), useSettings, useServerSettings, useDictation, useFloatingTip
                   (the one hover/pin explanation panel, shared by both Usage tabs),
@@ -382,7 +382,7 @@ client/src/
                   useStuckStrip (when the phone's aside strip pins)
   lib/            routines (the Routines page's pure helpers: pills, run folding, the Repos helper, write-failure text), routineForm (the job drawer's
                   Form view: one read/write/summary per row over the file text), filterSort, analyticsFilterSort, chatFilter, chatRow (the Sessions drawer's session: the live poll row, else one fetched from `/api/sessions/:id/row` when the filtered poll lacks it), chatPaging (the chat drawer's byte offsets: one
-                  tail poll at a time, an epoch per re-tail, a retry after a failed tail), pollSeq (`createPollSeq`, the skip-while-in-flight rule useSessions, usePendingReply, useSessionDetail and the Routines
+                  tail poll at a time, an epoch per re-tail, a retry after a failed tail), pollSeq (`createPollSeq`, the skip-while-in-flight rule useSessions, usePendingReply, useSessionDetail, useSessionSpend, useAccount, useRemoteAnswer and the Routines
                   polls share, and `pollFetch`, the 30s bound every guarded poll's request carries),
                   heldBody (which timeline body a pinned panel folds), markdown, configsEntries,
                   format, settings, persistedReset (Settings › Reset's reach into mounted usePersistedState holders),

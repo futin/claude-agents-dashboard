@@ -95,7 +95,7 @@ write, or JSON that is not an object all fail open to `null` the same way.
   `serveSessions` attaches), so it is cheap to poll slowly.
 
 `useAccount` polls it every **30s**, owned by `App` so the chip's two homes cannot both
-poll. A failed poll keeps the last good snapshot: the endpoint fails open, so a *thrown*
+poll. It follows the `pollSeq` rule: a tick is skipped while a request is out, and only the newest answer is applied. A failed poll keeps the last good snapshot: the endpoint fails open, so a *thrown*
 fetch means the server is gone, which is not a statement about the account —
 `useSessions` already owns saying the link is down.
 
