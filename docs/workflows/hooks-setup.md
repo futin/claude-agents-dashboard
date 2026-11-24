@@ -68,7 +68,7 @@ same command (a literal path under it is allowed either way), and a pattern with
 `"$PWD/x|vite"` matches every vite on the machine. The name is judged as the shell resolves it — `/usr/bin/pkill`, `\pkill` and `'pkill'` are all `pkill` —
 and behind any wrapper that runs it, the wrapper's own options included (`sudo -u root`, `timeout -s KILL 5`, `nice -n 5`, `env -i`, `xargs -r`, `sh -c '…'`
 and the rest the script's header lists); `… | xargs pkill -f` is refused with no pattern written, since `xargs` supplies one. What still gets through by
-design — a command held in a variable, a script file, `find … -exec` — is in that header's *Known limits*.
+design — a command held in a variable, a script file, `find … -exec`, a wrapper option it does not list — is in that header's *Known limits*.
 
 It is in this installer because of 2026-09-06. An unattended session in a sibling repo
 tore down two preview servers it had started itself, by pattern rather than by pid. The

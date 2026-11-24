@@ -129,6 +129,17 @@ const DENIED: string[] = [
   'xargs -r pkill -f vite',
   'eval pkill -f vite',
   'sudo timeout 5 /usr/bin/pkill -f vite',
+  // Long options whose value is the next word: the value is not the command.
+  'sudo --user root pkill -f vite',
+  'timeout --signal KILL 5 pkill -f vite',
+  'nice --adjustment 5 pkill -f vite',
+  'env --unset FOO pkill -f vite',
+  'xargs --max-args 1 pkill -f',
+  // A shell option with a value of its own may come before the `-c`.
+  "bash -o pipefail -c 'pkill -f vite'",
+  "bash -O extglob -c 'pkill -f vite'",
+  "bash +o histexpand -c 'pkill -f vite'",
+  "bash -eo pipefail -c 'pkill -f vite'",
   // A shell handed a command string runs that string.
   "sh -c 'pkill -f vite'",
   'bash -c "pkill -f vite"',
@@ -181,6 +192,7 @@ const ALLOWED: string[] = [
   // A shell given a script path is not handed a command string.
   'bash scripts/kill-guard-hook.sh',
   'bash scripts/pkill-notes.sh',
+  'bash -o pipefail scripts/pkill-notes.sh',
   // Looking the tool up is not running it.
   'command -v pkill',
   'which killall',

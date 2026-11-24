@@ -60,7 +60,9 @@
 #
 # Known limits — what still gets through by design, because judging it would
 # take a shell parser: a command held in a variable (`$K -f vite`), one run
-# from a script file (`bash kill.sh`), and `find … -exec pkill …`. In the other
+# from a script file (`bash kill.sh`), `find … -exec pkill …`, and a wrapper
+# option that takes its value as the next word but is not on that wrapper's
+# list in `strip_wrappers` (its value is then read as the command). In the other
 # direction, an anchored pattern inside `sh -c '…'` may be refused: the outer
 # quote tears the operand, which then never reads as anchored — the safe side.
 #
@@ -142,8 +144,9 @@ norm() {
 # this hook cannot read, and is judged as `bash`. `command -v` looks a name up
 # instead of running it, so nothing after it is a command.
 #
-# Value-taking flags are listed per wrapper so their value is skipped with them
-# (`timeout -s KILL`, `nice -n 5`); a value attached to its flag (`-oL`, `-c3`,
+# Value-taking flags, short and long, are listed per wrapper so their value is
+# skipped with them (`timeout -s KILL`, `sudo --user root`, `bash -o pipefail`);
+# a value attached to its flag (`-oL`, `-c3`,
 # `--signal=KILL`) is one word and needs no entry. `timeout` then takes a
 # duration, and `chrt` a priority and `taskset` a mask, before the command.
 strip_wrappers() {
@@ -161,24 +164,32 @@ strip_wrappers() {
         i=$((i + 1)); continue ;;
       command)
         case "${w[$((i + 1))]}" in -v|-V) STRIPPED=; return ;; esac ;;
-      sudo)    vflags=' -u -g -C -D -h -p -r -t -U -R -T ' ;;
+      sudo)    vflags=' -u -g -C -D -h -p -r -t -U -R -T --user --group --close-from --chdir --host --prompt --role --type '
+               vflags="$vflags--other-user --chroot --command-timeout " ;;
       doas)    vflags=' -u -C ' ;;
       exec)    vflags=' -a ' ;;
-      env)     vflags=' -u -C -S ' ;;
-      nice)    vflags=' -n ' ;;
-      ionice)  vflags=' -c -n -p ' ;;
-      stdbuf)  vflags=' -i -o -e ' ;;
-      timeout) vflags=' -s -k '; skip=duration ;;
+      env)     vflags=' -u -C -S --unset --chdir --split-string ' ;;
+      nice)    vflags=' -n --adjustment ' ;;
+      ionice)  vflags=' -c -n -p --class --classdata --pid ' ;;
+      stdbuf)  vflags=' -i -o -e --input --output --error ' ;;
+      timeout) vflags=' -s -k --signal --kill-after '; skip=duration ;;
       chrt|taskset) skip=operand ;;
-      xargs)   vflags=' -I -L -n -P -s -d -E -a -J -R -S '; VIA_XARGS=1 ;;
+      xargs)   vflags=' -I -L -n -P -s -d -E -a -J -R -S --replace --max-lines --max-args --max-procs --max-chars --delimiter '
+               vflags="$vflags--arg-file --eof "; VIA_XARGS=1 ;;
       time|setsid) ;;
       sh|bash|zsh|dash|ksh)
+        # `-o`/`-O` (and `+o`/`+O`) name an option in the next word, combined
+        # or not (`-eo pipefail`), so that word is skipped with them.
         j=$((i + 1)); found=
         while [ "$j" -lt "$n" ]; do
           case "${w[$j]}" in
+            --rcfile|--init-file) j=$((j + 2)) ;;
             --*) j=$((j + 1)) ;;
+            [-+]*[oO])
+              case "${w[$j]}" in -*c*) found=1 ;; esac
+              j=$((j + 2)) ;;
             -*c*) found=1; j=$((j + 1)) ;;
-            -*) j=$((j + 1)) ;;
+            [-+]*) j=$((j + 1)) ;;
             *) break ;;
           esac
         done
