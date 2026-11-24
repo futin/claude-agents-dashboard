@@ -51,7 +51,8 @@ pace, do I run dry before the window resets?*
 - **Status:** `usageStatus`, on both bodies, says why bars are/aren't shown: `ok`,
   `token-expired` (stored token past expiresAt), `signed-out` (the credential is present
   but blank — `claude auth logout` leaves it that way), `unavailable` (any other fail-open
-  cause, incl. the endpoint's own 429 rate limit). The client renders bars only on `ok`;
+  cause, incl. the endpoint's own 429 rate limit). A failed fetch — non-2xx, timeout, bad body — keeps serving the last good reading as `ok` while it is
+  younger than `STALE_MAX_MS` (10 min), and only past that turns `unavailable`; the token states blank at once. The client renders bars only on `ok`;
   `token-expired` and `signed-out` each swap the chip for an empty ring and put the
   remedy in the popover as visible text — `claude auth login` for the second, "it renews
   itself" for the first (no action button either way: the dashboard cannot drive an
@@ -1824,9 +1825,9 @@ Accepted limitations:
 
 ## Invariants
 
-- **Fail-open everywhere:** no token / expired / network error / non-2xx / unparseable →
-  `usage: null` → the header simply omits the bars. Never throws into `scanSessions`
-  (which stays pure).
+- **Fail-open everywhere:** no token / expired / signed-out → `usage: null` at once → the header simply omits the bars. A network error, non-2xx
+  (the 429s) or unparseable body keeps the last good reading as `ok` for up to `STALE_MAX_MS` (10 min), then `usage: null`. Never throws into
+  `scanSessions` (which stays pure).
 - **We never write credentials ourselves — we make the CLI do it.** Direct OAuth refresh
   is still rejected: undocumented endpoint, and taking a rotated refresh token and then
   dropping it can log the CLI out.
