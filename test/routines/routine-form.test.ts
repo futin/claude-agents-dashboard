@@ -150,6 +150,7 @@ export function run(): number {
     assert.deepStrictEqual(neither, { mode: 'cwd', picks: [], cwd: '' });
     assert.deepStrictEqual(r.summary({ mode: 'cwd', picks: [], cwd: '' }, ctx), { text: 'Your home folder', tone: 'dim' });
     assert.strictEqual(r.read('---\nforeach: everything\n---\n'), UNREADABLE);
+    assert.deepStrictEqual(r.read('\uFEFF---\ncron: "0 22 * * *"\nrun: claude\nforeach: pinned\n---\n/x\n'), { mode: 'all', picks: [], cwd: '' });
     // A value holding ` #` would read back cut at the comment, so it is written quoted and reads back whole.
     const hashed = r.write('---\nrun: shell\n---\n', { mode: 'cwd', picks: [], cwd: '~/a #b' });
     assert.strictEqual(hashed, '---\nrun: shell\ncwd: "~/a #b"\n---\n');
