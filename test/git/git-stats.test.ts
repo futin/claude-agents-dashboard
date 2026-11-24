@@ -580,6 +580,33 @@ export async function run(): Promise<number> {
     });
   }));
 
+  // #521: the main worktree was guessed as the common dir's parent, which is wrong whenever the git dir is not `<worktree>/.git`.
+  check(await test('worktree badge: a pinned submodule\'s own branch → null (common dir under <super>/.git/modules)', async () => {
+    await withGitFixture(async fx => {
+      const sup = cleanClone(fx);
+      const subOrigin = fx.bare('sub-origin.git');
+      fx.git(sup, ['-c', 'protocol.file.allow=always', 'submodule', 'add', '-q', subOrigin, 'sub']);
+      const sub = path.join(sup, 'sub');
+      fx.git(sub, ['checkout', '-q', '-b', 'feat']);
+      fx.commit(sub, 'in submodule');
+      const feat = ok(await read(sub)).branches.find(b => b.name === 'feat');
+      assert.ok(feat, 'feat is listed');
+      assert.strictEqual(feat.worktreePath, null);
+    });
+  }));
+
+  check(await test('worktree badge: a --separate-git-dir repo\'s own branch → null', async () => {
+    await withGitFixture(async fx => {
+      const sep = fx.p('sep');
+      fx.git(fx.root, ['clone', '-q', '--separate-git-dir', fx.p('sep-gitdir'), fx.bare('origin.git'), sep]);
+      fx.git(sep, ['checkout', '-q', '-b', 'feat']);
+      fx.commit(sep, 'in separate repo');
+      const feat = ok(await read(sep)).branches.find(b => b.name === 'feat');
+      assert.ok(feat, 'feat is listed');
+      assert.strictEqual(feat.worktreePath, null);
+    });
+  }));
+
   check(await test('trunkCheckedOutElsewhere: main checkout on main, pin on a linked worktree → true', async () => {
     await withGitFixture(async fx => {
       const work = cleanClone(fx);

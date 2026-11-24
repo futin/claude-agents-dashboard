@@ -290,6 +290,19 @@ export function stripUserinfo(url: string): string | null {
   return url;
 }
 
+/** The main worktree's realpath from `git worktree list --porcelain -z`'s first record; `null` when that record is bare. */
+async function readMainWorktree(git: (dir: string, args: string[]) => Promise<{ code: number; stdout: string }>, toplevel: string, commonDir: string): Promise<string | null> {
+  const r = await git(toplevel, ['worktree', 'list', '--porcelain', '-z']);
+  if (r.code !== 0) return realpathOr(path.dirname(commonDir));
+  // `-z` ends every attribute with NUL and every record with one more, so the first record is everything before the first empty field.
+  const fields = r.stdout.split('\0');
+  const end = fields.indexOf('');
+  const first = end === -1 ? fields : fields.slice(0, end);
+  const wt = first.find(f => f.startsWith('worktree '));
+  if (!wt || first.includes('bare')) return wt ? null : realpathOr(path.dirname(commonDir));
+  return realpathOr(wt.slice('worktree '.length));
+}
+
 async function readGitFacts(base: { dirName: string; name: string; path: string | null }, cwd: string, run: GitRunner, memo: GitMemo): Promise<RepoGitStats> {
   // Tags a rejection with the args it came from, so a timeout message can name the subcommand.
   const git = async (dir: string, args: string[]) => {
@@ -389,8 +402,9 @@ async function readGitFacts(base: { dirName: string; name: string; path: string 
   }
   for (const key of memo.keys()) if (key.startsWith(`${toplevel}\0`) && !used.has(key)) memo.delete(key);
 
-  // The main worktree is the common dir's parent, not the toplevel: for a pin on a linked worktree the two differ (§2 "Worktree badge").
-  const mainWorktree = await realpathOr(path.dirname(commonDir));
+  // The main worktree is git's first `worktree list` entry, not the toplevel: for a pin on a linked worktree the two differ (§2 "Worktree badge"). Nor is
+  // it the common dir's parent — wrong for a submodule or a `--separate-git-dir` repo (#521) — which stays only as the fallback when the call fails.
+  const mainWorktree = await readMainWorktree(git, toplevel, commonDir);
   unmerged.sort((a, b) => b.ref.committedMs - a.ref.committedMs || (a.ref.name < b.ref.name ? -1 : a.ref.name > b.ref.name ? 1 : 0));
   const branches: GitBranch[] = [];
   for (const { ref, counts: c } of unmerged.slice(0, MAX_BRANCHES)) {

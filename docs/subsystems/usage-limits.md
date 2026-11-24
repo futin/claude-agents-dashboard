@@ -51,7 +51,8 @@ pace, do I run dry before the window resets?*
 - **Status:** `usageStatus`, on both bodies, says why bars are/aren't shown: `ok`,
   `token-expired` (stored token past expiresAt), `signed-out` (the credential is present
   but blank — `claude auth logout` leaves it that way), `unavailable` (any other fail-open
-  cause, incl. the endpoint's own 429 rate limit). The client renders bars only on `ok`;
+  cause, incl. the endpoint's own 429 rate limit). A failed fetch — non-2xx, timeout, bad body — keeps serving the last good reading as `ok` while it is
+  younger than `STALE_MAX_MS` (10 min), and only past that turns `unavailable`; the token states blank at once. The client renders bars only on `ok`;
   `token-expired` and `signed-out` each swap the chip for an empty ring and put the
   remedy in the popover as visible text — `claude auth login` for the second, "it renews
   itself" for the first (no action button either way: the dashboard cannot drive an

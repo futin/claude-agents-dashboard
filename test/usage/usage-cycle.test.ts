@@ -199,6 +199,40 @@ export async function run(): Promise<number> {
       await within(usage.refreshNow(true), 2000, 'cycle');
       assert.deepStrictEqual(usage.getCachedUsageState(), { usage: null, status: 'unavailable' });
     })) p++; else f++;
+
+    // #521: one failed fetch used to blank the bars for a whole CACHE_TTL_MS though a minute-old reading was in hand.
+    if (await test('refreshNow: 200 then 429 → the last good reading is kept, status ok', async () => {
+      setup(() => ({ state: 'ok', token: 'tok' }));
+      onRequest = (h) => reply(h.res, 200, body(30));
+      await within(usage.refreshNow(true), 2000, 'good cycle');
+      onRequest = (h) => reply(h.res, 429, '{}');
+      await within(usage.refreshNow(true), 2000, 'failed cycle');
+      const state = usage.getCachedUsageState();
+      assert.strictEqual(state.status, 'ok');
+      assert.strictEqual(state.usage?.fiveHour.utilization, 30);
+    })) p++; else f++;
+
+    if (await test('refreshNow: 200, then 429 past STALE_MAX_MS → unavailable', async () => {
+      setup(() => ({ state: 'ok', token: 'tok' }));
+      onRequest = (h) => reply(h.res, 200, body(30));
+      await within(usage.refreshNow(true), 2000, 'good cycle');
+      const start = realNow();
+      Date.now = () => start + usage.STALE_MAX_MS + 1000;
+      onRequest = (h) => reply(h.res, 429, '{}');
+      await within(usage.refreshNow(true), 2000, 'failed cycle');
+      assert.deepStrictEqual(usage.getCachedUsageState(), { usage: null, status: 'unavailable' });
+    })) p++; else f++;
+    Date.now = realNow;
+
+    if (await test('refreshNow: an expired token after a good reading blanks at once → token-expired', async () => {
+      let state: TokenState = { state: 'ok', token: 'tok' };
+      setup(() => state);
+      onRequest = (h) => reply(h.res, 200, body(30));
+      await within(usage.refreshNow(true), 2000, 'good cycle');
+      state = { state: 'expired' };
+      await within(usage.refreshNow(true), 2000, 'expired cycle');
+      assert.deepStrictEqual(usage.getCachedUsageState(), { usage: null, status: 'token-expired' });
+    })) p++; else f++;
   } finally {
     Date.now = realNow;
     usage.setUsageCycleDeps(null);

@@ -44,6 +44,11 @@ const USAGE_PATH = '/api/oauth/usage';
 const KEYCHAIN_SERVICE = 'Claude Code-credentials';
 const CACHE_TTL_MS = 60_000;
 /**
+ * How long the last good reading outlives failed fetches (a 429, a timeout, a bad body) before the bars blank: ten missed polls, well inside the 5h
+ * window's ~10 %/h step (#521). Token states are real states, not misses, and still blank at once.
+ */
+export const STALE_MAX_MS = 10 * 60_000;
+/**
  * How long an in-flight refresh may run before the next call is allowed to
  * abandon it and start its own. A whole cycle is bounded well under this
  * (≤3 credential reads at 5s each + one 5s request), so crossing it means the
@@ -273,6 +278,8 @@ export function fetchUsage(token: string, timeoutMs = REQUEST_TIMEOUT_MS): Promi
 let cached: UsageLimits | null = null;
 let cachedStatus: UsageStatus = 'unavailable';
 let cachedAt = 0;
+/** When a cycle last stored a fresh `ok` reading; bounds how long a failed fetch may keep serving it ({@link STALE_MAX_MS}). */
+let lastGoodAt = 0;
 let refreshing: Promise<void> | null = null;
 /**
  * Whether an expired token may be renewed automatically. Set once at boot from
@@ -304,6 +311,7 @@ export function resetUsageCache(): void {
   cached = null;
   cachedStatus = 'unavailable';
   cachedAt = 0;
+  lastGoodAt = 0;
   refreshing = null;
   refreshStartedAt = 0;
 }
@@ -338,6 +346,16 @@ function gateState(): RefreshGate {
 }
 
 /**
+ * What a cycle stores when the fetch itself missed: the last good reading while it is younger than {@link STALE_MAX_MS}, else `unavailable`. The kept
+ * reading already carries its pace, so it is not fed to the pace store again.
+ */
+function missed(): UsageState {
+  return cachedStatus === 'ok' && Date.now() - lastGoodAt <= STALE_MAX_MS
+    ? { usage: cached, status: 'ok' }
+    : { usage: null, status: 'unavailable' };
+}
+
+/**
  * One fetch cycle: token → endpoint → cache. Single-flight via `refreshing`,
  * but the flight is *abandonable* — see {@link shouldRefresh}. Exported for
  * tests, which need its promise; callers use `refreshUsageNow` /
@@ -350,6 +368,7 @@ export function refreshNow(force = false): Promise<void> {
   refreshStartedAt = now;
   const cycle = (async () => {
     let next: UsageState = { usage: null, status: 'unavailable' };
+    let fresh = false;
     try {
       const t = await cycleDeps.readToken();
       if (t.state !== 'ok') {
@@ -427,10 +446,12 @@ export function refreshNow(force = false): Promise<void> {
           : null,
         status: limits ? 'ok' : 'unavailable'
       };
+      fresh = limits !== null;
+      if (!limits) next = missed();
     } catch {
       // Fail open: this promise is often fire-and-forget (`void refreshNow()`),
       // so a rejection here would be unhandled and kill the process.
-      next = { usage: null, status: 'unavailable' };
+      next = missed();
     } finally {
       // Only the newest cycle owns the cache: one the gate already abandoned as
       // stalled must not clobber fresher state if it ever wakes up.
@@ -438,6 +459,7 @@ export function refreshNow(force = false): Promise<void> {
         cached = next.usage;
         cachedStatus = next.status;
         cachedAt = Date.now();
+        if (fresh) lastGoodAt = cachedAt;
       }
     }
   })();

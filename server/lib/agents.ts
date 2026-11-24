@@ -12,7 +12,8 @@
  *    (analyze.ts sums the spend from the subagent's own transcript; bug-27).
  *
  *  - Background (async): the immediate `tool_result` is only a launch ack
- *    (`toolUseResult.isAsync` / "Async agent launched … agentId: <hex>"). The
+ *    (`toolUseResult.isAsync`, or — only for a record with no `toolUseResult` —
+ *    the text "Async agent launched … agentId: <hex>"). The
  *    real completion arrives later as a `<task-notification>` keyed by that
  *    `<hex>` agentId (not the tool_use_id), carrying a terminal `<status>` —
  *    `completed`, `failed`, `killed` or `stopped` (`TERMINAL_STATUSES`) — and,
@@ -191,9 +192,10 @@ export function parseRecordEvents(rec: any): AgentEvent[] {
       const text = toolResultText(b);
       const t = tur && typeof tur === 'object' ? tur : null;
       tur = undefined; // first tool_result consumes it
-      const isAsyncAck =
-        (t && (t.isAsync === true || t.status === 'async_launched')) ||
-        /Async agent launched/i.test(text);
+      // A structured result decides alone: a sync report may quote the ack phrase (#521). The text is the fallback for records without one.
+      const isAsyncAck = t
+        ? t.isAsync === true || t.status === 'async_launched'
+        : /Async agent launched/i.test(text);
       // Both shapes name the subagent: an ack so its completion can be paired,
       // a sync result so its own transcript (`subagents/agent-<id>.jsonl`) can be.
       let agentId: string | null = t && typeof t.agentId === 'string' ? t.agentId : null;
