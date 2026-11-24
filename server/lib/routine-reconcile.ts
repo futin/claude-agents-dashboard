@@ -14,6 +14,7 @@ import { isManualCron, parseCron, toCalendarIntervals } from '../../shared/cron.
 import type { CalendarInterval } from '../../shared/cron.js';
 import type { ReconcileChange, ReconcileReport, ReconcileState, RoutineJob } from '../../shared/types.js';
 import type { Config } from './config.js';
+import { writeFileAtomic } from './atomic-write.js';
 import { machineName, routineDirs, routineEnv } from './routine-config.js';
 import { createProbe, isOwner, readJobs, wrapperAlive } from './routine-store.js';
 import type { Probe, StoredJob } from './routine-store.js';
@@ -422,15 +423,6 @@ export function resetReconcileCache(clock: (() => number) | null = null): void {
   dropPlanCache();
 }
 
-/** Atomic write: launchd may read the plist the moment `bootstrap` names it, and cron may source the env file at any minute. */
-function writeFileAtomic(file: string, text: string, mode = 0o644): void {
-  fs.mkdirSync(path.dirname(file), { recursive: true });
-  const tmp = `${file}.${process.pid}.tmp`;
-  fs.writeFileSync(tmp, text, { mode });
-  fs.chmodSync(tmp, mode);
-  fs.renameSync(tmp, file);
-}
-
 async function applyMac(ctx: PlanContext, errors: string[]): Promise<void> {
   const domain = `gui/${host.uid}`;
   // launchd never creates a log path's parent: with launchd/ missing, every fire fails before exec and the wrapper logs nothing.
@@ -454,7 +446,9 @@ async function applyMac(ctx: PlanContext, errors: string[]): Promise<void> {
       }
       const want = ctx.desired.get(c.name);
       if (!want) continue;
-      writeFileAtomic(file, want.text);
+      // Atomic: launchd may read the plist the moment `bootstrap` names it.
+      fs.mkdirSync(path.dirname(file), { recursive: true });
+      writeFileAtomic(file, want.text, { mode: 0o644 });
       // Not loaded is the normal answer for an install; only bootstrap's verdict counts.
       await runner('launchctl', ['bootout', `${domain}/${label}`]);
       const boot = await runner('launchctl', ['bootstrap', domain, file]);
@@ -467,8 +461,11 @@ async function applyMac(ctx: PlanContext, errors: string[]): Promise<void> {
 
 async function applyWsl(ctx: PlanContext, errors: string[]): Promise<void> {
   if (ctx.writeEnv !== null) {
-    // 0600: the file carries the user's PATH and paths, and nothing but their own cron needs to read it.
-    try { writeFileAtomic(ctx.paths.cronEnv, ctx.writeEnv, 0o600); } catch (e) { errors.push(`cron.env: ${(e as Error).message}`); return; }
+    // 0600: the file carries the user's PATH and paths, and nothing but their own cron needs to read it. Atomic: cron may source it at any minute.
+    try {
+      fs.mkdirSync(path.dirname(ctx.paths.cronEnv), { recursive: true });
+      writeFileAtomic(ctx.paths.cronEnv, ctx.writeEnv, { mode: 0o600 });
+    } catch (e) { errors.push(`cron.env: ${(e as Error).message}`); return; }
   }
   if (!ctx.writeCrontab || ctx.crontab === null) return;
   const parts = splitCrontab(ctx.crontab);

@@ -300,7 +300,9 @@ server/
                   test seam, fail directions; a leaf lib/notify.ts imports, never
                   the reverse
   lib/remoteState.ts  remote-answer switch (env gate + persisted toggle)
-  lib/atomic-write.ts  `writeFileAtomic`: temp file + rename in the same dir — settings, the remote toggle and both log rotations go through it
+  lib/atomic-write.ts  `writeFileAtomic`: temp file + rename in the same dir, optional `mode` — settings, the remote toggle, both log rotations, the
+                  tick-cap, usage-alert and routine-notify ledgers, the profile, pins.json, plists and cron.env go through it;
+                  test/guards/rename-sites.test.ts fails a new hand copy
   lib/settings.ts persisted idle threshold, answer window, push policy + the
                   usage-recording switch, Git fetch interval, tailnet write trust, the launch form's
                   default surface and the pin list

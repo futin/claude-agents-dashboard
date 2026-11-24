@@ -14,6 +14,7 @@ import { isWrapperCommand, NAME_RE, parseJob, sameBoot } from '../../shared/rout
 import type { JobError, PinSnapshot } from '../../shared/routine-file.js';
 import type { PinRow, RoutineJob } from '../../shared/types.js';
 import { archivedSessionIds } from './archived.js';
+import { writeFileAtomic } from './atomic-write.js';
 import type { Config } from './config.js';
 import { listPinRows } from './management.js';
 import { routineDirs, routineStateRoot } from './routine-config.js';
@@ -91,13 +92,6 @@ export function deleteJob(dir: string, name: string): boolean {
   }
 }
 
-function writeAtomic(file: string, text: string): void {
-  fs.mkdirSync(path.dirname(file), { recursive: true });
-  const tmp = `${file}.${process.pid}.tmp`;
-  fs.writeFileSync(tmp, text);
-  fs.renameSync(tmp, file);
-}
-
 /**
  * `<state>/pins.json`: the pin rows the Projects tiles show, in pin order, cut to what the wrapper matches `foreach:` against. `rows` is a seam; by default
  * they are built the way `GET /api/pins` builds them, so a pin resolves to the same path here as everywhere else.
@@ -106,7 +100,9 @@ export function writePinsSnapshot(config: Config, rows?: readonly PinRow[]): voi
   const pins = getPinnedProjects();
   const list = rows ?? listPinRows(config, pins, { archivedIds: archivedSessionIds(), pinnedDirs: new Set(pins), transcripts: sharedListing(projectsRoot()) });
   const snapshot: PinSnapshot[] = list.map(r => ({ dirName: r.dirName, name: r.name, path: r.path, listed: r.listed }));
-  writeAtomic(path.join(routineStateRoot(config), 'pins.json'), JSON.stringify(snapshot, null, 2) + '\n');
+  const file = path.join(routineStateRoot(config), 'pins.json');
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  writeFileAtomic(file, JSON.stringify(snapshot, null, 2) + '\n');
 }
 
 /**
