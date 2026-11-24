@@ -111,6 +111,11 @@ const HEADING_RE = /^(#{1,6})\s+(.*)$/;
 const HR_RE = /^\s*([-*_])(\s*\1){2,}\s*$/;
 const ITEM_RE = /^(\s*)([-*+]|\d+[.)])\s+(.*)$/;
 
+/** A list item line, or null — a rule such as `* * *` or `- - -` also matches `ITEM_RE`, and it is a rule, not a bullet. */
+function itemMatch(line: string): RegExpExecArray | null {
+  return HR_RE.test(line) ? null : ITEM_RE.exec(line);
+}
+
 /** An `ITEM_RE` match as a flat list item, its written number kept. */
 function listItem(m: RegExpExecArray): ListItem {
   const ordered = /\d/.test(m[2]);
@@ -262,12 +267,12 @@ export function parseMarkdown(src: string): Block[] {
           // Blank lines inside a list keep it going when an item follows them, so `1. a`, blank, `2. b` stays one list numbered 1, 2.
           let j = i + 1;
           while (j < lines.length && !lines[j].trim()) j++;
-          const next = j < lines.length ? ITEM_RE.exec(lines[j]) : null;
+          const next = j < lines.length ? itemMatch(lines[j]) : null;
           if (!next || ends(listItem(next))) break;
           i = j - 1;
           continue;
         }
-        const it = ITEM_RE.exec(lines[i]);
+        const it = itemMatch(lines[i]);
         if (!it) break;
         const li = listItem(it);
         if (ends(li)) break;

@@ -224,6 +224,12 @@ export function run(): number {
     assert.deepStrictEqual(parseMarkdown('- a\n\n\nnot an item').map(b => b.t), ['list', 'p']);
   })) p++; else f++;
 
+  if (test('a rule after a list is a rule, not an item — after a blank line or straight after', () => {
+    assert.deepStrictEqual(parseMarkdown('- a\n\n* * *').map(b => b.t), ['list', 'hr']);
+    assert.deepStrictEqual(parseMarkdown('- a\n\n- - -\nfoo').map(b => b.t), ['list', 'hr', 'p']);
+    assert.deepStrictEqual(parseMarkdown('- a\n* * *').map(b => b.t), ['list', 'hr']);
+  })) p++; else f++;
+
   if (test('an item more than one level deeper attaches one level down, with no empty list between', () => {
     const tree = listTree(listOf('- a\n      - deep').items);
     assert.deepStrictEqual(texts(tree), ['a']);
