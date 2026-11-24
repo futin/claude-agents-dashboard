@@ -27,6 +27,8 @@ import fs from 'node:fs';
 import { listUsageTranscripts, projectsRoot } from '../server/lib/scan.js';
 import { CHECKED_MODEL_PREFIXES, longestPrefixMatch, weightsFor } from '../server/lib/usage-ledger.js';
 
+import { parseDays } from './lib/cli-args.js';
+
 const DAY_MS = 86_400_000;
 
 /** Published cache-write multipliers of base input, by TTL tier. */
@@ -62,21 +64,8 @@ function arg(name: string): string | undefined {
   return i === -1 ? undefined : process.argv[i + 1];
 }
 
-/**
- * `--days` as a positive whole number, 7 when the flag is absent. Anything else exits 2 before a transcript is read: `Number('7d')` is NaN, every window
- * test against NaN is false, and the run used to scan the whole history under a "last NaN day(s)" header with an unchanged exit code.
- */
-function parseDays(): number {
-  if (!process.argv.includes('--days')) return 7;
-  const raw = arg('days');
-  if (raw !== undefined && !raw.startsWith('--') && /^[1-9]\d*$/.test(raw)) return Number(raw);
-  const got = raw === undefined || raw.startsWith('--') ? 'got nothing' : `got "${raw}"`;
-  console.error(`--days must be a positive whole number, ${got}`);
-  process.exit(2);
-}
-
 const ROOT = arg('root') ?? projectsRoot();
-const DAYS = parseDays();
+const DAYS = parseDays(7);
 
 function emptyStats(): ModelStats {
   return { requests: 0, flatCC: 0, cc5m: 0, cc1h: 0, cr: 0 };

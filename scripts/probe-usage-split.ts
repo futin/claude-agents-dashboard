@@ -39,6 +39,7 @@
  *   stdout   one report, human-readable
  *   exit 0   the fit ran (whatever it concluded)
  *   exit 1   not enough data to fit anything
+ *   exit 2   usage: `--days` is not a positive whole number, or has no value
  */
 
 import fs from 'node:fs';
@@ -56,6 +57,8 @@ import {
 } from '../server/lib/usage-rate.js';
 import type { RateFloors } from '../server/lib/usage-rate.js';
 
+import { parseDays } from './lib/cli-args.js';
+
 /** No floor: the probe reports the evidence itself rather than hiding it. */
 const NO_FLOOR: RateFloors = { minIntervals: 1, minUtil: 0, minDays: 0 };
 const pool = (i: Parameters<typeof rateFor>[0], m: string, from: number, to: number) =>
@@ -71,7 +74,7 @@ function arg(name: string): string | undefined {
 const RECONSTRUCT = process.argv.includes('--reconstruct');
 const WEEKLY = process.argv.includes('--weekly');
 const DIR = arg('dir') ?? repoRoot();
-const DAYS = Number(arg('days') ?? 3);
+const DAYS = parseDays(3);
 
 /** Every assistant turn on disk in `[sinceMs, ∞)`, deduplicated by `message.id`. */
 function transcriptEvents(sinceMs: number): { ts: number; model: string }[] {

@@ -106,7 +106,56 @@ const DENIED: string[] = [
   'if cd /Users; then pkill -f "$PWD/"; fi',
   'while cd /Users; do pkill -f "$PWD/"; done',
   'until cd /Users; do sleep 1; done; pkill -f "$PWD/"',
-  'if pkill -f vite; then echo ok; fi'
+  'if pkill -f vite; then echo ok; fi',
+  // The same program under another spelling of its name: a path, a leading
+  // backslash (which skips aliases) or quotes around the word.
+  '/usr/bin/pkill -f vite',
+  '\\pkill -f vite',
+  "'pkill' -f vite",
+  '"pkill" -f vite',
+  'exec /usr/bin/killall node',
+  // Wrappers that run the command they are handed, with their own options and
+  // operands in front of it — the verb is what follows all of those.
+  'timeout 5 pkill -f vite',
+  'timeout -s KILL 5 pkill -f vite',
+  'nice -n 5 pkill -f vite',
+  'nice pkill node',
+  'ionice -c3 killall node',
+  'setsid pkill -f vite',
+  'stdbuf -oL pkill -f vite',
+  'doas pkill node',
+  'sudo -u root pkill -f vite',
+  'env -i pkill -f vite',
+  'xargs -r pkill -f vite',
+  'eval pkill -f vite',
+  'sudo timeout 5 /usr/bin/pkill -f vite',
+  // Long options whose value is the next word: the value is not the command.
+  'sudo --user root pkill -f vite',
+  'timeout --signal KILL 5 pkill -f vite',
+  'nice --adjustment 5 pkill -f vite',
+  'env --unset FOO pkill -f vite',
+  'xargs --max-args 1 pkill -f',
+  // A shell option with a value of its own may come before the `-c`.
+  "bash -o pipefail -c 'pkill -f vite'",
+  "bash -O extglob -c 'pkill -f vite'",
+  "bash +o histexpand -c 'pkill -f vite'",
+  "bash -eo pipefail -c 'pkill -f vite'",
+  // A shell handed a command string runs that string.
+  "sh -c 'pkill -f vite'",
+  'bash -c "pkill -f vite"',
+  "bash -lc 'pkill -f vite'",
+  "zsh -c 'pkill node'",
+  // `xargs` supplies the pattern from stdin, so a missing operand is the normal
+  // shape of a real kill here, not the prose the bare-verb pass exists for.
+  'echo vite | xargs pkill -f',
+  // …and it appends stdin to any pattern written, and pkill ORs its patterns,
+  // so an anchored one no longer bounds what dies.
+  'echo vite | xargs pkill -f "$PWD/x"',
+  `echo vite | xargs pkill -f ${CWD}/x`,
+  // `env -S` splits its value into the command it runs.
+  "env -S 'pkill -f vite'",
+  "env --split-string='pkill -f vite'",
+  "env -S'pkill -f vite'"
 ];
 
 const ALLOWED: string[] = [
@@ -140,7 +189,28 @@ const ALLOWED: string[] = [
   'killall -9',
   // Ordinary work, which must not pay for any of this.
   'pnpm dev',
-  'git status --porcelain'
+  'git status --porcelain',
+  // A wrapper must not turn ordinary work into a deny: what it runs is judged,
+  // and here that is not a kill.
+  'timeout 5 pnpm test',
+  'nice -n 10 pnpm build',
+  'timeout 5 grep -rn pkill scripts/',
+  "sh -c 'echo pkill'",
+  'bash -c "grep killall notes.md"',
+  // A shell given a script path is not handed a command string.
+  'bash scripts/kill-guard-hook.sh',
+  'bash scripts/pkill-notes.sh',
+  'bash -o pipefail scripts/pkill-notes.sh',
+  // Looking the tool up is not running it.
+  'command -v pkill',
+  'which killall',
+  'man pkill',
+  'echo 123 | xargs kill',
+  // The escape hatch keeps working under a path or a wrapper.
+  '/usr/bin/pkill -f "$PWD/node_modules/.bin/vite"',
+  'timeout 5 pkill -f "$PWD/node_modules/.bin/vite"',
+  // Prose naming the tool by its path, in inline code, with no operand.
+  'echo "never run `/usr/bin/pkill` here"'
 ];
 
 function ok(name: string, fn: () => void): boolean {

@@ -65,7 +65,11 @@ exemption is `pkill`-only; `killall` is refused in every form, since it kills ev
 process of that name by definition. Its refusal names the two shapes that are allowed
 instead — a pid you recorded, or `pkill -f "$PWD/…"`. `$PWD` counts as the session's directory only when no `cd`, `pushd` or `popd` comes earlier in the
 same command (a literal path under it is allowed either way), and a pattern with a `|` inside it is refused, since `-f` reads an extended regex and
-`"$PWD/x|vite"` matches every vite on the machine.
+`"$PWD/x|vite"` matches every vite on the machine. The name is judged as the shell resolves it — `/usr/bin/pkill`, `\pkill` and `'pkill'` are all `pkill` —
+and behind any wrapper that runs it, the wrapper's own options included (`sudo -u root`, `timeout -s KILL 5`, `nice -n 5`, `env -i`, `xargs -r`, `sh -c '…'`
+and the rest the script's header lists); `… | xargs pkill -f` is refused with or without a pattern written, anchored or not, since `xargs` appends its
+own. What still gets through by design — a command held in a variable, a script file, `find … -exec`, a wrapper option it does not list — is in that
+header's *Known limits*.
 
 It is in this installer because of 2026-09-06. An unattended session in a sibling repo
 tore down two preview servers it had started itself, by pattern rather than by pid. The
