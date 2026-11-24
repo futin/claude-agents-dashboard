@@ -30,7 +30,7 @@ import { BASELINE_MS } from './lib/usage-rate.js';
 import { localOffsetMinutes } from './lib/usage-forecast.js';
 import { blankUsageProfile, emptyRates, shapeUsageProfile, shapeUsageRates } from './lib/usage-shape.js';
 import {
-  collectServablePaths, listOlderProjects, listPinRows, listRecentProjects, readGlobalScope, readProjectScope, readServableFile, resolveProject
+  listOlderProjects, listPinRows, listRecentProjects, readGlobalScope, readProjectScope, readServableFile, resolveProject, servablePathsFor
 } from './lib/management.js';
 import { claudeHome, defaultClaudeRoots } from './lib/paths.js';
 import { listReports, reviewStatus } from './lib/analytics.js';
@@ -1490,7 +1490,7 @@ export async function serveConfigsFile(config: Config, rawPath: string, res: Ser
   const fail = (code: number) => sendJson(res, code, { path: p, content: '', size: 0, truncated: false, error: true });
   if (!p || !p.startsWith('/') || p.includes('..')) return fail(400);
   try {
-    const allowed = await collectServablePaths(config, pinOptions());
+    const allowed = await servablePathsFor(p, config, pinOptions());
     if (!allowed.has(p)) return fail(403);
     const file = await readServableFile(p, allowed);
     if (!file) return fail(404);

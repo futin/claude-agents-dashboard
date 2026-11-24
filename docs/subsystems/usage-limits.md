@@ -554,7 +554,8 @@ Usage → **History** (`client/src/components/usage/UsageHistory.tsx`) answers "
   says "Recording is off — the history ends at …" rather than going blank. (`/api/usage/rates` does go empty with recording off, because its fit also needs the
   ledger; this view needs only the log.)
 - **Reading.** `readSamplesSince` in `lib/usage-history.ts` reads backwards from the end in 256 KB chunks, each byte read and parsed once, and stops after
-  the first chunk holding a sample older than the range, at the top of the file, or at the 32 MB cap (#540). Measured on this machine 2026-10-01: about 18 KB/day, so a 90-day view reads roughly 1.6 MB.
+  the first chunk holding a sample older than the range, at the top of the file, or at the 32 MB cap (#540). Measured on this machine 2026-10-01: about
+  18 KB/day, so a 90-day view reads roughly 1.6 MB.
 - **Series** (`lib/usage-history-series.ts`, pure). The 5-hour series is every sample; the weekly series is only the samples that carry `week` — absent is not 0%.
   A window's identity is its **observed `resetsAt`** only, split wherever `classifyInterval` says `reset` (a stamp change beyond `sameWindow`'s 2-minute slack, or
   a drop of more than 0.5 points). No 5-hour or 7-day length is assumed, because weekly resets have not always been 7 days apart.
