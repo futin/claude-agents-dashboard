@@ -158,7 +158,7 @@ export async function serveSessions(baseConfig: Config, res: ServerResponse, par
   if (!data.error) {
     const shown = new Set(adopt);
     const unseen = listLaunching().filter(e => e.state === 'launching' && !e.resume && !shown.has(e.sessionId)).map(e => e.sessionId);
-    if (unseen.length) adopt.push(...launchRowIds(unseen, { root: projectsRoot() }));
+    if (unseen.length) adopt.push(...launchRowIds(unseen, { root: projectsRoot(), refs: sharedListing(projectsRoot()) }));
   }
   adoptLaunched(adopt);
   data.launching = listLaunching();

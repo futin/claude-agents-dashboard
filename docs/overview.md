@@ -270,6 +270,8 @@ server/
                   `ps`/`lsof` probe those readers share (joined while in flight, reused for `PROBE_TTL_MS`)
   lib/transcript-listing.ts  the one held transcript listing (≤ 3 s old) every request path but the poll reads: `sharedListing`,
                   `publishListing`, `resolveTranscript` for id lookups
+  lib/dir-cache.ts  `cachedEntries`: a directory's entries, re-read only when its mtime or inode moved (and never within `RACY_MS` of the mtime) —
+                  every transcript walk in scan.ts lists dirs through it, while still stat-ing every file
   lib/account.ts      `~/.claude.json` → `oauthAccount` as display strings, behind GET /api/account; fail-open to null
   lib/releases.ts     GET /api/releases: release-kit's memoised tag reader, pointed at the checkout, plus two test seams
   lib/analyze.ts  whole-session post-mortem → SessionAnalysis

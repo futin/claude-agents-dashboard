@@ -760,7 +760,7 @@ Each tick reads only the bytes appended to each transcript since the last one
 per model, and appends `{t, prevT, tok, req, sur}` — `tok` weighed in tokens, `req`
 counted in requests, `sur` the same tokens split by the session surface that spent them.
 
-Seven things are deliberate:
+Eleven things are deliberate:
 
 - **`prevT` is carried explicitly.** It is what makes a recording gap visible;
   a bare `t` could never show that two lines do not abut, and the fitter would
@@ -792,6 +792,10 @@ Seven things are deliberate:
 - **A file first seen after the seed is read from at most its last 8 MiB** (`NEW_FILE_READ_CAP`, eight `FOLD_CHUNK_BYTES`). A transcript that big on
   arrival is a fork or a restore, whose old records `sumWindow` drops anyway; a real new session writes far less in its first minute. The start lands
   mid-line, and that fragment fails to parse like any junk line.
+- **The listing reads each directory only when it changed.** `listUsageTranscripts` takes one pass per project dir through `dir-cache.ts`, whose held entry
+  lists give both the top-level files and the session dirs, and lists each `<session>/subagents/` the same way; every file is still stat-ed. Warm median on
+  this machine 170 ms → 44 ms (2026-11-24, macOS: 367 project dirs, 3,480 top-level transcripts, 464 `subagents/` dirs, 4,588 subagent files) — the old walk
+  listed every project dir twice and every agent dir on every tick.
 - **A transcript gone from the listing loses its cursor** on the same tick: `collectEvents` already holds the listing, so the prune costs no walk, and
   the cursor map no longer grows with every session the server has ever seen.
 - **`req` is a parallel map, and absent is not zero.** One assistant message is

@@ -6,7 +6,8 @@
  * tree again — a pin toggle used to list it four times (43–55 ms warm here, 2026-11-15, 656 transcripts; 7.5–14 ms with one listing). With no poll
  * running, the first caller past {@link LISTING_MAX_AGE_MS} takes one fresh walk and the rest share it.
  *
- * `listTranscripts` in `scan.ts` stays the raw, uncached walk: the poll, analytics and the usage ledger need it fresh.
+ * `listTranscripts` in `scan.ts` stays the fresh walk the poll, analytics and the usage ledger need: its readdirs are gated by directory mtime
+ * (`dir-cache.ts`), but it stats every file on every call, so no listing it returns is ever stale.
  */
 
 import { findTranscript, listTranscripts, restatRef } from './scan.js';
