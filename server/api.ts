@@ -73,7 +73,7 @@ import {
 } from './lib/spawn.js';
 import { staleEnvKeys, toPosInt, type Config } from './lib/config.js';
 import { describeCron, isManualCron, nextAfter, parseCron } from '../shared/cron.js';
-import { checkPins, parseJob, serializeEnabled } from '../shared/routine-file.js';
+import { NAME_RE, checkPins, parseJob, serializeEnabled } from '../shared/routine-file.js';
 import type { JobError, PinSnapshot } from '../shared/routine-file.js';
 import { foldForPush, ownerStatus, runsReader } from './lib/routine-boot.js';
 import { machineName, routineDirs } from './lib/routine-config.js';
@@ -1770,8 +1770,6 @@ export async function serveOpenFolder(config: Config, req: IncomingMessage, res:
 
 /* -------------------------------------------------- routines (docs/superpowers/specs/2026-10-19-scheduled-workflows-design.md §HTTP) */
 
-/** A job name from a URL or a body, checked before it reaches any path; the reserved names pass here and are the validator's to refuse. */
-const JOB_NAME_RE = /^[a-z0-9-]+$/;
 /** The wrapper takes `--only` as argv; a list longer than any pin set is refused rather than handed to a spawn. */
 const ONLY_MAX = 200;
 const ROUTINE_WINDOWS: readonly RoutineRunsWindow[] = [7, 30, 90];
@@ -1785,7 +1783,7 @@ const RUNS_PARAM: { [K in keyof RoutineRunsQuery]: K } = { days: 'days', job: 'j
  * writes job files, installs or runs, spec §Owning server). True when it has answered and the caller must return.
  */
 function refuseRoutineWrite(res: ServerResponse, name?: string): boolean {
-  if (name !== undefined && !JOB_NAME_RE.test(name)) { sendJson(res, 400, { error: 'bad name' }); return true; }
+  if (name !== undefined && !NAME_RE.test(name)) { sendJson(res, 400, { error: 'bad name' }); return true; }
   if (!isOwner()) { sendJson(res, 409, { error: 'not-owner' satisfies RoutineWriteError }); return true; }
   return false;
 }
@@ -1906,7 +1904,7 @@ export function serveRoutineRuns(config: Config, params: URLSearchParams, res: S
 
 /** `GET /api/routines/:name` — the raw file and its parse, for the editor. */
 export function serveRoutineRead(config: Config, name: string, res: ServerResponse): void {
-  if (!JOB_NAME_RE.test(name)) return sendJson(res, 400, { error: 'bad name' });
+  if (!NAME_RE.test(name)) return sendJson(res, 400, { error: 'bad name' });
   const stored = readJobs(routineDirs(config).routines, machineName(config).name).find(s => s.name === name);
   if (!stored) return sendJson(res, 404, { error: 'no such job' });
   sendJson(res, 200, stored satisfies RoutineFile);

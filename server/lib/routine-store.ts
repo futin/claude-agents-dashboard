@@ -9,7 +9,7 @@ import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 
-import { parseJob } from '../../shared/routine-file.js';
+import { NAME_RE, parseJob } from '../../shared/routine-file.js';
 import type { JobError, PinSnapshot } from '../../shared/routine-file.js';
 import type { PinRow, RoutineJob } from '../../shared/types.js';
 import { archivedSessionIds } from './archived.js';
@@ -26,11 +26,9 @@ export class RoutineStoreError extends Error {
   }
 }
 
-/** Path-safety only; reserved names and the rest of the name rules are the validator's. */
-const SAFE_NAME = /^[a-z0-9-]+$/;
 
 function assertSafeName(name: string): void {
-  if (!SAFE_NAME.test(name)) throw new RoutineStoreError('bad-name', `bad job name: ${name.slice(0, 60)}`);
+  if (!NAME_RE.test(name)) throw new RoutineStoreError('bad-name', `bad job name: ${name.slice(0, 60)}`);
 }
 
 export interface StoredJob { name: string; text: string; job: RoutineJob | null; errors: JobError[]; mtimeMs: number }
