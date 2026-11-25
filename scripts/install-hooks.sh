@@ -419,6 +419,11 @@ if [ "$UNINSTALL" != "true" ]; then
       step "         it said: $(printf '%s\n' "$envmsg" | head -1)"
     fi
     step "         Try: $TSX $REPO/scripts/env-value.ts ANSWER_TOKEN --env $REPO/.env"
+  elif [ -L "$TOKEN_FILE" ] && [ ! -e "$TOKEN_FILE" ]; then
+    # A link to a secret that is not there yet (a mount not attached). `-f` follows the link, so without this branch the first-install write below
+    # would rename a regular file over the link — the same swap the --force branch refuses.
+    step "warn     $TOKEN_FILE is a symlink to a missing file (-> $(readlink "$TOKEN_FILE"))."
+    step "         Left alone: the hooks send no token until it resolves."
   elif [ ! -f "$TOKEN_FILE" ] && [ "$envstate" = "ok" ]; then
     step "write    $TOKEN_FILE from $srclabel"
     [ "$DRY" = "true" ] || write_token "$envtok"

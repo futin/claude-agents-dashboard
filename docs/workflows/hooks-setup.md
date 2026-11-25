@@ -124,7 +124,7 @@ Stop event*; that belongs behind a command someone chose to run, not behind `git
   `no token file needed`: the hooks reach the dashboard on loopback, which the write gate
   always trusts. It is never read from or written to the repo. It is written `0600` from birth — into a temp file beside it, then renamed over the
   target, so an older `0644` file is replaced rather than refilled — and a write that cannot finish private stops the run with a `FAILED` line and
-  leaves no token file behind. A token file that is a symlink is left alone even under `--force`.
+  leaves no token file behind. A token file that is a symlink — one whose target is missing included — is never replaced, `--force` or not.
 
   A token file that already exists is now *compared* to `.env` rather than assumed correct:
   identical is `ok`, different is a `warn` that leaves the file alone and points at

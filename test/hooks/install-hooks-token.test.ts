@@ -352,6 +352,20 @@ export function run(): number {
       } finally { scratch.cleanup(); }
     })) p++; else f++;
 
+    for (const flags of [[], ['--force']]) {
+      if (test(`a dangling symlinked token file is left alone${flags.length ? ' under --force' : ''}`, () => {
+        const scratch = makeScratch();
+        const target = path.join(scratch.claude, '..', 'not-mounted-yet');
+        try {
+          const r = runInstaller(scratch, { env: 'ANSWER_TOKEN=abc\n', tokenLink: target, flags, write: true });
+          assert.strictEqual(r.status, 0, `got:\n${r.all}`);
+          assert.ok(fs.lstatSync(scratch.tokenFile).isSymbolicLink(), 'the link is still a link');
+          assert.ok(!fs.existsSync(target), 'nothing was written through it either');
+          assert.match(r.token, /warn {5}\S+dashboard-token is a symlink to a missing file/, `got:\n${r.token}`);
+        } finally { scratch.cleanup(); }
+      })) p++; else f++;
+    }
+
     if (test('the manual remedy in the warn line never writes before narrowing the mode', () => {
       const r = runInstaller(s, { env: 'ANSWER_TOKEN=abc\n', token: 'stale-token' });
       assert.ok(!/> \S+ && chmod 600/.test(r.token), `the write-then-chmod one-liner is the bug, got:\n${r.token}`);
