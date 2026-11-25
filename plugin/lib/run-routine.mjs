@@ -23,7 +23,7 @@ import os from 'node:os';
 import path from 'node:path';
 
 import { lastBefore, parseCron } from './cron.mjs';
-import { PERMISSION_MODES, parseJob } from './routine-file.mjs';
+import { isWrapperCommand, PERMISSION_MODES, parseJob, sameBoot } from './routine-file.mjs';
 
 const NAME_RE = /^[a-z0-9-]+$/;
 const EXIT_USAGE = 64;
@@ -93,14 +93,13 @@ const expandHome = (p) => (p === '~' ? home() : p.startsWith('~/') ? path.join(h
 /** The folder's name from before Schedules became Routines, while only that one exists; `routineDirs` in server/lib/routine-config.ts picks the same. */
 const orLegacy = (next, old) => (!fs.existsSync(next) && fs.existsSync(old) ? old : next);
 
-/** True when `pid` is alive and its command line has a `run-routine.mjs` element followed by exactly `job` (`git-sync` never matches `git-sync-all`). */
+/** True when `pid` is alive and its command line is the wrapper for exactly `job` — `isWrapperCommand`, the test the server's lock sweep runs too. */
 function isWrapperFor(pid, job) {
   try { process.kill(pid, 0); } catch (e) { if (e.code !== 'EPERM') return false; }
   let cmd;
-  try { cmd = execFileSync('ps', ['-o', 'command=', '-p', String(pid)], { encoding: 'utf8' }); } catch { return false; }
-  // Whitespace split: an install path with a space in it would read as stale. ~/.claude/plugins/… has none.
-  const tokens = cmd.trim().split(/\s+/);
-  return tokens.some((t, i) => path.basename(t) === 'run-routine.mjs' && tokens[i + 1] === job);
+  // The timeout keeps a wedged `ps` from holding the lock step; it throws like any other failure, which reads as stale.
+  try { cmd = execFileSync('ps', ['-o', 'command=', '-p', String(pid)], { encoding: 'utf8', timeout: 2000 }); } catch { return false; }
+  return isWrapperCommand(cmd, job);
 }
 
 // PERMISSION_MODES is the validator's own list (spawn.ts's minus bypassPermissions, which a routine never runs under whatever the file or the baked env
@@ -173,8 +172,7 @@ class Wrapper {
     let held = null;
     try { held = JSON.parse(text); } catch { /* torn or unreadable: stale */ }
     const pid = Number(held?.pid);
-    const sameBoot = held?.bootId == null || this.bootId == null || held.bootId === this.bootId;
-    return Number.isInteger(pid) && pid > 0 && sameBoot && isWrapperFor(pid, this.job) ? pid : null;
+    return Number.isInteger(pid) && pid > 0 && sameBoot(held?.bootId, this.bootId) && isWrapperFor(pid, this.job) ? pid : null;
   }
 
   /**

@@ -12,6 +12,7 @@ import path from 'node:path';
 
 import type { RoutineRun } from '../../shared/types.js';
 import type { Config } from './config.js';
+import { writeFileAtomic } from './atomic-write.js';
 import { sendRoutineEvent } from './notify.js';
 import { routineStateRoot } from './routine-config.js';
 import { pushableEvents } from './routine-log.js';
@@ -77,9 +78,7 @@ function persist(l: Ledger, now: number): void {
   prune(l, now);
   try {
     fs.mkdirSync(path.dirname(l.file), { recursive: true });
-    const tmp = `${l.file}.${process.pid}.tmp`;
-    fs.writeFileSync(tmp, JSON.stringify(l.floor > 0 ? { seen: Object.fromEntries(l.seen), floor: l.floor } : { seen: Object.fromEntries(l.seen) }));
-    fs.renameSync(tmp, l.file);
+    writeFileAtomic(l.file, JSON.stringify(l.floor > 0 ? { seen: Object.fromEntries(l.seen), floor: l.floor } : { seen: Object.fromEntries(l.seen) }));
   } catch {
     /* the in-memory set still dedupes this process; only a restart could resend */
   }

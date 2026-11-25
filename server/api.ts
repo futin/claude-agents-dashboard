@@ -73,7 +73,7 @@ import {
 } from './lib/spawn.js';
 import { staleEnvKeys, toPosInt, type Config } from './lib/config.js';
 import { describeCron, isManualCron, nextAfter, parseCron } from '../shared/cron.js';
-import { checkPins, parseJob, serializeEnabled } from '../shared/routine-file.js';
+import { NAME_RE, checkPins, parseJob, serializeEnabled } from '../shared/routine-file.js';
 import type { JobError, PinSnapshot } from '../shared/routine-file.js';
 import { foldForPush, ownerStatus, runsReader } from './lib/routine-boot.js';
 import { machineName, routineDirs } from './lib/routine-config.js';
@@ -90,7 +90,9 @@ import type {
   AccountResponse, GitFetchResponse, HealthResponse, NotifyTestResponse, OkResponse, RemoteAnswerToggleResponse, RoutineErrorsResponse,
   RoutineWriteResponse, StopResponse, TranscribeResponse,
   CodegraphRunRefusal, CodegraphRunRequest, HookNotifyEvent, NotifyEventRequest, OpenFolderError, OpenFolderRequest, RoutineRunState, RoutineRunsQuery,
-  RoutineRunsWindow, RoutineWriteError, SpawnError, Unvalidated, WriteRefusalError
+  RoutineRunsWindow, RoutineWriteError, SpawnError, Unvalidated, WriteRefusalError,
+  HookWaitRequest, MessageWaitRequest, PermissionNotifyRequest, PinOrderRequest, PinWriteRequest, RemoteAnswerRequest, RoutineCreateRequest,
+  RoutinePatch, RoutineReconcileRequest, RoutineRevealRequest, RoutineRunRequest, RoutineValidateRequest, RoutineWriteRequest, SessionStopRequest,
 } from '../shared/types.js';
 
 /** Session ids are transcript filenames (UUIDs) — restrict to safe chars. */
@@ -776,7 +778,7 @@ export async function serveRemoteAnswerToggle(
   config: Config, req: IncomingMessage, res: ServerResponse
 ): Promise<void> {
   if (refuseWrite(config, req, res)) return;
-  const body = await readJsonBody(req) as { enabled?: unknown } | null;
+  const body = await readJsonBody(req) as Unvalidated<RemoteAnswerRequest> | null;
   if (!body || typeof body.enabled !== 'boolean') return sendBadBody(res, { error: 'expected {enabled: boolean}' });
   const state = setEnabled(config, body.enabled);
   if (!state) return sendJson(res, 409, { error: 'disabled by REMOTE_ANSWER=false' });
@@ -802,8 +804,7 @@ export async function serveQuestionWait(config: Config, req: IncomingMessage, re
   if (!getState(config).remoteAnswer) return sendJson(res, 404, { error: 'remote answers disabled' });
   if (refuseWrite(config, req, res)) return;
 
-  const body = await readJsonBody(req) as
-    { sessionId?: unknown; toolInput?: unknown; timeoutMs?: unknown; permissionMode?: unknown } | null;
+  const body = await readJsonBody(req) as Unvalidated<HookWaitRequest> | null;
   if (!body || typeof body !== 'object') return sendBadBody(res, { error: 'bad body' });
 
   const sessionId = typeof body.sessionId === 'string' ? body.sessionId : '';
@@ -875,8 +876,7 @@ export async function servePlanWait(config: Config, req: IncomingMessage, res: S
   if (!getState(config).remoteAnswer) return sendJson(res, 404, { error: 'remote answers disabled' });
   if (refuseWrite(config, req, res)) return;
 
-  const body = await readJsonBody(req) as
-    { sessionId?: unknown; toolInput?: unknown; timeoutMs?: unknown; permissionMode?: unknown } | null;
+  const body = await readJsonBody(req) as Unvalidated<HookWaitRequest> | null;
   if (!body || typeof body !== 'object') return sendBadBody(res, { error: 'bad body' });
 
   const sessionId = typeof body.sessionId === 'string' ? body.sessionId : '';
@@ -970,8 +970,7 @@ export async function serveMessageWait(config: Config, req: IncomingMessage, res
   if (!getState(config).remoteAnswer) return sendJson(res, 404, { error: 'remote answers disabled' });
   if (refuseWrite(config, req, res)) return;
 
-  const body = await readJsonBody(req) as
-    { sessionId?: unknown; timeoutMs?: unknown; permissionMode?: unknown; stopHookActive?: unknown; headless?: unknown } | null;
+  const body = await readJsonBody(req) as Unvalidated<MessageWaitRequest> | null;
   if (!body || typeof body !== 'object') return sendBadBody(res, { error: 'bad body' });
 
   const sessionId = typeof body.sessionId === 'string' ? body.sessionId : '';
@@ -1051,8 +1050,7 @@ export async function servePermissionNotify(
 ): Promise<void> {
   if (refuseWrite(config, req, res)) return;
 
-  const body = await readJsonBody(req) as
-    { sessionId?: unknown; message?: unknown; permissionMode?: unknown } | null;
+  const body = await readJsonBody(req) as Unvalidated<PermissionNotifyRequest> | null;
   if (!body || typeof body !== 'object') return sendBadBody(res, { error: 'bad body' });
 
   const sessionId = typeof body.sessionId === 'string' ? body.sessionId : '';
@@ -1413,7 +1411,7 @@ export async function serveSessionStop(
     let parsed: unknown;
     try { parsed = JSON.parse(raw.bytes.toString('utf8')); }
     catch { return sendBadBody(res, { error: 'bad body' }); }
-    force = (parsed as { force?: unknown } | null)?.force === true;
+    force = (parsed as Unvalidated<SessionStopRequest> | null)?.force === true;
   }
 
   switch (force ? forceStopSession(id) : stopSession(id)) {
@@ -1698,7 +1696,7 @@ function sendPinsSaved(config: Config, res: ServerResponse): void {
  */
 export async function servePinsWrite(config: Config, req: IncomingMessage, res: ServerResponse): Promise<void> {
   if (refuseWrite(config, req, res)) return;
-  const body = await readJsonBody(req) as { dirName?: unknown; pinned?: unknown } | null;
+  const body = await readJsonBody(req) as Unvalidated<PinWriteRequest> | null;
   if (!body || typeof body.dirName !== 'string' || typeof body.pinned !== 'boolean') {
     return sendBadBody(res, { error: 'expected {dirName: string, pinned: boolean}' });
   }
@@ -1727,7 +1725,7 @@ export async function servePinsWrite(config: Config, req: IncomingMessage, res: 
  */
 export async function servePinsOrder(config: Config, req: IncomingMessage, res: ServerResponse): Promise<void> {
   if (refuseWrite(config, req, res)) return;
-  const body = await readJsonBody(req) as { order?: unknown } | null;
+  const body = await readJsonBody(req) as Unvalidated<PinOrderRequest> | null;
   if (!body || !Array.isArray(body.order) || !body.order.every(d => typeof d === 'string')) {
     return sendBadBody(res, { error: 'expected {order: string[]}' });
   }
@@ -1771,8 +1769,6 @@ export async function serveOpenFolder(config: Config, req: IncomingMessage, res:
 
 /* -------------------------------------------------- routines (docs/superpowers/specs/2026-10-19-scheduled-workflows-design.md §HTTP) */
 
-/** A job name from a URL or a body, checked before it reaches any path; the reserved names pass here and are the validator's to refuse. */
-const JOB_NAME_RE = /^[a-z0-9-]+$/;
 /** The wrapper takes `--only` as argv; a list longer than any pin set is refused rather than handed to a spawn. */
 const ONLY_MAX = 200;
 const ROUTINE_WINDOWS: readonly RoutineRunsWindow[] = [7, 30, 90];
@@ -1786,7 +1782,7 @@ const RUNS_PARAM: { [K in keyof RoutineRunsQuery]: K } = { days: 'days', job: 'j
  * writes job files, installs or runs, spec §Owning server). True when it has answered and the caller must return.
  */
 function refuseRoutineWrite(res: ServerResponse, name?: string): boolean {
-  if (name !== undefined && !JOB_NAME_RE.test(name)) { sendJson(res, 400, { error: 'bad name' }); return true; }
+  if (name !== undefined && !NAME_RE.test(name)) { sendJson(res, 400, { error: 'bad name' }); return true; }
   if (!isOwner()) { sendJson(res, 409, { error: 'not-owner' satisfies RoutineWriteError }); return true; }
   return false;
 }
@@ -1907,7 +1903,7 @@ export function serveRoutineRuns(config: Config, params: URLSearchParams, res: S
 
 /** `GET /api/routines/:name` — the raw file and its parse, for the editor. */
 export function serveRoutineRead(config: Config, name: string, res: ServerResponse): void {
-  if (!JOB_NAME_RE.test(name)) return sendJson(res, 400, { error: 'bad name' });
+  if (!NAME_RE.test(name)) return sendJson(res, 400, { error: 'bad name' });
   const stored = readJobs(routineDirs(config).routines, machineName(config).name).find(s => s.name === name);
   if (!stored) return sendJson(res, 404, { error: 'no such job' });
   sendJson(res, 200, stored satisfies RoutineFile);
@@ -1921,7 +1917,7 @@ export function serveRoutineRead(config: Config, name: string, res: ServerRespon
 export async function serveRoutineWrite(config: Config, name: string, req: IncomingMessage, res: ServerResponse): Promise<void> {
   if (refuseWrite(config, req, res)) return;
   if (refuseRoutineWrite(res, name)) return;
-  const body = await readJsonBody(req) as { text?: unknown; mtimeMs?: unknown } | null;
+  const body = await readJsonBody(req) as Unvalidated<RoutineWriteRequest> | null;
   if (!body || typeof body !== 'object' || typeof body.text !== 'string' || (body.mtimeMs !== undefined && typeof body.mtimeMs !== 'number')) {
     return sendBadBody(res, { error: 'expected {text: string, mtimeMs?: number}' });
   }
@@ -1945,7 +1941,7 @@ export async function serveRoutineWrite(config: Config, name: string, req: Incom
 /** `POST /api/routines` `{name, text}` — a new job: `409` when the file exists, else validated and written like PUT. */
 export async function serveRoutineCreate(config: Config, req: IncomingMessage, res: ServerResponse): Promise<void> {
   if (refuseWrite(config, req, res)) return;
-  const body = await readJsonBody(req) as { name?: unknown; text?: unknown } | null;
+  const body = await readJsonBody(req) as Unvalidated<RoutineCreateRequest> | null;
   if (!body || typeof body !== 'object' || typeof body.name !== 'string' || typeof body.text !== 'string') {
     return sendBadBody(res, { error: 'expected {name: string, text: string}' });
   }
@@ -1986,7 +1982,7 @@ export async function serveRoutineDelete(config: Config, name: string, req: Inco
 export async function serveRoutinePatch(config: Config, name: string, req: IncomingMessage, res: ServerResponse): Promise<void> {
   if (refuseWrite(config, req, res)) return;
   if (refuseRoutineWrite(res, name)) return;
-  const body = await readJsonBody(req) as { enabled?: unknown } | null;
+  const body = await readJsonBody(req) as Unvalidated<RoutinePatch> | null;
   if (!body || typeof body !== 'object' || typeof body.enabled !== 'boolean') return sendBadBody(res, { error: 'expected {enabled: boolean}' });
   const dir = routineDirs(config).routines;
   const stored = readJobs(dir, machineName(config).name).find(s => s.name === name);
@@ -2007,7 +2003,7 @@ export async function serveRoutinePatch(config: Config, name: string, req: Incom
 export async function serveRoutineReconcile(config: Config, req: IncomingMessage, res: ServerResponse): Promise<void> {
   if (refuseWrite(config, req, res)) return;
   if (refuseRoutineWrite(res)) return;
-  const body = await readJsonBody(req) as { apply?: unknown } | null;
+  const body = await readJsonBody(req) as Unvalidated<RoutineReconcileRequest> | null;
   try {
     sendJson(res, 200, body && typeof body === 'object' && body.apply === true ? await applyReconcile(config) : await planReconcile(config));
   } catch (e) {
@@ -2029,7 +2025,7 @@ export async function serveRoutineRun(config: Config, name: string, req: Incomin
     try { body = JSON.parse(raw.bytes.toString('utf8')); } catch { return sendBadBody(res, { error: 'bad body' }); }
     if (!body || typeof body !== 'object' || Array.isArray(body)) return sendBadBody(res, { error: 'bad body' });
     // No `only` key is a whole run; anything under the key, null included, is `runJob`'s to judge.
-    only = 'only' in body ? (body as { only?: unknown }).only : undefined;
+    only = 'only' in body ? (body as Unvalidated<RoutineRunRequest>).only : undefined;
   }
   // `runJob` reads `[]` as every pin; over HTTP an empty selection is a caller bug, not a request for a whole run.
   if (Array.isArray(only) && (only.length === 0 || only.length > ONLY_MAX)) return sendJson(res, 400, { error: 'bad-only' satisfies RoutineWriteError });
@@ -2062,7 +2058,7 @@ export async function serveRoutineStop(config: Config, name: string, req: Incomi
  */
 export async function serveRoutineReveal(config: Config, req: IncomingMessage, res: ServerResponse): Promise<void> {
   if (refuseWrite(config, req, res)) return;
-  const body = await readJsonBody(req) as { name?: unknown } | null;
+  const body = await readJsonBody(req) as Unvalidated<RoutineRevealRequest> | null;
   const name = body && typeof body === 'object' ? body.name : undefined;
   if (name !== undefined && typeof name !== 'string') return sendBadBody(res, { error: 'expected {name?: string}' });
   if (refuseRoutineWrite(res, name)) return;
@@ -2085,7 +2081,7 @@ export async function serveRoutineReveal(config: Config, req: IncomingMessage, r
  * and touches no file. Without a `name` the file is judged under a neutral one, so the name rules stay the Name field's.
  */
 export async function serveRoutineValidate(config: Config, req: IncomingMessage, res: ServerResponse): Promise<void> {
-  const body = await readJsonBody(req) as { text?: unknown; name?: unknown } | null;
+  const body = await readJsonBody(req) as Unvalidated<RoutineValidateRequest> | null;
   if (!body || typeof body !== 'object' || typeof body.text !== 'string') return sendBadBody(res, { error: 'expected {text: string}' });
   const name = typeof body.name === 'string' ? body.name : 'untitled';
   const checked = validateOr500(config, name, body.text, res);

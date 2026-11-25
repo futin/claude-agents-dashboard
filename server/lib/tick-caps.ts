@@ -10,6 +10,7 @@ import os from 'node:os';
 import path from 'node:path';
 
 import type { Config } from './config.js';
+import { writeFileAtomic } from './atomic-write.js';
 import { sendTickCappedEvent, tickCanSend } from './notify.js';
 import { routineStateRoot } from './routine-config.js';
 import { isOwner } from './routine-store.js';
@@ -199,14 +200,11 @@ function decideStats(home: string): string {
 
 /** tmp + rename, so a reader never sees half a ledger. Returns false on failure; the caller sends anyway. */
 function writeLedger(file: string, ledger: TickCapLedger): boolean {
-  const tmp = `${file}.${process.pid}.tmp`;
   try {
     fs.mkdirSync(path.dirname(file), { recursive: true });
-    fs.writeFileSync(tmp, JSON.stringify(ledger) + '\n', 'utf8');
-    fs.renameSync(tmp, file);
+    writeFileAtomic(file, JSON.stringify(ledger) + '\n');
     return true;
   } catch {
-    try { fs.rmSync(tmp, { force: true }); } catch { /* nothing to clean */ }
     return false;
   }
 }

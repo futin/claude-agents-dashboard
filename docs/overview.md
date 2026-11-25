@@ -179,6 +179,7 @@ shared/types.ts   the API contract (SessionsResponse, Session, ManagementIndex,
                   SessionAnalysis, AnalyticsReport, …)
 shared/frontmatter.ts  zero-dep YAML-frontmatter subset parser — shared because
                   both sides parse it (lib/management.ts and configs/FileBlock.tsx)
+                  — plus `frontmatterFence` / `frontmatterKeyIndex`, the one fence and key reader every job-file reader and writer uses
 shared/gitUpstream.ts  zero-dep upstream rule (`gitUpstreamShown`) — shared so the Git view's chip and level
                   rule and the hub's Git pending tile cannot disagree about the same repo
 shared/cron.ts    zero-dep five-field cron parser: `parseCron`, next and last fire time, the launchd `StartCalendarInterval` expansion, a plain-words
@@ -284,7 +285,7 @@ server/
   lib/spend-tally.ts  the spend reducers (main-transcript and subagent record rules) and the figures read off a tally; fed by agents-cache.ts
                   and session-spend.ts
   lib/usage-line.ts  the one parse of an assistant usage line (id, model, ts, four counts); usage-ledger, session-spend,
-                  analyze and scripts/lib/transcript-audit.ts each keep their own gates on it
+                  analyze, scripts/lib/transcript-audit.ts and scripts/check-token-weights.ts each keep their own gates on it
   lib/jsonl-tail.ts  byte-offset JSONL follower: foldLines, the chunked read loop of all seven followers (tasks.ts, pr-detect.ts,
                   usage-ledger.ts, routine-log.ts, routine-run.ts directly; agents-cache.ts and session-spend.ts through followJsonl)
   lib/sessionAnalyticsLog.ts  parses ~/.claude/session-analytics-log.md
@@ -301,7 +302,9 @@ server/
                   test seam, fail directions; a leaf lib/notify.ts imports, never
                   the reverse
   lib/remoteState.ts  remote-answer switch (env gate + persisted toggle)
-  lib/atomic-write.ts  `writeFileAtomic`: temp file + rename in the same dir — settings, the remote toggle and both log rotations go through it
+  lib/atomic-write.ts  `writeFileAtomic`: temp file + rename in the same dir, optional `mode` — settings, the remote toggle, both log rotations, the
+                  tick-cap, usage-alert and routine-notify ledgers, the profile, pins.json, plists and cron.env go through it;
+                  test/guards/rename-sites.test.ts fails a new hand copy
   lib/settings.ts persisted idle threshold, answer window, push policy + the
                   usage-recording switch, Git fetch interval, tailnet write trust, the launch form's
                   default surface and the pin list
@@ -389,7 +392,7 @@ client/src/
                   tail poll at a time, an epoch per re-tail, a retry after a failed tail), pollSeq (`createPollSeq`, the skip-while-in-flight rule useSessions, usePendingReply, useSessionDetail, useSessionSpend, useAccount, useRemoteAnswer and the Routines
                   polls share, and `pollFetch`, the 30s bound every guarded poll's request carries),
                   heldBody (which timeline body a pinned panel folds), markdown, configsEntries,
-                  format, settings, persistedReset (Settings › Reset's reach into mounted usePersistedState holders),
+                  format, settings, persistedReset (Settings › Reset's reach into mounted usePersistedState holders), persistedValue (usePersistedState's storage half: parse, write, follow other tabs),
                   sections, deepLink, dictation, openFolder (the Open folder key's status → note), spawnOptions, textCaps (the composers' length caps and the chat drawer's truncation caps behind Settings' Chat messages hint, each the server's; pinned by `test/guards/client-server-caps.test.ts`), settingsBounds (Settings › Shared's number-field bounds, the server's, pinned by the same guard), spawnResponse (`parseSpawnResponse`, the `POST /api/spawn` 200 body → its `SpawnResponse` branch; `spawnOutcome`, what `useSpawn` applies for a result), launchSurface (which launch surfaces the form offers, its initial pick, and the desktop copy), pins, resume, pace, usageProfile,
                   usageRatesFormat, usageHistory (the History tab's step path, ticks and figures), panelCollapse, surface, walkChart (the headroom
                   chart's geometry), walkRows (the same walk as day rows), holds,
@@ -428,7 +431,9 @@ test/             node-assert tests over backend + client domain logic, one leve
 .github/workflows/  ci.yml (the PR gate) and release.yml (tags and publishes each release) — workflows/ci.md
 scripts/          install-hooks.sh (`pnpm hooks:install`), ask-remote-hook.sh,
                   plan-remote-hook.sh, permission-notify-hook.sh,
-                  remote-decision-hook.sh, stop-notify-hook.sh,
+                  remote-decision-hook.sh, stop-notify-hook.sh (all five source
+                  hook-common.sh beside their real path: DASH, TOKEN_FILE, dash_curl,
+                  autopilot_running; never linked itself),
                   kill-guard-hook.sh (refuses broad pkill/killall — see
                   workflows/hooks-setup.md), host-credentials.sh,
                   lan-ip.sh, env-value.ts (the one .env reader the installer and
@@ -447,9 +452,11 @@ scripts/          install-hooks.sh (`pnpm hooks:install`), ask-remote-hook.sh,
                   ci-scope.ts — CI's one check command: full typecheck/build/test, or on a
                   docs-only PR just the suites that read the changed docs, run through
                   test/run-some.ts (workflows/ci.md §Scoped checks),
-                  gen-plugin-lib.ts (`pnpm plugin:gen`) — transpiles shared/{cron,frontmatter,
-                  routine-file}.ts into plugin/lib/*.mjs; test/guards/plugin-manifest.test.ts
-                  regenerates and compares,
+                  gen-plugin-lib.ts (`pnpm plugin:gen`) — transpiles the sources in its
+                  LIB_MODULES list (shared/{cron,frontmatter,routine-file}.ts and
+                  server/lib/{agents,subagent-usage,usage-line}.ts) into plugin/lib/*.mjs;
+                  test/guards/plugin-manifest.test.ts regenerates and compares, and fails a
+                  generated module that imports anything but node: or a generated sibling,
                   session-analytics.ts (`pnpm session-analytics`) — prints one
                   session's SessionAnalysis as JSON without the server running,
                   which is how `/kaizen` gets exact numbers; its `--latest` resolver is
@@ -473,11 +480,13 @@ scripts/          install-hooks.sh (`pnpm hooks:install`), ask-remote-hook.sh,
 plugin/           the installable Claude Code plugin (`/plugin install`, README §Install the skills);
                   plain JS skills, never imported by server/ or client/ at runtime
   .claude-plugin/plugin.json  name + version
-  lib/            generated `.mjs` copies of the shared routine modules, for plain-`node` use
+  lib/            generated `.mjs` copies of the shared routine modules and of the server's
+                  agents / subagent-usage / usage-line modules (kaizen's), for plain-`node` use
                   (never `bin/`: Claude Code puts that on every session's PATH)
   skills/git-sync/  repo chores across machines; engine tools/git-sync.mjs, own `node --test`
                   suite run by `pnpm test:skills` (~4 min, 2026-10-01)
-  skills/kaizen/  session post-mortem and last-N-runs-of-a-skill review; analyzer kaizen.mjs, own `node --test` suite run
+  skills/kaizen/  session post-mortem and last-N-runs-of-a-skill review; analyzer kaizen.mjs (imports ../../lib/*.mjs,
+                  the analysis itself still a hand port of analyze.ts), own `node --test` suite run
                   inside `pnpm test`; its log line grammar is a contract with Analytics
                   (docs/subsystems/analytics.md)
 ```

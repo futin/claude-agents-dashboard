@@ -7,6 +7,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
+import { NAME_RE } from '../../shared/routine-file.js';
 import type { RoutineRunConflict, RoutineWriteError } from '../../shared/types.js';
 import type { Config } from './config.js';
 import { foldLines } from './jsonl-tail.js';
@@ -32,7 +33,6 @@ export type StopResult = { status: 204 } | { status: 409; error: Extract<Routine
 export const READBACK_MS = 2000;
 const POLL_MS = 40;
 
-const SAFE_NAME = /^[a-z0-9-]+$/;
 const sleep = (ms: number): Promise<void> => new Promise(r => setTimeout(r, ms));
 
 /** The pid in `<locks>/<name>.lock` when that wrapper is live for this job from this boot, else null. Unreadable command lines count as not live: never signal on a guess. */
@@ -100,7 +100,7 @@ export async function runJob(config: Config, name: string, only?: unknown, probe
   const pins = only === undefined ? [] : validOnly(only) ? only : null;
   if (pins === null) return { status: 400, error: 'bad-only' };
   const machine = machineName(config).name;
-  const stored = SAFE_NAME.test(name) ? readJobs(routineDirs(config).routines, machine).find(j => j.name === name) : undefined;
+  const stored = NAME_RE.test(name) ? readJobs(routineDirs(config).routines, machine).find(j => j.name === name) : undefined;
   if (!stored) return { status: 404 };
   // The wrapper would refuse both of these and a 2 s wait for a log line that never comes would then read as a slow success.
   if (!stored.job) return { status: 409, error: 'invalid' };
@@ -139,7 +139,7 @@ export function stopJob(
   probe: Probe = createProbe(),
   kill: (pid: number, signal: 'SIGTERM') => void = (pid, signal) => { process.kill(pid, signal); }
 ): StopResult {
-  if (!SAFE_NAME.test(name)) return { status: 409, error: 'not-running' };
+  if (!NAME_RE.test(name)) return { status: 409, error: 'not-running' };
   const pid = liveLockPid(config, name, probe);
   if (pid === null) return { status: 409, error: 'not-running' };
   try { kill(pid, 'SIGTERM'); } catch { return { status: 409, error: 'not-running' }; }

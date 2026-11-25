@@ -11,6 +11,7 @@ import path from 'node:path';
 import type { UsageLimits } from '../../shared/types.js';
 import { readAccountProfile } from './account.js';
 import type { Config } from './config.js';
+import { writeFileAtomic } from './atomic-write.js';
 import { sendUsageEvent, usageCanSend } from './notify.js';
 import { getSettings } from './settings.js';
 import { sameWindow } from './usage-history.js';
@@ -183,14 +184,11 @@ function readLedger(): UsageAlertLedger {
 /** tmp + rename, so a reader never sees half a ledger. Returns false on failure; the caller sends anyway. */
 function writeLedger(ledger: UsageAlertLedger): boolean {
   const file = ledgerFile();
-  const tmp = `${file}.${process.pid}.tmp`;
   try {
     fs.mkdirSync(path.dirname(file), { recursive: true });
-    fs.writeFileSync(tmp, JSON.stringify(ledger) + '\n', 'utf8');
-    fs.renameSync(tmp, file);
+    writeFileAtomic(file, JSON.stringify(ledger) + '\n');
     return true;
   } catch {
-    try { fs.rmSync(tmp, { force: true }); } catch { /* nothing to clean */ }
     return false;
   }
 }

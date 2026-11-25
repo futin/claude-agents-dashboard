@@ -1,14 +1,17 @@
 /**
- * Characterization of the five readers of an assistant usage line — the ledger (`usage-ledger.ts`), the rates audit (`scripts/lib/transcript-audit.ts`),
- * subagent spend (`readSubagentUsage`) and session spend (`readSessionSpend`), both in `session-spend.ts`, and the session analysis (`analyze.ts`). They share one parse
- * (`usage-line.ts`) but keep their own gates on purpose, so each scenario pins every caller's total side by side: a change to one gate shows up as one
- * cell, never as a silent drift between readers. Every fixture puts its tokens in `input_tokens` only, so each reader's figure is that one class.
+ * Characterization of the six readers of an assistant usage line — the ledger (`usage-ledger.ts`), the rates audit (`scripts/lib/transcript-audit.ts`),
+ * subagent spend (`readSubagentUsage`) and session spend (`readSessionSpend`), both in `session-spend.ts`, the session analysis (`analyze.ts`) and the
+ * token-weight check (`scripts/check-token-weights.ts`). They share one parse (`usage-line.ts`) but keep their own gates on purpose, so each scenario pins
+ * every caller's total side by side: a change to one gate shows up as one cell, never as a silent drift between readers. Every fixture puts its tokens in
+ * `input_tokens` only, so each reader's figure is that one class — except the weight check, which reads no input class: `weightsCr` moves the same count
+ * into `cache_read_input_tokens` for it.
  */
 import assert from 'node:assert';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
+import { collect } from '../../scripts/check-token-weights.js';
 import { readRecords } from '../../scripts/lib/transcript-audit.js';
 import { _resetAgentsCache } from '../../server/lib/agents-cache.js';
 import { analyzeSession } from '../../server/lib/analyze.js';
@@ -72,7 +75,27 @@ function ledgerIn(recs: unknown[]): number {
   }
 }
 
-interface Totals { ledger: number; audit: number; subagent: number; spend: number; analyze: number }
+/** The weight check's cache-read total for `recs`, each record's `input_tokens` moved into `cache_read_input_tokens`, the class it sums. */
+function weightsCr(recs: unknown[]): number {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'cad-usage-line-weights-'));
+  try {
+    const moved = recs.map(r => {
+      const c = structuredClone(r) as { message: { usage: Record<string, unknown> } };
+      c.message.usage.cache_read_input_tokens = c.message.usage.input_tokens;
+      c.message.usage.input_tokens = 0;
+      return c;
+    });
+    fs.mkdirSync(path.join(root, '-Users-x-proj'), { recursive: true });
+    fs.writeFileSync(path.join(root, '-Users-x-proj', `${SESSION}.jsonl`), jsonl(moved));
+    let total = 0;
+    for (const s of collect(root, T0).stats.values()) total += s.cr;
+    return total;
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+}
+
+interface Totals { ledger: number; audit: number; subagent: number; spend: number; analyze: number; weights: number }
 
 /** Every reader's input total for one transcript holding `recs` (as a main transcript, and as a subagent's for `readSubagentUsage`). */
 function totals(recs: unknown[]): Totals {
@@ -92,7 +115,7 @@ function totals(recs: unknown[]): Totals {
     const spend = readSessionSpend(main)!.main;
     fs.rmSync(path.join(dir, SESSION), { recursive: true, force: true });
     const analyze = analyzeSession(main)!.totals.input;
-    return { ledger: ledgerIn(recs), audit, subagent, spend, analyze };
+    return { ledger: ledgerIn(recs), audit, subagent, spend, analyze, weights: weightsCr(recs) };
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }
@@ -104,29 +127,29 @@ export function run(): number {
   const r = (ok: boolean) => { if (ok) p++; else f++; };
 
   r(test('two records sharing a message.id count once in every caller', () => {
-    assert.deepStrictEqual(totals([rec(5, { id: 'm1' }), rec(5, { id: 'm1' })]), { ledger: 5, audit: 5, subagent: 5, spend: 5, analyze: 5 });
+    assert.deepStrictEqual(totals([rec(5, { id: 'm1' }), rec(5, { id: 'm1' })]), { ledger: 5, audit: 5, subagent: 5, spend: 5, analyze: 5, weights: 5 });
   }));
 
   r(test('a zero-token first copy: the ledger counts the second, every other caller lets the first consume the id', () => {
-    assert.deepStrictEqual(totals([rec(0, { id: 'm1' }), rec(7, { id: 'm1' })]), { ledger: 7, audit: 0, subagent: 0, spend: 0, analyze: 0 });
+    assert.deepStrictEqual(totals([rec(0, { id: 'm1' }), rec(7, { id: 'm1' })]), { ledger: 7, audit: 0, subagent: 0, spend: 0, analyze: 0, weights: 0 });
   }));
 
-  r(test('a record with no model: dropped by the ledger and the audit, counted by the rest', () => {
-    assert.deepStrictEqual(totals([rec(4, { id: 'm1', model: '' })]), { ledger: 0, audit: 0, subagent: 4, spend: 4, analyze: 4 });
+  r(test('a record with no model: dropped by the ledger, the audit and the weight check, counted by the rest', () => {
+    assert.deepStrictEqual(totals([rec(4, { id: 'm1', model: '' })]), { ledger: 0, audit: 0, subagent: 4, spend: 4, analyze: 4, weights: 0 });
   }));
 
-  r(test('a record with no timestamp: dropped by the ledger and the audit, counted by the rest', () => {
-    assert.deepStrictEqual(totals([rec(2, { id: 'm1', ts: false })]), { ledger: 0, audit: 0, subagent: 2, spend: 2, analyze: 2 });
+  r(test('a record with no timestamp: dropped by the ledger, the audit and the weight check, counted by the rest', () => {
+    assert.deepStrictEqual(totals([rec(2, { id: 'm1', ts: false })]), { ledger: 0, audit: 0, subagent: 2, spend: 2, analyze: 2, weights: 0 });
   }));
 
   r(test('records with no id fail open: each counts once in every caller', () => {
-    assert.deepStrictEqual(totals([rec(3), rec(3)]), { ledger: 6, audit: 6, subagent: 6, spend: 6, analyze: 6 });
+    assert.deepStrictEqual(totals([rec(3), rec(3)]), { ledger: 6, audit: 6, subagent: 6, spend: 6, analyze: 6, weights: 6 });
   }));
 
   r(test('a non-number token count reads as 0 in every caller', () => {
     const bad = rec(0, { id: 'm1' }) as { message: { usage: Record<string, unknown> } };
     bad.message.usage.input_tokens = '7';
-    assert.deepStrictEqual(totals([bad, rec(1, { id: 'm2' })]), { ledger: 1, audit: 1, subagent: 1, spend: 1, analyze: 1 });
+    assert.deepStrictEqual(totals([bad, rec(1, { id: 'm2' })]), { ledger: 1, audit: 1, subagent: 1, spend: 1, analyze: 1, weights: 1 });
   }));
 
   console.log(`\n  ${p} passed, ${f} failed`);

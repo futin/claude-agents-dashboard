@@ -15,8 +15,10 @@
  *   node kaizen.mjs --skill <name> [N] [--outcome <regex>]
  *                                           the newest N (default 50) finished sessions whose first prompt ran the skill, per session and summed
  *
- * PROVENANCE: ported from claude-agents-dashboard server/lib/{analyze,agents,subagent-usage,scan}.ts.
- * That repo holds the unit-tested source of truth; keep this in sync if it changes.
+ * PROVENANCE: the subagent parse (`readAgents`), the subagent totals helpers and the usage-line parse are GENERATED from claude-agents-dashboard
+ * server/lib/{agents,subagent-usage,usage-line}.ts into ../../lib/*.mjs by `pnpm plugin:gen`, and test/guards/plugin-manifest.test.ts fails on a stale copy.
+ * The analysis (analyze.ts) and the transcript enumeration (scan.ts) are still hand-PORTED — analyze.ts's import closure is too wide to generate — so keep
+ * those in sync by hand; the parity cases in test/analytics/analyze.test.ts are their guard.
  * Exception: `--trend` is kaizen-only, has no TS twin, and is tested by spawning this file (test/analytics/kaizen-trend.test.ts); so are `--compare`, tested in
  * test/compare.test.mjs, `--budget`, tested in test/budget.test.mjs, and `--skill`, tested in test/skill-review.test.mjs. `--latest`'s resolver,
  * `resolveLatest`, has a TS twin in scripts/lib/latest-session.ts; it and the CLI's path, session-id and usage errors are tested in test/latest.test.mjs.
@@ -32,6 +34,10 @@ import os from 'node:os';
 import path from 'node:path';
 import { StringDecoder } from 'node:string_decoder';
 import { fileURLToPath } from 'node:url';
+
+import { readAgents } from '../../lib/agents.mjs';
+import { addTotals, emptyTotals, subagentDirOf } from '../../lib/subagent-usage.mjs';
+import { assistantUsage } from '../../lib/usage-line.mjs';
 
 /* ------------------------------------------------ transcript enumeration */
 
@@ -64,14 +70,10 @@ function normCwd(p) {
   return p.length > 1 && p.endsWith('/') ? p.slice(0, -1) : p;
 }
 
-/* ------------------------------------------------ subagent parsing (agents.ts) */
+/* ------------------------------------------------ transcript text helpers (analyze.ts) */
 
-function isAgentLaunch(b) {
-  if (!b || b.type !== 'tool_use') return false;
-  if (b.name === 'Task' || b.name === 'Agent') return true;
-  return !!(b.input && typeof b.input.subagent_type === 'string');
-}
-function isSendMessage(b) { return !!b && b.type === 'tool_use' && b.name === 'SendMessage'; }
+// The subagent parse itself is generated: parseRecordEvents / readAgents come from ../../lib/agents.mjs. These two text helpers are private there and the
+// analysis below needs them, so this file keeps its own.
 function contentText(content) {
   if (typeof content === 'string') return content;
   if (!Array.isArray(content)) return '';
@@ -88,164 +90,16 @@ function toolResultText(b) {
   if (Array.isArray(b.content)) return b.content.map(x => (x && typeof x.text === 'string' ? x.text : '')).join('');
   return '';
 }
-const AGENT_ID_RE = /agentId:\s*([A-Za-z0-9]+)/;
-const RESUMED_ID_RE = /"resumedAgentId"\s*:\s*"([A-Za-z0-9]+)"/;
-const TASK_ID_RE = /<task-id>\s*([A-Za-z0-9]+)\s*<\/task-id>/;
-const STATUS_RE = /<status>\s*([a-z_]+)\s*<\/status>/i;
-const SUBAGENT_TOKENS_RE = /<subagent_tokens>\s*(\d+)\s*<\/subagent_tokens>/;
-const TOOL_USES_RE = /<tool_uses>\s*(\d+)\s*<\/tool_uses>/;
-const DURATION_MS_RE = /<duration_ms>\s*(\d+)\s*<\/duration_ms>/;
-// The `<status>` values that end a run. Closing only on `completed` left a failed, killed or stopped run open, so its spend was never counted (#420, #506).
-const TERMINAL_STATUSES = new Set(['completed', 'failed', 'killed', 'stopped']);
 
 // Untyped records (fixtures, older transcripts) still count.
 function isConversationRecord(rec) { return typeof rec.type !== 'string' || rec.type === 'user' || rec.type === 'assistant'; }
 function finiteOrNull(v) { return typeof v === 'number' && Number.isFinite(v) ? v : null; }
-function intFromMatch(text, re) { const m = text.match(re); return m ? parseInt(m[1], 10) : null; }
-
-// A notification landing mid-turn is absorbed into the running turn as message-less
-// `queue-operation` (top-level `content`) / `attachment` (`attachment.prompt`) records (bug-11).
-function notificationText(rec, content) {
-  let out = contentText(content);
-  if (typeof rec.content === 'string') out += '\n' + rec.content;
-  const prompt = rec.attachment && rec.attachment.prompt;
-  if (typeof prompt === 'string') out += '\n' + prompt;
-  return out;
-}
-
-function parseRecordEvents(rec) {
-  if (!rec || typeof rec !== 'object') return [];
-  const content = rec.message ? rec.message.content : undefined;
-  const ts = typeof rec.timestamp === 'string' ? rec.timestamp : null;
-  const events = [];
-  const flat = notificationText(rec, content);
-  if (flat.includes('<task-notification>')) {
-    const idM = flat.match(TASK_ID_RE), stM = flat.match(STATUS_RE);
-    if (idM && stM) events.push({
-      kind: 'notify', agentId: idM[1], terminal: TERMINAL_STATUSES.has(stM[1].toLowerCase()), ts,
-      tokens: intFromMatch(flat, SUBAGENT_TOKENS_RE), toolUses: intFromMatch(flat, TOOL_USES_RE),
-      exactDurationMs: intFromMatch(flat, DURATION_MS_RE)
-    });
-  }
-  if (!Array.isArray(content)) return events;
-  let tur = rec.toolUseResult;
-  for (const b of content) {
-    if (!b || typeof b !== 'object') continue;
-    if (isAgentLaunch(b) && typeof b.id === 'string') {
-      const input = b.input || {};
-      events.push({
-        kind: 'launch', id: b.id,
-        type: typeof input.subagent_type === 'string' ? input.subagent_type : '',
-        description: typeof input.description === 'string' ? input.description : '', ts
-      });
-    } else if (isSendMessage(b) && typeof b.id === 'string') {
-      const input = b.input || {};
-      events.push({ kind: 'send', id: b.id, summary: typeof input.summary === 'string' ? input.summary : '', ts });
-    } else if (b.type === 'tool_result' && typeof b.tool_use_id === 'string') {
-      const text = toolResultText(b);
-      const t = tur && typeof tur === 'object' ? tur : null;
-      tur = undefined;
-      const isAsyncAck = (t && (t.isAsync === true || t.status === 'async_launched')) || /Async agent launched/i.test(text);
-      let agentId = t && typeof t.agentId === 'string' ? t.agentId : null;
-      if (isAsyncAck && !agentId) { const m = text.match(AGENT_ID_RE); agentId = m ? m[1] : null; }
-      let resumedAgentId = t && typeof t.resumedAgentId === 'string' ? t.resumedAgentId : null;
-      if (!resumedAgentId) { const m = text.match(RESUMED_ID_RE); resumedAgentId = m ? m[1] : null; }
-      events.push({
-        kind: 'result', toolUseId: b.tool_use_id, ts, isAsyncAck: !!isAsyncAck, agentId, resumedAgentId,
-        tokens: isAsyncAck ? null : finiteOrNull(t && t.totalTokens),
-        toolUses: isAsyncAck ? null : finiteOrNull(t && t.totalToolUseCount),
-        exactDurationMs: isAsyncAck ? null : finiteOrNull(t && t.totalDurationMs)
-      });
-    }
-  }
-  return events;
-}
-
-function readAgents(filePath) {
-  let text;
-  try { text = fs.readFileSync(filePath, 'utf8'); } catch { return null; }
-  const launches = [], byToolUseId = new Map(), byAgentId = new Map(), sends = new Map();
-  // The indexes are emptied as they are consumed, so only this set recognizes a launch or send replayed after a compaction (#174).
-  const seen = new Set();
-  // A resume proves the previous run stopped: one still open (no terminal notification seen) closes at the resume time, with no figures of its own —
-  // left open, nothing could ever close it (#420). The resumed row takes over byAgentId, so the next notification for that id is its own.
-  const resume = (id, agentId, send, resultTs) => {
-    const prev = byAgentId.get(agentId);
-    if (prev && prev.endedAt === null) prev.endedAt = send.ts ?? resultTs;
-    const origin = launches.find(x => x.agentId === agentId && !x.resumed);
-    const l = {
-      id, type: origin ? origin.type : '', description: send.summary || (origin ? origin.description : ''),
-      startedAt: send.ts, endedAt: null, exactDurationMs: null, tokens: null, toolUses: null, agentId, resumed: true
-    };
-    launches.push(l);
-    byAgentId.set(agentId, l);
-  };
-  const apply = (ev) => {
-    if (ev.kind === 'launch' || ev.kind === 'send') {
-      if (seen.has(ev.id)) return;
-      seen.add(ev.id);
-    }
-    if (ev.kind === 'launch') {
-      const l = { id: ev.id, type: ev.type, description: ev.description, startedAt: ev.ts, endedAt: null, exactDurationMs: null, tokens: null, toolUses: null, agentId: null, resumed: false };
-      launches.push(l);
-      if (!byToolUseId.has(ev.id)) byToolUseId.set(ev.id, l);
-      return;
-    }
-    if (ev.kind === 'send') {
-      if (!sends.has(ev.id)) sends.set(ev.id, { summary: ev.summary, ts: ev.ts });
-      return;
-    }
-    if (ev.kind === 'result') {
-      const l = byToolUseId.get(ev.toolUseId);
-      if (!l) {
-        const send = sends.get(ev.toolUseId);
-        if (!send) return;
-        sends.delete(ev.toolUseId);
-        if (ev.resumedAgentId) resume(ev.toolUseId, ev.resumedAgentId, send, ev.ts);
-        return;
-      }
-      byToolUseId.delete(ev.toolUseId);
-      l.agentId = ev.agentId;
-      if (ev.isAsyncAck) { if (ev.agentId && !byAgentId.has(ev.agentId)) byAgentId.set(ev.agentId, l); }
-      else { l.endedAt = ev.ts; l.tokens = ev.tokens; l.toolUses = ev.toolUses; l.exactDurationMs = ev.exactDurationMs; }
-      return;
-    }
-    if (!ev.terminal || !ev.ts) return;
-    const l = byAgentId.get(ev.agentId);
-    if (!l) return;
-    byAgentId.delete(ev.agentId);
-    l.endedAt = ev.ts; l.tokens = ev.tokens; l.toolUses = ev.toolUses; l.exactDurationMs = ev.exactDurationMs;
-  };
-  for (const line of text.split('\n')) {
-    const trimmed = line.trim();
-    if (!trimmed) continue;
-    let rec;
-    try { rec = JSON.parse(trimmed); } catch { continue; }
-    for (const ev of parseRecordEvents(rec)) apply(ev);
-  }
-  const agents = launches.map(l => {
-    const startMs = l.startedAt ? Date.parse(l.startedAt) : NaN;
-    const endMs = l.endedAt ? Date.parse(l.endedAt) : NaN;
-    const diff = Number.isFinite(startMs) && Number.isFinite(endMs) ? endMs - startMs : null;
-    return {
-      id: l.id, type: l.type, description: l.description, status: l.endedAt ? 'done' : 'running',
-      startedAt: l.startedAt, endedAt: l.endedAt, durationMs: l.exactDurationMs ?? diff, tokens: l.tokens, toolUses: l.toolUses, agentId: l.agentId,
-      resumed: l.resumed
-    };
-  });
-  agents.reverse();
-  return agents;
-}
 
 /* ------------------------------------------------ subagent spend (subagent-usage.ts) */
 
 // The harness figure (totalTokens / <subagent_tokens>) is a subagent's FINAL context size,
-// not its spend; the spend is in its own transcript, summed once per message.id (bug-27).
-function emptyTotals() { return { input: 0, output: 0, cacheCreation: 0, cacheRead: 0, combined: 0, billableApprox: 0 }; }
-function addTotals(a, b) {
-  a.input += b.input; a.output += b.output; a.cacheCreation += b.cacheCreation; a.cacheRead += b.cacheRead;
-  a.combined += b.combined; a.billableApprox += b.billableApprox;
-}
+// not its spend; the spend is in its own transcript, summed once per message.id (bug-27). emptyTotals / addTotals / subagentDirOf and the usage parse
+// are generated from the server (../../lib/subagent-usage.mjs, ../../lib/usage-line.mjs); the per-file sum below is kaizen's own.
 function sumSubagentTranscript(text) {
   const t = emptyTotals();
   const seen = new Set();
@@ -254,19 +108,17 @@ function sumSubagentTranscript(text) {
     if (!trimmed) continue;
     let rec;
     try { rec = JSON.parse(trimmed); } catch { continue; }
-    const msg = rec && rec.message;
-    if (!msg || msg.role !== 'assistant' || !msg.usage || typeof msg.usage !== 'object') continue;
-    if (typeof msg.id === 'string' && msg.id) { if (seen.has(msg.id)) continue; seen.add(msg.id); }
-    const u = msg.usage;
-    t.input += num(u.input_tokens); t.output += num(u.output_tokens);
-    t.cacheCreation += num(u.cache_creation_input_tokens); t.cacheRead += num(u.cache_read_input_tokens);
+    const u = assistantUsage(rec);
+    if (!u) continue;
+    if (u.id) { if (seen.has(u.id)) continue; seen.add(u.id); }
+    t.input += u.tok.in; t.output += u.tok.out; t.cacheCreation += u.tok.cc; t.cacheRead += u.tok.cr;
   }
   t.combined = t.input + t.output + t.cacheCreation + t.cacheRead;
   t.billableApprox = t.input + t.output + t.cacheCreation;
   return t;
 }
 function readSubagentUsage(mainPath) {
-  const dir = path.join(mainPath.replace(/\.jsonl$/, ''), 'subagents');
+  const dir = subagentDirOf(mainPath);
   let names;
   try { names = fs.readdirSync(dir); } catch { return []; }
   const out = [];

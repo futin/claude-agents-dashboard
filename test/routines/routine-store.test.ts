@@ -13,7 +13,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import type { PinRow } from '../../shared/types.js';
 import type { Config } from '../../server/lib/config.js';
 import {
-  bootId, claimOwner, createProbe, deleteJob, isOwner, isWrapperCommand, readJobs, releaseOwner, sweepLocks, wrapperAlive, writeJob, writePinsSnapshot, RoutineStoreError
+  bootId, claimOwner, createProbe, deleteJob, isOwner, readJobs, releaseOwner, sweepLocks, wrapperAlive, writeJob, writePinsSnapshot, RoutineStoreError
 } from '../../server/lib/routine-store.js';
 import type { Probe } from '../../server/lib/routine-store.js';
 import { resetSettings } from '../../server/lib/settings.js';
@@ -277,17 +277,6 @@ export function run(): number {
     } finally { releaseOwner(); h.done(); }
   });
 
-  t('isWrapperCommand: run-routine.mjs followed by exactly the job', () => {
-    assert.strictEqual(isWrapperCommand('node /p/lib/run-routine.mjs git-sync-all --trigger schedule', 'git-sync-all'), true);
-    assert.strictEqual(isWrapperCommand('node /p/lib/run-routine.mjs git-sync-all --trigger schedule', 'git-sync'), false);
-    assert.strictEqual(isWrapperCommand('node /p/lib/run-schedule.mjs git-sync-all', 'git-sync-all'), true, 'the wrapper under its pre-rename name');
-    assert.strictEqual(isWrapperCommand('node /p/lib/run-other.mjs git-sync-all', 'git-sync-all'), false);
-    assert.strictEqual(isWrapperCommand('node /p/lib/run-routine.mjs git-sync', 'git-sync-all'), false);
-    assert.strictEqual(isWrapperCommand('  /usr/bin/node   /p/lib/run-routine.mjs   x  ', 'x'), true);
-    assert.strictEqual(isWrapperCommand('vim run-routine.mjs', 'x'), false);
-    assert.strictEqual(isWrapperCommand('node /p/other.mjs git-sync', 'git-sync'), false);
-  });
-
   t('wrapperAlive: dead -> false, live match -> true, live mismatch -> false, unreadable command -> null', () => {
     const probe = fakeProbe({ 10: 'node /p/run-routine.mjs j', 11: 'bash', 12: null });
     assert.deepStrictEqual([10, 11, 12, 13].map(pid => wrapperAlive(pid, 'j', probe)), [true, false, null, false]);
@@ -372,19 +361,26 @@ export function run(): number {
     }
   });
 
-  t('drift guard: the wrapper source still holds the boot id, command-line and lock-shape expressions this module mirrors', () => {
+  t('drift guard: the wrapper source still holds the boot id, ps and lock-shape expressions this module mirrors', () => {
     const src = fs.readFileSync(WRAPPER, 'utf8');
     for (const needle of [
       `execFileSync('sysctl', ['-n', 'kern.boottime'], { encoding: 'utf8' })`,
       'out.match(/sec = (\\d+)/)',
       `m ? m[1] : out.trim()`,
       `fs.readFileSync('/proc/sys/kernel/random/boot_id', 'utf8').trim()`,
-      `execFileSync('ps', ['-o', 'command=', '-p', String(pid)]`,
-      'cmd.trim().split(/\\s+/)',
-      `path.basename(t) === 'run-routine.mjs' && tokens[i + 1] === job`,
-      `JSON.stringify({ pid: process.pid, bootId: this.bootId, job: this.job })`,
-      `held?.bootId == null || this.bootId == null || held.bootId === this.bootId`
+      `execFileSync('ps', ['-o', 'command=', '-p', String(pid)], { encoding: 'utf8', timeout: 2000 })`,
+      `JSON.stringify({ pid: process.pid, bootId: this.bootId, job: this.job })`
     ]) assert.ok(src.includes(needle), `wrapper no longer contains: ${needle}`);
+  });
+
+  t('the wrapper imports isWrapperCommand and sameBoot from ./routine-file.mjs and declares neither — one test for the server and the wrapper', () => {
+    const src = fs.readFileSync(WRAPPER, 'utf8');
+    for (const name of ['isWrapperCommand', 'sameBoot']) {
+      assert.match(src, new RegExp(`import\\s*\\{[^}]*\\b${name}\\b[^}]*\\}\\s*from\\s*'\\./routine-file\\.mjs'`), `wrapper does not import ${name}`);
+      assert.ok(!new RegExp(`\\b(function|const|let|var)\\s+${name}\\b`).test(src), `wrapper declares its own ${name}`);
+    }
+    // A local token test beside the import would still drift: the wrapper's only command-line test is the call into the shared one.
+    assert.ok(!/\.split\(\/\\s\+\/\)/.test(src), 'wrapper splits a command line itself');
   });
 
   for (const d of made) fs.rmSync(d, { recursive: true, force: true });

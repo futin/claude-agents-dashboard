@@ -4,7 +4,7 @@ import { useAnswerToken } from './useAnswerToken';
 import { postWrite } from '../lib/postWrite';
 import { pinWriteOutcome, settleReorder } from '../lib/pinWrite';
 import { applyPinOrder } from '../lib/pins';
-import type { PinsResponse } from '../../../shared/types';
+import type { PinOrderRequest, PinWriteRequest, PinsResponse } from '../../../shared/types';
 
 export interface PinsControl {
   /** null until `GET /api/pins` answers, or if it never does. */
@@ -49,7 +49,7 @@ export function usePins(): PinsControl {
   const setPin = useCallback(async (dirName: string, pinned: boolean): Promise<string | null> => {
     setBusy(dirName);
     try {
-      const outcome = pinWriteOutcome(await postWrite('/api/pins', { token, body: { dirName, pinned } }));
+      const outcome = pinWriteOutcome(await postWrite('/api/pins', { token, body: { dirName, pinned } satisfies PinWriteRequest }));
       if (outcome.kind === 'fresh') {
         setPins(outcome.pins);
         return null;
@@ -69,7 +69,7 @@ export function usePins(): PinsControl {
     setBusy('order');
     if (before) setPins({ ...before, pinned: applyPinOrder(before.pinned, order) });
     try {
-      const outcome = pinWriteOutcome(await postWrite('/api/pins/order', { token, body: { order } }));
+      const outcome = pinWriteOutcome(await postWrite('/api/pins/order', { token, body: { order } satisfies PinOrderRequest }));
       const settled = await settleReorder(outcome, before, () => fetch('/api/pins'));
       if ('pins' in settled) setPins(settled.pins ?? null);
       return settled.text;

@@ -1,6 +1,6 @@
 import assert from 'node:assert';
 
-import { checkPins, parseJob, serializeEnabled } from '../../shared/routine-file.js';
+import { checkPins, isWrapperCommand, parseJob, sameBoot, serializeEnabled } from '../../shared/routine-file.js';
 import type { PinSnapshot } from '../../shared/routine-file.js';
 import type { RoutineJob } from '../../shared/types.js';
 
@@ -239,6 +239,7 @@ export function run(): number {
     const crlf = EXAMPLE.replace(/\n/g, '\r\n');
     assert.strictEqual(must('a', crlf).body, '/git-sync');
     assert.strictEqual(must('a', '﻿' + EXAMPLE).cron, '0 22 * * *');
+    assert.strictEqual(must('a', '\uFEFF' + EXAMPLE.replace(/\n/g, '\r\n')).foreach, 'pinned');
     assert.deepStrictEqual(errs('a', claude('foo: 1').replace(/\n/g, '\r\n')), [{ line: 4, message: 'unknown key foo' }]);
   })) p++; else f++;
 
@@ -346,6 +347,29 @@ export function run(): number {
       ['---', 'cron: "0 9 * * *"', 'run: claude', 'enabled: false', 'model: opus', '---', '/git-sync', ''].join('\n'),
     );
     assert.strictEqual(must('a', serializeEnabled(text, false)).enabled, false);
+  })) p++; else f++;
+
+  if (test('isWrapperCommand: a wrapper name followed by exactly the job, the old run-schedule.mjs name included', () => {
+    assert.strictEqual(isWrapperCommand('node /p/lib/run-routine.mjs git-sync-all --trigger schedule', 'git-sync-all'), true);
+    assert.strictEqual(isWrapperCommand('node /p/lib/run-routine.mjs git-sync-all --trigger schedule', 'git-sync'), false);
+    assert.strictEqual(isWrapperCommand('node /p/lib/run-schedule.mjs j', 'j'), true, 'the wrapper under its pre-rename name');
+    assert.strictEqual(isWrapperCommand('node /p/lib/run-routine.mjs j-all', 'j'), false);
+    assert.strictEqual(isWrapperCommand('node /p/lib/run-other.mjs git-sync-all', 'git-sync-all'), false);
+    assert.strictEqual(isWrapperCommand('node /p/lib/run-routine.mjs git-sync', 'git-sync-all'), false);
+    assert.strictEqual(isWrapperCommand('  /usr/bin/node   /p/lib/run-routine.mjs   x  ', 'x'), true);
+    assert.strictEqual(isWrapperCommand('node run-routine.mjs x', 'x'), true, 'a bare name with no directory');
+    assert.strictEqual(isWrapperCommand('vim run-routine.mjs', 'x'), false);
+    assert.strictEqual(isWrapperCommand('node /p/other.mjs git-sync', 'git-sync'), false);
+    assert.strictEqual(isWrapperCommand('node /p/lib/xrun-routine.mjs x', 'x'), false, 'the basename must be the whole name');
+  })) p++; else f++;
+
+  if (test('sameBoot: a boot id missing on either side is the same boot; two present ids must match', () => {
+    assert.strictEqual(sameBoot(null, 'a'), true);
+    assert.strictEqual(sameBoot(undefined, 'a'), true);
+    assert.strictEqual(sameBoot('a', null), true);
+    assert.strictEqual(sameBoot('a', 'a'), true);
+    assert.strictEqual(sameBoot('a', 'b'), false);
+    assert.strictEqual(sameBoot(1, '1'), false, 'a non-string held id never equals the string one');
   })) p++; else f++;
 
   console.log(`\nroutine-file: ${p} passed, ${f} failed`);

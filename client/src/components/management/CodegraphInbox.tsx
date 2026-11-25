@@ -1,6 +1,5 @@
-import { useState } from 'react';
-
-import { CODEGRAPH_LEVELS, type CodegraphAssessed, type CodegraphLevel } from '../../lib/codegraphLevels';
+import { usePersistedState } from '../../hooks/usePersistedState';
+import { CODEGRAPH_LEVELS, codegraphInboxFilter, type CodegraphAssessed, type CodegraphLevel } from '../../lib/codegraphLevels';
 import { CODEGRAPH_FILTER_EMPTY, CODEGRAPH_FOLDER_GONE, CODEGRAPH_NOT_INDEXED, codegraphQuietLine, codegraphSteps, codegraphVerdict } from '../../lib/codegraphText';
 import { shortenHome } from '../../lib/pins';
 import { CodegraphChips, CodegraphConfirm, CodegraphDot, CodegraphKeys, type CodegraphLayoutProps } from './CodegraphParts';
@@ -13,7 +12,8 @@ const LEVEL_LABEL = Object.fromEntries(CODEGRAPH_LEVELS.map(l => [l.key, l.label
  */
 export default function CodegraphInbox(props: CodegraphLayoutProps) {
   const { ranked, nowMs, home } = props;
-  const [filter, setFilter] = useState<CodegraphLevel | 'all'>('all');
+  const [stored, setFilter] = usePersistedState<string>('management.codegraphInboxFilter', 'all');
+  const filter = codegraphInboxFilter(stored); // guard a stale stored value
   const show = (l: CodegraphLevel) => filter === 'all' || filter === l;
 
   const loud = ranked.filter(a => (a.level === 'needs' || a.level === 'look') && show(a.level));

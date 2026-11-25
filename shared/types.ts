@@ -1157,6 +1157,33 @@ export interface NotifyEventRequest {
   permissionMode?: string;
 }
 
+/**
+ * Body of `POST /api/questions/wait` and `POST /api/plans/wait`, sent by `scripts/ask-remote-hook.sh` and `scripts/plan-remote-hook.sh` (shell, not
+ * type-checked: a rename here must be made there too). `toolInput` is the tool's raw input, sanitised by the route; a bad or missing `timeoutMs` is clamped.
+ */
+export interface HookWaitRequest {
+  sessionId: string;
+  toolInput: unknown;
+  timeoutMs?: number;
+  permissionMode?: string;
+}
+
+/** Body of `POST /api/messages/wait`, sent by `scripts/stop-notify-hook.sh` (shell, not type-checked). `stopHookActive` and `headless` count only when `true`. */
+export interface MessageWaitRequest {
+  sessionId: string;
+  timeoutMs?: number;
+  permissionMode?: string;
+  stopHookActive?: boolean;
+  headless?: boolean;
+}
+
+/** Body of `POST /api/permissions/notify`, sent by `scripts/permission-notify-hook.sh` (shell, not type-checked). */
+export interface PermissionNotifyRequest {
+  sessionId: string;
+  message?: string;
+  permissionMode?: string;
+}
+
 /** A write that answers nothing but its success: the answer, plan-answer and message-answer routes, the notify hooks, a codegraph run, a reveal. */
 export interface OkResponse { ok: true }
 
@@ -1165,6 +1192,11 @@ export type Unvalidated<T> = { [K in keyof T]?: unknown };
 
 /** The `error` of the 403 every write route answers through `refuseWrite` (`server/api.ts`): a token could help, or nothing the caller sends can. */
 export type WriteRefusalError = 'bad token' | 'read-only from this network';
+
+/** Body of `POST /api/sessions/:id/stop`, optional: `force: true` kills outright instead of a graceful stop. */
+export interface SessionStopRequest {
+  force?: boolean;
+}
 
 /** `POST /api/spawn/:id/stop` and `POST /api/sessions/:id/stop`: killed outright, or a graceful stop still landing. */
 export type StopResponse = { stopped: true } | { stopping: true };
@@ -1270,6 +1302,11 @@ export interface EnvOverride {
   value: string;
   /** `settings.json` → the `env` block in ~/.claude; `environment` → the server's own shell. */
   source: 'settings.json' | 'environment';
+}
+
+/** Body of `POST /api/remote-answer`: the switch's new position. */
+export interface RemoteAnswerRequest {
+  enabled: boolean;
 }
 
 /** `POST /api/remote-answer`: the switch, and how many held waits switching off released. */
@@ -1922,6 +1959,17 @@ export interface OpenFolderResponse {
   ok: true;
 }
 
+/** Body of `POST /api/pins`: pin or unpin one project dir. */
+export interface PinWriteRequest {
+  dirName: string;
+  pinned: boolean;
+}
+
+/** Body of `POST /api/pins/order`: every stored pin, in its new order. */
+export interface PinOrderRequest {
+  order: string[];
+}
+
 /**
  * Payload of `GET /api/pins`, and of a successful `POST /api/pins` (#161) or `POST /api/pins/order`. A write route whose change saved but whose payload could
  * not be rebuilt answers {@link PinsSavedError} instead.
@@ -2490,6 +2538,44 @@ export interface RoutineRunsQuery {
 export interface RoutineRunsResponse {
   runs: RoutineRun[];
   stats: RoutineStats;
+}
+
+/** Body of `PUT /api/routines/:name`: the whole file, and the mtime the editor loaded it at (a moved file is `409 changed`). */
+export interface RoutineWriteRequest {
+  text: string;
+  mtimeMs?: number;
+}
+
+/** Body of `POST /api/routines`: a new job's name and whole file. */
+export interface RoutineCreateRequest {
+  name: string;
+  text: string;
+}
+
+/** Body of `PATCH /api/routines/:name`: the `enabled:` line's new value. */
+export interface RoutinePatch {
+  enabled: boolean;
+}
+
+/** Body of `POST /api/routines/reconcile`, optional: `apply: true` applies the diff instead of only planning it. */
+export interface RoutineReconcileRequest {
+  apply?: boolean;
+}
+
+/** Body of `POST /api/routines/:name/run`, optional: run only these pins (no key runs every pin). */
+export interface RoutineRunRequest {
+  only?: string[];
+}
+
+/** Body of `POST /api/routines/reveal`: the job to select, or none for the folder. */
+export interface RoutineRevealRequest {
+  name?: string;
+}
+
+/** Body of `POST /api/routines/validate`: the file as typed, and the name to judge it under (a neutral one when absent). */
+export interface RoutineValidateRequest {
+  text: string;
+  name?: string;
 }
 
 /** A routine create, save, toggle or delete: the job as it now parses (absent on a delete), and the reconcile that followed. */

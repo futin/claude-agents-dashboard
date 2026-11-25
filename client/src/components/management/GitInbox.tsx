@@ -1,7 +1,8 @@
 import { useState } from 'react';
 
+import { usePersistedState } from '../../hooks/usePersistedState';
 import { formatAgo } from '../../lib/format';
-import { GIT_LEVELS, agentOn, gitPlural, gitSentence, rankGitRepos, type GitAssessed, type GitLevel } from '../../lib/gitLevels';
+import { GIT_LEVELS, agentOn, gitInboxFilter, gitPlural, gitSentence, rankGitRepos, type GitAssessed, type GitLevel } from '../../lib/gitLevels';
 import { GIT_BRANCH_CAP, gitBranchChipText, gitFetchedText, gitNotShownText, gitStateSentence } from '../../lib/gitStatsText';
 import { GitAgentChip, GitBranchChip, GitBranchDv, GitBranchLabel, GitKeys, GitLevelDot } from './GitParts';
 import type { GitLayoutProps } from './gitLayoutProps';
@@ -14,7 +15,8 @@ import Chevron from '../Chevron';
 export default function GitInbox(props: GitLayoutProps) {
   const { repos, sessions, nowMs, clock } = props;
   const ranked = rankGitRepos(repos, sessions, nowMs);
-  const [filter, setFilter] = useState<GitLevel | 'all'>('all');
+  const [stored, setFilter] = usePersistedState<string>('management.gitInboxFilter', 'all');
+  const filter = gitInboxFilter(stored); // guard a stale stored value
   const [open, setOpen] = useState<Set<string>>(() => new Set());
   const show = (l: GitLevel) => filter === 'all' || filter === l;
   const toggle = (dirName: string) => setOpen(prev => {
