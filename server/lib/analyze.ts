@@ -329,7 +329,7 @@ export function analyzeSession(filePath: string, id?: string): SessionAnalysis |
  * neither. A transcript no launch claims is not a subagent this session can account for, and
  * is left out rather than risk counting one twice. A `resumed` row is left out too: its runs
  * write into the transcript the original launch already claims. Two rows can still claim one
- * transcript — a sync result naming an agentId already claimed — so a file joins `usage` once.
+ * transcript — a sync result naming an agentId already claimed — so a file joins `usage` and `tokens` once.
  */
 function subagentSpend(filePath: string, launches: AgentJob[]): { agents: AgentJob[]; subagentTotals: SubagentTotals } {
   const files = readSubagentUsage(filePath);
@@ -344,14 +344,15 @@ function subagentSpend(filePath: string, launches: AgentJob[]): { agents: AgentJ
     if (a.status === 'done') {
       if (file && file.usage.combined > 0 && file.usage.combined >= (a.tokens ?? 0)) {
         figure = file.usage.combined;
-        if (!added.has(file.agentId)) { added.add(file.agentId); addTotals(usage, file.usage); }
+        // The row still shows what its launch read; only the totals skip a file another row already counted.
+        if (!added.has(file.agentId)) { added.add(file.agentId); addTotals(usage, file.usage); tokens += figure; }
       } else if (a.tokens != null) {
         figure = a.tokens;
         fallbackCount++;
+        tokens += figure;
       }
     }
     if (figure == null) unknownTokenCount++;
-    else tokens += figure;
     return { ...a, tokens: figure };
   });
   return { agents, subagentTotals: { count: agents.length, tokens, usage, fallbackCount, unknownTokenCount } };

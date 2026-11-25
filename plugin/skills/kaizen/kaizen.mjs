@@ -138,7 +138,7 @@ function readSubagentUsage(mainPath) {
 }
 // A finished launch takes its transcript sum unless that sums below the harness figure (file
 // still being written) — then the harness figure, as a lower bound. Unclaimed files are left out, and so is a resumed row: its runs write into the
-// transcript the original launch already claims.
+// transcript the original launch already claims. A transcript two rows claim joins `usage` and `tokens` once; each row still shows it.
 function subagentSpend(filePath) {
   const files = readSubagentUsage(filePath);
   const byAgentId = new Map(files.map(f => [f.agentId, f]));
@@ -150,10 +150,10 @@ function subagentSpend(filePath) {
     const file = (a.agentId && byAgentId.get(a.agentId)) || byToolUseId.get(a.id);
     let figure = null;
     if (a.status === 'done') {
-      if (file && file.usage.combined > 0 && file.usage.combined >= (a.tokens ?? 0)) { figure = file.usage.combined; if (!added.has(file)) { added.add(file); addTotals(usage, file.usage); } }
-      else if (a.tokens != null) { figure = a.tokens; fallbackCount++; }
+      if (file && file.usage.combined > 0 && file.usage.combined >= (a.tokens ?? 0)) { figure = file.usage.combined; if (!added.has(file)) { added.add(file); addTotals(usage, file.usage); tokens += figure; } }
+      else if (a.tokens != null) { figure = a.tokens; fallbackCount++; tokens += figure; }
     }
-    if (figure == null) unknownTokenCount++; else tokens += figure;
+    if (figure == null) unknownTokenCount++;
     return { ...a, tokens: figure };
   });
   return { agents, subagentTotals: { count: agents.length, tokens, usage, fallbackCount, unknownTokenCount } };

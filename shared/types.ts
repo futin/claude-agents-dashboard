@@ -1698,7 +1698,8 @@ export interface SessionAnalysis {
   byTool: ToolStat[];
   /**
    * Subagents launched (from `readAgents`), newest-first. `tokens` is the figure counted into
-   * `subagentTotals.tokens` — transcript spend, else the harness fallback.
+   * `subagentTotals.tokens` — transcript spend, else the harness fallback. A transcript two rows
+   * claim shows on both and is counted once.
    */
   bySubagent: AgentJob[];
   subagentTotals: SubagentTotals;
