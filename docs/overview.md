@@ -211,7 +211,7 @@ server/
                   `desktopLiveSessionIds`, names the sessions the app holds open
                   (`Session.desktopOwned`) and fails the other way
   lib/agents.ts   whole-file subagent parser → AgentJob[]
-  lib/agents-cache.ts  incremental byte-offset cache over agents.ts
+  lib/agents-cache.ts  incremental byte-offset cache over agents.ts; the same pass folds the main transcript's spend tally (`readSessionFold`)
   lib/tasks.ts    whole-file fold of the plan signals and TaskCreate/TaskUpdate → Session.tasks / taskPlan (plan wins), incremental by byte offset (the creates sit below the 256 KB tail)
   lib/pr-detect.ts    the newest PR a session created: Claude Code's `gitOperation.pr` create (URL must be `https://<host>/<owner>/<repo>/pull/<n>`), else a `gh pr create` result's last PR URL; never `pr-link`; incremental by byte offset
   lib/pr-status.ts    a PR's live state for the chat PR card: launches `gh pr view --json`, folds checks/review/merge, caches per URL (20s busy or failed, 60s settled, forever once ended)
@@ -280,8 +280,10 @@ server/
                   hook would have saved per threshold, with Bash split by command kind (no server route; scripts/tool-output-replay.ts is
                   the one reader; findings: docs/superpowers/decisions/2026-11-12-context-mode-evaluation.md)
   lib/subagent-usage.ts  the `subagents/` dir path, the per-subagent result type and the token-totals helpers
-  lib/session-spend.ts  GET /api/sessions/:id/spend: main + claimed subagent transcripts, followed incrementally; also `readSubagentUsage`, every
-                  subagent transcript's token classes for Analytics, through the same cache (LRU over 32 sessions)
+  lib/session-spend.ts  GET /api/sessions/:id/spend: the main tally from agents-cache.ts plus claimed subagent transcripts, followed incrementally;
+                  also `readSubagentUsage`, every subagent transcript's token classes for Analytics, through the same cache (LRU over 32 sessions)
+  lib/spend-tally.ts  the spend reducers (main-transcript and subagent record rules) and the figures read off a tally; fed by agents-cache.ts
+                  and session-spend.ts
   lib/usage-line.ts  the one parse of an assistant usage line (id, model, ts, four counts); usage-ledger, session-spend,
                   analyze, scripts/lib/transcript-audit.ts and scripts/check-token-weights.ts each keep their own gates on it
   lib/jsonl-tail.ts  byte-offset JSONL follower: foldLines, the chunked read loop of all seven followers (tasks.ts, pr-detect.ts,
@@ -421,7 +423,7 @@ vite.config.ts    dev proxy /api → backend; reuses the server config loader;
 test/             node-assert tests over backend + client domain logic, one level of feature folders:
                   api, sessions, chat, spawn, usage, git, codegraph, routines, notify, hooks, analytics,
                   settings, ui, infra, plus guards/ for the source guards that read across the repo.
-                  Helpers (api-harness.ts, git-fixture.ts, tmp-root.ts, suites.ts) and the runners stay at the
+                  Helpers (api-harness.ts, fs-bytes.ts, git-fixture.ts, tmp-root.ts, suites.ts) and the runners stay at the
                   root; run-all.ts runs every *.test.ts suites.ts finds outside visual/, so a new suite needs
                   no line anywhere
   visual/         the Playwright suite behind `pnpm test:visual` (config in playwright.config.ts at the

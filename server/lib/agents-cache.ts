@@ -15,10 +15,14 @@
  *    A newline-less tail that parses is consumed, matching the oracle, which parses
  *    a final unterminated line.
  *  - `size < offset` means truncation/rotation → reset and re-read from 0.
- *  - Any unexpected error falls back to the pure whole-file readAgents.
+ *  - Any unexpected error falls back to the pure whole-file readAgents — in
+ *    readAgentsCached only; readSessionFold throws, since the oracle knows nothing about spend.
+ *
+ * The entry also carries the main transcript's spend tally (spend-tally.ts `onMainRecord`), fed from the same records in the same pass, so the drawer's
+ * detail and spend reads fold the main transcript once between them, not once each (#552), and truncation or a failure resets both folds together.
  *
  * Three callers: the on-demand GET /api/sessions/:id handler, the drawer's
- * spend read (session-spend.ts), and the 3s /api/sessions poll through scan.ts
+ * spend read (session-spend.ts, through readSessionFold), and the 3s /api/sessions poll through scan.ts
  * `subagentRunning` — gated there behind a subagent file written in the last 15
  * minutes that is still mid-turn. So state
  * exists only for sessions the UI watches or that are parked on a live subagent
@@ -30,11 +34,14 @@ import fs from 'node:fs';
 import type { AgentJob } from '../../shared/types.js';
 import { createScanState, parseRecordEvents, applyEvent, toAgentJobs, readAgents, type ScanState } from './agents.js';
 import { createTail, followJsonl, type JsonlTail } from './jsonl-tail.js';
+import { createTally, onMainRecord, type SpendTally } from './spend-tally.js';
 
 interface CacheEntry {
   /** How far into the file `state` has consumed. */
   tail: JsonlTail;
   state: ScanState;
+  /** The main transcript's spend so far, over the same bytes as `state`. */
+  spend: SpendTally;
   /** Last materialized snapshot, returned as-is when the file hasn't grown. */
   jobs: AgentJob[];
   lastUsed: number;
@@ -45,7 +52,7 @@ const cache = new Map<string, CacheEntry>();
 
 // Stamped now, not 0: `evictIfNeeded` runs right after insertion, and a 0 would make the new entry the LRU pick, evicting itself.
 function freshEntry(): CacheEntry {
-  return { tail: createTail(), state: createScanState(), jobs: [], lastUsed: Date.now() };
+  return { tail: createTail(), state: createScanState(), spend: createTally(), jobs: [], lastUsed: Date.now() };
 }
 
 function evictIfNeeded(): void {
@@ -59,10 +66,10 @@ function evictIfNeeded(): void {
 }
 
 /**
- * Drop-in replacement for readAgents on the detail endpoint: same output for
- * the same file contents, but O(new bytes) per call after the first.
+ * The agents list and the main-transcript spend tally of `filePath`, both folded up to its current size; null when it can't be `stat`ed. O(new bytes)
+ * per call after the first. An unexpected read or parse failure drops the entry and throws. The tally is live cache state: read it, never mutate it.
  */
-export function readAgentsCached(filePath: string): AgentJob[] | null {
+export function readSessionFold(filePath: string): { jobs: AgentJob[]; main: SpendTally } | null {
   let size: number;
   try {
     size = fs.statSync(filePath).size;
@@ -84,18 +91,31 @@ export function readAgentsCached(filePath: string): AgentJob[] | null {
     entry = reset;
   }
   entry.lastUsed = Date.now();
-  if (size === entry.tail.offset && entry.tail.partial.length === 0) return entry.jobs;
+  if (size === entry.tail.offset && entry.tail.partial.length === 0) return { jobs: entry.jobs, main: entry.spend };
 
   try {
-    const state = entry.state;
+    const { state, spend } = entry;
     followJsonl(filePath, size, entry.tail, rec => {
       for (const ev of parseRecordEvents(rec)) applyEvent(state, ev);
+      onMainRecord(spend, rec);
     });
     entry.jobs = toAgentJobs(entry.state);
-    return entry.jobs;
-  } catch {
-    // Unexpected read/parse failure: drop the entry, use the pure oracle.
+    return { jobs: entry.jobs, main: entry.spend };
+  } catch (e) {
     cache.delete(filePath);
+    throw e;
+  }
+}
+
+/**
+ * Drop-in replacement for readAgents on the detail endpoint: same output for
+ * the same file contents, but O(new bytes) per call after the first.
+ */
+export function readAgentsCached(filePath: string): AgentJob[] | null {
+  try {
+    return readSessionFold(filePath)?.jobs ?? null;
+  } catch {
+    // Unexpected read/parse failure: readSessionFold dropped the entry; use the pure oracle.
     return readAgents(filePath);
   }
 }

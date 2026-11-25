@@ -589,7 +589,8 @@ type, so that width goes to the description), description, running/done,
 duration, tokens (the harness's figure: the subagent's final context size, not its spend — the Analytics
 inspector sums the real spend from the subagent transcripts), tool-use count — under a `N running · N finished · N agents` summary.
 Served by an incremental byte-offset cache (`agents.ts` / `agents-cache.ts`) so repeat
-opens stay cheap. A compaction can replay earlier records verbatim, tool_use ids included, so `applyEvent` drops a launch or `SendMessage` whose id
+opens stay cheap. That one pass also feeds the main transcript's spend tally (`spend-tally.ts`) to the drawer's spend card, so a first open reads the main
+transcript once for both, not once each (#552). A compaction can replay earlier records verbatim, tool_use ids included, so `applyEvent` drops a launch or `SendMessage` whose id
 `ScanState.seen` already holds (#174); without that a replayed launch reads as a second row.
 
 **A background run ends on any terminal `<task-notification>` status** — `completed`, `failed`, `killed` or `stopped` (`TERMINAL_STATUSES` in `agents.ts`),
