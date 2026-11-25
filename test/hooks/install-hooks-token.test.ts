@@ -5,7 +5,7 @@
  * `test/settings/env-value.test.ts` proves the reader answers correctly. That is only half
  * of backlog bug-6: the half that actually bit was the *caller*, which had its own
  * parser, believed it, and reported success. So this file drives the real script,
- * always against a throwaway `CLAUDE_CONFIG_DIR` and, but for the real-write cases (#569), with `--dry-run`, and
+ * always against a throwaway `CLAUDE_CONFIG_DIR` and, except in the real-write cases (#569), with `--dry-run`. It
  * asserts the two properties a wrong caller cannot have:
  *
  *   - **It names the source the value really came from.** `env-value` mirrors
@@ -23,7 +23,7 @@
  * Nothing here touches the real `~/.claude`: `CLAUDE_CONFIG_DIR` and `HOME` are
  * both redirected into tmpdirs, and `--dry-run` suppresses every write the script
  * makes anyway. The real-write cases (#569) drop `--dry-run` to see a written file's
- * bytes, mode and inode, each in a scratch of its own. Elsewhere the token file each
+ * bytes, mode and inode, each in a scratch of its own but the leakage case's one real row, the last use of the shared scratch. Elsewhere the token file each
  * case starts with is asserted byte-identical afterwards.
  */
 
