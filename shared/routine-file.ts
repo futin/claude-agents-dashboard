@@ -31,6 +31,28 @@ const LIST_KEYS = new Set(['allowed-tools']);
 /** The modes a routine may run under, lowest to highest: the runner clamps a file's mode to its ceiling by this order. */
 export const PERMISSION_MODES = ['plan', 'acceptEdits', 'auto'] as const;
 /** A job's timeout when its file names none, and the grammar of the `timeout` key. */
+/**
+ * The wrapper's file names: `run-routine.mjs`, and `run-schedule.mjs` from before Schedules became Routines, because a run an older install started is
+ * still a live wrapper holding its lock.
+ */
+const WRAPPER_NAMES: ReadonlySet<string> = new Set(['run-routine.mjs', 'run-schedule.mjs']);
+
+/**
+ * Whether the command line `command` runs the wrapper for exactly `job`: a whitespace-split element whose basename is a wrapper name, followed by `job` as
+ * the next element (`git-sync` never matches `git-sync-all`). The server's lock sweep and the wrapper's own lock both ask this; an install path with a space
+ * in it would read as not-a-wrapper, and `~/.claude/plugins/…` has none. The basename is the text after the last `/`, since the client imports this module
+ * and `node:path` is not there.
+ */
+export function isWrapperCommand(command: string, job: string): boolean {
+  const tokens = command.trim().split(/\s+/);
+  return tokens.some((t, i) => WRAPPER_NAMES.has(t.slice(t.lastIndexOf('/') + 1)) && tokens[i + 1] === job);
+}
+
+/** A lock's `bootId` against this host's: one missing on either side counts as the same boot, so a host that cannot read one never reads every lock stale. */
+export function sameBoot(held: unknown, mine: string | null): boolean {
+  return held == null || mine == null || held === mine;
+}
+
 export const DEFAULT_TIMEOUT_MS = 3_600_000;
 export const TIMEOUT_RE = /^(\d+)([smh])$/;
 const UNIT_MS = { s: 1000, m: 60_000, h: 3_600_000 } as const;

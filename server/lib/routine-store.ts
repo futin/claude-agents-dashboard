@@ -1,18 +1,20 @@
 /**
  * routine-store.ts — the job folder on disk, the pins snapshot the wrapper reads, the owner lock that lets one server per machine touch `~/.claude/routines/`,
  * and the start-up sweep of dead wrappers' locks. Callers gate on `isOwner()`; nothing here refuses a write for a non-owner, so a test or the seam can still
- * drive a folder. The wrapper (`plugin/lib/run-routine.mjs`) owns `locks/` while it runs: `bootId`, `isWrapperCommand` and the lock shape below mirror its own
- * and `test/routines/routine-store.test.ts` pins them against its source, because the server cannot import the plugin.
+ * drive a folder. The wrapper (`plugin/lib/run-routine.mjs`) owns `locks/` while it runs: `bootId` and the lock shape below mirror its own and
+ * `test/routines/routine-store.test.ts` pins them against its source, because the server cannot import the plugin; the wrapper-command test and the boot rule
+ * (`isWrapperCommand`, `sameBoot`) are `shared/routine-file.ts`'s, which both import.
  */
 
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 
-import { NAME_RE, parseJob } from '../../shared/routine-file.js';
+import { isWrapperCommand, NAME_RE, parseJob, sameBoot } from '../../shared/routine-file.js';
 import type { JobError, PinSnapshot } from '../../shared/routine-file.js';
 import type { PinRow, RoutineJob } from '../../shared/types.js';
 import { archivedSessionIds } from './archived.js';
+import { writeFileAtomic } from './atomic-write.js';
 import type { Config } from './config.js';
 import { listPinRows } from './management.js';
 import { routineDirs, routineStateRoot } from './routine-config.js';
@@ -90,13 +92,6 @@ export function deleteJob(dir: string, name: string): boolean {
   }
 }
 
-function writeAtomic(file: string, text: string): void {
-  fs.mkdirSync(path.dirname(file), { recursive: true });
-  const tmp = `${file}.${process.pid}.tmp`;
-  fs.writeFileSync(tmp, text);
-  fs.renameSync(tmp, file);
-}
-
 /**
  * `<state>/pins.json`: the pin rows the Projects tiles show, in pin order, cut to what the wrapper matches `foreach:` against. `rows` is a seam; by default
  * they are built the way `GET /api/pins` builds them, so a pin resolves to the same path here as everywhere else.
@@ -105,7 +100,9 @@ export function writePinsSnapshot(config: Config, rows?: readonly PinRow[]): voi
   const pins = getPinnedProjects();
   const list = rows ?? listPinRows(config, pins, { archivedIds: archivedSessionIds(), pinnedDirs: new Set(pins), transcripts: sharedListing(projectsRoot()) });
   const snapshot: PinSnapshot[] = list.map(r => ({ dirName: r.dirName, name: r.name, path: r.path, listed: r.listed }));
-  writeAtomic(path.join(routineStateRoot(config), 'pins.json'), JSON.stringify(snapshot, null, 2) + '\n');
+  const file = path.join(routineStateRoot(config), 'pins.json');
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  writeFileAtomic(file, JSON.stringify(snapshot, null, 2) + '\n');
 }
 
 /**
@@ -125,9 +122,6 @@ export function bootId(): string | null {
   }
 }
 
-/** The wrapper's own rule: a boot id missing on either side counts as the same boot, so a host that cannot read one never reads every lock as stale. */
-const sameBoot = (held: unknown, mine: string | null): boolean => held == null || mine == null || held === mine;
-
 /** The process seam: tests pass a fake, never a real foreign pid. */
 export interface Probe {
   alive(pid: number): boolean;
@@ -145,13 +139,6 @@ export function createProbe(): Probe {
       try { return execFileSync('ps', ['-o', 'command=', '-p', String(pid)], { encoding: 'utf8', timeout: 2000 }); } catch { return null; }
     }
   };
-}
-
-/** `run-routine.mjs` followed by exactly `job` as whitespace-split elements, the wrapper's `isWrapperFor` test (`git-sync` never matches `git-sync-all`). */
-export function isWrapperCommand(command: string, job: string): boolean {
-  const tokens = command.trim().split(/\s+/);
-  // `run-schedule.mjs` is the wrapper's name before Schedules became Routines: a run that an older install started is still a live wrapper.
-  return tokens.some((t, i) => (path.basename(t) === 'run-routine.mjs' || path.basename(t) === 'run-schedule.mjs') && tokens[i + 1] === job);
 }
 
 /** Whether `pid` is a live wrapper for `job`; null when its command line cannot be read, which the callers treat as "do not act". */

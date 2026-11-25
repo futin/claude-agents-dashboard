@@ -696,14 +696,10 @@ export function loadProfileState(dir?: string): ProfileState {
  * flag — a failed write costs this week's fold, not the process.
  */
 export function saveProfileState(state: ProfileState, dir?: string): boolean {
-  const target = profilePath(dir);
-  const tmp = target + '.tmp';
   try {
-    fs.writeFileSync(tmp, JSON.stringify(state) + '\n', 'utf8');
-    fs.renameSync(tmp, target);
+    writeFileAtomic(profilePath(dir), JSON.stringify(state) + '\n');
     return true;
   } catch {
-    try { fs.unlinkSync(tmp); } catch { /* nothing to clean up */ }
     return false;
   }
 }

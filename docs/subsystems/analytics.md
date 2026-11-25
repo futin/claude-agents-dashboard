@@ -88,13 +88,15 @@ one of them at random — the same two-state rule the Sessions board follows.
   subagent's *final context size*, not its spend — 5–130x low on many-turn subagents (bug-27) — so it is only the fallback
   for a finished subagent whose transcript is missing or sums below it, counted in `subagentTotals.fallbackCount`. The
   metric's tooltip carries `subagentTotals.usage`'s billable / cache-read split. `/kaizen`'s `kaizen.mjs` does the
-  same, and `test/analytics/analyze.test.ts` runs it against `analyzeSession` to keep the two in step.
+  same: its subagent parse (`lib/agents.ts`), totals helpers (`lib/subagent-usage.ts`) and usage parse (`lib/usage-line.ts`) are generated into
+  `plugin/lib/*.mjs` by `pnpm plugin:gen`, and its analysis is a hand port that `test/analytics/analyze.test.ts` runs against `analyzeSession` to keep the
+  two in step.
   Each file is folded incrementally by byte offset through the cache the drawer's spend poll keeps ([chat](chat.md) §Tokens spent; LRU over 32
   sessions), so a repeat read with no new bytes reads nothing from `subagents/` and a grown file costs only its appended bytes. Like that poll, it assumes
   the transcripts are append-only: a shrunk file is re-read from the start, a same-size rewrite is not seen.
   A `resumed` row (a SendMessage resume, which `lib/agents.ts` lists as its own row) is left out of the sum: its runs write into the transcript the
-  original launch already claims. `kaizen.mjs` folds SendMessage resumes the same way and skips the same rows; both close a background launch on
-  any terminal `<status>` (completed, failed, killed or stopped) and close a run still open at its resume (#420, #506).
+  original launch already claims. `kaizen.mjs` runs the same generated fold, so it skips the same rows, closes a background launch on any terminal
+  `<status>` (completed, failed, killed or stopped) and closes a run still open at its resume (#420, #506).
   A compaction replays earlier records verbatim; both sides count each `tool_use` id, `tool_result`, Agent launch and SendMessage once and add each
   subagent transcript once (#174, #226), and the parity tests include a replayed fixture.
   Both sides also skip Claude Code 2.1.302's `api-request-blob` records, which replay each request's turns with the same role and content: `analyze.ts`

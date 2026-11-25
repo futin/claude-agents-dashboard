@@ -45,8 +45,16 @@ command -v jq > /dev/null 2>&1 || exit 0
 # `CLAUDE_DASHBOARD_SCHEDULE` is the same marker as stamped by a wrapper installed before Schedules became Routines.
 [ -n "$CLAUDE_DASHBOARD_ROUTINE$CLAUDE_DASHBOARD_SCHEDULE" ] && exit 0
 
-DASH="${CLAUDE_DASHBOARD_URL:-http://127.0.0.1:4173}"
-TOKEN_FILE="${CLAUDE_CONFIG_DIR:-$HOME/.claude}/hooks/dashboard-token"
+# The shared preamble (DASH, TOKEN_FILE, dash_curl, autopilot_running) sits beside this script's real path. The installer links ~/.claude/hooks/<name>.sh
+# to it with an absolute source, so one readlink (no -f: not every macOS has it) finds the scripts dir; run directly, $0 is already there. A checkout
+# that predates the file exits 0 — the same fail-open as a missing hook.
+HOOK_SELF="$0"
+if [ -L "$HOOK_SELF" ]; then
+  HOOK_LINK="$(readlink "$HOOK_SELF")"
+  case "$HOOK_LINK" in /*) HOOK_SELF="$HOOK_LINK" ;; *) HOOK_SELF="$(dirname "$HOOK_SELF")/$HOOK_LINK" ;; esac
+fi
+[ -r "$(dirname "$HOOK_SELF")/hook-common.sh" ] || exit 0
+. "$(dirname "$HOOK_SELF")/hook-common.sh" || exit 0
 
 SHA=$(printf '%s' "$INPUT" | jq -r '.stop_hook_active // false')
 
@@ -58,30 +66,15 @@ bg=$(printf '%s' "$INPUT" | jq '((.background_tasks // []) | length) + ((.sessio
 SESSION_ID=$(printf '%s' "$INPUT" | jq -r '.session_id // empty')
 [ -n "$SESSION_ID" ] || exit 0
 
-# Autopilot opt-out. While an `autopilot` run is `running` (state file ~/.claude/autopilot/<session_id>.json, field `status`, written by the autopilot CLI)
-# the run must not ask, and the CLI applies a deny/block only after EVERY hook on the event has returned — so a hold here would idle the run for up to
-# `answerSecs` and push a question to the phone for a session that must not ask. Reads only `status == "running"`; any other status, a missing or malformed
-# file or a jq failure is "not running" and leaves today's behaviour untouched. Never writes the file. The id is checked against the CLI's own grammar first
-# so a crafted session_id cannot walk the path out of the state directory.
-#
-# NOT identical to the copies in ask-remote-hook.sh and plan-remote-hook.sh: this one also counts `blocked` with `blockPasses == 0` as running, because the
-# CLI's Stop guard blocks in that state too (a blocked run whose one question is already asked). Nothing writes state on Stop, so there is no race. The
-# PreToolUse/PermissionRequest copies must NOT do the same: there it would race the gate's own blockPasses 1→0 write on the same event and could hide the
-# one blocker question from the phone.
-autopilot_running() {
-  local LC_ALL=C sid="$1"
-  case "$sid" in ''|*[!A-Za-z0-9-]*) return 1 ;; esac
-  local f="$HOME/.claude/autopilot/$sid.json"
-  [ -f "$f" ] || return 1
-  [ "$(jq -r 'if .status == "running" or (.status == "blocked" and .blockPasses == 0) then "yes" else "no" end' "$f" 2>/dev/null)" = "yes" ]
-}
+# Autopilot opt-out (hook-common.sh). `--blocked-unasked`: a blocked run whose one question is already asked counts as running here,
+# because the CLI's Stop guard blocks in that state too.
 
 # `running`: the turn autopilot's guard blocks (stop_hook_active exactly false) exits silently — no hold, no "finished" push. A MISSING flag is not false: the
 # guard does not block then, so the turn ends here and must reach the phone like any other stop (SHA above defaults it to false, so it just falls through).
 # The second Stop (stop_hook_active true) is the one that ends the turn, so it is treated as a FIRST stop: SHA=false makes both notify_fallback and the hold
 # body (`stopHookActive`) behave as on a first stop, because the server only pushes when that field is not true. A run that dies mid-way must still reach
 # the phone.
-if autopilot_running "$SESSION_ID"; then
+if autopilot_running "$SESSION_ID" --blocked-unasked; then
   RAW_SHA=$(printf '%s' "$INPUT" | jq -r '.stop_hook_active | tostring')
   [ "$RAW_SHA" = "false" ] && exit 0
   SHA=false
@@ -111,17 +104,6 @@ case "$TTY_NAME" in '??'|'?') HEADLESS=true ;; esac
 # are listed, so an unfamiliar entrypoint leaves the TTY verdict standing and a
 # new headless front-end still fails closed.
 case "$CLAUDE_CODE_ENTRYPOINT" in claude-desktop) HEADLESS=false ;; esac
-
-# curl, plus the dashboard token when there is one. The header goes in through a file descriptor (`-H @/dev/fd/N`), never argv, which any local `ps` can
-# read for the whole hold. The substitution is expanded inside the curl command itself so its fd is still open when curl reads it, and `printf` is a
-# builtin, so the token is no process's argv at all. No token file → no Authorization header, as before.
-dash_curl() {
-  if [ -f "$TOKEN_FILE" ]; then
-    curl -H @<(printf 'Authorization: Bearer %s\n' "$(tr -d '\n' < "$TOKEN_FILE")") "$@"
-  else
-    curl "$@"
-  fi
-}
 
 # The pre-feature behaviour: tell the dashboard a turn finished (it decides
 # whether that is worth a push) and end the turn. Mid-conversation stops

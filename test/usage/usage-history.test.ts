@@ -627,6 +627,19 @@ export function run(): number {
     assert.deepStrictEqual(leftovers, []);
   })) p++; else f++;
 
+  if (test('saveProfileState whose swap fails returns false, leaves no .tmp and keeps the saved profile', () => {
+    const dir = fs.mkdtempSync(path.join(tmp, 'atomicfail-'));
+    assert.strictEqual(saveProfileState(emptyState(), dir), true);
+    const before = fs.readdirSync(dir).map((n) => [n, fs.readFileSync(path.join(dir, n), 'utf8')]);
+    overrideAtomicRename(() => { throw new Error('ENOSPC'); });
+    try {
+      assert.strictEqual(saveProfileState({ ...emptyState(), observedWeeks: ['2026-W01'] }, dir), false);
+    } finally {
+      overrideAtomicRename(null);
+    }
+    assert.deepStrictEqual(fs.readdirSync(dir).map((n) => [n, fs.readFileSync(path.join(dir, n), 'utf8')]), before);
+  })) p++; else f++;
+
   // The rotation cases pass an explicit small cap rather than writing 32 MB per
   // case: the behaviour under test is the trim-and-keep-the-tail logic, and
   // MAX_HISTORY_BYTES is asserted separately to be the production default.

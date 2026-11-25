@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-import { writeFileAtomic } from '../../server/lib/atomic-write.js';
+import { overrideAtomicRename, writeFileAtomic } from '../../server/lib/atomic-write.js';
 
 function test(name: string, fn: () => void): boolean {
   try { fn(); console.log('  ✓ ' + name); return true; }
@@ -43,6 +43,38 @@ export function run(): number {
     fs.writeFileSync(file, 'a much longer old content than the new one\n'.repeat(10));
     writeFileAtomic(file, Buffer.from('short\n'));
     assert.strictEqual(fs.readFileSync(file, 'utf8'), 'short\n');
+    assert.deepStrictEqual(temps(dir), []);
+  })) p++; else f++;
+
+  if (process.platform !== 'win32') {
+    if (test('mode 0o600 gives the file that mode under a 0o022 umask, and replacing a 0o644 file narrows it', () => {
+      const dir = fs.mkdtempSync(path.join(tmp, 'mode-'));
+      const file = path.join(dir, 'cron.env');
+      const prev = process.umask(0o022);
+      try {
+        writeFileAtomic(file, 'A=1\n', { mode: 0o600 });
+        assert.strictEqual(fs.statSync(file).mode & 0o777, 0o600);
+        fs.chmodSync(file, 0o644);
+        writeFileAtomic(file, 'A=2\n', { mode: 0o600 });
+        assert.strictEqual(fs.statSync(file).mode & 0o777, 0o600);
+        // A mode wider than the umask allows is set too: the chmod, not the create flag, decides.
+        writeFileAtomic(file, 'A=3\n', { mode: 0o666 });
+        assert.strictEqual(fs.statSync(file).mode & 0o777, 0o666);
+      } finally {
+        process.umask(prev);
+      }
+      assert.deepStrictEqual(temps(dir), []);
+    })) p++; else f++;
+  }
+
+  if (test('with a mode, a failed rename still leaves no *.tmp', () => {
+    const dir = fs.mkdtempSync(path.join(tmp, 'modefail-'));
+    overrideAtomicRename(() => { throw new Error('EXDEV'); });
+    try {
+      assert.throws(() => writeFileAtomic(path.join(dir, 'x'), 'x', { mode: 0o600 }), /EXDEV/);
+    } finally {
+      overrideAtomicRename(null);
+    }
     assert.deepStrictEqual(temps(dir), []);
   })) p++; else f++;
 

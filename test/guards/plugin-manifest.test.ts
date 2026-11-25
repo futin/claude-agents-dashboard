@@ -11,8 +11,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
-import ts from 'typescript';
-
+import { generate, LIB_MODULES } from '../../scripts/gen-plugin-lib.js';
 import { parseFrontmatter } from '../../shared/frontmatter.js';
 import { findRepoRoot } from './docs-links.test.js';
 
@@ -23,9 +22,6 @@ function test(name: string, fn: () => void): boolean {
 
 /** Every skill the plugin ships. A new one is added here deliberately, beside its directory. */
 const SKILLS = ['git-sync', 'kaizen'];
-
-/** The shared modules the routine wrapper runs, generated into plugin/lib by `pnpm plugin:gen` (scripts/gen-plugin-lib.ts). */
-const LIB_MODULES = ['cron', 'frontmatter', 'routine-file'];
 
 const readJson = (p: string): any => JSON.parse(fs.readFileSync(p, 'utf8'));
 
@@ -62,18 +58,29 @@ export function run(): number {
     assert.deepStrictEqual(entries, ['.claude-plugin', 'lib', 'skills']);
   })) p++; else f++;
 
-  if (test('plugin/lib/ holds exactly the three generated .mjs modules plus the hand-written run-routine.mjs wrapper', () => {
-    assert.deepStrictEqual(fs.readdirSync(path.join(root, 'plugin', 'lib')).sort(), [...LIB_MODULES, 'run-routine'].map((m) => `${m}.mjs`).sort());
+  if (test('plugin/lib/ holds exactly the six generated .mjs modules plus the hand-written run-routine.mjs wrapper', () => {
+    assert.strictEqual(LIB_MODULES.length, 6);
+    assert.deepStrictEqual(fs.readdirSync(path.join(root, 'plugin', 'lib')).sort(), [...LIB_MODULES.map((m) => m.out), 'run-routine.mjs'].sort());
   })) p++; else f++;
 
-  for (const name of LIB_MODULES) {
-    if (test(`plugin/lib/${name}.mjs is shared/${name}.ts transpiled — a TS edit without \`pnpm plugin:gen\` fails here`, () => {
-      const source = fs.readFileSync(path.join(root, 'shared', `${name}.ts`), 'utf8');
-      const { outputText } = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 } });
-      const expected = outputText.replace(/(from\s+['"]\.\/[\w-]+)\.js(['"])/g, '$1.mjs$2');
-      assert.strictEqual(fs.readFileSync(path.join(root, 'plugin', 'lib', `${name}.mjs`), 'utf8'), expected);
+  for (const m of LIB_MODULES) {
+    if (test(`plugin/lib/${m.out} is ${m.source} transpiled — a TS edit without \`pnpm plugin:gen\` fails here`, () => {
+      const expected = generate(fs.readFileSync(path.join(root, m.source), 'utf8'));
+      assert.strictEqual(fs.readFileSync(path.join(root, 'plugin', 'lib', m.out), 'utf8'), expected);
     })) p++; else f++;
   }
+
+  if (test('every import in a generated module is a node: builtin or a sibling the generator also writes — anything else is a missing file once installed', () => {
+    const generated = new Set(LIB_MODULES.map((m) => m.out));
+    for (const m of LIB_MODULES) {
+      const text = fs.readFileSync(path.join(root, 'plugin', 'lib', m.out), 'utf8');
+      // `from '…'` covers import and re-export; `import '…'` / `import('…')` the bare and dynamic forms.
+      for (const [, a, b] of text.matchAll(/\bfrom\s*['"]([^'"]+)['"]|\bimport\s*\(?\s*['"]([^'"]+)['"]/g)) {
+        const spec = a ?? b;
+        assert.ok(spec.startsWith('node:') || (spec.startsWith('./') && generated.has(spec.slice(2))), `${m.out} imports ${spec}, which is neither node: nor a generated sibling`);
+      }
+    }
+  })) p++; else f++;
 
   if (test('the generated modules load under plain node with no package.json, and parseJob works — a broken specifier fails here', () => {
     const entry = pathToFileURL(path.join(root, 'plugin', 'lib', 'routine-file.mjs')).href;
@@ -84,6 +91,14 @@ export function run(): number {
     assert.deepStrictEqual(JSON.parse(out), { errors: [], cron: '0 9 * * *' });
   })) p++; else f++;
 
+  if (test('kaizen.mjs loads its generated modules under plain node with no package.json — a bad relative path fails here', () => {
+    const kaizen = path.join(root, 'plugin', 'skills', 'kaizen', 'kaizen.mjs');
+    const script = `await import(${JSON.stringify(pathToFileURL(kaizen).href)}); process.stdout.write('ok');`;
+    // Importing runs no CLI: the entry check compares argv[1] to the file, and here argv[1] is absent.
+    const out = execFileSync(process.execPath, ['--input-type=module', '-e', script], { encoding: 'utf8', cwd: path.join(root, 'plugin') });
+    assert.strictEqual(out.endsWith('ok'), true);
+  })) p++; else f++;
+
   if (test('run-routine.mjs takes PERMISSION_MODES from the validator, never a copy of its own', () => {
     const text = fs.readFileSync(path.join(root, 'plugin', 'lib', 'run-routine.mjs'), 'utf8');
     assert.ok(!/\b(const|let|var)\s+PERMISSION_MODES\b/.test(text), 'run-routine.mjs declares its own PERMISSION_MODES');
@@ -91,10 +106,10 @@ export function run(): number {
   })) p++; else f++;
 
   if (test('no generated module keeps an import of types.js or a .js specifier — types are erased, siblings are .mjs', () => {
-    for (const name of LIB_MODULES) {
-      const text = fs.readFileSync(path.join(root, 'plugin', 'lib', `${name}.mjs`), 'utf8');
-      assert.ok(!/types\.js/.test(text), `${name}.mjs mentions types.js`);
-      assert.ok(!/from\s+['"]\.\/[\w-]+\.js['"]/.test(text), `${name}.mjs imports a .js sibling`);
+    for (const { out: name } of LIB_MODULES) {
+      const text = fs.readFileSync(path.join(root, 'plugin', 'lib', name), 'utf8');
+      assert.ok(!/types\.js/.test(text), `${name} mentions types.js`);
+      assert.ok(!/from\s+['"]\.\/[\w-]+\.js['"]/.test(text), `${name} imports a .js sibling`);
     }
   })) p++; else f++;
 

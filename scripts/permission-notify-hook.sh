@@ -50,9 +50,16 @@ INPUT=$(cat)
 # `CLAUDE_DASHBOARD_SCHEDULE` is the same marker as stamped by a wrapper installed before Schedules became Routines.
 [ -n "$CLAUDE_DASHBOARD_ROUTINE$CLAUDE_DASHBOARD_SCHEDULE" ] && exit 0
 
-# The API port, not Vite's: in dev the page is on :5174 but /api lives here.
-DASH="${CLAUDE_DASHBOARD_URL:-http://127.0.0.1:4173}"
-TOKEN_FILE="${CLAUDE_CONFIG_DIR:-$HOME/.claude}/hooks/dashboard-token"
+# The shared preamble (DASH, TOKEN_FILE, dash_curl, autopilot_running) sits beside this script's real path. The installer links ~/.claude/hooks/<name>.sh
+# to it with an absolute source, so one readlink (no -f: not every macOS has it) finds the scripts dir; run directly, $0 is already there. A checkout
+# that predates the file exits 0 — the same fail-open as a missing hook.
+HOOK_SELF="$0"
+if [ -L "$HOOK_SELF" ]; then
+  HOOK_LINK="$(readlink "$HOOK_SELF")"
+  case "$HOOK_LINK" in /*) HOOK_SELF="$HOOK_LINK" ;; *) HOOK_SELF="$(dirname "$HOOK_SELF")/$HOOK_LINK" ;; esac
+fi
+[ -r "$(dirname "$HOOK_SELF")/hook-common.sh" ] || exit 0
+. "$(dirname "$HOOK_SELF")/hook-common.sh" || exit 0
 
 command -v jq > /dev/null 2>&1 || exit 0
 
@@ -96,17 +103,6 @@ PERM_MODE=$(printf '%s' "$INPUT" | jq -r '.permission_mode // empty' 2>/dev/null
 
 BODY=$(jq -cn --arg sid "$SESSION_ID" --arg m "$MSG" --arg pm "$PERM_MODE" \
   '{sessionId: $sid, message: $m, permissionMode: $pm}') || exit 0
-
-# curl, plus the dashboard token when there is one. The header goes in through a file descriptor (`-H @/dev/fd/N`), never argv, which any local `ps` can
-# read for the whole hold. The substitution is expanded inside the curl command itself so its fd is still open when curl reads it, and `printf` is a
-# builtin, so the token is no process's argv at all. No token file → no Authorization header, as before.
-dash_curl() {
-  if [ -f "$TOKEN_FILE" ]; then
-    curl -H @<(printf 'Authorization: Bearer %s\n' "$(tr -d '\n' < "$TOKEN_FILE")") "$@"
-  else
-    curl "$@"
-  fi
-}
 
 # Best-effort. Dashboard down, wrong port, bad token → the dialog behaves exactly
 # as it did before this hook existed. The 1s cap matters more here than on the

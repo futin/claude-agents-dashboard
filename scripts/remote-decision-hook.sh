@@ -79,7 +79,16 @@ INPUT=$(cat)
 # `CLAUDE_DASHBOARD_SCHEDULE` is the same marker as stamped by a wrapper installed before Schedules became Routines.
 [ -n "$CLAUDE_DASHBOARD_ROUTINE$CLAUDE_DASHBOARD_SCHEDULE" ] && exit 0
 
-DASH="${CLAUDE_DASHBOARD_URL:-http://127.0.0.1:4173}"
+# The shared preamble (DASH, TOKEN_FILE, dash_curl, autopilot_running) sits beside this script's real path. The installer links ~/.claude/hooks/<name>.sh
+# to it with an absolute source, so one readlink (no -f: not every macOS has it) finds the scripts dir; run directly, $0 is already there. A checkout
+# that predates the file exits 0 — the same fail-open as a missing hook.
+HOOK_SELF="$0"
+if [ -L "$HOOK_SELF" ]; then
+  HOOK_LINK="$(readlink "$HOOK_SELF")"
+  case "$HOOK_LINK" in /*) HOOK_SELF="$HOOK_LINK" ;; *) HOOK_SELF="$(dirname "$HOOK_SELF")/$HOOK_LINK" ;; esac
+fi
+[ -r "$(dirname "$HOOK_SELF")/hook-common.sh" ] || exit 0
+. "$(dirname "$HOOK_SELF")/hook-common.sh" || exit 0
 MODES="${CLAUDE_DASHBOARD_DECISION_MODES:-auto bypassPermissions dontAsk}"
 
 command -v jq > /dev/null 2>&1 || exit 0
@@ -142,7 +151,6 @@ case " $MODES " in
       #
       # `// false` matters: an older server has no tokenRequired field, and warning on
       # a server that never said it needs a token would be the same mistake inverted.
-      TOKEN_FILE="${CLAUDE_CONFIG_DIR:-$HOME/.claude}/hooks/dashboard-token"
       if [ "$(printf '%s' "$HEALTH" | jq -r '.tokenRequired // false' 2>/dev/null)" = "true" ] && [ ! -f "$TOKEN_FILE" ]; then
         STATE=NOTARMED
       fi

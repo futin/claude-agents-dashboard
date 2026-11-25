@@ -37,8 +37,16 @@ INPUT=$(cat)
 # `CLAUDE_DASHBOARD_SCHEDULE` is the same marker as stamped by a wrapper installed before Schedules became Routines.
 [ -n "$CLAUDE_DASHBOARD_ROUTINE$CLAUDE_DASHBOARD_SCHEDULE" ] && exit 0
 
-DASH="${CLAUDE_DASHBOARD_URL:-http://127.0.0.1:4173}"
-TOKEN_FILE="${CLAUDE_CONFIG_DIR:-$HOME/.claude}/hooks/dashboard-token"
+# The shared preamble (DASH, TOKEN_FILE, dash_curl, autopilot_running) sits beside this script's real path. The installer links ~/.claude/hooks/<name>.sh
+# to it with an absolute source, so one readlink (no -f: not every macOS has it) finds the scripts dir; run directly, $0 is already there. A checkout
+# that predates the file exits 0 — the same fail-open as a missing hook.
+HOOK_SELF="$0"
+if [ -L "$HOOK_SELF" ]; then
+  HOOK_LINK="$(readlink "$HOOK_SELF")"
+  case "$HOOK_LINK" in /*) HOOK_SELF="$HOOK_LINK" ;; *) HOOK_SELF="$(dirname "$HOOK_SELF")/$HOOK_LINK" ;; esac
+fi
+[ -r "$(dirname "$HOOK_SELF")/hook-common.sh" ] || exit 0
+. "$(dirname "$HOOK_SELF")/hook-common.sh" || exit 0
 
 command -v jq > /dev/null 2>&1 || exit 0
 
@@ -46,19 +54,6 @@ command -v jq > /dev/null 2>&1 || exit 0
 # for anything but a plan, whatever it ends up registered against.
 TOOL=$(printf '%s' "$INPUT" | jq -r '.tool_name // empty' 2>/dev/null)
 [ "$TOOL" = "ExitPlanMode" ] || exit 0
-
-# Autopilot opt-out. While an `autopilot` run is `running` (state file ~/.claude/autopilot/<session_id>.json, field `status`, written by the autopilot CLI)
-# the run must not ask, and the CLI applies a deny/block only after EVERY hook on the event has returned — so a hold here would idle the run for up to
-# `answerSecs` and push a question to the phone for a session that must not ask. Reads only `status == "running"`; any other status, a missing or malformed
-# file or a jq failure is "not running" and leaves today's behaviour untouched. Never writes the file. The id is checked against the CLI's own grammar first
-# so a crafted session_id cannot walk the path out of the state directory.
-autopilot_running() {
-  local LC_ALL=C sid="$1"
-  case "$sid" in ''|*[!A-Za-z0-9-]*) return 1 ;; esac
-  local f="$HOME/.claude/autopilot/$sid.json"
-  [ -f "$f" ] || return 1
-  [ "$(jq -r '.status // empty' "$f" 2>/dev/null)" = "running" ]
-}
 
 # The session id is parsed ahead of the probe so a `running` autopilot session costs no network call at all. (This hook runs on PermissionRequest, which
 # never fires for a call a PreToolUse hook denied, so here the opt-out is belt-and-braces — except in plan mode, where the gate passes ExitPlanMode.)
@@ -115,17 +110,6 @@ BODY=$(jq -cn \
   --argjson ti "$TOOL_INPUT" \
   --argjson t "$((TIMEOUT_S * 1000))" \
   '{sessionId: $sid, toolInput: $ti, timeoutMs: $t, permissionMode: $pm}') || exit 0
-
-# curl, plus the dashboard token when there is one. The header goes in through a file descriptor (`-H @/dev/fd/N`), never argv, which any local `ps` can
-# read for the whole hold. The substitution is expanded inside the curl command itself so its fd is still open when curl reads it, and `printf` is a
-# builtin, so the token is no process's argv at all. No token file → no Authorization header, as before.
-dash_curl() {
-  if [ -f "$TOKEN_FILE" ]; then
-    curl -H @<(printf 'Authorization: Bearer %s\n' "$(tr -d '\n' < "$TOKEN_FILE")") "$@"
-  else
-    curl "$@"
-  fi
-}
 
 # 3. Register and wait. The server resolves this itself at the deadline, so
 #    curl's own cap is only a backstop for a hung server. A non-2xx, a reset
