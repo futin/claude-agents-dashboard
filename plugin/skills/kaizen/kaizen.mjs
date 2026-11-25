@@ -744,6 +744,9 @@ const SKILL_ACTIVE_MS = 5 * 60_000;
 // The first prompt sits a few records in, but a hook's output or an older transcript's preload can come first; past 1 MiB it is not a skill run.
 const SKILL_HEAD_CAP = 1024 * 1024;
 const SKILL_HEAD_CHUNK = 64 * 1024;
+// A request in plain words ("lets run a deep audit") is a run when the reply loads the skill early: in 9 of 10 real /audit runs the Skill call was in
+// the reply's first turn (2026-11-25). Three turns leaves room for a look-around first without counting a skill the session reached for later.
+const SKILL_REPLY_TURNS = 3;
 const SKILL_TOP = 20;
 const COMMAND_NAME_RE = /<command-name>\s*\/?([^<\s]+)\s*<\/command-name>/;
 const COMMAND_ARGS_RE = /<command-args>([\s\S]*?)<\/command-args>/;
@@ -763,14 +766,19 @@ function typedPrompt(rec) {
   return t.trim() && !NOT_TYPED_RE.test(t) ? t : null;
 }
 
-/** The first typed prompt, read in chunks from the head; null when an assistant turn or the cap comes first. */
-function firstPrompt(file) {
+/**
+ * How the session started the skill, read in chunks from the head: `{ via: 'prompt', args }` when the first typed prompt invokes it, `{ via:
+ * 'skill-tool', args }` when that prompt is plain words and the reply's first SKILL_REPLY_TURNS turns call the Skill tool for it; null otherwise,
+ * or when an assistant turn or the cap comes before any prompt. A typed slash command for another skill is that skill's run, whatever it loads next.
+ */
+function skillInvocation(file, skill) {
   let fd;
   try { fd = fs.openSync(file, 'r'); } catch { return null; }
   try {
     const decoder = new StringDecoder('utf8');
     const buf = Buffer.alloc(SKILL_HEAD_CHUNK);
-    let pos = 0, carry = '';
+    let pos = 0, carry = '', prompted = false;
+    const turns = new Set();
     for (;;) {
       const n = pos < SKILL_HEAD_CAP ? fs.readSync(fd, buf, 0, buf.length, pos) : 0;
       pos += n;
@@ -779,9 +787,23 @@ function firstPrompt(file) {
       for (const line of lines) {
         let rec;
         try { rec = JSON.parse(line); } catch { continue; }
-        if (rec && rec.message && rec.message.role === 'assistant' && rec.isSidechain !== true && isConversationRecord(rec)) return null;
         const t = typedPrompt(rec);
-        if (t != null) return t;
+        if (t != null) {
+          if (prompted) return null;
+          const inv = parseInvocation(t);
+          if (inv) return invokesSkill(inv.command, skill) ? { via: 'prompt', args: inv.args } : null;
+          prompted = true;
+          continue;
+        }
+        if (!(rec && rec.message && rec.message.role === 'assistant' && rec.isSidechain !== true && isConversationRecord(rec))) continue;
+        if (!prompted) return null;
+        turns.add(rec.message.id ?? `#${turns.size}`);
+        if (turns.size > SKILL_REPLY_TURNS) return null;
+        for (const b of Array.isArray(rec.message.content) ? rec.message.content : []) {
+          if (b && b.type === 'tool_use' && b.name === 'Skill' && typeof b.input?.skill === 'string' && invokesSkill(b.input.skill, skill)) {
+            return { via: 'skill-tool', args: typeof b.input.args === 'string' ? b.input.args.trim() : '' };
+          }
+        }
       }
       if (n <= 0) return null;
     }
@@ -913,7 +935,7 @@ function skillRun(t, outcomeRe) {
   const preload = f.preload.map(p => ({ kind: p.kind, count: p.count, approxTokens: Math.round(p.chars / 4) })).sort((x, y) => y.approxTokens - x.approxTokens || x.kind.localeCompare(y.kind));
   const sinks = f.sinks.map(s => ({ key: s.key, tool: s.tool, calls: s.calls, approxTokens: Math.round(s.chars / 4) })).sort((x, y) => y.approxTokens - x.approxTokens || x.key.localeCompare(y.key));
   const row = {
-    id: t.id, project: a.cwd ? path.basename(normCwd(a.cwd)) : null, startedAt: a.startedAt, durationMs: a.durationMs, args: t.args,
+    id: t.id, project: a.cwd ? path.basename(normCwd(a.cwd)) : null, startedAt: a.startedAt, durationMs: a.durationMs, args: t.args, via: t.via,
     userPrompts: f.userPrompts, humanContinued: f.userPrompts > 1, models: a.models, turns: a.perTurn.count,
     tokens: {
       main, subagents: { count: subs.length, input: sub.input, cacheCreation: sub.cacheCreation, cacheRead: sub.cacheRead, output: sub.output, billableApprox: sub.billableApprox, combined: sub.combined },
@@ -1008,11 +1030,10 @@ export function reviewSkill({ root, skill, limit = SKILL_DEFAULT_LIMIT, outcome 
   for (const t of cands) {
     if (picked.length >= limit) break;
     scanned++;
-    const p = firstPrompt(t.file);
-    const inv = p == null ? null : parseInvocation(p);
-    if (!inv || !invokesSkill(inv.command, skill)) continue;
+    const inv = skillInvocation(t.file, skill);
+    if (!inv) continue;
     if (now - t.mtimeMs < SKILL_ACTIVE_MS) { skippedActive++; continue; }
-    picked.push({ ...t, args: inv.args });
+    picked.push({ ...t, args: inv.args, via: inv.via });
   }
   const runs = picked.map(t => skillRun(t, outcomeRe)).filter(Boolean);
   return {
@@ -1022,6 +1043,7 @@ export function reviewSkill({ root, skill, limit = SKILL_DEFAULT_LIMIT, outcome 
     notes: [
       'tokens.billableApprox = input + output + cacheCreation, main plus subagents; combined adds cacheRead. Subagents are every transcript under <session>/subagents/, each summed once per message.id.',
       'firstTurnCtx is measured (input + cache_creation + cache_read of the first assistant turn). preload[].approxTokens is estimated — the text-bearing fields of each record before that turn at chars ÷ 4 — so firstTurnCtx minus preloadApproxTokens is roughly the tool schemas and any system prompt the transcript did not record.',
+      'via is how the run started: "prompt" (a typed /skill) or "skill-tool" (a request in plain words the reply answered by calling the Skill tool). A skill-tool run loads the skill body after the first turn, so its firstTurnCtx and preload carry no skill_body — compare preload within one via, not across.',
       'durationMs runs from the first to the last record, so a session a person continued (humanContinued) reads long; judge time on the others.',
       'sinks and topSinks size each tool result at chars ÷ 4; errors fold digits and hex runs to N and key on the first 100 characters.'
     ]

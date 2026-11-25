@@ -264,7 +264,9 @@ returned — no backend change, so the read-only invariant above still holds.
   a keyed row. A path that resolves in no session is an error exit. It never reads or writes the log. Kaizen-only like `--trend`, tested in
   `plugin/skills/kaizen/test/compare.test.mjs`; a dir-name prefilter and a 64 KB head read keep it to one full analysis per selected session.
 - **`kaizen.mjs --skill <name> [N] [--outcome <regex>]` backs `/kaizen skill`.** It picks the newest N (default 50) transcripts by mtime whose first
-  typed prompt invokes the skill — `<command-name>/x</command-name>` or plain `/x` text, `plugin:name` also matching the bare `/name` — skipping any
+  typed prompt invokes the skill — `<command-name>/x</command-name>` or plain `/x` text, `plugin:name` also matching the bare `/name` — or, when that
+  prompt is plain words, whose reply calls the `Skill` tool for it within its first three turns (each row's `via` says which: `prompt` or
+  `skill-tool`; most `/audit` runs start the second way), skipping any
   written in the last five minutes as possibly live, and runs `analyzeSession` on each plus one more walk: the records before the first assistant turn
   sized by kind (the preload), typed prompts (more than one marks a session a person continued), `is_error` results grouped by tool and digit-folded
   message, tool output per sink (`Read` by basename, `Skill` by skill name), and the optional outcome regex's first capture. Subagent tokens sum every

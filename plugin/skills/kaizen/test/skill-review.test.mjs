@@ -103,6 +103,31 @@ test('a session counts only when its first real prompt invokes the skill, in any
   assert.ok(review(root, 'tick').sessions.some(s => s.id === other))
 })
 
+test('a plain-words first prompt counts when the reply calls the Skill tool for the skill within its first three turns', () => {
+  const { root } = world()
+  // "lets run a deep audit" → the model loads the skill itself: the shape 9 of 10 real /audit runs took (2026-11-25).
+  const asked = tx(root).prompt('lets run a deep audit').turn({ tools: [['Skill', { skill: 'plug:tick', args: 'deep' }]] }).write(1 * HOUR)
+  const thirdTurn = tx(root).prompt('please tick').turn({ tools: [['Bash', { command: 'ls' }]] }).turn({ tools: [['Skill', { skill: 'superpowers:x' }]] })
+    .turn({ tools: [['Skill', { skill: 'tick' }]] }).write(2 * HOUR)
+  // A turn written as several records (thinking, then the tool call) is one turn, not two.
+  const split = tx(root).prompt('tick it').turn({ id: 'm1' }).turn({ id: 'm1' }).turn({ id: 'm1' }).turn({ id: 'm1', tools: [['Skill', { skill: 'tick' }]] })
+    .write(2.5 * HOUR)
+  // The mirrors: a fourth-turn call, a call after a second typed prompt, a call to another skill, and a typed slash command for another skill
+  // whose run then loads this one — that session is a run of the other skill.
+  tx(root).prompt('tick later').turn().turn().turn().turn({ tools: [['Skill', { skill: 'tick' }]] }).write(3 * HOUR)
+  tx(root).prompt('hello').turn().prompt('now tick').turn({ tools: [['Skill', { skill: 'tick' }]] }).write(4 * HOUR)
+  tx(root).prompt('tock please').turn({ tools: [['Skill', { skill: 'plug:tock' }]] }).write(5 * HOUR)
+  tx(root).prompt(cmd('/autopilot')).turn({ tools: [['Skill', { skill: 'tick' }]] }).write(6 * HOUR)
+
+  const r = review(root, 'plug:tick')
+  assert.deepEqual(r.sessions.map(s => s.id), [asked, thirdTurn, split])
+  assert.deepEqual(r.sessions.map(s => s.via), ['skill-tool', 'skill-tool', 'skill-tool'])
+  assert.deepEqual(r.sessions.map(s => s.args), ['deep', '', ''])
+  // A typed invocation still reads as one, and says so.
+  const typed = tx(root).prompt(cmd('/plug:tick', 'groom')).turn().write(0.5 * HOUR)
+  assert.equal(review(root, 'tick').sessions.find(s => s.id === typed).via, 'prompt')
+})
+
 test('newest N by mtime; a transcript written in the last five minutes is still live and left out, and counted', () => {
   const { root } = world()
   const ids = [3, 1, 4, 2].map(h => [h, tx(root).prompt('/tick').turn().write(h * HOUR)])
