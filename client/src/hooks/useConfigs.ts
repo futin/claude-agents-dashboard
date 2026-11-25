@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 
-import { projectScopeOf } from '../lib/configsEntries';
+import { acceptIndex, projectScopeOf } from '../lib/configsEntries';
 import type { FileContent, ManagementIndex, ScopeConfig } from '../../../shared/types';
 
 /**
@@ -32,7 +32,7 @@ export function useConfigsIndex(refreshKey: number, active = true): IndexState {
     fetch('/api/configs')
       .then(res => res.json() as Promise<ManagementIndex>)
       .then(index => {
-        if (alive) setState({ index, loading: false, error: index.error === true });
+        if (alive) setState(prev => ({ index: acceptIndex(prev.index, index), loading: false, error: index.error === true }));
       })
       .catch(() => {
         if (alive) setState(prev => ({ index: prev.index, loading: false, error: true }));
@@ -77,7 +77,8 @@ export interface FileState {
 
 /**
  * One file's text for a FileBlock, cached per `${refreshKey}:${path}` the way `useProjectScope` keys its scopes, so ↻ (which bumps `refreshKey`) refetches
- * the file that is open. While that refetch is out the old text stays in `file` beside `loading: true`, so the block does not flash empty.
+ * the file that is open. While that refetch is out the old text stays in `file` beside `loading: true`, so the block does not flash empty; a failed refetch
+ * of the same path keeps it too, flagged `error`. A failed read of a newly opened path has no old text to keep.
  */
 export function useFileContent(path: string | null, refreshKey = 0): FileState {
   const cache = useRef(new Map<string, FileContent>());
@@ -105,14 +106,14 @@ export function useFileContent(path: string | null, refreshKey = 0): FileState {
       .then(file => {
         if (!alive) return;
         if (file.error === true) {
-          setState({ file: null, loading: false, error: true });
+          setState(prev => ({ file: samePath ? prev.file : null, loading: false, error: true }));
         } else {
           cache.current.set(key, file);
           setState({ file, loading: false, error: false });
         }
       })
       .catch(() => {
-        if (alive) setState({ file: null, loading: false, error: true });
+        if (alive) setState(prev => ({ file: samePath ? prev.file : null, loading: false, error: true }));
       });
     return () => { alive = false; };
   }, [path, refreshKey]);

@@ -1,7 +1,7 @@
 import assert from 'node:assert';
 
-import { buildEntries, filterEntries, pinnedProjects, projectScopeOf, railRows } from '../../client/src/lib/configsEntries.js';
-import type { McpServerInfo, ProjectRef, ScopeConfig } from '../../shared/types.js';
+import { acceptIndex, buildEntries, filterEntries, pinnedProjects, projectScopeOf, railRows } from '../../client/src/lib/configsEntries.js';
+import type { ManagementIndex, McpServerInfo, ProjectRef, ScopeConfig } from '../../shared/types.js';
 
 function test(name: string, fn: () => void): boolean {
   try { fn(); console.log('  ✓ ' + name); return true; }
@@ -241,6 +241,17 @@ export function run(): number {
     assert.ok(failed(projectScopeOf(true, { message: 'proxy page' })), 'a 2xx that is not a scope');
     assert.ok(failed(projectScopeOf(true, null)), 'null body');
     assert.ok(failed(projectScopeOf(false, undefined)), 'no reply at all');
+  })) p++; else f++;
+
+  if (test('acceptIndex: an error body keeps the last good index; a good body replaces it; a first-load failure stays null', () => {
+    const ref = (dirName: string): ProjectRef => ({ dirName, name: dirName, path: '/' + dirName, lastActiveMs: 0, pinned: true });
+    const prev: ManagementIndex = { generatedAt: '2026-11-24T00:00:00Z', global: scope({}), projects: [ref('repo-a')] };
+    const good: ManagementIndex = { generatedAt: '2026-11-25T00:00:00Z', global: scope({}), projects: [ref('repo-b')] };
+    // The server answers a failed scan with a 200 and this placeholder, so the hook sees it as a reply, not a throw.
+    const errorBody: ManagementIndex = { generatedAt: '2026-11-25T00:00:00Z', global: scope({}), projects: [], error: true };
+    assert.strictEqual(acceptIndex(prev, errorBody), prev);
+    assert.strictEqual(acceptIndex(null, errorBody), null);
+    assert.strictEqual(acceptIndex(prev, good), good);
   })) p++; else f++;
 
   if (test('pinnedProjects: keeps only pinned refs, in the order given; recent-only rows (worktree clones, scratchpads) drop out', () => {

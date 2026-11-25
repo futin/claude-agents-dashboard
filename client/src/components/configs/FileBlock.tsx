@@ -80,7 +80,8 @@ export function FileBlock({ path, kind }: Props) {
   );
 
   if (loading && file === null) return shell(<div className="mgmt-empty">loading…</div>);
-  if (error) return shell(<div className="mgmt-empty off">couldn't load this file</div>);
+  // A failed ↻ of the open file keeps its old text (useFileContent), so the error message is only for a read that has nothing to show.
+  if (error && file === null) return shell(<div className="mgmt-empty off">couldn't load this file</div>);
   if (file === null) return frame(null);
 
   // Frontmatter is only split off a markdown file; every other kind is its own
@@ -170,6 +171,7 @@ export function FileBlock({ path, kind }: Props) {
             </button>
           ) : null}
         </div>
+        {error ? <div className="mgmt-empty off">couldn't refresh — showing the last read</div> : null}
         {file.truncated ? (
           <div className="mgmt-trunc">
             showing first {fmtTok(file.content.length)} of {fmtTok(file.size)} bytes
