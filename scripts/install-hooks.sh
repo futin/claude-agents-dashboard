@@ -157,6 +157,29 @@ refuse() {
   exit 1
 }
 
+# The token is a bearer secret, so it is never written where another local user could read it, not even for a moment. A plain `> "$TOKEN_FILE" && chmod
+# 600` did exactly that (#569): a new file was born at the umask's 0644 until the chmod ran, `--force` truncated an existing 0644 inode and refilled it, and
+# a failed chmod was silent. Instead: write into a temp file in the same directory (0600 from birth — mktemp's own default, and umask 077 so that does not
+# rest on one tool), rename it over the target (a new inode, so an old file's mode goes with the old file), then check the result is exactly 0600. `find
+# -perm 600` is an exact match on both BSD and GNU, where `stat`'s flags differ. Any failure stops the run with a FAILED line and leaves no readable file.
+token_failed() {
+  [ -n "${tok_tmp:-}" ] && rm -f "$tok_tmp"
+  echo "FAILED   could not write $TOKEN_FILE privately — $1" >&2
+  echo "         Earlier steps are idempotent: fix the cause and re-run." >&2
+  exit 1
+}
+
+write_token() {
+  tok_tmp="$( (umask 077; mktemp "$HOOK_DIR/.dashboard-token.XXXXXX") 2>/dev/null )" || { tok_tmp=""; token_failed "mktemp in $HOOK_DIR failed"; }
+  printf '%s' "$1" > "$tok_tmp" || token_failed "writing the temp file failed"
+  mv -f "$tok_tmp" "$TOKEN_FILE" || token_failed "renaming the temp file into place failed"
+  tok_tmp=""
+  if [ -z "$(find "$TOKEN_FILE" -prune -perm 600 2>/dev/null)" ]; then
+    rm -f "$TOKEN_FILE"
+    token_failed "it did not end up mode 0600, so it was removed"
+  fi
+}
+
 check_settings() {
   [ -s "$SETTINGS" ] || return 0
   jq -s -e "$ONE_OBJECT" "$SETTINGS" > /dev/null 2>&1 \
@@ -396,11 +419,14 @@ if [ "$UNINSTALL" != "true" ]; then
       step "         it said: $(printf '%s\n' "$envmsg" | head -1)"
     fi
     step "         Try: $TSX $REPO/scripts/env-value.ts ANSWER_TOKEN --env $REPO/.env"
+  elif [ -L "$TOKEN_FILE" ] && [ ! -e "$TOKEN_FILE" ]; then
+    # A link to a secret that is not there yet (a mount not attached). `-f` follows the link, so without this branch the first-install write below
+    # would rename a regular file over the link — the same swap the --force branch refuses.
+    step "warn     $TOKEN_FILE is a symlink to a missing file (-> $(readlink "$TOKEN_FILE"))."
+    step "         Left alone: the hooks send no token until it resolves."
   elif [ ! -f "$TOKEN_FILE" ] && [ "$envstate" = "ok" ]; then
     step "write    $TOKEN_FILE from $srclabel"
-    if [ "$DRY" != "true" ]; then
-      printf '%s' "$envtok" > "$TOKEN_FILE" && chmod 600 "$TOKEN_FILE"
-    fi
+    [ "$DRY" = "true" ] || write_token "$envtok"
   elif [ ! -f "$TOKEN_FILE" ]; then
     # No token anywhere is fine: the hooks reach the dashboard on loopback, which the write gate always trusts. A container or a non-loopback
     # CLAUDE_DASHBOARD_URL is the case that still needs one (docs/subsystems/remote-access.md).
@@ -419,11 +445,14 @@ if [ "$UNINSTALL" != "true" ]; then
     filetok="$(cat "$TOKEN_FILE"; printf x)"; filetok="${filetok%x}"
     if [ "$filetok" = "$envtok" ]; then
       step "ok       $TOKEN_FILE already exists and matches $srclabel"
+    elif [ "$FORCE" = "true" ] && [ -L "$TOKEN_FILE" ]; then
+      # Someone pointed the token file at a secret kept elsewhere (a mounted volume, say). Renaming over it would quietly swap that link for a
+      # copy, so --force leaves it to whoever made it.
+      step "warn     $TOKEN_FILE is a symlink (-> $(readlink "$TOKEN_FILE")) and differs from $srclabel."
+      step "         Left alone even with --force: update the file it points at by hand."
     elif [ "$FORCE" = "true" ]; then
       step "write    $TOKEN_FILE replaced from $srclabel (--force)"
-      if [ "$DRY" != "true" ]; then
-        printf '%s' "$envtok" > "$TOKEN_FILE" && chmod 600 "$TOKEN_FILE"
-      fi
+      [ "$DRY" = "true" ] || write_token "$envtok"
     else
       # Never overwritten without --force, and neither value is printed, not
       # even a prefix. A deliberately different per-machine token is legitimate
@@ -434,7 +463,7 @@ if [ "$UNINSTALL" != "true" ]; then
       # changes nothing, since .env may match this file exactly.
       step "warn     $TOKEN_FILE differs from $srclabel."
       step "         Left alone. If $srclabel is the one you want, re-run with --force,"
-      step "         or: printf '%s' \"\$ANSWER_TOKEN\" > $TOKEN_FILE && chmod 600 $TOKEN_FILE"
+      step "         or: rm -f $TOKEN_FILE && (umask 077; printf '%s' \"\$ANSWER_TOKEN\" > $TOKEN_FILE)"
     fi
     unset filetok
   fi
