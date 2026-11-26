@@ -999,24 +999,23 @@ export function profileProgress(cells: UsageProfileCell[]): ProfileProgress {
 
   <div class="card card-concept">
     <h2>Naming the gate, and naming the date</h2>
-    <p><code>RecordingStatus</code> turns those four counts into one of three messages, and
-    the branch order is the useful part. If any bucket carries a weight, say how many — the
-    panel is working, nothing to explain. Otherwise, if some buckets have cleared the floor,
-    the thing being waited on is the <em>fold</em>, so name the date it will happen. Otherwise
-    nothing has cleared the floor yet, so name the floor itself <em>and</em> the date.</p>
-    <p>Naming a date is what makes this a status line rather than a spinner. "Weights appear
-    when the week rolls over on Mon 1 Sep" is checkable; "collecting data…" is not.
-    The date is dated from the cells, not the calendar: <code>earliestWeightMs</code> finds the next occurrence of a
+    <p>The status note is inline in <code>UsageProfile</code> (UsageProfile.tsx:577-586), and it renders only while
+    <code>trusted</code> is zero — once any bucket carries a weight the coloured grid speaks for itself and the note
+    goes away. Its two branches are the useful part. If some buckets have cleared the floor, the thing being waited on
+    is the <em>fold</em>, so name the date it will happen. Otherwise nothing has cleared the floor yet, so name the
+    floor itself <em>and</em> the date.</p>
+    <p>Naming a date is what makes this a status line rather than a spinner. "The first weight appears on Thu 28 Aug,
+    when that hour comes round in a new week" is checkable; "collecting data…" is not.
+    The date is dated from the cells, not the calendar (UsageProfile.tsx:421-427): <code>earliestWeightMs</code> finds the next occurrence of a
     bucket that can fold, because a bucket carrying last week's stamp folds at its next occurrence — usually days before
     the next Monday. Only with nothing recorded does it fall back to <code>nextWeekStartMs</code>: local midnight starting
     the next ISO week. Note the two details in that fallback's local branch — <code>getDay() || 7</code> converts
     JavaScript's Sunday-is-0 to ISO's Sunday-is-7, and on a Monday the function deliberately returns the
     <em>following</em> Monday, because the current week is the one still accumulating. Both take the host's
     <code>offsetMinutes</code>, so the date is the server's wall clock, not the browser's.</p>
-    <p>One early-return sits above all of it: with recording off and nothing observed, the
-    component renders nothing, because the separate <code>.up-off</code> block already
-    explains the situation and offers the setting to change it. Two overlapping explanations
-    of the same emptiness would be worse than one.</p>
+    <p>Recording being off is a separate message: the <code>.up-off</code> block reads the setting, not any count,
+    and renders above the grid while the rest of the panel stays — the profile already learned is still worth showing,
+    it just stops growing.</p>
 <pre>// usageProfile.ts:77-91
 export function nextWeekStartMs(nowMs: number, offsetMinutes?: number): number {
   if (offsetMinutes !== undefined) {
@@ -1034,11 +1033,11 @@ export function nextWeekStartMs(nowMs: number, offsetMinutes?: number): number {
   return d.getTime();
 }</pre>
     <details>
-      <summary>More detail — the third branch's wording</summary>
+      <summary>More detail — the second branch's wording</summary>
       <p>The "no weights yet" branch names both gates in one sentence, because at that point
       the user is waiting on both and will hit them in order. Its text reads: an hour needs
-      <code>TRUST_FLOOR_MIN</code> minutes of evidence, and the first fold happens when the
-      week rolls over on that date. The interpolated constant is the same 60 the server
+      <code>TRUST_FLOOR_MIN</code> min of evidence and one week to fold, so the earliest a
+      weight can appear is that date. The interpolated constant is the same 60 the server
       enforces, which is the practical reason the duplication matters — the sentence would
       otherwise be able to state a threshold the server does not use.</p>
     </details>
@@ -1067,16 +1066,16 @@ export function nextWeekStartMs(nowMs: number, offsetMinutes?: number): number {
       <div class="quiz-option" data-correct="false">
         <button class="quiz-option-btn">Nothing — the component early-returns until at least
         one bucket carries a weight</button>
-        <p class="quiz-feedback">The early return is much narrower than that: it fires only
-        when recording is off <em>and</em> <code>touched</code> is zero. With evidence
-        recorded, this is precisely the case the status line was written for.</p>
+        <p class="quiz-feedback">There is no early return: the grid, the legend and the note
+        always render. The note is the part gated on <code>trusted</code> being zero, so with
+        evidence recorded and no fold yet, this is precisely the case it was written for.</p>
       </div>
       <div class="quiz-option" data-correct="true">
-        <button class="quiz-option-btn">That those hours have enough evidence and weights
-        appear at the week roll-over — nothing is wrong</button>
-        <p class="quiz-feedback">Correct: this is the middle branch. The trust floor is
-        cleared, the fold is not, and a fold only happens when a sample lands in a bucket in
-        a new ISO week. The line names that Monday so the wait is legible.</p>
+        <button class="quiz-option-btn">That those hours have enough evidence, and the date
+        of the first weight — all fine</button>
+        <p class="quiz-feedback">Correct: the first branch. The floor is cleared, the fold is
+        not, and a fold only happens when a sample lands in a bucket in a new ISO week. The
+        line names when that hour next comes round.</p>
       </div>
     </div>
   </div>
