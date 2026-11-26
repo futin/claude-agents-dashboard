@@ -3,7 +3,7 @@
  * entry groups the middle pane renders. Pure (unit-tested server-side).
  */
 
-import type { ConfigItem, HookInfo, McpServerInfo, ProjectRef, ScopeConfig } from '../../../shared/types';
+import type { ConfigItem, HookInfo, ManagementIndex, McpServerInfo, ProjectRef, ScopeConfig } from '../../../shared/types';
 
 export type FileKind = 'markdown' | 'json' | 'text';
 
@@ -139,6 +139,14 @@ function fromMcpServers(servers: McpServerInfo[]): Entry[] {
  */
 export function pinnedProjects(projects: ProjectRef[]): ProjectRef[] {
   return projects.filter(p => p.pinned === true);
+}
+
+/**
+ * A failed scan keeps the last good index. The server answers that failure with a 200 and an empty placeholder flagged `error`, so without this the rail's
+ * pinned tree and the spawn panel's project select would empty on one bad ↻. A first-load failure has no `prev` and stays `null`.
+ */
+export function acceptIndex(prev: ManagementIndex | null, incoming: ManagementIndex): ManagementIndex | null {
+  return incoming.error === true ? prev : incoming;
 }
 
 /**

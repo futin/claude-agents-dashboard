@@ -135,6 +135,11 @@ control (the type is a column now, not a collapsible header) and the
   ↻; project scopes + file bodies fetched lazily on click and cached in ref-held Maps, both keyed by ↻'s `refreshKey`, so ↻ also refetches
   the file that is open (`FileBlock` reads the key from `useConfigsScope`); the old text stays on screen while the refetch is out, and so does the old
   project scope (`useProjectScope` returns the last one read for that dir), or the list and the open file would unmount on every ↻.
+  **A failed ↻ keeps the last good state too.** The server answers a failed scan with a 200 placeholder flagged `error` (empty `projects`), so
+  `acceptIndex` (`lib/configsEntries.ts`) keeps the previous index and only the band's `scan failed — showing last snapshot` changes — the rail's
+  pinned tree and the selected scope stay. A failed refetch of the open file keeps its text, flagged `error`, and `FileBlock` shows
+  `couldn't refresh — showing the last read` above it; `couldn't load this file` is only for a read with nothing to show. A component that mounts its own
+  `useConfigsIndex` during a failing scan (SpawnPanel) has no last index to keep and shows its empty state.
   Switching to Claude Configs unmounts SessionsView → the 3s poll stops.
 - **Client:** ConfigsView is a `React.lazy` default export (own chunk; sessions bundle
   unchanged). Entry normalization is pure (`lib/configsEntries.ts`, unit-tested).

@@ -117,7 +117,9 @@ export function sanitizeQuestions(toolInput: unknown): PendingQuestionItem[] {
 /**
  * Validate a submitted answer against the questions it claims to answer. Every
  * question must be answered exactly once, and a single-select question takes
- * exactly one value.
+ * exactly one value. A question takes at most its own option count plus one: the
+ * `+ 1` is the free-text "Other" the panel adds beside every option list, and since
+ * `normalizeQuestions` caps options at MAX_OPTIONS the bound stays small.
  *
  * Values are deliberately NOT checked against the option labels: the terminal
  * dialog always offers a free-text "Other", and the panel mirrors that.
@@ -135,7 +137,7 @@ export function validateAnswer(questions: PendingQuestionItem[], answers: unknow
     seen.add(index as number);
 
     const selected = a.selected;
-    if (!Array.isArray(selected) || selected.length === 0 || selected.length > MAX_OPTIONS) return 'malformed';
+    if (!Array.isArray(selected) || selected.length === 0 || selected.length > questions[index as number].options.length + 1) return 'malformed';
     if (!selected.every(s => typeof s === 'string' && s.trim() !== '' && s.length <= SELECTED_CAP)) return 'malformed';
     if (!questions[index as number].multiSelect && selected.length !== 1) return 'malformed';
   }
