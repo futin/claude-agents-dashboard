@@ -7,17 +7,27 @@
  *   tsx scripts/session-analytics.ts /abs/path/to/x.jsonl    analyze a transcript directly
  *   tsx scripts/session-analytics.ts --latest                newest transcript for the current cwd
  *
- * Id resolution mirrors serveSessionDetail (api.ts): the id is matched against
- * the enumerated transcript list, never joined into a path — so a hostile id
- * can't escape the projects root.
+ * Id resolution calls serveSessionDetail's own resolver (api.ts → `resolveTranscript`, transcript-listing.ts): the id is matched against enumerated
+ * transcripts, never joined into a path — so a hostile id can't escape the projects root — and a worktree session split across two `.jsonl` files
+ * resolves to the half the API serves, its newest, not whichever `readdir` yielded first.
  */
 
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
 import { analyzeSession } from '../server/lib/analyze.js';
-import { listTranscripts, projectsRoot } from '../server/lib/scan.js';
+import { projectsRoot } from '../server/lib/scan.js';
+import type { TranscriptRef } from '../server/lib/scan.js';
+import { resolveTranscript } from '../server/lib/transcript-listing.js';
 import { normCwd, resolveLatest } from './lib/latest-session.js';
 
 /** Same guard as api.ts ID_RE, duplicated so the CLI doesn't import the HTTP layer. */
 const ID_RE = /^[A-Za-z0-9._-]+$/;
+
+/** The transcript a session id names, resolved exactly as `serveSessionDetail` resolves it. */
+export function resolveSessionId(id: string, root: string = projectsRoot()): TranscriptRef | undefined {
+  return resolveTranscript(root, id);
+}
 
 function die(msg: string): never {
   console.error(msg);
@@ -45,7 +55,7 @@ function main(): void {
     file = arg;
   } else {
     if (!ID_RE.test(arg)) die('invalid session id');
-    const ref = listTranscripts(projectsRoot()).find(t => t.id === arg);
+    const ref = resolveSessionId(arg);
     if (!ref) die(`session not found: ${arg}`);
     file = ref.file;
     id = ref.id;
@@ -56,4 +66,4 @@ function main(): void {
   process.stdout.write(JSON.stringify(analysis, null, 2) + '\n');
 }
 
-main();
+if (process.argv[1] && path.resolve(process.argv[1]) === path.resolve(fileURLToPath(import.meta.url))) main();
