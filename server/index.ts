@@ -55,6 +55,7 @@ import {
 import { startRoutines, stopRoutines } from './lib/routine-boot.js';
 import { createDashboardHub } from './lib/hub-widgets.js';
 import { startGitFetchTimer } from './lib/git-fetch.js';
+import { warmDesktopStore } from './lib/archived.js';
 import { crossSiteWrite, hostAllowed } from './lib/request-guard.js';
 import { armUsageAlerts } from './lib/usage-alerts.js';
 import { startUsageRecording } from './lib/usage-history.js';
@@ -559,6 +560,9 @@ if (import.meta.url === `file://${process.argv[1]}`) {
 
     // Opt-in (`ROUTINES_OWNER`); a server that loses the owner claim, or never makes it, only reads (routines spec §Owning server).
     startRoutines(config);
+
+    // Off the request path: without it the first /api/sessions poll after a restart classifies the whole desktop store synchronously (#559).
+    void warmDesktopStore().catch(() => {});
   });
 
   // `claimOwner` releases on `exit`, which a signal skips; and the reconcile watchers must stop before the process does.
