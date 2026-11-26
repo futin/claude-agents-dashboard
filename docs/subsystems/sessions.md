@@ -592,7 +592,12 @@ duration, tokens (the harness's figure: the subagent's final context size, not i
 inspector sums the real spend from the subagent transcripts), tool-use count — under a `N running · N finished · N agents` summary.
 Served by an incremental byte-offset cache (`agents.ts` / `agents-cache.ts`) so repeat
 opens stay cheap. That one pass also feeds the main transcript's spend tally (`spend-tally.ts`) to the drawer's spend card, so a first open reads the main
-transcript once for both, not once each (#552). A compaction can replay earlier records verbatim, tool_use ids included, so `applyEvent` drops a launch or `SendMessage` whose id
+transcript once for both, not once each (#552). Both drawer routes fold through `readSessionFoldAsync`: a cold or evicted entry is read in slices of at most
+`FOLD_CHUNK_BYTES` (1 MiB) with a `setImmediate` yield between them, so a multi-megabyte first open no longer holds the event loop — and every other request
+behind it — for the whole parse (#563). The detail and spend requests a first open fires together share one fold: the second waits on the one in flight
+(single-flight per entry) and then folds only what was appended since. The sync `readSessionFold` stays for scan.ts `subagentRunning`, which runs inside the
+synchronous scan; it may land between two async slices, and is safe there because every slice resumes from the entry's current byte offset, so no record is
+delivered twice. An entry evicted mid-fold finishes as an orphan and answers its own request without being re-inserted. A compaction can replay earlier records verbatim, tool_use ids included, so `applyEvent` drops a launch or `SendMessage` whose id
 `ScanState.seen` already holds (#174); without that a replayed launch reads as a second row.
 
 **A background run ends on any terminal `<task-notification>` status** — `completed`, `failed`, `killed` or `stopped` (`TERMINAL_STATUSES` in `agents.ts`),

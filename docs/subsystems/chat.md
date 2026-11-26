@@ -340,8 +340,8 @@ this figure does not, because transcripts are append-only, a replayed turn dedup
 
 - **Figure:** `billableApprox` (input + output + cache writes; cache reads are out), by the same rules as the session analysis: main like `analyzeSession`,
   subagents once per `message.id`. Tests pin the two equal once every subagent has finished.
-- **The main figure rides the agents cache.** The main transcript is folded once, in the same pass as the drawer's agents list (`readSessionFold`,
-  `agents-cache.ts`; the reducers are `spend-tally.ts`), so a first open reads it once for both cards and an Analytics sweep cannot evict that fold.
+- **The main figure rides the agents cache.** The main transcript is folded once, in the same pass as the drawer's agents list (`readSessionFoldAsync`,
+  `agents-cache.ts`, in yielding slices; the reducers are `spend-tally.ts`), so a first open reads it once for both cards and an Analytics sweep cannot evict that fold.
 - **The subagent cache is shared with Analytics.** `readSubagentUsage` in `session-spend.ts` folds every subagent transcript for `analyzeSession` through the
   same per-session entry (LRU over 32 sessions), so a file this poll has followed is not read again when Analytics opens, and the reverse. That entry holds
   subagent tallies only, so an Analytics sweep that evicts it costs the drawer a re-read of its subagent files, never of the main transcript.

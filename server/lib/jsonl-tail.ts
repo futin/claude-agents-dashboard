@@ -10,6 +10,7 @@
  *    chunk is carried across chunks and delivered whole (single records run past 1 MiB: 1.36 MB seen, 2026-10-07).
  *  - A read can end mid-line; `foldLines` hands that fragment back for the caller to keep. `followJsonl` buffers it in `partial` and prepends it to the
  *    next read; if the newline-less tail parses as JSON it is a complete record (a strict prefix of a JSON document never parses), so it is consumed.
+ *    That EOF rule holds only at the file's real end: a follow told its span stops short (`eof: false`) only buffers the fragment.
  *
  * Truncation is the caller's to detect (`size < tail.offset`), because whatever it
  * derived from the consumed bytes has to be reset along with the tail.
@@ -79,11 +80,19 @@ function consumeLine(lineBuf: Buffer, onRecord: (rec: any) => void): void {
   onRecord(rec);
 }
 
+export interface FollowOptions {
+  /**
+   * `false` when `size` stops short of the file's real end, as a sliced follow's every slice but the last does: the newline-less fragment is then a cut
+   * through a line, buffered without the EOF rule's parse attempt — which would otherwise re-parse a record longer than a slice once per slice.
+   */
+  eof?: boolean;
+}
+
 /**
  * Feed every record appended since `tail` to `onRecord`, advancing `tail`. A read failure throws; `tail` is then left at the last line delivered whole
  * (its fragment dropped and re-read from disk next time), so a retry re-delivers nothing and loses nothing.
  */
-export function followJsonl(filePath: string, size: number, tail: JsonlTail, onRecord: (rec: any) => void): void {
+export function followJsonl(filePath: string, size: number, tail: JsonlTail, onRecord: (rec: any) => void, opts: FollowOptions = {}): void {
   let rest = tail.partial;
   if (size > tail.offset) {
     const cursor = { offset: tail.offset - tail.partial.length };
@@ -100,7 +109,7 @@ export function followJsonl(filePath: string, size: number, tail: JsonlTail, onR
     tail.offset = cursor.offset + rest.length;
   }
 
-  if (rest.length > 0) {
+  if (rest.length > 0 && opts.eof !== false) {
     const text = rest.toString('utf8').trim();
     if (text) {
       try {

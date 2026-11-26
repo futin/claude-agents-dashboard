@@ -499,7 +499,7 @@ export function createRequestListener(config: Config): http.RequestListener {
     if (spend) {
       const id = decodePath(spend[1]);
       if (id === null) return badRequest(res);
-      return serveSessionSpend(id, res);
+      return void serveSessionSpend(id, res);
     }
     // Detail route must be matched before the generic prefix below, which would
     // otherwise swallow `/api/sessions/:id`.
@@ -507,7 +507,7 @@ export function createRequestListener(config: Config): http.RequestListener {
     if (detail) {
       const id = decodePath(detail[1]);
       if (id === null) return badRequest(res);
-      return serveSessionDetail(id, res);
+      return void serveSessionDetail(id, res);
     }
     if (req.url && req.url.startsWith('/api/sessions')) {
       // Query params carry the Settings page's per-device scan knobs (limit /
