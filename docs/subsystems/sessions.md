@@ -563,8 +563,9 @@ its `mtimeMs` and `size` and re-parses only a file that changed (entries leave o
 `publishListing`; the module holds the newest listing of one root and the time it was taken. `sharedListing(root)` serves it while it is at most
 `LISTING_MAX_AGE_MS` (3 s, the default poll interval) old, otherwise walks once and holds that. Its readers: the `api.ts` id lookups through
 `resolveTranscript` (session detail, spend, chat, `sessionExists`, PR, the routine-run resolve, the row endpoint), and every pin and project list —
-`pinOptions` carries the listing, so a pin toggle's membership check, `pins.json` snapshot and reply share one walk, and `git-stats.ts`,
-`git-fetch.ts`, `codegraph-store.ts` and `routine-store.ts` pass it to `listPinRows`. One pin toggle went from 43–55 ms warm to 7.5–14 ms
+`pinListOptions` (`management.ts`) carries the listing, so a pin toggle's membership check, `pins.json` snapshot and reply share one walk, and
+`git-stats.ts`, `git-fetch.ts`, `codegraph-store.ts` and `routine-store.ts` build their `listPinRows` options through it too — one option set, Claude
+roots included, so a pin reads the same `listed` in all of them (#580). One pin toggle went from 43–55 ms warm to 7.5–14 ms
 (2026-11-15, WSL2, 656 transcripts). `listTranscripts` stays the fresh walk (every file stat-ed, readdirs gated by `dir-cache.ts`); `test/guards/transcript-walks.test.ts` pins the few files that may walk the whole tree — a
 `listTranscripts(` or `listUsageTranscripts(` call, or a `findTranscript(` given no refs.
 

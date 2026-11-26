@@ -24,7 +24,8 @@ export const LIB_MODULES: readonly LibModule[] = [
   { source: 'shared/routine-file.ts', out: 'routine-file.mjs' },
   { source: 'server/lib/agents.ts', out: 'agents.mjs' },
   { source: 'server/lib/subagent-usage.ts', out: 'subagent-usage.mjs' },
-  { source: 'server/lib/usage-line.ts', out: 'usage-line.mjs' }
+  { source: 'server/lib/usage-line.ts', out: 'usage-line.mjs' },
+  { source: 'server/lib/transcript-record.ts', out: 'transcript-record.mjs' }
 ];
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');

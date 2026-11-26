@@ -14,9 +14,8 @@ import type { HubHandler } from 'lookout-widgets';
 import { launchRowIds, liveSessionIds, projectsRoot, sessionFromRef, sessionSurface } from './lib/scan.js';
 import { scanSnapshot } from './lib/scan-snapshot.js';
 import { resolveTranscript, sharedListing } from './lib/transcript-listing.js';
-import type { TranscriptRef } from './lib/scan.js';
 import { readSessionAnalyticsLog } from './lib/sessionAnalyticsLog.js';
-import { archivedSessionIds, desktopLiveSessionIds } from './lib/archived.js';
+import { desktopLiveSessionIds } from './lib/archived.js';
 import { lastSessionEffort, readTranscript } from './lib/transcript.js';
 import { readAgentsCachedAsync } from './lib/agents-cache.js';
 import { readSessionSpendAsync } from './lib/session-spend.js';
@@ -30,9 +29,10 @@ import { BASELINE_MS } from './lib/usage-rate.js';
 import { localOffsetMinutes } from './lib/usage-forecast.js';
 import { blankUsageProfile, emptyRates, shapeUsageProfile, shapeUsageRates } from './lib/usage-shape.js';
 import {
-  listOlderProjects, listPinRows, listRecentProjects, readGlobalScope, readProjectScope, readServableFile, resolveProject, servablePathsFor
+  listOlderProjects, listPinRows, listRecentProjects, pinListOptions, readGlobalScope, readProjectScope, readServableFile, resolveProject, servablePathsFor
 } from './lib/management.js';
-import { claudeHome, defaultClaudeRoots } from './lib/paths.js';
+import type { ProjectsOptions } from './lib/management.js';
+import { claudeHome } from './lib/paths.js';
 import { listReports, reviewStatus } from './lib/analytics.js';
 import {
   CHAT_PAGE_MESSAGES, DEFAULT_CAPS, NO_CAPS, readChatAfter, readChatBefore, readChatTail
@@ -1455,7 +1455,7 @@ export async function serveConfigsIndex(config: Config, res: ServerResponse): Pr
   try {
     const [global, projects] = await Promise.all([
       readGlobalScope(),
-      Promise.resolve(listRecentProjects(config, { archivedIds: archivedSessionIds(), ...pinOptions() }))
+      Promise.resolve(listRecentProjects(config, pinListOptions(getPinnedProjects())))
     ]);
     data = { generatedAt: new Date().toISOString(), global, projects };
   } catch (e) {
@@ -1505,13 +1505,12 @@ export async function serveConfigsFile(config: Config, rawPath: string, res: Ser
 /* ------------------------------------------------------- pins endpoints */
 
 /**
- * The stored pins, as the `ProjectsOptions` every project-list caller passes
- * (#161). Read per request — `settings.ts` caches it, so this costs nothing.
- * The Claude roots ride along so no list, spawn or pin ever reaches a scratchpad, a scratch workspace or a dir under `~/.claude`.
- * So does the shared listing (`transcript-listing.ts`): a pin write's membership check, snapshot and reply take one walk between them, not one each.
+ * The stored pins (#161) as `pinListOptions` builds them for every pin-row reader, minus the archive filter: `resolveProject` and `servablePathsFor` resolve
+ * one project by name, and a project whose last session was archived in the desktop app can still be opened and spawned in. Read per request —
+ * `settings.ts` caches the pins and `transcript-listing.ts` the walk, so this costs nothing.
  */
-function pinOptions(): { pinnedDirs: ReadonlySet<string>; claudeRoots: readonly string[]; transcripts: readonly TranscriptRef[] } {
-  return { pinnedDirs: new Set(getPinnedProjects()), claudeRoots: defaultClaudeRoots(), transcripts: sharedListing(projectsRoot()) };
+function pinOptions(): ProjectsOptions {
+  return { ...pinListOptions(getPinnedProjects()), archivedIds: null };
 }
 
 let pinsPayloadOverride: ((config: Config) => PinsResponse) | null = null;
@@ -1531,17 +1530,17 @@ export function overridePinRows(fn: ((config: Config) => ReturnType<typeof listP
 /** The stored pins as rows, the same read `GET /api/pins` makes for `pinned`. Throws when the listing does; every caller answers that as a 500. */
 function readPinRows(config: Config): ReturnType<typeof listPinRows> {
   if (pinRowsOverride) return pinRowsOverride(config);
-  return listPinRows(config, getPinnedProjects(), { archivedIds: archivedSessionIds(), ...pinOptions() });
+  return listPinRows(config, getPinnedProjects(), pinListOptions(getPinnedProjects()));
 }
 
 /**
- * A project Claude made for itself (a scratch workspace, a dir under `~/.claude`) is on no list at all (`pinOptions`). A pin stored there before that
+ * A project Claude made for itself (a scratch workspace, a dir under `~/.claude`) is on no list at all (`pinListOptions`). A pin stored there before that
  * rule still shows under `pinned`, unlisted — that is where it can be removed.
  */
 function pinsPayload(config: Config): PinsResponse {
   if (pinsPayloadOverride) return pinsPayloadOverride(config);
   // One listing for all three lists, which used to enumerate the tree five times between them.
-  const options = { archivedIds: archivedSessionIds(), ...pinOptions() };
+  const options = pinListOptions(getPinnedProjects());
   return {
     pinned: listPinRows(config, getPinnedProjects(), options),
     recent: listRecentProjects(config, options).filter(r => !r.pinned),
@@ -1706,7 +1705,7 @@ export async function servePinsWrite(config: Config, req: IncomingMessage, res: 
   if (pinned) {
     let known: boolean;
     try {
-      const options = { archivedIds: archivedSessionIds(), ...pinOptions() };
+      const options = pinListOptions(getPinnedProjects());
       known = [...listRecentProjects(config, options), ...listOlderProjects(config, options)]
         .some(r => r.dirName === dirName);
     } catch (e) {

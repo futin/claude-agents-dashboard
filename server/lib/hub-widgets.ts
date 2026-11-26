@@ -5,6 +5,7 @@ import { gitUpstreamShown } from '../../shared/gitUpstream.js';
 import type { RepoGitStats, Session } from '../../shared/types.js';
 import type { Config } from './config.js';
 import { markGitWatched } from './git-fetch.js';
+import { viewUrl } from './notify.js';
 import { readGitStats } from './git-stats.js';
 import { scanSnapshot } from './scan-snapshot.js';
 import { getCachedUsageState, type UsageState } from './usage.js';
@@ -37,7 +38,7 @@ function sessionRow(s: Session) {
 
 type GitRow = { id: string; title: string; subtitle: string; status: RowStatus; open: string };
 
-const GIT_OPEN = '/?view=git';
+const GIT_OPEN = viewUrl('', 'git');
 
 function unreadableReason(r: Exclude<RepoGitStats, { state: 'ok' }>): string {
   if (r.state === 'missing') return 'folder missing';

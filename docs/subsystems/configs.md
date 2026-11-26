@@ -118,7 +118,8 @@ control (the type is a column now, not a collapsible header) and the
   under a Claude root (`defaultClaudeRoots`: `os.tmpdir()` and its realpath, `/tmp`, `/private/tmp` —
   session scratchpads — plus `~/.claude` and `~/Library/Application Support/Claude`, the desktop app's
   scratch workspaces) and anything failing bug-21. Every API caller of `listRecentProjects` passes those roots too
-  (`pinOptions` in `api.ts`), so a Claude-root cwd is on no list at all — not the launch select, not the index, not
+  (`pinListOptions` in `management.ts`, which every pin-row reader builds its options with), so a Claude-root cwd is on no list at all — not the
+  launch select, not the index, not
   `GET /api/pins` — and is neither spawnable nor pinnable; a pin stored under one before that rule reads `listed: false`
   under `pinned`, where it can be unpinned. Called directly, `listRecentProjects` filters roots only when given them. The 30 days cap only what is *offered*; a pin already made stays
   listed at any age.

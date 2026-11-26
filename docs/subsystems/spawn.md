@@ -330,7 +330,7 @@ at all.
 joined into a filesystem path. That list includes every pinned project whatever its age (#161),
 so a pin is what makes a project past `LOOKBACK_HOURS` launchable; the sheet's `Not listed? Show
 older projects` disclosure pins one and selects it. A pin does not reach past the list's other filters, though: a cwd Claude made for itself (a
-scratchpad, a scratch workspace, a dir under `~/.claude`; `pinOptions` passes `defaultClaudeRoots()`) or one inside a `worktrees` / `.worktrees` dir
+scratchpad, a scratch workspace, a dir under `~/.claude`; `pinListOptions` passes `defaultClaudeRoots()`) or one inside a `worktrees` / `.worktrees` dir
 (`isListedProjectPath`) is on no list, pinned or not, so it cannot be launched into. An unknown name is a 400, not a lookup that might escape
 somewhere unexpected. The project's `cwd` (read off its own most-recent transcript, not
 user input — its launch cwd, not whatever that session later chdir'd into) becomes the

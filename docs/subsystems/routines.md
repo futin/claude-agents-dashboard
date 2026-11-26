@@ -118,7 +118,7 @@ the session would have worked. The wrapper does not parse the prompt to enforce 
 An unknown key is a validation error naming the key. A cron that launchd cannot express (day-of-month and weekday both restricted: cron ORs them, launchd
 ANDs them) is an error when the validating machine is `mac` (`parseJob(name, text, machine)`). Step values and ranges are expanded into a list of `StartCalendarInterval` dicts. The parser, the
 writer and the validator are `shared/routine-file.ts` and `shared/cron.ts`, which the server, the client and the wrapper all run; the wrapper's copies are
-generated (`pnpm plugin:gen` writes `plugin/lib/*.mjs` from the list in `scripts/gen-plugin-lib.ts`, which also carries kaizen's three server modules, and
+generated (`pnpm plugin:gen` writes `plugin/lib/*.mjs` from the list in `scripts/gen-plugin-lib.ts`, which also carries kaizen's four server modules, and
 `test/guards/plugin-manifest.test.ts` regenerates and compares, so an edit to the `.ts` without regenerating fails CI).
 Every reader of a job file's frontmatter — `parseJob`, the drawer's form (`client/src/lib/routineForm.ts`) and the Repos helper (`readForeach`, `setRepos`)
 — finds the fence and a key line through `frontmatterFence` and `frontmatterKeyIndex` in `shared/frontmatter.ts`, so a BOM, CRLF or `foreach : pinned`

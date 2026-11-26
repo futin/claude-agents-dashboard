@@ -52,7 +52,7 @@ import { randomUUID } from 'node:crypto';
 
 import type { Config } from './config.js';
 import { DASHBOARD_ENTRYPOINT } from './entrypoint.js';
-import type { LaunchSurface, LaunchingSession, PermissionMode, ProjectRef, StopState } from '../../shared/types.js';
+import type { LaunchSurface, LaunchingSession, PermissionMode, ProjectRef, SpawnRequest, StopState } from '../../shared/types.js';
 
 /** The permission ladder, lowest to highest. Array index order IS the ordering. */
 export const PERMISSION_MODES = ['plan', 'acceptEdits', 'auto', 'bypassPermissions'] as const;
@@ -173,7 +173,8 @@ export function parseSpawnRequest(body: unknown, ceiling: PermissionMode): Parse
   if (typeof body !== 'object' || body === null || Array.isArray(body)) {
     return { ok: false, error: 'request body must be a JSON object' };
   }
-  const b = body as Record<string, unknown>;
+  // Typed over `SpawnRequest`'s keys, every value still `unknown`: a field renamed or dropped in `shared/types.ts` fails `tsc` here, not at runtime.
+  const b = body as { [K in keyof SpawnRequest]?: unknown };
 
   // Rejects rather than drops, for the reason `resume` does below: a headless launch the user believed was going to the desktop app is worse than a 400.
   // Absent is `dashboard` — never the default setting, which only preselects the form (desktop-launch spec, decision 1).

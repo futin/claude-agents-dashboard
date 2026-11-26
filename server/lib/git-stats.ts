@@ -10,13 +10,10 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 import type { GitBranch, GitStatsResponse, PinRow, RepoGitStats } from '../../shared/types.js';
-import { archivedSessionIds } from './archived.js';
 import type { Config } from './config.js';
 import { getFetchClock, lastFetchFor } from './git-fetch.js';
-import { listPinRows } from './management.js';
-import { projectsRoot } from './scan.js';
+import { listPinRows, pinListOptions } from './management.js';
 import { getPinnedProjects } from './settings.js';
-import { sharedListing } from './transcript-listing.js';
 
 /** Exit code and output of one git call. Rejects only when git could not be spawned or outlived its timeout; a non-zero exit resolves. */
 export type GitRunner = (cwd: string, args: string[]) => Promise<{ code: number; stdout: string; stderr: string }>;
@@ -524,7 +521,8 @@ export async function readGitStatsOrLast(config: Partial<Config>): Promise<GitSt
 
 async function readAll(config: Partial<Config>): Promise<GitStatsResponse> {
   // The same options `GET /api/pins` builds its `pinned` rows with, so a pin resolves to the same path in both.
-  const pins = listPinRows(config, getPinnedProjects(), { archivedIds: archivedSessionIds(), pinnedDirs: new Set(getPinnedProjects()), transcripts: sharedListing(projectsRoot()) });
+  const pinned = getPinnedProjects();
+  const pins = listPinRows(config, pinned, pinListOptions(pinned));
   const run = runner;
   const repos = await Promise.all(pins.map(pin => readRepo(pin, run, memo)));
 

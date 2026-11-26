@@ -39,7 +39,7 @@ import { atDesk, readIdleSecs, type IdleReading } from './idle.js';
 import { getSettings } from './settings.js';
 import { staleEnvKeys } from './config.js';
 import type { Config } from './config.js';
-import type { NotifyEvent, NotifyPolicy, RoutineRun } from '../../shared/types.js';
+import type { DeepLinkView, NotifyEvent, NotifyPolicy, RoutineRun } from '../../shared/types.js';
 import type { UsageAlertKind } from './usage-alerts.js';
 
 /**
@@ -262,16 +262,25 @@ export function clickUrl(config: Config, sessionId: string): string {
   return `${config.publicUrl}/?session=${encodeURIComponent(sessionId)}`;
 }
 
+/**
+ * A `?view=` deep link under `base` (`''` for a same-origin path), with `extra` params URI-encoded after it. Every `?view=` link the server builds goes
+ * through here, so its view is a `DeepLinkView` the client's `readViewParam` parses.
+ */
+export function viewUrl(base: string, view: DeepLinkView, extra: Record<string, string> = {}): string {
+  const tail = Object.entries(extra).map(([k, v]) => `&${k}=${encodeURIComponent(v)}`).join('');
+  return `${base}/?view=${view}${tail}`;
+}
+
 /** Where a routine push lands: the Routines view with that run's fold open. Empty without a public URL, like {@link clickUrl}. */
 export function routineClickUrl(config: Config, runId: string): string {
   if (!config.publicUrl) return '';
-  return `${config.publicUrl}/?view=routines&run=${encodeURIComponent(runId)}`;
+  return viewUrl(config.publicUrl, 'routines', { run: runId });
 }
 
 /** A usage alert's phone tap-through: the Usage view. `''` without a public URL. */
 export function usageClickUrl(config: Config): string {
   if (!config.publicUrl) return '';
-  return `${config.publicUrl}/?view=usage`;
+  return viewUrl(config.publicUrl, 'usage');
 }
 
 /**
@@ -281,7 +290,7 @@ export function usageClickUrl(config: Config): string {
 export function tickCappedClickUrl(config: Config): string {
   if (config.backlogBoardUrl) return `${config.backlogBoardUrl}/`;
   if (!config.publicUrl) return '';
-  return `${config.publicUrl}/?view=routines`;
+  return viewUrl(config.publicUrl, 'routines');
 }
 
 /**

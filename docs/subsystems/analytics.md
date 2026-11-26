@@ -88,7 +88,8 @@ one of them at random — the same two-state rule the Sessions board follows.
   subagent's *final context size*, not its spend — 5–130x low on many-turn subagents (bug-27) — so it is only the fallback
   for a finished subagent whose transcript is missing or sums below it, counted in `subagentTotals.fallbackCount`. The
   metric's tooltip carries `subagentTotals.usage`'s billable / cache-read split. `/kaizen`'s `kaizen.mjs` does the
-  same: its subagent parse (`lib/agents.ts`), totals helpers (`lib/subagent-usage.ts`) and usage parse (`lib/usage-line.ts`) are generated into
+  same: its subagent parse (`lib/agents.ts`), totals helpers (`lib/subagent-usage.ts`), usage parse (`lib/usage-line.ts`) and record filter
+  (`lib/transcript-record.ts`) are generated into
   `plugin/lib/*.mjs` by `pnpm plugin:gen`, and its analysis is a hand port that `test/analytics/analyze.test.ts` runs against `analyzeSession` to keep the
   two in step.
   Each file is folded incrementally by byte offset through the cache the drawer's spend poll keeps ([chat](chat.md) §Tokens spent; LRU over 32
@@ -100,7 +101,8 @@ one of them at random — the same two-state rule the Sessions board follows.
   A compaction replays earlier records verbatim; both sides count each `tool_use` id, `tool_result`, Agent launch and SendMessage once and add each
   subagent transcript once (#174, #226), and the parity tests include a replayed fixture.
   Both sides also skip Claude Code 2.1.302's `api-request-blob` records, which replay each request's turns with the same role and content: `analyze.ts`
-  through `transcript.ts`'s `isConversationRecord`, `kaizen.mjs` through its own copy of it (#252, #253), with a blob fixture in the parity test.
+  through `transcript.ts`'s `isConversationRecord`, `kaizen.mjs` through the same function generated from `server/lib/transcript-record.ts` into
+  `plugin/lib/transcript-record.mjs` (#252, #253, #580), with a blob fixture in the parity test.
 - **Research & suggestions** — the one-line lesson `/kaizen` wrote for that session. The
   server does **no** LLM calls and invents no advice; the qualitative judgment is
   entirely `/kaizen`'s.

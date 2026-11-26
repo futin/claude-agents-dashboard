@@ -18,7 +18,10 @@
  *
  * `?view=usage` is a usage-limit push (`server/lib/notify.ts` `usageClickUrl`): it lands on the Usage section, with no sub-view to set.
  */
+import type { DeepLinkView } from '../../../shared/types';
 import { isSection, type Section } from './sections';
+
+export type { DeepLinkView };
 
 /** A session id is a UUID; anything else is junk and is ignored. Pure — tested. */
 export function readSessionParam(search: string): string | null {
@@ -30,9 +33,6 @@ export function readSessionParam(search: string): string | null {
     return null; // malformed query string
   }
 }
-
-/** The sub-views a link may name. */
-export type DeepLinkView = 'git' | 'routines' | 'usage';
 
 /** The one sub-view a link may name; anything else is ignored. Pure — tested. */
 export function readViewParam(search: string): DeepLinkView | null {
