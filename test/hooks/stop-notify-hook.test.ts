@@ -1,6 +1,6 @@
 /**
- * `scripts/stop-notify-hook.sh` — the `CLAUDE_DASHBOARD_ONESHOT` and `BM_ORCH_RUN` (#504) exemptions, the `CLAUDE_DASHBOARD_REFRESH` exit (#178), and the
- * HEADLESS classification with the idle gate it feeds (#417).
+ * `scripts/stop-notify-hook.sh` — the `CLAUDE_DASHBOARD_ONESHOT` and `BM_ORCH_RUN` (#504) exemptions, the `CLAUDE_DASHBOARD_REFRESH` exit (#178), the
+ * background-work gate (#568), and the HEADLESS classification with the idle gate it feeds (#417).
  *
  * A session the dashboard launched as one-shot (the Git Sync button, or the spawn form's "Close when done") must end when its last turn does, instead of
  * sitting in the reply hold for `answerSecs`. The hook is driven the way the CLI drives it — one Stop payload on stdin, `CLAUDECODE=1` — against an
@@ -54,7 +54,7 @@ async function fakeDashboard(
 
 /** Run the hook once. `oneShot` undefined leaves the variable out of the env entirely; `extra` adds env on top. */
 async function runHook(
-  url: string, home: string, oneShot: string | undefined, stopHookActive = false, extra: NodeJS.ProcessEnv = {}
+  url: string, home: string, oneShot: string | undefined, stopHookActive = false, extra: NodeJS.ProcessEnv = {}, payload: Record<string, unknown> = {}
 ): Promise<{ code: number | null; stdout: string }> {
   const env: NodeJS.ProcessEnv = { ...process.env, CLAUDECODE: '1', CLAUDE_DASHBOARD_URL: url, CLAUDE_DASHBOARD_IDLE_SECS: '0', HOME: home };
   // Every marker the hook reads is cleared, so a suite run from inside a routine or a desktop session sees the case's env, not its own.
@@ -65,7 +65,7 @@ async function runHook(
   const child = spawn('bash', [HOOK], { env, stdio: ['pipe', 'pipe', 'ignore'] });
   let stdout = '';
   child.stdout.on('data', c => { stdout += c; });
-  child.stdin.end(JSON.stringify({ session_id: 's1', stop_hook_active: stopHookActive, permission_mode: 'auto' }));
+  child.stdin.end(JSON.stringify({ session_id: 's1', stop_hook_active: stopHookActive, permission_mode: 'auto', ...payload }));
   const code = await new Promise<number | null>(resolve => child.on('close', resolve));
   return { code, stdout };
 }
@@ -94,7 +94,7 @@ async function ok(name: string, fn: () => Promise<void>): Promise<boolean> {
 }
 
 export async function run(): Promise<number> {
-  console.log('\n=== stop-notify-hook.sh: CLAUDE_DASHBOARD_ONESHOT / BM_ORCH_RUN / CLAUDE_DASHBOARD_REFRESH / HEADLESS ===\n');
+  console.log('\n=== stop-notify-hook.sh: CLAUDE_DASHBOARD_ONESHOT / BM_ORCH_RUN / CLAUDE_DASHBOARD_REFRESH / background work / HEADLESS ===\n');
   let p = 0, f = 0;
 
   for (const tool of ['jq', 'curl']) {
@@ -222,6 +222,32 @@ export async function run(): Promise<number> {
           assert.deepStrictEqual(dash.posts.map(x => x.path), [], `remoteAnswer=${remote}: the refresh turn must POST nothing`);
         } finally { await dash.close(); }
       }
+    })) p++; else f++;
+
+    // The background-work gate (#568): a turn that ends with background tasks or session crons still running is not finished — they wake it again — so
+    // it neither holds nor pushes. The both-empty case is the mirror that proves the payload reached the hook at all.
+    for (const [label, extraPayload] of [
+      ['non-empty background_tasks', { background_tasks: [{ id: 'b1' }], session_crons: [] }],
+      ['non-empty session_crons', { background_tasks: [], session_crons: [{ id: 'c1' }] }],
+    ] as const) {
+      if (await ok(`${label}: exits 0 with no push and no hold`, async () => {
+        const dash = await fakeDashboard(true);
+        try {
+          const r = await runHook(dash.url, home, undefined, false, {}, extraPayload);
+          assert.strictEqual(r.code, 0);
+          assert.strictEqual(r.stdout, '');
+          assert.deepStrictEqual(dash.posts, [], 'background work pending: nothing reaches the dashboard');
+        } finally { await dash.close(); }
+      })) p++; else f++;
+    }
+
+    if (await ok('background_tasks and session_crons both empty: the normal path — the session holds', async () => {
+      const dash = await fakeDashboard(true);
+      try {
+        const r = await runHook(dash.url, home, undefined, false, {}, { background_tasks: [], session_crons: [] });
+        assert.strictEqual(r.code, 0);
+        assert.strictEqual(count(dash.posts, '/api/messages/wait'), 1);
+      } finally { await dash.close(); }
     })) p++; else f++;
 
     if (await ok('CLAUDE_DASHBOARD_REFRESH empty: an ordinary session, which holds', async () => {

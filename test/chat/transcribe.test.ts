@@ -1,6 +1,6 @@
 import assert from 'node:assert';
 import fs from 'node:fs';
-import http from 'node:http';
+import http, { type ServerResponse } from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 
@@ -103,6 +103,57 @@ function post(
       req.end(body);
     });
   });
+}
+
+/**
+ * Run `serveTranscribe` behind a one-shot server, let `drive` talk to it however it needs to (chunked, or hanging up mid-body), and return the reply the
+ * ROUTE wrote — captured at `res.end`, on the server side. The client cannot be trusted to see it: a 413 destroys the socket once it flushes, and an aborted
+ * upload has no client left to read anything, yet the status and error the route chose are exactly what these cases pin.
+ */
+function routeReply(
+  cfg: ReturnType<typeof loadConfig>, drive: (port: number) => void
+): Promise<{ status: number; json: any }> {
+  return new Promise((resolve, reject) => {
+    let done = false;
+    const timer = setTimeout(() => settle(() => reject(new Error('the route wrote no reply within 5s'))), 5000);
+    const srv = http.createServer((req, res) => {
+      const end = res.end.bind(res) as (...a: unknown[]) => ServerResponse;
+      res.end = ((chunk?: unknown, ...rest: unknown[]) => {
+        const json = (() => { try { return JSON.parse(String(chunk)); } catch { return null; } })();
+        settle(() => resolve({ status: res.statusCode, json }));
+        return end(chunk, ...rest);
+      }) as typeof res.end;
+      void serveTranscribe(cfg, req, res);
+    });
+    function settle(fn: () => void): void {
+      if (done) return;
+      done = true;
+      clearTimeout(timer);
+      srv.closeAllConnections();
+      srv.close();
+      fn();
+    }
+    srv.on('error', e => settle(() => reject(e)));
+    srv.listen(0, () => drive((srv.address() as { port: number }).port));
+  });
+}
+
+/** Configure a stubbed engine, so the route gets past its 404 probe to the body read, and hand `fn` the config. */
+async function withEngine(fn: (cfg: ReturnType<typeof loadConfig>) => Promise<void>): Promise<void> {
+  resetProbe();
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cad-ep-body-'));
+  try {
+    const model = path.join(dir, 'ggml.bin');
+    fs.writeFileSync(model, 'x');
+    const bin = stubBin(dir, 'wh-stub');
+    let err: unknown;
+    await inTmpCwd(async () => {
+      await new Promise<void>(done => {
+        withEnvFile(`WHISPER_MODEL=${model}\nWHISPER_BIN=${bin}\n`, cfg => { void fn(cfg).catch(e => { err = e; }).finally(done); });
+      });
+    });
+    if (err) throw err;
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 }
 
 export async function run(): Promise<number> {
@@ -537,6 +588,34 @@ export async function run(): Promise<number> {
       });
       if (err) throw err;
     } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+  }));
+
+  // The byte-counted half of the cap (#568): the Content-Length pre-check above only sees an honest header, so a chunked upload — no Content-Length at all —
+  // reaches the cap only by counting bytes as they arrive.
+  check(await testAsync('a chunked upload over the cap is refused 413 "clip too large" once the byte count passes it', async () => {
+    await withEngine(async cfg => {
+      const r = await routeReply(cfg, port => {
+        const req = http.request({ port, method: 'POST', path: '/api/transcribe', headers: { 'Content-Type': 'audio/mp4' } });
+        req.on('error', () => { /* the 413 tears the socket down mid-upload */ });
+        const chunk = Buffer.alloc(1024 * 1024, 1);
+        for (let i = 0; i < 9; i++) req.write(chunk);
+        req.end();
+      });
+      assert.deepEqual(r, { status: 413, json: { error: 'clip too large' } });
+    });
+  }));
+
+  check(await testAsync('an upload the client abandons mid-body is answered 400 "upload aborted"', async () => {
+    await withEngine(async cfg => {
+      const r = await routeReply(cfg, port => {
+        const req = http.request({ port, method: 'POST', path: '/api/transcribe', headers: { 'Content-Type': 'audio/mp4', 'Content-Length': '4096' } });
+        req.on('error', () => { /* we hung up on purpose */ });
+        req.write(Buffer.alloc(16, 1));
+        // Let the 16 bytes and the headers land, so the route is inside the body read when the socket goes.
+        setTimeout(() => req.destroy(), 100);
+      });
+      assert.deepEqual(r, { status: 400, json: { error: 'upload aborted' } });
+    });
   }));
 
   check(await testAsync('readBinaryBody reports overflow distinctly from abort', async () => {

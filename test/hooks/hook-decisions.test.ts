@@ -264,6 +264,31 @@ export async function run(): Promise<number> {
         } finally { await dash.close(); }
       }));
     }
+
+    // The POST body is the hook-to-server contract for the `allow?` pill and its push (#568): `permissionMode` is what `requireAutoMode` reads, and the
+    // message is the push's text. Pinned whole, so a dropped or renamed key fails here by name.
+    tally(await ok('permission-notify-hook.sh: PermissionRequest → body is exactly {sessionId, message, permissionMode}', async () => {
+      const dash = await fakeDashboard();
+      try {
+        const r = await runHook('permission-notify-hook.sh',
+          { session_id: 's1', hook_event_name: 'PermissionRequest', tool_name: 'Bash', tool_input: { command: 'ls' }, permission_mode: 'auto' }, dash.url, home);
+        assert.strictEqual(r.code, 0);
+        assert.strictEqual(r.stdout, '', 'display-only: never a decision');
+        const sent = posts(dash.requests);
+        assert.deepStrictEqual(sent.map(q => q.path), ['/api/permissions/notify']);
+        assert.deepStrictEqual(sent[0].body, { sessionId: 's1', message: 'Claude needs your permission to use Bash', permissionMode: 'auto' });
+      } finally { await dash.close(); }
+    }));
+
+    tally(await ok('permission-notify-hook.sh: PermissionRequest with no tool_name or mode → "a tool", and an empty permissionMode', async () => {
+      const dash = await fakeDashboard();
+      try {
+        const r = await runHook('permission-notify-hook.sh', { session_id: 's1', hook_event_name: 'PermissionRequest' }, dash.url, home);
+        assert.strictEqual(r.code, 0);
+        const sent = posts(dash.requests);
+        assert.deepStrictEqual(sent.map(q => q.body), [{ sessionId: 's1', message: 'Claude needs your permission to use a tool', permissionMode: '' }]);
+      } finally { await dash.close(); }
+    }));
   } finally {
     fs.rmSync(home, { recursive: true, force: true });
   }
