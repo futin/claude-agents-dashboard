@@ -33,13 +33,21 @@ export function readIdleSecs(): Promise<number | null> {
   return new Promise(resolve => {
     try {
       execFile('ioreg', ['-c', 'IOHIDSystem'], { encoding: 'utf8', timeout: 1000 }, (err, out) => {
-        const match = err ? null : out.match(/"HIDIdleTime"\s*=\s*(\d+)/);
-        resolve(match ? Math.floor(Number(match[1]) / 1_000_000_000) : null);
+        resolve(err ? null : parseIdleSecs(out));
       });
     } catch {
       resolve(null);
     }
   });
+}
+
+/**
+ * Whole seconds of keyboard idle from `ioreg -c IOHIDSystem` output: its `HIDIdleTime` is nanoseconds, floored to the second. null when the output carries
+ * no such line — the same "unreadable" {@link readIdleSecs} reports for a failed run.
+ */
+export function parseIdleSecs(out: string): number | null {
+  const match = out.match(/"HIDIdleTime"\s*=\s*(\d+)/);
+  return match ? Math.floor(Number(match[1]) / 1_000_000_000) : null;
 }
 
 /** What an idle source answers: a reading, sync or async — test fakes stay synchronous, the real reader is not. */

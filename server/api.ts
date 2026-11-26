@@ -424,8 +424,10 @@ export async function serveTranscribe(
 
   // An honest Content-Length already over the cap needs no bytes read to
   // reject — skip straight to the same 413 an overflow would reach after
-  // buffering the whole thing. Chunked transfers and clients that lie about
-  // this header still fall through to the byte-counted check below.
+  // buffering the whole thing. Chunked transfers, which carry no
+  // Content-Length, still fall through to the byte-counted check below. A
+  // header that under-declares never gets there: Node's parser ends the body
+  // at the declared length, so the route reads no more than was declared.
   const declaredLength = Number(req.headers['content-length']);
   if (Number.isFinite(declaredLength) && declaredLength > AUDIO_CAP) {
     return send413(res, { error: 'clip too large' });

@@ -298,7 +298,7 @@ server/
                   cancel, and the one 5s idle reaper across them (one `backAtDesk()` per tick)
   lib/remote-message-prose.ts  the reply prose, wrap + unwrap in one import-free leaf
   lib/idle.ts     the shared `backAtDesk()` policy behind the stores' 5s idle release —
-                  threshold, the ioreg reading (`readIdleSecs`), the `atDesk` rule,
+                  threshold, the ioreg reading (`readIdleSecs`, parsed by the pure `parseIdleSecs`), the `atDesk` rule,
                   test seam, fail directions; a leaf lib/notify.ts imports, never
                   the reverse
   lib/remoteState.ts  remote-answer switch (env gate + persisted toggle)

@@ -12,8 +12,11 @@ import type { AddressInfo } from 'node:net';
 import * as usage from '../../server/lib/usage.js';
 import type { TokenState } from '../../server/lib/usage.js';
 import type { AutoRenewOptions } from '../../server/lib/token-refresh.js';
-import { resetSettings } from '../../server/lib/settings.js';
+import { resetSettings, setSettings } from '../../server/lib/settings.js';
+import { resetRecorder } from '../../server/lib/usage-history.js';
+import type { UsageSample } from '../../server/lib/usage-history.js';
 import { resetPaceStore } from '../../server/lib/usage-pace.js';
+import type { UsageLimits } from '../../shared/types.js';
 
 async function test(name: string, fn: () => Promise<void>): Promise<boolean> {
   try { await fn(); console.log('  ✓ ' + name); return true; }
@@ -66,7 +69,11 @@ export async function run(): Promise<number> {
   process.env.CLAUDE_USAGE_BASE_URL = `http://127.0.0.1:${port}`;
   // Settings resolve from the cwd: an empty dir keeps `recordUsageHistory` at its default (off), so no cycle writes a history or ledger file.
   const prevCwd = process.cwd();
-  process.chdir(fs.mkdtempSync(path.join(os.tmpdir(), 'usage-cycle-')));
+  const cycleDir = fs.mkdtempSync(path.join(os.tmpdir(), 'usage-cycle-'));
+  process.chdir(cycleDir);
+  // The recording cases read the profile state through the state dir: point it here too, so they never read the repo's own.
+  const prevStateDir = process.env.DASHBOARD_STATE_DIR;
+  process.env.DASHBOARD_STATE_DIR = cycleDir;
   resetSettings();
   const realNow = Date.now;
 
@@ -233,14 +240,66 @@ export async function run(): Promise<number> {
       await within(usage.refreshNow(true), 2000, 'expired cycle');
       assert.deepStrictEqual(usage.getCachedUsageState(), { usage: null, status: 'token-expired' });
     })) p++; else f++;
+
+    // The recording branch (#568). Every recorder is swapped for a spy, so these cases see what the branch fed each one and write no history or ledger file.
+    interface Fed { ticks: UsageSample[]; readings: (UsageLimits | null)[]; ledger: number; profiles: unknown[]; }
+    const recordingSetup = (recording: boolean): Fed => {
+      setup(() => ({ state: 'ok', token: 'tok' }));
+      assert.ok(setSettings({ recordUsageHistory: recording }), 'the settings patch must apply');
+      const fed: Fed = { ticks: [], readings: [], ledger: 0, profiles: [] };
+      usage.setUsageCycleDeps({
+        readToken: () => ({ state: 'ok', token: 'tok' }),
+        autoRenew: async () => { /* never spawned */ },
+        recordTick: (s) => { fed.ticks.push(s); },
+        onUsageReading: (l) => { fed.readings.push(l); },
+        recordLedgerTick: () => { fed.ledger++; },
+        setForecastProfile: (p) => { fed.profiles.push(p); }
+      });
+      return fed;
+    };
+
+    if (await test('recording on: a reading with no weekly utilization → the sample carries no `week`; with one, it does', async () => {
+      const fed = recordingSetup(true);
+      onRequest = (h) => reply(h.res, 200, JSON.stringify({ five_hour: { utilization: 12, resets_at: null }, seven_day: { utilization: null, resets_at: null } }));
+      await within(usage.refreshNow(true), 2000, 'cycle without weekly');
+      onRequest = (h) => reply(h.res, 200, JSON.stringify({ five_hour: { utilization: 14, resets_at: null }, seven_day: { utilization: 3, resets_at: null } }));
+      await within(usage.refreshNow(true), 2000, 'cycle with weekly');
+      assert.strictEqual(fed.ticks.length, 2);
+      assert.strictEqual(fed.ticks[0].utilization, 12);
+      assert.ok(!('week' in fed.ticks[0]), 'a window the endpoint did not report is not a window at 0%');
+      assert.deepStrictEqual(fed.ticks[1].week, { utilization: 3, resetsAt: null });
+    })) p++; else f++;
+
+    if (await test('recording on: a failed fetch records no sample, but the alert detector and the ledger still run', async () => {
+      const fed = recordingSetup(true);
+      onRequest = (h) => reply(h.res, 503, '{}');
+      await within(usage.refreshNow(true), 2000, 'failed cycle');
+      assert.strictEqual(fed.ticks.length, 0, 'no reading, no sample');
+      assert.deepStrictEqual(fed.readings, [null], 'the detector must see the failed fetch as "no reading"');
+      assert.strictEqual(fed.ledger, 1, 'the tokens were still spent');
+      assert.strictEqual(fed.profiles.length, 1);
+      assert.notStrictEqual(fed.profiles[0], null, 'recording on pushes a derived profile');
+    })) p++; else f++;
+
+    if (await test('recording off: the forecast profile is cleared and no recorder runs', async () => {
+      const fed = recordingSetup(false);
+      onRequest = (h) => reply(h.res, 200, body(20));
+      await within(usage.refreshNow(true), 2000, 'cycle');
+      assert.deepStrictEqual(fed.profiles, [null]);
+      assert.strictEqual(fed.ticks.length, 0);
+      assert.strictEqual(fed.readings.length, 0);
+      assert.strictEqual(fed.ledger, 0);
+    })) p++; else f++;
   } finally {
     Date.now = realNow;
+    resetRecorder();
     usage.setUsageCycleDeps(null);
     usage.setUsageAutoRefresh(true);
     usage.resetUsageCache();
     resetPaceStore();
     resetSettings();
     process.chdir(prevCwd);
+    if (prevStateDir === undefined) delete process.env.DASHBOARD_STATE_DIR; else process.env.DASHBOARD_STATE_DIR = prevStateDir;
     if (prevBase === undefined) delete process.env.CLAUDE_USAGE_BASE_URL;
     else process.env.CLAUDE_USAGE_BASE_URL = prevBase;
     server.closeAllConnections();
