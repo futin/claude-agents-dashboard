@@ -35,7 +35,7 @@ sequenceDiagram
 The whole mechanism is six lines:
 
 ```ts
-// server/api.ts:819-825
+// server/api.ts:821-827
 let questionId = '';
 res.on('close', () => { if (questionId) cancelPending(sessionId, questionId); });
 questionId = register(sessionId, questions, clampTimeout(body.timeoutMs), (result: WaitResult) => {
@@ -48,7 +48,7 @@ if (res.destroyed) cancelPending(sessionId, questionId);
 **Why the push comes last:**
 
 ```ts
-// server/api.ts:827-828
+// server/api.ts:829-830
 // Last, so a refused registration never pushes. Returns immediately — the
 // response above stays held either way.
 ```
@@ -131,7 +131,7 @@ stateDiagram-v2
 interrupted — shows up only as a closed socket:
 
 ```ts
-// server/api.ts:815-818
+// server/api.ts:817-820
 // The hook's socket closing IS the signal that nobody is waiting any more
 // (session interrupted, hook killed, CLI hook timeout). Listen before
 // registering, and re-check after, so a socket that dies during the body read
@@ -145,7 +145,7 @@ again. The `res.destroyed` re-check catches exactly that window.
 **Why `cancel` takes a `questionId`:**
 
 ```ts
-// server/lib/pending.ts:247-249
+// server/lib/pending.ts:249-251
 export function cancel(sessionId: string, questionId: string): void {
   store.cancel(sessionId, entry => entry.questionId === questionId);
 }
@@ -172,7 +172,7 @@ which is what makes a stale phone tab 404 instead of answering the wrong questio
 ## 5. No locking, and the invariant that makes that safe
 
 ```ts
-// server/lib/pending.ts:216-220
+// server/lib/pending.ts:218-222
 /**
  * Answer (or dismiss) a session's pending question. Synchronous by design:
  * Node is single-threaded, so two tabs submitting at once means the first wins
@@ -216,7 +216,7 @@ module for what differs, and its call site passes only what the shared code cann
 *declines* to check:
 
 ```ts
-// server/lib/pending.ts:122-123
+// server/lib/pending.ts:124-125
  * Values are deliberately NOT checked against the option labels: the terminal
  * dialog always offers a free-text "Other", and the panel mirrors that.
 ```

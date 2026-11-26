@@ -28,7 +28,7 @@ flowchart LR
 **Why the server owns the deadline rather than curl:**
 
 ```bash
-# scripts/ask-remote-hook.sh:119-121
+# scripts/ask-remote-hook.sh:103-105
 # 3. Register and wait. The server resolves this itself at the deadline, so
 #    curl's own cap is only a backstop for a hung server. A non-2xx, a reset
 #    (server restarted), or a timeout all mean: use the terminal dialog.
@@ -120,7 +120,7 @@ dialog. That is the same outcome as every other failure in this subsystem.
 ## 3. Precedence: three sources, resolved in one line of shell
 
 ```bash
-# scripts/ask-remote-hook.sh:68
+# scripts/ask-remote-hook.sh:63
 IDLE_MIN_S="${CLAUDE_DASHBOARD_IDLE_SECS:-$(printf '%s' "$HEALTH" | jq -r '.idleSecs // 60')}"
 ```
 
@@ -130,7 +130,7 @@ probe) → hardcoded default.** The same one-liner shape resolves `answerSecs`.
 **Why Settings rides on the health probe** rather than having its own endpoint:
 
 ```bash
-# scripts/ask-remote-hook.sh:63-67
+# scripts/ask-remote-hook.sh:58-62
 # Seconds without keyboard/mouse input before you count as away. 0 disables the
 # check (always wait — the pre-idle-arbiter behaviour). An explicitly exported
 # env var wins; otherwise the dashboard's Settings page owns it, carried on the

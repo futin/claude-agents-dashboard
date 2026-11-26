@@ -42,7 +42,7 @@ turn-end is by definition a mid-hook-conversation stop.
 So the flag changed jobs. It is no longer control flow; it is data:
 
 ```bash
-# scripts/stop-notify-hook.sh:202-208
+# scripts/stop-notify-hook.sh:184-190
 BODY=$(jq -cn \
   --arg sid "$SESSION_ID" \
   --arg pm "$PERM_MODE" \
@@ -75,7 +75,7 @@ platform is strictly better here.
 `notify_fallback` is a shell function used as a jump target:
 
 ```bash
-# scripts/stop-notify-hook.sh:129-136
+# scripts/stop-notify-hook.sh:111-118
 notify_fallback() {
   [ "$SHA" = "true" ] && exit 0
   BODY=$(jq -cn --arg sid "$SESSION_ID" --arg pm "$PERM_MODE" \
@@ -112,7 +112,7 @@ suppression is a preserved behaviour, not a new one.
 This runs before the health probe — before any network call at all:
 
 ```bash
-# scripts/stop-notify-hook.sh:53-56
+# scripts/stop-notify-hook.sh:61-64
 # Count in-flight background work. Missing keys -> [] -> 0 (safe fallback).
 # Only the hook payload carries this, which is why the guard stays here.
 bg=$(printf '%s' "$INPUT" | jq '((.background_tasks // []) | length) + ((.session_crons // []) | length)' 2>/dev/null || echo 0)

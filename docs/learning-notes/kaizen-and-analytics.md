@@ -31,9 +31,10 @@ forbids the model from inventing them (`plugin/skills/kaizen/SKILL.md`, intro: "
 model only does what math can't — judge whether the work was any good.
 
 The `.mjs` is deliberately zero-dep pure Node (not `tsx`, no repo) so the *global*
-skill runs in **any** project. It is a hand-port of `server/lib/{analyze,agents,
-subagent-usage,scan}.ts`, which the header names as the unit-tested source of truth
-(`plugin/skills/kaizen/kaizen.mjs`, the header's `PROVENANCE` line).
+skill runs in **any** project. Only part of it is hand-written now. The subagent parse (`readAgents`), the subagent totals helpers and the usage-line
+parse are **generated** from `server/lib/{agents,subagent-usage,usage-line}.ts` into `plugin/lib/*.mjs` by `pnpm plugin:gen`, and `kaizen.mjs` imports
+them; `test/guards/plugin-manifest.test.ts` fails on a stale copy. The analysis (`analyze.ts`) and the transcript enumeration (`scan.ts`) are still a
+hand-port, kept in sync by the parity cases in `test/analytics/analyze.test.ts` (`plugin/skills/kaizen/kaizen.mjs`, the header's `PROVENANCE` line).
 
 - **Bad alternative:** `import`-ing the repo's TypeScript directly. Con: the skill
   would only work inside this repo, with `tsx` installed. **Chosen:** duplicate the
@@ -211,8 +212,9 @@ each recent lesson it:
 
 1. Resolves `idPrefix` → a real transcript by **prefix-matching** the enumerated
    `listTranscripts()` list (`findTranscriptByPrefix`).
-2. Runs `analyzeSession(ref.file, ref.id)` **live** — the same analyzer, re-run
-   fresh on every request.
+2. Runs `analyzeSession(ref.file, ref.id)` — the same analyzer — through `cachedAnalysis`, a memo keyed on the transcript's `mtimeMs`, `size`, id and
+   its `subagents/` dir listing. The analyzer re-runs only when one of those changed; otherwise the memoised analysis is served. The memo is pruned to
+   the paths the latest `listReports` call looked up, and a null result is never stored.
 3. Assembles an `AnalyticsReport` = `{sessionId, project, cwd, models, loggedAt,
    analysis, lesson, lessonStatus, lessonVerdict, …}` (`shared/types.ts` `AnalyticsReport`).
 
@@ -256,8 +258,8 @@ scrapped. The trade-off:
 
 The insight: **the numbers are deterministically recomputable, but the lesson is
 not.** So the log stores only the irreducible human judgment, and the
-expensive-*looking* "re-run the analyzer on every request" is actually the cheap,
-correct choice.
+expensive-*looking* "re-run the analyzer" is actually the cheap, correct choice — and the memo makes it cheaper still: an unchanged transcript is
+not re-read at all, while a changed one is re-analyzed on the next request, so the numbers still never go stale.
 
 ### Prefix-match, never path-join
 
@@ -296,23 +298,24 @@ config only ever grows unless something removes from it — and every line of a
 Entirely from that one log file, read-only. `sessionAnalyticsLog.ts` parses each
 line into `{date, project, idPrefix, lesson}` and takes the newest N (deduped), and
 in the same pass collects the `status` lines and the newest `review:` marker.
-`analytics.ts` resolves each `idPrefix` to a transcript by prefix-match, re-runs the
-*same* analyzer live to regenerate fresh numbers, and packages
+`analytics.ts` resolves each `idPrefix` to a transcript by prefix-match, runs the
+*same* analyzer — memoised until the transcript or its subagent dir changes — and packages
 `{analysis, lesson, lessonStatus, …}` into an `AnalyticsReport`. `serveAnalytics`
 returns them at `GET /api/analytics`, along with `lastReviewAt` / `reviewDue`. The
 lesson and its status are the only stored artifacts; every number on the card is
-recomputed on the fly, so the dashboard stays read-only and never shows stale
-figures.
+derived from the transcript (held in memory only, never written), so the dashboard stays read-only and never shows stale figures.
 
 ---
 
 **Relevant files**
 
 - `plugin/skills/kaizen/SKILL.md` — the LLM instructions: 7-step loop, token-honesty rules, promotion policy, the status/review/capture modes.
-- `plugin/skills/kaizen/kaizen.mjs` — the zero-dep deterministic analyzer (`analyzeSession`, `readAgents`); vendored port of the server libs.
-- `~/.claude/session-analytics-log.md` — the single append-only wire between producer and consumer (global; lesson, status and review lines).
+- `plugin/skills/kaizen/kaizen.mjs` — the zero-dep deterministic analyzer (`analyzeSession`); hand-port of `analyze.ts` and `scan.ts`, importing the
+  generated `plugin/lib/{agents,subagent-usage,usage-line}.mjs` (`readAgents` lives in `agents.mjs`).
+- `~/.claude/session-analytics-log.md` — the single append-only wire between producer and consumer (global; lesson, status, verdict and review lines).
 - `server/lib/sessionAnalyticsLog.ts` — parses the log (the four line regexes, `parseLogEvents`, `recentLessons`, `statusForSession`); fail-open.
-- `server/lib/analytics.ts` — `listReports`: prefix-resolve transcript, re-analyze live, build `AnalyticsReport`; `reviewStatus`: the 7-day sweep clock.
+- `server/lib/analytics.ts` — `listReports`: prefix-resolve transcript, analyze through the `cachedAnalysis` memo, build `AnalyticsReport`;
+  `reviewStatus`: the 7-day sweep clock.
 - `server/lib/analyze.ts` — the in-repo source of truth for the analyzer (`kaizen.mjs` mirrors it).
 - `server/api.ts` — `serveAnalytics` (`GET /api/analytics`), fail-open.
 - `shared/types.ts` — `SessionAnalysis` / `AnalyticsReport` / `AnalyticsResponse`, the FE/BE contract.

@@ -170,7 +170,7 @@ export interface WaitEntry&lt;R&gt; {
     <h2>One entry per session, and a newer one wins</h2>
     <p>Every store keys by session id and holds at most one entry. A second registration for a
     session that already has one does not error and does not queue — it <em>supersedes</em>:</p>
-<pre>// wait-store.ts:103-108
+<pre>// wait-store.ts:121-126
     add(entry) {
       const prev = entries.get(entry.sessionId);
       if (prev) settle(prev, opts.superseded);
@@ -195,7 +195,7 @@ export interface WaitEntry&lt;R&gt; {
     <h2>Every exit runs through one funnel</h2>
     <p>Answered, dismissed, superseded, expired, released — every terminal transition that still has someone to answer
     goes through one function:</p>
-<pre>// wait-store.ts:90-97
+<pre>// wait-store.ts:102-109
   const settle = (entry: E, result: R): void =&gt; {
     if (settled.has(entry)) return;
     settled.add(entry);
@@ -433,7 +433,7 @@ export function sanitizeQuestions(toolInput: unknown): PendingQuestionItem[] {
       its two jobs: state the choice, and stop the re-ask, "a denied AskUserQuestion is otherwise an
       invitation to try again". Both the one-question and many-question branches end on the same
       instruction:</p>
-<pre>// pending.ts:157-158
+<pre>// pending.ts:159-160
     return `The user answered via the dashboard (not the terminal dialog) — ${lines[0]}. `
       + 'Treat this as the user\'s selection and continue; do not ask again.';</pre>
     </details>
@@ -617,23 +617,33 @@ export function sanitizeQuestions(toolInput: unknown): PendingQuestionItem[] {
     <p>The release condition is not about the session at all — it is about <em>you</em>. It is the same rule for all
     three stores, so it lives once, in <code>wait-store.ts</code>: every 5 seconds one reaper collects the releasable
     entries of every store and asks <code>backAtDesk()</code> once for all of them:</p>
-<pre>// wait-store.ts:68-73
-export function reapIdle(): number {
+<pre>// wait-store.ts:75-86
+export async function reapIdle(): Promise&lt;number&gt; {
+  if (reaping) return 0;
   const release = [...stores].flatMap(s =&gt; s.releasable());
-  if (release.length === 0 || !backAtDesk()) return 0;
-  for (const r of release) r();
-  return release.length;
+  if (release.length === 0) return 0;
+  reaping = true;
+  try {
+    if (!(await backAtDesk())) return 0;
+  } finally {
+    reaping = false;
+  }
+  return release.filter(r =&gt; r()).length;
 }</pre>
+    <p>It is async because the idle reading is: <code>backAtDesk()</code> awaits an <code>ioreg</code> run instead of
+    blocking the event loop on it. The <code>reaping</code> flag keeps ticks from overlapping while that reading is in
+    flight, and each closure says whether it still released something — an entry answered while the reading was pending
+    keeps its answer and is not counted.</p>
     <p>If your machine reports recent input, you are back at the keyboard, and holding a wait open
     for a phone reply is pointless — so the releasable holds go at once, questions and plans included. What only
     <code>messages.ts</code> adds is a say in which of its holds count as releasable — the next card.</p>
-    <p>Read the guard conditions in <code>backAtDesk</code> (<code>idle.ts:82-90</code>) as failure directions. Unreadable
+    <p>Read the guard conditions in <code>backAtDesk</code> (<code>idle.ts:89-97</code>) as failure directions. Unreadable
     idle time, on Docker or non-macOS, reads as "not at the desk" and releases nothing, leaving the deadline timer as
     the reaper of last resort. Never releasing is a delay; releasing wrongly would cut short a window you were about
     to use.</p>
     <details><summary>More detail: the reaper only exists while holds do</summary>
       <p>The 5-second interval is created on the first hold in any store and cleared once every store is empty
-      (wait-store.ts:59-61 and 76-83), and it is <code>unref()</code>'d so it cannot keep the process alive. With
+      (<code>ensureReaper</code>, wait-store.ts:89-95, and <code>stopReaperIfEmpty</code>, 65-67), and it is <code>unref()</code>'d so it cannot keep the process alive. With
       nothing releasable the tick returns before asking <code>backAtDesk</code>, so an idle server never spawns the
       <code>ioreg</code> subprocess that reads idle time — the cost is paid only while someone is actually waiting, and
       once per tick however many stores hold entries.</p>

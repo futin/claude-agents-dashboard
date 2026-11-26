@@ -51,6 +51,11 @@ Two things a container can't reach on its own:
   a named volume there; the five state files live on it — `.dashboard-settings.json`, `.remote-answer.json`, `.usage-ledger.jsonl`,
   `.usage-history.jsonl` and `.usage-profile.json` — and survive a rebuild. `docker compose down -v` deletes the volume and them with it. The dev compose
   needs none of this: it bind-mounts the repo, so those files already sit in your checkout.
+- **Usage alerts lose their dedupe claim.** One more state file is not on the volume: the usage-alert claim, `~/.claude/dashboard/usage-alerts.json`
+  (`server/lib/usage-alerts.ts`), sits under the home dir on purpose so a prod and a dev dashboard on one machine find each other's claim. In these images
+  that path is inside the read-only `~/.claude` mount, so the claim write fails and the claim lives only in the server's memory. The alert still sends, but a
+  restart forgets which window it already alerted on, and a dashboard on the host never sees the container's claim — so the same "limit reached" or
+  "limit reset" push can arrive twice. See [push notifications](../subsystems/push-notify.md).
 - **The What's new drawer and the version chip are empty in these images.** `.dockerignore` drops `.git` and `node:20-alpine` ships no `git` binary,
   so the [releases](../subsystems/releases.md) reader has no checkout to read and answers its empty shape — designed behavior, not a broken state. Same fix
   as dictation and spawn below: run the server on the host.
@@ -98,6 +103,7 @@ Two things a container can't reach on its own:
     - scripts/host-credentials.sh
     - scripts/lan-ip.sh
     - server/lib/config.ts
+    - server/lib/usage-alerts.ts
   kind: workflow
-  verified: 7b75ae1917c8e25249c5d0ab4e16f13da9a22b82
+  verified: f5396f2ece852345b17abb0f87440655eaa4fb57
 -->

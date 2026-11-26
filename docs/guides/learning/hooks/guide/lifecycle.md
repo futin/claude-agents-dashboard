@@ -110,7 +110,7 @@ This is why `plan-remote-hook.sh` re-checks the tool name even though its matche
 narrows it:
 
 ```bash
-# scripts/plan-remote-hook.sh:45-48
+# scripts/plan-remote-hook.sh:53-56
 # A matcher is configuration, so never trust it alone: this hook must be inert
 # for anything but a plan, whatever it ends up registered against.
 TOOL=$(printf '%s' "$INPUT" | jq -r '.tool_name // empty' 2>/dev/null)
