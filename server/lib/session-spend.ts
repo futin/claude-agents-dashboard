@@ -27,8 +27,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-import type { SessionSpend } from '../../shared/types.js';
-import { readSessionFold } from './agents-cache.js';
+import type { AgentJob, SessionSpend } from '../../shared/types.js';
+import { readSessionFold, readSessionFoldAsync } from './agents-cache.js';
 import { createTail, followJsonl, type JsonlTail } from './jsonl-tail.js';
 import { billableOf, combinedOf, createTally, onSubagentRecord, totalsOf, type SpendTally } from './spend-tally.js';
 import { subagentDirOf, type SubagentFileUsage } from './subagent-usage.js';
@@ -93,9 +93,20 @@ function evictIfNeeded(): void {
   if (oldestKey !== null) cache.delete(oldestKey);
 }
 
+type Spend = Omit<SessionSpend, 'id' | 'error'>;
+
 /** The session's spend so far, or null when its transcript can't be read. A later read failure on that transcript throws. */
-export function readSessionSpend(mainPath: string): Omit<SessionSpend, 'id' | 'error'> | null {
-  const fold = readSessionFold(mainPath);
+export function readSessionSpend(mainPath: string): Spend | null {
+  return spendOf(mainPath, readSessionFold(mainPath));
+}
+
+/** {@link readSessionSpend} for the drawer's route: the main transcript is folded in yielding slices (agents-cache.ts); rejects where that throws. */
+export async function readSessionSpendAsync(mainPath: string): Promise<Spend | null> {
+  return spendOf(mainPath, await readSessionFoldAsync(mainPath));
+}
+
+/** The spend figures from the main transcript's fold plus the subagent files beside it, which stay a sync follow (per-subagent files, out of #563’s scope). */
+function spendOf(mainPath: string, fold: { jobs: AgentJob[]; main: SpendTally } | null): Spend | null {
   if (!fold) {
     cache.delete(mainPath);
     return null;

@@ -16,6 +16,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 import { testAsync, userRecord, withServer } from '../api-harness.js';
+import { withReadFaultAsync } from '../fs-bytes.js';
 import { appSessionsRoot, resetArchivedCache } from '../../server/lib/archived.js';
 import { TEXT_CAP } from '../../server/lib/chat.js';
 
@@ -185,6 +186,19 @@ export async function run(): Promise<number> {
       const missing = await h.req('/api/sessions/99999999-9999-4999-8999-999999999999/spend');
       assert.equal(missing.status, 404);
       assert.equal(missing.json?.error, true);
+    });
+  }));
+
+  check(await testAsync('GET /api/sessions/:id/spend answers 500 with error:true when the main transcript read fails mid-fold', async () => {
+    await withServer(ENV, async h => {
+      h.plant(ID, [{ type: 'assistant', message: { role: 'assistant', id: 'm1', content: [], usage: { input_tokens: 1, output_tokens: 2, cache_creation_input_tokens: 3, cache_read_input_tokens: 500 } } }]);
+      const reply = await withReadFaultAsync(() => h.req(`/api/sessions/${ID}/spend`), p => p.endsWith(`${ID}.jsonl`), 0);
+      assert.equal(reply.status, 500);
+      assert.equal(reply.json?.error, true);
+      assert.equal(reply.json?.id, ID);
+      const healed = await h.req(`/api/sessions/${ID}/spend`);
+      assert.equal(healed.status, 200);
+      assert.equal(healed.json?.main, 6);
     });
   }));
 

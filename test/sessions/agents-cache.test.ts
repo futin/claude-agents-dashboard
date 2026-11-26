@@ -5,11 +5,22 @@ import path from 'node:path';
 
 import type { AgentJob } from '../../shared/types.js';
 import { readAgents } from '../../server/lib/agents.js';
-import { readAgentsCached, _resetAgentsCache, _agentsCacheSize } from '../../server/lib/agents-cache.js';
+import {
+  readAgentsCached, readAgentsCachedAsync, readSessionFold, readSessionFoldAsync, _resetAgentsCache, _agentsCacheSize, _setFoldSliceBytes
+} from '../../server/lib/agents-cache.js';
+import { bytesRead, withReadFaultAsync } from '../fs-bytes.js';
 
 function test(name: string, fn: () => void): boolean {
   try { fn(); console.log('  ✓ ' + name); return true; }
   catch (e) { console.log('  ✗ ' + name); console.log('    ' + (e as Error).message); return false; }
+}
+
+/** An async case on emptied caches; the slice budget is reset with them, so a case that shrinks it cannot leak into the next. */
+async function testAsync(name: string, fn: () => Promise<void>): Promise<boolean> {
+  _resetAgentsCache();
+  try { await fn(); console.log('  ✓ ' + name); return true; }
+  catch (e) { console.log('  ✗ ' + name); console.log('    ' + (e as Error).message); return false; }
+  finally { _resetAgentsCache(); }
 }
 
 function tmpFile(): string {
@@ -62,7 +73,7 @@ function assertMatchesOracle(file: string) {
   assert.deepStrictEqual(readAgentsCached(file), readAgents(file));
 }
 
-export function run(): number {
+export async function run(): Promise<number> {
   console.log('\n=== agents-cache.ts ===\n');
   let p = 0, f = 0;
 
@@ -301,8 +312,127 @@ export function run(): number {
     assert.strictEqual(k.endedAt, '2026-07-01T10:03:00Z');
   })) p++; else f++;
 
+  /* --------------------------------------------- the async, sliced fold (#563) */
+
+  const SAMPLE = [
+    taskRec('t1', 'Explore', 'first 🚀 描述', '2026-07-01T10:00:00Z'),
+    resultRec('t1', '2026-07-01T10:00:10Z', { status: 'completed', totalDurationMs: 9500, totalTokens: 1200, totalToolUseCount: 3 }),
+    taskRec('t2', 'Plan', 'second', '2026-07-01T10:01:00Z'),
+    ackRec('t2', 'bg42', '2026-07-01T10:01:00.030Z'),
+    taskRec('t3', 'Explore', 'third', '2026-07-01T10:02:00Z'),
+    resultRec('t3', '2026-07-01T10:02:05Z'),
+    ...absorbedRecs('bg42', '2026-07-01T10:05:00Z', { tokens: 29252, toolUses: 17, durationMs: 40576 }),
+    taskRec('k', 'Explore', 'async', '2026-07-01T10:06:00Z'),
+    ackRec('k', 'bgK', '2026-07-01T10:06:00.030Z'),
+    notifyRec('bgK', '2026-07-01T10:07:00Z', undefined, 'killed')
+  ];
+  const jsonl = (recs: unknown[], trailingNewline = true): string => recs.map(r => JSON.stringify(r)).join('\n') + (trailingNewline ? '\n' : '');
+  const written = (text: string): string => { const file = tmpFile(); fs.writeFileSync(file, text); return file; };
+  const sizeOf = (file: string): number => fs.statSync(file).size;
+
+  const parityFixtures = (): string[] => [
+    written(jsonl(SAMPLE)),
+    written(jsonl(SAMPLE, false)),
+    written(jsonl(SAMPLE.slice(0, 4)) + JSON.stringify(SAMPLE[4]).slice(0, 30)),
+    written('')
+  ];
+
+  for (const budget of [0, 64]) {
+    const label = budget ? `${budget}-byte slices` : 'the default slice';
+    if (await testAsync(`async parity with the oracle, ${label}`, async () => {
+      for (const file of parityFixtures()) {
+        _resetAgentsCache();
+        if (budget) _setFoldSliceBytes(budget);
+        assert.deepStrictEqual(await readAgentsCachedAsync(file), readAgents(file), file);
+      }
+    })) p++; else f++;
+  }
+
+  if (await testAsync('async: missing file → null', async () => {
+    assert.strictEqual(await readAgentsCachedAsync('/no/such/transcript.jsonl'), null);
+    assert.strictEqual(await readSessionFoldAsync('/no/such/transcript.jsonl'), null);
+  })) p++; else f++;
+
+  if (await testAsync('async: the fold yields to the event loop between slices', async () => {
+    _setFoldSliceBytes(64);
+    const file = written(jsonl(SAMPLE));
+    assert.ok(sizeOf(file) >= 4 * 64, 'fixture must span at least 4 slices');
+    const order: string[] = [];
+    const fold = readSessionFoldAsync(file).then(r => { order.push('resolved'); return r; });
+    setImmediate(() => order.push('ran'));
+    const result = await fold;
+    assert.deepStrictEqual(order, ['ran', 'resolved']);
+    assert.deepStrictEqual(result!.jobs, readAgents(file));
+  })) p++; else f++;
+
+  if (await testAsync('async: a sync read between slices advances the same tail — nothing delivered twice', async () => {
+    _setFoldSliceBytes(64);
+    const file = written(jsonl(SAMPLE));
+    const fold = readSessionFoldAsync(file);
+    const sync = readSessionFold(file);
+    assert.deepStrictEqual(sync!.jobs, readAgents(file));
+    assert.deepStrictEqual((await fold)!.jobs, readAgents(file));
+  })) p++; else f++;
+
+  if (await testAsync('async: a record longer than a slice is delivered once', async () => {
+    _setFoldSliceBytes(64);
+    const long = taskRec('big', 'Explore', 'x'.repeat(5 * 64), '2026-07-01T10:03:00Z');
+    const file = written(jsonl([SAMPLE[0], long, SAMPLE[1], resultRec('big', '2026-07-01T10:04:00Z')]));
+    const jobs = await readAgentsCachedAsync(file);
+    assert.deepStrictEqual(jobs, readAgents(file));
+    assert.strictEqual(jobs!.filter(j => j.id === 'big').length, 1);
+  })) p++; else f++;
+
+  if (await testAsync('async: a newline-less record at the real EOF is consumed; an unparseable one stays buffered until its newline', async () => {
+    _setFoldSliceBytes(64);
+    const whole = written(jsonl(SAMPLE, false));
+    assert.strictEqual((await readAgentsCachedAsync(whole))!.find(j => j.id === 'k')!.status, 'done');
+
+    const lastLine = JSON.stringify(resultRec('t3', '2026-07-01T10:02:05Z'));
+    const file = written(jsonl(SAMPLE.slice(0, 5)) + lastLine.slice(0, 40));
+    const before = await readAgentsCachedAsync(file);
+    assert.deepStrictEqual(before, readAgents(file));
+    assert.strictEqual(before!.find(j => j.id === 't3')!.status, 'running');
+    fs.appendFileSync(file, lastLine.slice(40) + '\n');
+    const after = await readAgentsCachedAsync(file);
+    assert.deepStrictEqual(after, readAgents(file));
+    assert.strictEqual(after!.find(j => j.id === 't3')!.status, 'done');
+  })) p++; else f++;
+
+  if (await testAsync('async: truncation resets state and matches the oracle of the new content', async () => {
+    _setFoldSliceBytes(64);
+    const file = written(jsonl(SAMPLE));
+    await readAgentsCachedAsync(file);
+    fs.writeFileSync(file, jsonl([taskRec('n1', 'Explore', 'fresh', '2026-07-01T11:00:00Z')]));
+    const jobs = await readAgentsCachedAsync(file);
+    assert.deepStrictEqual(jobs, readAgents(file));
+    assert.deepStrictEqual(jobs!.map(j => j.id), ['n1']);
+  })) p++; else f++;
+
+  if (await testAsync('async: a read failure on the second slice rejects, drops the entry, and the next read recovers', async () => {
+    _setFoldSliceBytes(64);
+    const file = written(jsonl(SAMPLE));
+    const onFile = (q: string): boolean => q === file;
+    await assert.rejects(withReadFaultAsync(() => readSessionFoldAsync(file), onFile, 1), /injected read failure/);
+    assert.strictEqual(_agentsCacheSize(), 0, 'the failed entry must be dropped');
+    assert.deepStrictEqual((await readSessionFoldAsync(file))!.jobs, readAgents(file));
+    _resetAgentsCache();
+    _setFoldSliceBytes(64);
+    assert.deepStrictEqual(await withReadFaultAsync(() => readAgentsCachedAsync(file), onFile, 1), readAgents(file));
+  })) p++; else f++;
+
+  if (await testAsync('async: an entry evicted mid-fold still answers its own file, and is not re-inserted', async () => {
+    _setFoldSliceBytes(64);
+    const file = written(jsonl(SAMPLE));
+    const fold = readSessionFoldAsync(file);
+    for (let i = 0; i < 32; i++) readSessionFold(written(jsonl([taskRec('o' + i, 'Explore', 'x', '2026-07-01T10:00:00Z')])));
+    assert.deepStrictEqual((await fold)!.jobs, readAgents(file));
+    assert.ok(_agentsCacheSize() <= 32, `cache size ${_agentsCacheSize()} > 32`);
+    assert.strictEqual(bytesRead(() => readSessionFold(file), q => q === file).bytes, sizeOf(file), 'the orphan entry was re-inserted');
+  })) p++; else f++;
+
   console.log('\nPassed: ' + p + '  Failed: ' + f + '\n');
   return f;
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) process.exit(run() > 0 ? 1 : 0);
+if (import.meta.url === `file://${process.argv[1]}`) process.exit((await run()) > 0 ? 1 : 0);

@@ -8,15 +8,24 @@ import os from 'node:os';
 import path from 'node:path';
 
 import { readAgents } from '../../server/lib/agents.js';
-import { readAgentsCached, _resetAgentsCache } from '../../server/lib/agents-cache.js';
-import { readSessionSpend, readSubagentUsage, _resetSessionSpendCache } from '../../server/lib/session-spend.js';
-import { bytesRead, withReadFaultOnce } from '../fs-bytes.js';
+import { readAgentsCached, readAgentsCachedAsync, readSessionFold, _resetAgentsCache, _setFoldSliceBytes } from '../../server/lib/agents-cache.js';
+import { readSessionSpend, readSessionSpendAsync, readSubagentUsage, _resetSessionSpendCache } from '../../server/lib/session-spend.js';
+import { bytesRead, bytesReadAsync, withReadFaultAsync, withReadFaultOnce } from '../fs-bytes.js';
 
 function test(name: string, fn: () => void): boolean {
   _resetAgentsCache();
   _resetSessionSpendCache();
   try { fn(); console.log('  ✓ ' + name); return true; }
   catch (e) { console.log('  ✗ ' + name); console.log('    ' + (e as Error).message); return false; }
+}
+
+/** {@link test} for an async case; `_resetAgentsCache` also restores the default slice budget. */
+async function testAsync(name: string, fn: () => Promise<void>): Promise<boolean> {
+  _resetAgentsCache();
+  _resetSessionSpendCache();
+  try { await fn(); console.log('  ✓ ' + name); return true; }
+  catch (e) { console.log('  ✗ ' + name); console.log('    ' + (e as Error).message); return false; }
+  finally { _resetAgentsCache(); }
 }
 
 const line = (rec: unknown): string => JSON.stringify(rec) + '\n';
@@ -74,7 +83,7 @@ function fresh(main: string) {
   return readSessionSpend(main);
 }
 
-export function run(): number {
+export async function run(): Promise<number> {
   console.log('\n=== one main-transcript pass for agents and spend ===\n');
   const results: boolean[] = [];
   const t = (name: string, fn: () => void): void => { results.push(test(name, fn)); };
@@ -143,6 +152,69 @@ export function run(): number {
     assert.deepStrictEqual(readAgentsCached(main), readAgents(main));
     assert.deepStrictEqual(recovered, fresh(main));
     assert.equal(recovered!.main, 66);
+  });
+
+  /* ------------------------------------------------ the async drawer reads (#563) */
+
+  const ta = async (name: string, fn: () => Promise<void>): Promise<void> => { results.push(await testAsync(name, fn)); };
+  /** A longer main transcript, so 64-byte slices make many of them. */
+  const LONG = [...RECS, ...Array.from({ length: 12 }, (_, i) => turn(`n${i}`, i, 1, 2, 3))];
+
+  for (const budget of [0, 64]) {
+    await ta(`async spend and agents match the sync reads, ${budget ? `${budget}-byte slices` : 'the default slice'}`, async () => {
+      for (const recs of [RECS, LONG, []]) {
+        const main = fixture(recs);
+        const want = { spend: fresh(main), agents: readAgents(main) };
+        _resetAgentsCache();
+        _resetSessionSpendCache();
+        if (budget) _setFoldSliceBytes(budget);
+        assert.deepStrictEqual(await readSessionSpendAsync(main), want.spend);
+        assert.deepStrictEqual(await readAgentsCachedAsync(main), want.agents);
+      }
+    });
+  }
+
+  await ta('async: a cold open firing both reads together folds the main transcript once, one slice per event-loop turn', async () => {
+    const main = fixture(LONG);
+    const want = { spend: fresh(main), agents: readAgents(main) };
+    _resetAgentsCache();
+    _resetSessionSpendCache();
+    _setFoldSliceBytes(64);
+    // Bytes read per event-loop turn: an immediate that re-queues itself runs once per turn and closes the bucket.
+    const turns: number[] = [0];
+    let open = true;
+    const tick = (): void => { if (!open) return; turns.push(0); setImmediate(tick); };
+    setImmediate(tick);
+    const both = await bytesReadAsync(
+      () => Promise.all([readAgentsCachedAsync(main), readSessionSpendAsync(main)]), p => p === main, n => { turns[turns.length - 1] += n; }
+    );
+    open = false;
+    assert.equal(both.bytes, sizeOf(main));
+    assert.deepStrictEqual(both.result[0], want.agents);
+    assert.deepStrictEqual(both.result[1], want.spend);
+    assert.ok(Math.max(...turns) <= 64, `one turn read ${Math.max(...turns)} bytes of the main transcript, over the 64-byte slice`);
+  });
+
+  await ta('async: a sync fold landing between slices counts no record twice', async () => {
+    const main = fixture(LONG);
+    const want = fresh(main);
+    _resetAgentsCache();
+    _resetSessionSpendCache();
+    _setFoldSliceBytes(64);
+    const spend = readSessionSpendAsync(main);
+    readSessionFold(main);
+    assert.deepStrictEqual(await spend, want);
+    assert.deepStrictEqual(readSessionSpend(main), want);
+  });
+
+  await ta('async: a read failure mid-fold rejects the spend read, and the next read recovers', async () => {
+    const main = fixture(LONG);
+    const want = fresh(main);
+    _resetAgentsCache();
+    _resetSessionSpendCache();
+    _setFoldSliceBytes(64);
+    await assert.rejects(withReadFaultAsync(() => readSessionSpendAsync(main), p => p === main, 1), /injected read failure/);
+    assert.deepStrictEqual(await readSessionSpendAsync(main), want);
   });
 
   const ok = results.filter(Boolean).length;

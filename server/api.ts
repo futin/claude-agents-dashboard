@@ -18,8 +18,8 @@ import type { TranscriptRef } from './lib/scan.js';
 import { readSessionAnalyticsLog } from './lib/sessionAnalyticsLog.js';
 import { archivedSessionIds, desktopLiveSessionIds } from './lib/archived.js';
 import { lastSessionEffort, readTranscript } from './lib/transcript.js';
-import { readAgentsCached } from './lib/agents-cache.js';
-import { readSessionSpend } from './lib/session-spend.js';
+import { readAgentsCachedAsync } from './lib/agents-cache.js';
+import { readSessionSpendAsync } from './lib/session-spend.js';
 import { getCachedUsageState } from './lib/usage.js';
 import { isRefreshSession } from './lib/token-refresh.js';
 import { readAccountProfile } from './lib/account.js';
@@ -177,15 +177,15 @@ export async function serveSessions(baseConfig: Config, res: ServerResponse, par
 
 /**
  * `GET /api/sessions/:id` — the subagents a session launched. First selection
- * reads the full transcript once, in a pass shared with the spend route
- * (`readSessionFold`, agents-cache.ts); while the session stays selected, the 3s detail
+ * reads the full transcript once, in yielding slices and in a pass shared with the spend route
+ * (`readSessionFoldAsync`, agents-cache.ts); while the session stays selected, the 3s detail
  * poll goes through the incremental cache and costs O(new bytes) (see
  * agents-cache.ts). The list poll touches the same cache only through scan.ts
  * `subagentRunning`, and only for a session with a fresh, unfinished subagent.
  * The id is resolved against the enumerated transcript list, never joined into a
  * path directly, so a hostile id can't escape the projects root.
  */
-export function serveSessionDetail(id: string, res: ServerResponse): void {
+export async function serveSessionDetail(id: string, res: ServerResponse): Promise<void> {
   const fail = (code: number): void => {
     const body: SessionDetail = { id, agents: [], running: 0, finished: 0, error: true };
     res.writeHead(code, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
@@ -198,7 +198,7 @@ export function serveSessionDetail(id: string, res: ServerResponse): void {
   try {
     const ref = resolveTranscript(projectsRoot(), id);
     if (!ref) return fail(404);
-    const agents = readAgentsCached(ref.file);
+    const agents = await readAgentsCachedAsync(ref.file);
     if (!agents) return fail(404);
     detail = {
       id,
@@ -215,7 +215,7 @@ export function serveSessionDetail(id: string, res: ServerResponse): void {
 }
 
 /** GET /api/sessions/:id/spend — tokens the session has spent, followed incrementally (see session-spend.ts). Same id handling as the detail route. */
-export function serveSessionSpend(id: string, res: ServerResponse): void {
+export async function serveSessionSpend(id: string, res: ServerResponse): Promise<void> {
   const fail = (code: number): void => {
     const body: SessionSpend = { id, main: 0, subagents: 0, total: 0, compactions: 0, uncountedSubagents: 0, error: true };
     res.writeHead(code, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
@@ -228,7 +228,7 @@ export function serveSessionSpend(id: string, res: ServerResponse): void {
   try {
     const ref = resolveTranscript(projectsRoot(), id);
     if (!ref) return fail(404);
-    const spend = readSessionSpend(ref.file);
+    const spend = await readSessionSpendAsync(ref.file);
     if (!spend) return fail(404);
     body = { id, ...spend };
   } catch (e) {
