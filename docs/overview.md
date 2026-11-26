@@ -193,6 +193,7 @@ server/
   lib/entrypoint.ts  the transcript `entrypoint` labels read or stamped: `sdk-cli`, and `claude-agents-dashboard` under SPAWN_OWN_ENTRYPOINT
   lib/request-guard.ts  pure pre-route checks: `hostAllowed` (DNS rebinding) and `crossSiteWrite` (CSRF)
   lib/transcript.ts  tail-reads a transcript → tokens/model/window/activity
+  lib/transcript-record.ts  `isConversationRecord`, the api-request-blob filter; a zero-import leaf transcript.ts re-exports, generated for /kaizen
   lib/title-cache.ts  remembers a custom title once it sinks below the tail window
   lib/model-identity.ts  the session's model attachment id — its family/version (or `[1m]`) sizes the window, same tail-then-hunt
   lib/compact-history.ts  the newest compaction's `preTokens` — past 200k it proves a 1M window, same tail-then-hunt
@@ -456,7 +457,7 @@ scripts/          install-hooks.sh (`pnpm hooks:install`), ask-remote-hook.sh,
                   test/run-some.ts (workflows/ci.md §Scoped checks),
                   gen-plugin-lib.ts (`pnpm plugin:gen`) — transpiles the sources in its
                   LIB_MODULES list (shared/{cron,frontmatter,routine-file}.ts and
-                  server/lib/{agents,subagent-usage,usage-line}.ts) into plugin/lib/*.mjs;
+                  server/lib/{agents,subagent-usage,usage-line,transcript-record}.ts) into plugin/lib/*.mjs;
                   test/guards/plugin-manifest.test.ts regenerates and compares, and fails a
                   generated module that imports anything but node: or a generated sibling,
                   session-analytics.ts (`pnpm session-analytics`) — prints one

@@ -20,7 +20,7 @@ the typed JSON in `shared/types.ts`, plus four zero-dep modules both sides run: 
   folder, and being a `*.test.ts` there is all it takes: `test/run-all.ts` finds every suite on disk (`listSuites`, `test/suites.ts`).
 - `plugin/` — the installable Claude Code plugin (the repo root's `.claude-plugin/marketplace.json` points at it): the skills the dashboard depends on, plain
   JS, never imported by server or client at runtime; `plugin/lib/` holds the Routines wrapper and the generated `.mjs` copies of the shared modules and of
-  kaizen's three server modules.
+  kaizen's four server modules.
   `test/guards/plugin-manifest.test.ts` pins what may live in it.
 
 **The file-by-file map is `docs/overview.md`, not this file.** It is not auto-loaded —
@@ -40,7 +40,7 @@ read it (plus the relevant `docs/subsystems/*.md`) *before* changing an area. `d
 - `pnpm plugin:sync` — reinstall the plugin once a `plugin/` change is pushed to `main`; the installed copy is a snapshot, not a link, so until this
   runs the edit reaches no session. Refuses an unpushed tree (`scripts/sync-plugin.ts`).
 - `pnpm plugin:gen` — regenerates `plugin/lib/*.mjs` from the sources `LIB_MODULES` lists in `scripts/gen-plugin-lib.ts`: `shared/{cron,frontmatter,
-  routine-file}.ts` and kaizen's `server/lib/{agents,subagent-usage,usage-line}.ts`. Run it after editing any of the six, or
+  routine-file}.ts` and kaizen's `server/lib/{agents,subagent-usage,usage-line,transcript-record}.ts`. Run it after editing any of the seven, or
   `test/guards/plugin-manifest.test.ts` fails.
 - `pnpm typecheck` — `tsc --noEmit`.
 - CI (`.github/workflows/ci.yml`) runs `pnpm typecheck`, `pnpm build`, `pnpm test` on every PR into `main`, plus `pnpm test:skills` when the PR touches

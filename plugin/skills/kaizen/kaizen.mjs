@@ -15,10 +15,13 @@
  *   node kaizen.mjs --skill <name> [N] [--outcome <regex>]
  *                                           the newest N (default 50) finished sessions whose first prompt ran the skill, per session and summed
  *
- * PROVENANCE: the subagent parse (`readAgents`), the subagent totals helpers and the usage-line parse are GENERATED from claude-agents-dashboard
- * server/lib/{agents,subagent-usage,usage-line}.ts into ../../lib/*.mjs by `pnpm plugin:gen`, and test/guards/plugin-manifest.test.ts fails on a stale copy.
- * The analysis (analyze.ts) and the transcript enumeration (scan.ts) are still hand-PORTED — analyze.ts's import closure is too wide to generate — so keep
- * those in sync by hand; the parity cases in test/analytics/analyze.test.ts are their guard.
+ * PROVENANCE: the subagent parse (`readAgents`), the subagent totals helpers, the usage-line parse and the conversation-record filter
+ * (`isConversationRecord`) are GENERATED from claude-agents-dashboard server/lib/{agents,subagent-usage,usage-line,transcript-record}.ts into
+ * ../../lib/*.mjs by `pnpm plugin:gen`, and test/guards/plugin-manifest.test.ts fails on a stale copy.
+ * Still hand-PORTED, and kept in sync by hand: `analyzeSession`'s fold (analyze.ts — a superset of it here; analyze.ts's import closure reaches
+ * transcript.ts and session-spend.ts, whose caches and title / model / compact-window modules plain `node` cannot load), `listTranscripts`' plain walk
+ * (scan.ts — the server's runs through dir-cache.ts), and `contentText` / `toolResultText` (transcript.ts, private there). The parity cases in
+ * test/analytics/analyze.test.ts are their guard.
  * Exception: `--trend` is kaizen-only, has no TS twin, and is tested by spawning this file (test/analytics/kaizen-trend.test.ts); so are `--compare`, tested in
  * test/compare.test.mjs, `--budget`, tested in test/budget.test.mjs, and `--skill`, tested in test/skill-review.test.mjs. `--latest`'s resolver,
  * `resolveLatest`, has a TS twin in scripts/lib/latest-session.ts; it and the CLI's path, session-id and usage errors are tested in test/latest.test.mjs.
@@ -38,6 +41,7 @@ import { fileURLToPath } from 'node:url';
 import { readAgents } from '../../lib/agents.mjs';
 import { addTotals, emptyTotals, subagentDirOf } from '../../lib/subagent-usage.mjs';
 import { assistantUsage } from '../../lib/usage-line.mjs';
+import { isConversationRecord } from '../../lib/transcript-record.mjs';
 
 /* ------------------------------------------------ transcript enumeration */
 
@@ -91,8 +95,6 @@ function toolResultText(b) {
   return '';
 }
 
-// Untyped records (fixtures, older transcripts) still count.
-function isConversationRecord(rec) { return typeof rec.type !== 'string' || rec.type === 'user' || rec.type === 'assistant'; }
 function finiteOrNull(v) { return typeof v === 'number' && Number.isFinite(v) ? v : null; }
 
 /* ------------------------------------------------ subagent spend (subagent-usage.ts) */
@@ -296,8 +298,8 @@ export function analyzeSession(filePath, id) {
       continue;
     }
 
-    // Claude Code 2.1.302 replays each API request's turns as `type: "api-request-blob"` records with the same role and content. Mirrors
-    // server/lib/transcript.ts `isConversationRecord`; it sits below the boundary handling because a boundary is a `type: "system"` record.
+    // Claude Code 2.1.302 replays each API request's turns as `type: "api-request-blob"` records with the same role and content,
+    // skipped by the generated `isConversationRecord` (server/lib/transcript-record.ts); it sits below the boundary handling because a boundary is a `type: "system"` record.
     if (!isConversationRecord(rec)) continue;
     const msg = rec.message;
     if (!msg) continue;

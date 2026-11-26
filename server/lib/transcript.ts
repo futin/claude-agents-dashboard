@@ -9,8 +9,12 @@ import { findCompactPreTokens, resolveCompactPreTokens } from './compact-history
 import { frozenCompactWindow } from './compact-window.js';
 import { findModelIdentity, resolveModelIdentity } from './model-identity.js';
 import { findTitle, resolveSessionTitle } from './title-cache.js';
+import { isConversationRecord } from './transcript-record.js';
 
 import type { Activity, ApiErrorState } from '../../shared/types.js';
+
+// The record filter lives in a zero-import leaf so `pnpm plugin:gen` can generate it for `/kaizen` (#580); re-exported so no importer changes.
+export { isConversationRecord };
 
 export const STANDARD_WINDOW = 200000;
 export const LARGE_WINDOW = 1000000;
@@ -57,14 +61,6 @@ export const WAIT_TOOLS = new Set(['AskUserQuestion', 'ExitPlanMode']);
  */
 const LOCAL_PLUMBING = /^<(command-(name|message|args)|local-command-[a-z]+|bash-(input|stdout|stderr))>/;
 
-/**
- * False for a record that carries a `message` but is not a turn of the conversation. Claude Code 2.1.302 writes `type: "api-request-blob"` records that
- * replay each API request's turns — the same role and content as the real `user`/`assistant` records, with no uuid or timestamp — so a reader keyed on
- * `message.role` alone sees every turn twice. Fixtures and old transcripts without a `type` still count.
- */
-export function isConversationRecord(rec: any): boolean {
-  return typeof rec?.type !== 'string' || rec.type === 'user' || rec.type === 'assistant';
-}
 
 /** Text of a message record's content, whether stored as a string or as blocks. */
 function contentText(content: unknown): string {

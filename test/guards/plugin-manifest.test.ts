@@ -58,8 +58,8 @@ export function run(): number {
     assert.deepStrictEqual(entries, ['.claude-plugin', 'lib', 'skills']);
   })) p++; else f++;
 
-  if (test('plugin/lib/ holds exactly the six generated .mjs modules plus the hand-written run-routine.mjs wrapper', () => {
-    assert.strictEqual(LIB_MODULES.length, 6);
+  if (test('plugin/lib/ holds exactly the seven generated .mjs modules plus the hand-written run-routine.mjs wrapper', () => {
+    assert.strictEqual(LIB_MODULES.length, 7);
     assert.deepStrictEqual(fs.readdirSync(path.join(root, 'plugin', 'lib')).sort(), [...LIB_MODULES.map((m) => m.out), 'run-routine.mjs'].sort());
   })) p++; else f++;
 

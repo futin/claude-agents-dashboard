@@ -100,7 +100,8 @@ one of them at random — the same two-state rule the Sessions board follows.
   A compaction replays earlier records verbatim; both sides count each `tool_use` id, `tool_result`, Agent launch and SendMessage once and add each
   subagent transcript once (#174, #226), and the parity tests include a replayed fixture.
   Both sides also skip Claude Code 2.1.302's `api-request-blob` records, which replay each request's turns with the same role and content: `analyze.ts`
-  through `transcript.ts`'s `isConversationRecord`, `kaizen.mjs` through its own copy of it (#252, #253), with a blob fixture in the parity test.
+  through `transcript.ts`'s `isConversationRecord`, `kaizen.mjs` through the same function generated from `server/lib/transcript-record.ts` into
+  `plugin/lib/transcript-record.mjs` (#252, #253, #580), with a blob fixture in the parity test.
 - **Research & suggestions** — the one-line lesson `/kaizen` wrote for that session. The
   server does **no** LLM calls and invents no advice; the qualitative judgment is
   entirely `/kaizen`'s.
