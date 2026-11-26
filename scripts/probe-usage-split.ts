@@ -43,6 +43,8 @@
  */
 
 import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import { listUsageTranscripts, projectsRoot } from '../server/lib/scan.js';
 import { readRecentSamples, repoRoot, sameWindow } from '../server/lib/usage-history.js';
@@ -56,6 +58,7 @@ import {
   rateFor
 } from '../server/lib/usage-rate.js';
 import type { RateFloors } from '../server/lib/usage-rate.js';
+import { assistantUsage } from '../server/lib/usage-line.js';
 
 import { parseDays } from './lib/cli-args.js';
 
@@ -76,6 +79,29 @@ const WEEKLY = process.argv.includes('--weekly');
 const DIR = arg('dir') ?? repoRoot();
 const DAYS = parseDays(3);
 
+/**
+ * One transcript's billable assistant turns at or after `sinceMs`, as `{ ts, model }`: each record read through `assistantUsage` (usage-line.ts), the
+ * parse every usage reader shares, then this probe's own rules — no tokens, no model or no timestamp in the window drops it, and a message id already in
+ * `seen` (shared across files) is a replay. Exported for the test.
+ */
+export function usageEvents(text: string, sinceMs: number, seen: Set<string>): { ts: number; model: string }[] {
+  const events: { ts: number; model: string }[] = [];
+  for (const line of text.split('\n')) {
+    if (line.trim() === '') continue;
+    let rec: unknown;
+    try { rec = JSON.parse(line); } catch { continue; }
+    const u = assistantUsage(rec);
+    if (!u || rawTokens(u.tok) <= 0 || !u.model) continue;
+    if (!Number.isFinite(u.ts) || u.ts < sinceMs) continue;
+    if (u.id) {
+      if (seen.has(u.id)) continue;
+      seen.add(u.id);
+    }
+    events.push({ ts: u.ts, model: u.model });
+  }
+  return events;
+}
+
 /** Every assistant turn on disk in `[sinceMs, ∞)`, deduplicated by `message.id`. */
 function transcriptEvents(sinceMs: number): { ts: number; model: string }[] {
   const events: { ts: number; model: string }[] = [];
@@ -88,30 +114,7 @@ function transcriptEvents(sinceMs: number): { ts: number; model: string }[] {
     files++;
     let text: string;
     try { text = fs.readFileSync(ref.file, 'utf8'); } catch { continue; }
-    for (const line of text.split('\n')) {
-      if (line.trim() === '') continue;
-      let rec: any;
-      try { rec = JSON.parse(line); } catch { continue; }
-      const msg = rec?.message;
-      if (!msg || msg.role !== 'assistant' || !msg.usage) continue;
-      const tok = {
-        in: Number(msg.usage.input_tokens) || 0,
-        out: Number(msg.usage.output_tokens) || 0,
-        cc: Number(msg.usage.cache_creation_input_tokens) || 0,
-        cr: Number(msg.usage.cache_read_input_tokens) || 0
-      };
-      if (rawTokens(tok) <= 0) continue;
-      const model = typeof msg.model === 'string' ? msg.model : '';
-      if (!model) continue;
-      const ts = typeof rec.timestamp === 'string' ? Date.parse(rec.timestamp) : Number.NaN;
-      if (!Number.isFinite(ts) || ts < sinceMs) continue;
-      const id = typeof msg.id === 'string' ? msg.id : '';
-      if (id) {
-        if (seen.has(id)) continue;
-        seen.add(id);
-      }
-      events.push({ ts, model });
-    }
+    events.push(...usageEvents(text, sinceMs, seen));
   }
   console.log(`  transcripts read: ${files} (${skipped} older than the window)`);
   return events.sort((a, b) => a.ts - b.ts);
@@ -406,4 +409,4 @@ function main(): number {
   return 0;
 }
 
-process.exit(main());
+if (process.argv[1] && path.resolve(process.argv[1]) === path.resolve(fileURLToPath(import.meta.url))) process.exit(main());
