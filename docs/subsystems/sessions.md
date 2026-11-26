@@ -493,7 +493,9 @@ Two properties make it affordable and safe:
   A record whose mtime is unchanged is never re-read. Within a re-read, a prefix read
   (8 KB, where both top-level fields actually sit) is trusted only to say *"not archived"*;
   hiding a session always costs a real `JSON.parse`, so a false positive in the cheap path
-  cannot reach the caller.
+  cannot reach the caller. One shared pass (`classifyRecord`) fills both the archive and the live verdict per record, from at most one prefix read
+  and one parse, and the server warms that cache at startup (`warmDesktopStore`, yielding between records) so the first poll after a restart does
+  not classify the whole store on the request path — measured 2026-11-25 at 1,646 records, 227 MB, a cold pass of both readers cost ~5.6 s.
 - **Fail open.** Missing store (every non-macOS host), unreadable file, malformed JSON,
   absent flag → empty set, nothing hidden. Wrongly hiding a live session is the harmful
   direction. A transcript with **no** app record — a terminal `claude` run, a dashboard
