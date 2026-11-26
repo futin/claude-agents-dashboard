@@ -172,9 +172,10 @@ hand-over of a `dashboard` session, and for a fresh desktop launch once its firs
 [spawn](spawn.md#launching-in-the-desktop-app)). That module is the one place to fix a change in the link.
 
 **`Session.desktopOwned`** marks a session the app now holds, so the dashboard offers neither a headless resume nor a second hand-over for it. It is set
-from `desktopLiveSessionIds()` (`server/lib/archived.ts`): the `cliSessionId` of every registry record that is not archived, read from the same files and
-with the same stat-and-re-read-on-mtime cost as `archivedSessionIds`. Its failure direction is the **inverse** of `classify`'s: a wrong "archived" hides a
-row, so `classify` fails open to "not archived"; a wrong "not owned" admits a second writer on one transcript, so this reader treats a record as live
+from `desktopLiveSessionIds()` (`server/lib/archived.ts`): the `cliSessionId` of every registry record that is not archived, a second verdict from the
+same pass over the same files as `archivedSessionIds` — one mtime-keyed cache, so the second of the two calls a poll makes opens no record, and the server
+warms it at startup (`warmDesktopStore`). Its failure direction is the **inverse** of the archive verdict's: a wrong "archived" hides a
+row, so that verdict fails open to "not archived"; a wrong "not owned" admits a second writer on one transcript, so this reader treats a record as live
 unless `isArchived` is exactly `true` and only ever adds an id. What it cannot read (no root, an unreadable or malformed record, no string `cliSessionId`)
 it cannot attribute, and contributes nothing. The flag is `true` or absent, never `false`, like `processLive`.
 

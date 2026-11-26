@@ -207,9 +207,10 @@ server/
                   Support) for the `isArchived` flag, joined to transcripts by
                   `cliSessionId` — the only place that touches that store; the id
                   set is passed *into* `scanSessions`/`listRecentProjects` so they
-                  stay pure. Fails open (no store → nothing hidden). Its second reader,
+                  stay pure. Fails open (no store → nothing hidden). Its second verdict,
                   `desktopLiveSessionIds`, names the sessions the app holds open
-                  (`Session.desktopOwned`) and fails the other way
+                  (`Session.desktopOwned`) and fails the other way; both come from one
+                  mtime-keyed pass, warmed at startup (`warmDesktopStore`)
   lib/agents.ts   whole-file subagent parser → AgentJob[]
   lib/agents-cache.ts  incremental byte-offset cache over agents.ts; the same pass folds the main transcript's spend tally (`readSessionFold`)
   lib/tasks.ts    whole-file fold of the plan signals and TaskCreate/TaskUpdate → Session.tasks / taskPlan (plan wins), incremental by byte offset (the creates sit below the 256 KB tail)

@@ -7,7 +7,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-import { archivedSessionIds, appSessionsRoot, desktopLiveSessionIds, resetArchivedCache } from '../../server/lib/archived.js';
+import { archivedSessionIds, appSessionsRoot, desktopLiveSessionIds, resetArchivedCache, warmDesktopStore } from '../../server/lib/archived.js';
 import * as scan from '../../server/lib/scan.js';
 import * as mgmt from '../../server/lib/management.js';
 import { listReports } from '../../server/lib/analytics.js';
@@ -80,10 +80,15 @@ function makeProjectsRoot(specs: { dirName: string; id: string; cwd?: string; mt
 const CFG = { maxSessions: 5, activeWindowMin: 5, lookbackHours: 24 };
 const NOW = Date.UTC(2026, 7, 1, 12, 0, 0);
 
-export function run(): number {
+export async function run(): Promise<number> {
   console.log('archived.test.ts');
   let ok = 0, n = 0;
   const t = (name: string, fn: () => void) => { n++; if (test(name, fn)) ok++; };
+  const at = async (name: string, fn: () => Promise<void>) => {
+    n++;
+    try { await fn(); console.log('  ✓ ' + name); ok++; }
+    catch (e) { console.log('  ✗ ' + name); console.log('    ' + (e as Error).message); }
+  };
 
   /* ------------------------------------------------------- archivedSessionIds */
 
@@ -311,12 +316,92 @@ export function run(): number {
     assert.deepEqual([...desktopLiveSessionIds({ root })], ['a']);
   });
 
-  t('desktopLiveSessionIds: the sibling leaves archivedSessionIds alone, and the two caches do not share verdicts', () => {
+  t('desktopLiveSessionIds and archivedSessionIds give the same answers in either call order', () => {
     resetArchivedCache();
-    const root = liveFixture();
+    let root = liveFixture();
     assert.deepEqual([...desktopLiveSessionIds({ root })].sort(), ['a', 'c']);
     assert.deepEqual([...archivedSessionIds({ root })], ['b']);
     assert.deepEqual([...desktopLiveSessionIds({ root })].sort(), ['a', 'c']);
+    resetArchivedCache();
+    root = liveFixture();
+    assert.deepEqual([...archivedSessionIds({ root })], ['b']);
+    assert.deepEqual([...desktopLiveSessionIds({ root })].sort(), ['a', 'c']);
+    assert.deepEqual([...archivedSessionIds({ root })], ['b']);
+  });
+
+  t('shared pass, archive first: desktopLiveSessionIds reuses the verdict archivedSessionIds already took (no re-read)', () => {
+    resetArchivedCache();
+    const root = makeStore([{ local: 'u1', cliSessionId: 'x', isArchived: false, mtimeMs: NOW }]);
+    assert.deepEqual([...archivedSessionIds({ root })], []);
+    // Same mtime, archived content: a re-read would drop 'x', the shared pass must not.
+    writeRecord(root, { local: 'u1', cliSessionId: 'x', isArchived: true, mtimeMs: NOW });
+    assert.deepEqual([...desktopLiveSessionIds({ root })], ['x']);
+  });
+
+  t('shared pass, live first: archivedSessionIds reuses the verdict desktopLiveSessionIds already took (no re-read)', () => {
+    resetArchivedCache();
+    const root = makeStore([{ local: 'u1', cliSessionId: 'y', isArchived: true, mtimeMs: NOW }]);
+    assert.deepEqual([...desktopLiveSessionIds({ root })], []);
+    writeRecord(root, { local: 'u1', cliSessionId: 'y', isArchived: false, mtimeMs: NOW });
+    assert.deepEqual([...archivedSessionIds({ root })], ['y']);
+  });
+
+  t('a prefix-ambiguous record is judged by both readers from one parse, in either call order', () => {
+    const raw = '{"cliSessionId":"x","isArchived":false,"nested":{"isArchived":true}}';
+    resetArchivedCache();
+    let root = makeStore([{ local: 'u1', raw }]);
+    assert.deepEqual([...archivedSessionIds({ root })], []);
+    assert.deepEqual([...desktopLiveSessionIds({ root })], ['x']);
+    resetArchivedCache();
+    root = makeStore([{ local: 'u1', raw }]);
+    assert.deepEqual([...desktopLiveSessionIds({ root })], ['x']);
+    assert.deepEqual([...archivedSessionIds({ root })], []);
+  });
+
+  /* ------------------------------------------------------- warmDesktopStore */
+
+  await at('warmDesktopStore fills the shared cache: later reads answer from the warm verdicts', async () => {
+    resetArchivedCache();
+    const root = makeStore([
+      { local: 'u1', cliSessionId: 'a', isArchived: false, mtimeMs: NOW },
+      { local: 'u2', cliSessionId: 'b', isArchived: true, mtimeMs: NOW }
+    ]);
+    await warmDesktopStore({ root });
+    // Swap the flags at the same mtimes: a re-read would swap the answers, the warm verdicts must not.
+    writeRecord(root, { local: 'u1', cliSessionId: 'a', isArchived: true, mtimeMs: NOW });
+    writeRecord(root, { local: 'u2', cliSessionId: 'b', isArchived: false, mtimeMs: NOW });
+    assert.deepEqual([...archivedSessionIds({ root })], ['b']);
+    assert.deepEqual([...desktopLiveSessionIds({ root })], ['a']);
+  });
+
+  await at('warmDesktopStore yields to the event loop between records', async () => {
+    resetArchivedCache();
+    const root = makeStore([
+      { local: 'u1', cliSessionId: 'a', isArchived: false },
+      { local: 'u2', cliSessionId: 'b', isArchived: true },
+      { local: 'u3', cliSessionId: 'c', isArchived: false }
+    ]);
+    let ran = false;
+    setImmediate(() => { ran = true; });
+    await warmDesktopStore({ root });
+    assert.ok(ran, 'a setImmediate scheduled before the warm ran before it resolved');
+  });
+
+  await at('warmDesktopStore on an absent root resolves without throwing and leaves both readers empty', async () => {
+    resetArchivedCache();
+    const root = path.join(os.tmpdir(), 'cad-store-warm-absent-' + Date.now());
+    await warmDesktopStore({ root });
+    assert.deepEqual([...archivedSessionIds({ root })], []);
+    assert.deepEqual([...desktopLiveSessionIds({ root })], []);
+  });
+
+  await at('a record changed after the warm (newer mtime) is still re-read', async () => {
+    resetArchivedCache();
+    const root = makeStore([{ local: 'u1', cliSessionId: 'w', isArchived: false, mtimeMs: NOW - 60_000 }]);
+    await warmDesktopStore({ root });
+    writeRecord(root, { local: 'u1', cliSessionId: 'w', isArchived: true, mtimeMs: NOW });
+    assert.deepEqual([...archivedSessionIds({ root })], ['w']);
+    assert.deepEqual([...desktopLiveSessionIds({ root })], []);
   });
 
   t('desktopLiveSessionIds: a store root other than the one asked for does not leak in', () => {
