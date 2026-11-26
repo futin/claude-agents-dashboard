@@ -97,7 +97,7 @@ an optimization and buys nothing: the payload is a few kilobytes already buffere
 Two `case` statements, identical syntax, opposite conclusions:
 
 ```bash
-# scripts/ask-remote-hook.sh:86-89
+# scripts/ask-remote-hook.sh:81-84
   case "$IDLE_S" in
     ''|*[!0-9]*) exit 0 ;;                          # unreadable → treat as at-desk
     *) [ "$IDLE_S" -lt "$IDLE_MIN_S" ] && exit 0 ;; # at the desk → terminal dialog
@@ -105,7 +105,7 @@ Two `case` statements, identical syntax, opposite conclusions:
 ```
 
 ```bash
-# scripts/ask-remote-hook.sh:69
+# scripts/ask-remote-hook.sh:64
 case "$IDLE_MIN_S" in ''|*[!0-9]*) IDLE_MIN_S=60 ;; esac
 ```
 
@@ -127,7 +127,7 @@ blast radius.
 **a) `ask-remote-hook.sh` — unknown idle → do NOT intercept.**
 
 ```bash
-# scripts/ask-remote-hook.sh:79-82
+# scripts/ask-remote-hook.sh:74-77
 # 2. Are you at the keyboard? If so the terminal dialog wins — remote answering
 #    only kicks in once you've stepped away. macOS reports idle nanoseconds via
 #    IOHIDSystem (~40ms to read). If it can't be read (non-macOS, ioreg missing)

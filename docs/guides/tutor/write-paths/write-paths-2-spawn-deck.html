@@ -827,12 +827,23 @@ export function clampPermission(requested: unknown, ceiling: unknown): Permissio
     <h2>The scanner is the witness</h2>
     <p>The store never looks at the filesystem. The sessions handler, which has just scanned it,
     hands over the ids it saw:</p>
-<pre>// api.ts:147-152 (compacted here)
+<pre>// api.ts:153-166 (compacted here)
   // Adopt before listing: a launch id that just showed up in `sessions` must
   // not also be reported as still `launching` in the same poll. Attached on
   …
-  adoptLaunched(data.sessions.map(s =&gt; s.id));
+  const adopt = data.sessions.map(s =&gt; s.id);
+  // The rows above passed the `?project=` filter, so a launch into a filtered-out project is never among them: ask its transcript directly (#471).
+  …
+  if (!data.error) {
+    const shown = new Set(adopt);
+    const unseen = listLaunching().filter(e =&gt; e.state === 'launching' &amp;&amp; !e.resume &amp;&amp; !shown.has(e.sessionId)).map(e =&gt; e.sessionId);
+    if (unseen.length) adopt.push(...launchRowIds(unseen, { root: projectsRoot(), refs: sharedListing(projectsRoot()) }));
+  }
+  adoptLaunched(adopt);
   data.launching = listLaunching();</pre>
+    <p>The ids come from the scanned rows first. Those rows already passed the board's <code>?project=</code> filter, so a
+    launch into a project that is filtered out would never appear among them; for those still-launching ids the handler
+    asks the transcripts directly (<code>launchRowIds</code>) and adds what it finds before adopting.</p>
     <p>A launch that became a real session stops being a launch: its id appears in a scan, the entry turns
     <code>running</code> — off the launching list, but still holding the child's handle for Stop — and from then
     on the row is an ordinary scanned row like any other. Note the ordering the comment
@@ -890,7 +901,7 @@ export function clampPermission(requested: unknown, ceiling: unknown): Permissio
     <h2>Stopping a launch is a deletion, not a state</h2>
     <p>Stopping goes through <code>stopSession</code>, and for an entry still launching it signals the child
     and removes the entry in the same breath:</p>
-<pre>// spawn.ts:858-866
+<pre>// spawn.ts:865-873
 export function stopSession(id: string, now: number = Date.now()): StopResult {
   const entry = entries.get(id);
   if (!entry || !entry.child || entry.state === 'failed') return 'not-found';
@@ -951,12 +962,12 @@ export function stopSession(id: string, now: number = Date.now()): StopResult {
     <p class="eyebrow">Questions you might ask</p>
     <details class="qa-item">
       <summary>Why adopt <em>before</em> listing, rather than after building the response?</summary>
-      <p>Otherwise one session appears twice in the same payload. <code>api.ts:147-150</code> states
+      <p>Otherwise one session appears twice in the same payload. <code>api.ts:153-156</code> states
       the ordering as a rule with its reason attached: "Adopt before listing: a launch id that just
       showed up in <code>sessions</code> must not also be reported as still <code>launching</code> in
       the same poll."</p>
-<pre>// api.ts:151-152
-  adoptLaunched(data.sessions.map(s =&gt; s.id));
+<pre>// api.ts:165-166
+  adoptLaunched(adopt);
   data.launching = listLaunching();</pre>
       <p>The same call is attached to the error snapshot too, because "a failed scan is exactly when
       'did my launch work?' matters most."</p>

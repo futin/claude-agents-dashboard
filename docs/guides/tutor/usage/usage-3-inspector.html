@@ -166,7 +166,7 @@
     legend — but as one line beside the evidence, not instead of it. The cost is a
     non-trivial component: hundreds of lines of view code plus the pure helpers behind it, for a panel most
     users open once.</p>
-<pre>// UsageProfile.tsx:25-29
+<pre>// UsageProfile.tsx:24-28
  * **Why this exists.** The forecast silently changes a number the user acts on,
  * using a model built in the background. Without an inspector a wrong
  * projection is undebuggable — the only recourse is reading `.usage-profile.json`
@@ -325,7 +325,7 @@
 
   <div class="card card-concept">
     <h2>Five steps, plus two states that are not steps</h2>
-    <p><code>stepOf</code> maps a weight to a CSS class, and the shape of the ladder matters
+    <p><code>profileStep</code> maps a weight to a CSS class, and the shape of the ladder matters
     more than the thresholds. Five filled steps cover 0.02 upward, and a weight at or below
     0.02 gets the <em>empty string</em> — no step class at all, so the cell renders as a bare
     bordered track.</p>
@@ -340,8 +340,8 @@
     and it is the single most misleading thing this panel could say — a fresh install would
     look like a user who never works. The cost of keeping them apart is a legend with three
     keys instead of one continuous bar.</p>
-<pre>// UsageProfile.tsx:83-90
-function stepOf(weight: number): string {
+<pre>// usageProfile.ts:492-499
+export function profileStep(weight: number): string {
   if (weight &lt;= 0.02) return '';           // measured idle — the bare track
   if (weight &lt;= 0.2) return 'q1';
   if (weight &lt;= 0.4) return 'q2';
@@ -368,7 +368,7 @@ function stepOf(weight: number): string {
     <em>by construction</em> in every theme — a property no hand-picked palette can promise.
     The hatched <code>unknown</code> state is built the same way, from
     <code>--hairline</code> and a repeating gradient, so it also cannot go wrong per theme.</p>
-<pre>// styles.css:2800-2805
+<pre>// styles.css:2806-2811
 .up-cell.q1{background:color-mix(in oklab,var(--cyan) 20%,var(--strip))}
 .up-cell.q2{background:color-mix(in oklab,var(--cyan) 40%,var(--strip))}
 .up-cell.q3{background:color-mix(in oklab,var(--cyan) 60%,var(--strip))}
@@ -394,7 +394,7 @@ function stepOf(weight: number): string {
     <code>&lt;th scope&gt;</code> headers. Every cell also carries an
     <code>aria-label</code> built from the same tooltip text, with newlines flattened to
     dashes — so the grid itself is readable without colour too.</p>
-<pre>// UsageProfile.tsx:53-56
+<pre>// UsageProfile.tsx:52-55
  * - **The numbers view is required, not a nicety.** The two lowest ramp steps
  *   fall below 3:1 against the card surface, and that obligates a non-colour
  *   path to the same weights. The mock has no such control; it is kept, in the
@@ -419,7 +419,7 @@ function stepOf(weight: number): string {
       <div class="quiz-option" data-correct="false">
         <button class="quiz-option-btn">As <code>q1</code>, the palest of the five filled
         steps</button>
-        <p class="quiz-feedback">This is the merge <code>stepOf</code> exists to prevent. A
+        <p class="quiz-feedback">This is the merge <code>profileStep</code> exists to prevent. A
         weight of 0 and a weight of 0.15 would then look identical, and the panel would be
         unable to distinguish "never" from "rarely" — the two ends of its own scale.</p>
       </div>
@@ -440,7 +440,7 @@ function stepOf(weight: number): string {
       </div>
       <div class="quiz-option" data-correct="true">
         <button class="quiz-option-btn">As a bare bordered cell, because
-        <code>stepOf</code> returns the empty string</button>
+        <code>profileStep</code> returns the empty string</button>
         <p class="quiz-feedback">Correct. At or below 0.02 there is no step class, so only
         <code>.up-cell</code>'s own border and radius apply. Empty means measured idle, which
         the tooltip states in words as "never active — measured, not missing".</p>
@@ -520,7 +520,7 @@ function stepOf(weight: number): string {
     one gave free. Each of those is a bug you can write. The <code>aria-label</code> on every
     cell exists partly to cover that: a screen reader reads the same text without going
     through this panel at all.</p>
-<pre>// UsageProfile.tsx:57-63
+<pre>// UsageProfile.tsx:56-62
  * - **A real tooltip element, not the `title` attribute.** `title` is drawn by
  *   browser chrome, needs a dwell, and — the reason that settles it — never
  *   fires on touch. This dashboard is read from a phone, so `title` put the
@@ -999,23 +999,33 @@ export function profileProgress(cells: UsageProfileCell[]): ProfileProgress {
 
   <div class="card card-concept">
     <h2>Naming the gate, and naming the date</h2>
-    <p><code>RecordingStatus</code> turns those four counts into one of three messages, and
-    the branch order is the useful part. If any bucket carries a weight, say how many — the
-    panel is working, nothing to explain. Otherwise, if some buckets have cleared the floor,
-    the thing being waited on is the <em>fold</em>, so name the date it will happen. Otherwise
-    nothing has cleared the floor yet, so name the floor itself <em>and</em> the date.</p>
-    <p>Naming a date is what makes this a status line rather than a spinner. "Weights appear
-    when the week rolls over on Mon 1 Sep" is checkable; "collecting data…" is not.
-    <code>nextWeekStartMs</code> computes it: local midnight starting the next ISO week. Note
-    the two details in seven lines — <code>getDay() || 7</code> converts JavaScript's
-    Sunday-is-0 to ISO's Sunday-is-7, and on a Monday the function deliberately returns the
-    <em>following</em> Monday, because the current week is the one still accumulating.</p>
-    <p>One early-return sits above all of it: with recording off and nothing observed, the
-    component renders nothing, because the separate <code>.up-off</code> block already
-    explains the situation and offers the setting to change it. Two overlapping explanations
-    of the same emptiness would be worse than one.</p>
-<pre>// usageProfile.ts:76-82
-export function nextWeekStartMs(nowMs: number): number {
+    <p>The status note is inline in <code>UsageProfile</code> (UsageProfile.tsx:577-586), and it renders only while
+    <code>trusted</code> is zero — once any bucket carries a weight the coloured grid speaks for itself and the note
+    goes away. Its two branches are the useful part. If some buckets have cleared the floor, the thing being waited on
+    is the <em>fold</em>, so name the date it will happen. Otherwise nothing has cleared the floor yet, so name the
+    floor itself <em>and</em> the date.</p>
+    <p>Naming a date is what makes this a status line rather than a spinner. "The first weight appears on Thu 28 Aug,
+    when that hour comes round in a new week" is checkable; "collecting data…" is not.
+    The date is dated from the cells, not the calendar (UsageProfile.tsx:421-427): <code>earliestWeightMs</code> finds the next occurrence of a
+    bucket that can fold, because a bucket carrying last week's stamp folds at its next occurrence — usually days before
+    the next Monday. Only with nothing recorded does it fall back to <code>nextWeekStartMs</code>: local midnight starting
+    the next ISO week. Note the two details in that fallback's local branch — <code>getDay() || 7</code> converts
+    JavaScript's Sunday-is-0 to ISO's Sunday-is-7, and on a Monday the function deliberately returns the
+    <em>following</em> Monday, because the current week is the one still accumulating. Both take the host's
+    <code>offsetMinutes</code>, so the date is the server's wall clock, not the browser's.</p>
+    <p>Recording being off is a separate message: the <code>.up-off</code> block reads the setting, not any count,
+    and renders above the grid while the rest of the panel stays — the profile already learned is still worth showing,
+    it just stops growing.</p>
+<pre>// usageProfile.ts:77-91
+export function nextWeekStartMs(nowMs: number, offsetMinutes?: number): number {
+  if (offsetMinutes !== undefined) {
+    // A fixed offset has no DST, so the UTC setters on the shifted instant are the host's wall clock.
+    const shift = offsetMinutes * 60_000;
+    const h = new Date(nowMs + shift);
+    h.setUTCHours(0, 0, 0, 0);
+    h.setUTCDate(h.getUTCDate() + (8 - (h.getUTCDay() || 7)));
+    return h.getTime() - shift;
+  }
   const d = new Date(nowMs);
   d.setHours(0, 0, 0, 0);
   const isoDay = d.getDay() || 7;   // getDay(): Sunday is 0; ISO wants 7
@@ -1023,11 +1033,11 @@ export function nextWeekStartMs(nowMs: number): number {
   return d.getTime();
 }</pre>
     <details>
-      <summary>More detail — the third branch's wording</summary>
+      <summary>More detail — the second branch's wording</summary>
       <p>The "no weights yet" branch names both gates in one sentence, because at that point
       the user is waiting on both and will hit them in order. Its text reads: an hour needs
-      <code>TRUST_FLOOR_MIN</code> minutes of evidence, and the first fold happens when the
-      week rolls over on that date. The interpolated constant is the same 60 the server
+      <code>TRUST_FLOOR_MIN</code> min of evidence and one week to fold, so the earliest a
+      weight can appear is that date. The interpolated constant is the same 60 the server
       enforces, which is the practical reason the duplication matters — the sentence would
       otherwise be able to state a threshold the server does not use.</p>
     </details>
@@ -1056,16 +1066,16 @@ export function nextWeekStartMs(nowMs: number): number {
       <div class="quiz-option" data-correct="false">
         <button class="quiz-option-btn">Nothing — the component early-returns until at least
         one bucket carries a weight</button>
-        <p class="quiz-feedback">The early return is much narrower than that: it fires only
-        when recording is off <em>and</em> <code>touched</code> is zero. With evidence
-        recorded, this is precisely the case the status line was written for.</p>
+        <p class="quiz-feedback">There is no early return: the grid, the legend and the note
+        always render. The note is the part gated on <code>trusted</code> being zero, so with
+        evidence recorded and no fold yet, this is precisely the case it was written for.</p>
       </div>
       <div class="quiz-option" data-correct="true">
-        <button class="quiz-option-btn">That those hours have enough evidence and weights
-        appear at the week roll-over — nothing is wrong</button>
-        <p class="quiz-feedback">Correct: this is the middle branch. The trust floor is
-        cleared, the fold is not, and a fold only happens when a sample lands in a bucket in
-        a new ISO week. The line names that Monday so the wait is legible.</p>
+        <button class="quiz-option-btn">That those hours have enough evidence, and the date
+        of the first weight — all fine</button>
+        <p class="quiz-feedback">Correct: the first branch. The floor is cleared, the fold is
+        not, and a fold only happens when a sample lands in a bucket in a new ISO week. The
+        line names when that hour next comes round.</p>
       </div>
     </div>
   </div>
@@ -1088,7 +1098,7 @@ export function nextWeekStartMs(nowMs: number): number {
       <p>Because the value it feeds — the next ISO week's start — is a display string, not
       part of any computation the rest of the panel depends on, and it is re-derived on each
       render anyway. The arithmetic that would be awkward to test with an ambient clock lives
-      in <code>nextWeekStartMs</code>, which takes <code>nowMs</code> as a parameter and is
+      in <code>earliestWeightMs</code> and <code>nextWeekStartMs</code>, which take <code>nowMs</code> as a parameter and are
       unit-tested with fixed inputs. The component keeps only the call.</p>
     </details>
   </div>

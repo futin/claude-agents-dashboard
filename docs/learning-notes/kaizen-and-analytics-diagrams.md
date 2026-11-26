@@ -25,7 +25,7 @@ flowchart LR
 
     subgraph C["Analytics tab — the consumer, read-only"]
         SAL["sessionAnalyticsLog.ts<br/>parseLogEvents: verdict → status → review → lesson<br/>newest-first · dedupe by idPrefix · cap ANALYTICS_KEEP=5"]
-        AN["analytics.ts<br/>prefix-match idPrefix against enumerated<br/>transcripts (ID_RE, never path-joined)<br/>then re-run analyzeSession() live<br/>+ reviewStatus(): 7-day sweep clock"]
+        AN["analytics.ts<br/>prefix-match idPrefix against enumerated<br/>transcripts (ID_RE, never path-joined)<br/>then analyzeSession(), memoised until the<br/>transcript or its subagents/ dir changes<br/>+ reviewStatus(): 7-day sweep clock"]
         API["api.ts<br/>GET /api/analytics · fail-open"]
         AV["AnalyticsView card<br/>fetch on mount + manual refresh, no polling<br/>status badge · review-due chip"]
         SAL --> AN --> API --> AV
@@ -53,12 +53,15 @@ actually extracts from it:
   ^date      ^project                  ^idPrefix  ^-- numbers: human grep only, NOT parsed --------------^  ^lesson — the one thing that can't be recomputed
 ```
 
-The two later shapes, matched **before** the lesson pattern so a note containing
+The three later shapes, matched **before** the lesson pattern (verdict → status → review) so a note containing
 `Lesson:` can't conjure a phantom card:
 
 ```
 - 2026-08-01 [claude-agents-dashboard] d04e9b52: status actioned — added to project CLAUDE.md
   ^date      ^project                  ^idPrefix         ^actioned|promoted|dropped   ^note (optional)
+
+- 2026-09-02 [claude-agents-dashboard] d04e9b52: verdict helped — errorSignals.retries median 4 → 1 over 5 sessions
+  ^date      ^project                  ^idPrefix          ^helped|hurt|no-effect|confounded   ^note (optional) — written only by /kaizen review
 
 - 2026-08-09 review: swept 12 lessons, promoted 1, pruned 2
   ^date      ^only the date is read — it is the sweep clock; the summary is for humans
@@ -195,4 +198,5 @@ flowchart TB
 
 The insight: **the numbers are deterministically recomputable, but the lesson is
 not.** So the log stores only the irreducible human judgment, and re-running the
-analyzer on every request — which looks expensive — is the cheap, correct choice.
+analyzer — which looks expensive — is the cheap, correct choice. `analytics.ts` memoises each analysis on the transcript's `mtimeMs`/`size` and its
+`subagents/` dir listing, so a request re-analyzes only a transcript that changed.

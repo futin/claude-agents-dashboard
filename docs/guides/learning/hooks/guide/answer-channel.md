@@ -9,7 +9,7 @@ The keystone. Everything else in this subsystem is scaffolding around one idea.
 ## 1. The trick
 
 ```bash
-# scripts/ask-remote-hook.sh:133-139
+# scripts/ask-remote-hook.sh:117-123
 jq -cn --arg r "$REASON" '{
   hookSpecificOutput: {
     hookEventName: "PreToolUse",
@@ -54,7 +54,7 @@ triggers the same question again.
 Nothing unifies the output formats. Each event wants its own:
 
 ```bash
-# scripts/ask-remote-hook.sh:135-138  (PreToolUse — flat string)
+# scripts/ask-remote-hook.sh:119-122  (PreToolUse — flat string)
     hookEventName: "PreToolUse",
     permissionDecision: "deny",
     permissionDecisionReason: $r
@@ -62,14 +62,14 @@ Nothing unifies the output formats. Each event wants its own:
 ```
 
 ```bash
-# scripts/plan-remote-hook.sh:146-148  (PermissionRequest — nested object)
+# scripts/plan-remote-hook.sh:130-132  (PermissionRequest — nested object)
     hookEventName: "PermissionRequest",
     decision: { behavior: "deny", message: $r }
   }
 ```
 
 ```bash
-# scripts/stop-notify-hook.sh:224  (Stop — top level, no hookSpecificOutput at all)
+# scripts/stop-notify-hook.sh:206  (Stop — top level, no hookSpecificOutput at all)
 jq -cn --arg r "$REASON" '{decision: "block", reason: $r}'
 ```
 
@@ -90,7 +90,7 @@ Every one of the three scripts pulls `.reason` out of the HTTP response and prin
 verbatim. None of them writes prose. From `ask-remote-hook.sh`:
 
 ```bash
-# scripts/ask-remote-hook.sh:130-132
+# scripts/ask-remote-hook.sh:114-116
 # 4. Inject. This block is the only mechanism-specific part of the feature —
 #    swap it if a native "answer the tool call" path ever lands. The reason is
 #    composed server-side (pending.ts composeReason), never here.
@@ -152,7 +152,7 @@ remotely, the fix is not to keep trying — it is to stop the model from proposi
 way:
 
 ```bash
-# scripts/remote-decision-hook.sh:189-192  (heredoc body — no comment prefixes here)
+# scripts/remote-decision-hook.sh:197-200  (heredoc body — no comment prefixes here)
 2. Do not enter plan mode and do not call ExitPlanMode — its approval card can
    only be answered at the terminal. Present a plan as a concise summary (or a
    file) and then ask via AskUserQuestion: proceed, or revise (with an option to

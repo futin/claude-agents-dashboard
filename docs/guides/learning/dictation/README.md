@@ -67,7 +67,8 @@ have no chapter yet. They are listed here rather than silently omitted:
 - **The wire format** — raw binary body with the recorder's own `Content-Type`, no
   multipart, no base64, and the `Content-Length` pre-check.
 - **Security posture** — why `/api/health` publishes `transcribe` unauthenticated, the
-  check ordering in `serveTranscribe`, and the four mitigations that stand in for a token.
+  check ordering in `serveTranscribe`, and the write gate (`refuseWrite`) it now sits behind: loopback and the tailnet pass, any other caller needs
+  the token, so an unauthenticated one is refused at 403 before any audio is read or any per-clip process spawns.
 
 For those, [`docs/subsystems/dictation.md`](../../../subsystems/dictation.md) is the current
 best source — it covers the *what* thoroughly, and a fair amount of the *why*.
