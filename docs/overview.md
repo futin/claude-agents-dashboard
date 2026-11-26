@@ -126,7 +126,7 @@ remote-answer switch on, a **gate-only write** needs the gate alone ([who may wr
 | `GET /api/routines/runs` | folded runs of the run log, newest first, with stats for `days` (7/30/90) and the window before it; `?job=&outcome=&runner=` filter, 400 `bad outcome` |
 | `GET /api/routines/:name` | one job's raw file text and parsed shape, for the editor |
 | `POST /api/routines`, `PUT`, `PATCH`, `DELETE /api/routines/:name` | create / replace / toggle `enabled` / delete a job file, then reconcile; 422 with `errors`, 409 `exists`, 409 `changed` when a PUT's `mtimeMs` no longer matches the file; all gate-only writes, 409 `not-owner` off the owning server |
-| `POST /api/routines/validate` | `{text, name?}` → `{errors, summary}`; read-only, outside the write gate |
+| `POST /api/routines/validate` | `{text, name?}` → `{errors, summary, nextAt}`, `nextAt` the next fire on the host's clock (null when invalid or manual); read-only, outside the write gate |
 | `POST /api/routines/reconcile` | `{apply?}`: the plan of installs, updates and removes against launchd / crontab, applied when `apply` (gate-only write) |
 | `POST /api/routines/reveal` | open the routines folder, or one job's file, in Finder with `open` / `open -R`; 501 off macOS (gate-only write) |
 | `POST /api/routines/:name/run` | start the wrapper now (`{only?: [pins]}`), 202 with the run id read back from the log; 409 `already-running` (gate-only write) |
