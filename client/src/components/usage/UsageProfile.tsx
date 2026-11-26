@@ -13,7 +13,7 @@ import {
   joinPoints, pctX, pctY, pointsAttr, segAreaPath, stepTitle, VIEW_H, walkWidth, yHead, zeroY,
   type HeadScale
 } from '../../lib/walkChart';
-import { headBarPct, walkRows, weightSource, type WalkTable } from '../../lib/walkRows';
+import { headBarPct, hrs, walkRowNote, walkRows, walkTotalsNote, weightSource, type WalkTable } from '../../lib/walkRows';
 import { InfoDot } from './ReadingAids';
 import { Band, Definitions, RowHead, Sheet, SheetDivider, StatStrip } from './Sheet';
 
@@ -69,16 +69,6 @@ import { Band, Definitions, RowHead, Sheet, SheetDivider, StatStrip } from './Sh
  *
  * Mock: `docs/guides/mockups/redesign-mock.html` `#forecast`.
  */
-
-/**
- * Hours as the tables print them: whole where they are whole, one decimal where
- * the reset cuts an hour in half. A column of `13 / 24 / 24 / 8.0` reads as a
- * mistake; `13 / 24 / 24 / 8` beside a real `7.5` does not.
- */
-function hrs(n: number): string {
-  const r = Math.round(n * 10) / 10;
-  return Number.isInteger(r) ? String(r) : r.toFixed(1);
-}
 
 /**
  * The forward walk as headroom, draining to empty and then past it.
@@ -274,16 +264,7 @@ function WalkTableRows({ table, globalMean }: { table: WalkTable; globalMean: nu
                 style={{ width: `${headBarPct(r.endHead, startHead)}%` }}
               />
             </td>
-            <td data-l="Note" className="mut">
-              {/* The deficit is only reported on a day that *deepened* it: a
-                  day past the crossing that spends nothing repeats the figure
-                  above it, and a column of the same number three times reads
-                  as three findings. */}
-              {r.crossesAt !== null
-                ? `empty at ${r.crossesAt}`
-                : r.endHead < 0 && r.spent >= 0.05 ? `${Math.round(-r.endHead)} pts past empty`
-                  : i === rows.length - 1 ? 'to the weekly reset' : ''}
-            </td>
+            <td data-l="Note" className="mut">{walkRowNote(r, i === rows.length - 1)}</td>
           </tr>
         ))}
         <tr className="tot">
@@ -298,19 +279,7 @@ function WalkTableRows({ table, globalMean }: { table: WalkTable; globalMean: nu
           <td className="barcell">
             <i className="bar hatch" style={{ width: '100%' }} />
           </td>
-          <td data-l="Note" className="mut">
-            {/* Keyed off `crossed`, not off the unpayable counter: a crossing
-                inside the last slice leaves no whole hour after it, and keying
-                off the counter made this cell say the window coasts while the
-                Left cell beside it printed a negative. Under an hour past the
-                crossing the row says it went empty without naming a count the
-                rounding would print as `0 hours`. */}
-            {!totals.crossed
-              ? 'the window coasts to its reset'
-              : Math.round(totals.unpayableHours) > 0
-                ? `${hrs(totals.unpayableHours)} hours past the crossing the window cannot pay for`
-                : 'the window goes empty before its reset'}
-          </td>
+          <td data-l="Note" className="mut">{walkTotalsNote(totals)}</td>
         </tr>
       </tbody>
     </table>

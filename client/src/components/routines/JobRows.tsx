@@ -3,7 +3,7 @@ import { useId, useState } from 'react';
 import { PERMISSION_MODES, type JobError } from '../../../../shared/routine-file';
 import { useDraft } from '../../hooks/useDraft';
 import {
-  FIELDS, UNREADABLE, formKind, frontmatterReadable, routeErrors, scheduleEdit, schedulePick, timeoutUnitView, timeoutWithUnit, visibleFields,
+  FIELDS, UNREADABLE, formKind, frontmatterReadable, reposFlip, reposPickList, reposSwitch, routeErrors, scheduleEdit, schedulePick, timeoutUnitView, timeoutWithUnit, visibleFields,
   type FieldDef, type FieldId, type FormKind, type Limits, type ModelEffort, type Permission, type Repos, type Schedule, type ScheduleStep,
   type Summary, type TimeoutUnit, type Tools
 } from '../../lib/routineForm';
@@ -34,13 +34,12 @@ function ReposControl({ v, ctl, disabled, put }: { v: Repos; ctl: RoutineCtl; di
   const pinNames = jobPins('pinned', ctl.pins);
   const paths = ctl.pins.filter(p => p.listed && p.path !== null).map(p => p.path as string);
   const cwd = useDraft<HTMLInputElement>(v.cwd, s => put({ ...v, cwd: s }));
-  const picks = [...v.picks, ...pinNames.filter(n => !v.picks.includes(n))];
+  const picks = reposPickList(v, pinNames);
   const setMode = (mode: Repos['mode']) => {
-    if (mode === v.mode) return;
-    // Pick starts from every pin, so switching from All pinned changes nothing that runs until a chip is turned off.
-    put(mode === 'pick' ? { mode, picks: v.picks.length > 0 ? v.picks : pinNames, cwd: v.cwd } : { mode, picks: [], cwd: v.cwd });
+    const next = reposSwitch(v, mode, pinNames);
+    if (next) put(next);
   };
-  const flip = (n: string) => put({ ...v, picks: v.picks.includes(n) ? v.picks.filter(x => x !== n) : [...v.picks, n] });
+  const flip = (n: string) => put(reposFlip(v, n));
   const labels = ctl.phone ? ['All', 'Pick', 'Folder'] : ['All pinned', 'Pick', 'One folder'];
   return (
     <>

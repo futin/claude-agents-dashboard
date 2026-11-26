@@ -20,6 +20,10 @@ export function run(): number {
     assert.strictEqual(wrapClass('configs'), 'wrap wide wide-mgmt');
   })) p++; else f++;
 
+  if (test('routines opts out of the pinned shell', () => {
+    assert.strictEqual(wrapClass('routines'), 'wrap wide wide-mgmt');
+  })) p++; else f++;
+
   // The mirror case: Analytics is the one section whose tab is its own scroller, so it keeps the pinned shell.
   if (test('analytics keeps the pinned shell', () => {
     assert.strictEqual(wrapClass('analytics'), 'wrap wide');

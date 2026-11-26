@@ -1,4 +1,4 @@
-import type { Session, SessionsResponse } from '../../../shared/types';
+import type { LaunchingSession, Session, SessionsResponse } from '../../../shared/types';
 
 /** Human labels for each status. Shared by the session views and the Toolbar. */
 export const STATUS_LABEL: Record<Session['status'], string> = {
@@ -277,4 +277,17 @@ export function filterCount(view: View): number {
 export function clearFilters(view: View): View {
   if (!hasActiveFilters(view)) return view;
   return { ...view, projects: [], statuses: [], window: 'all' };
+}
+
+/**
+ * The launches that draw a phantom row of their own: every fresh launch, and a resume only once it has FAILED. A resume's id already names a real row — its
+ * `launching` phantom would be a duplicate, so only its failure is worth a row of its own.
+ */
+export function phantomRows(launching: LaunchingSession[] | undefined): LaunchingSession[] {
+  return (launching ?? []).filter(l => !l.resume || l.state === 'failed');
+}
+
+/** Whether the board draws its empty state: still loading (`shown` null), or no session row and no phantom row to draw. */
+export function sessionsEmpty(shown: Session[] | null, phantoms: LaunchingSession[]): boolean {
+  return shown === null || (!shown.length && !phantoms.length);
 }

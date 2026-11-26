@@ -1,6 +1,6 @@
 import assert from 'node:assert';
 
-import type { Session } from '../../shared/types.js';
+import type { LaunchingSession, Session } from '../../shared/types.js';
 import {
   applyView,
   clearFilters,
@@ -10,6 +10,8 @@ import {
   drawableLayout,
   hasActiveFilters,
   isLayout,
+  phantomRows,
+  sessionsEmpty,
   layoutsFor,
   pruneProjects,
   availableProjects,
@@ -379,6 +381,24 @@ export function run(): number {
       assert.ok(SORT_HINT[k].length > 0, k + ' hint');
     }
     assert.strictEqual(SORT_LABEL.recency, 'Recency');
+  })) p++; else f++;
+
+  // #581: which launches draw a phantom row, and when the board shows its empty state.
+  const launch = (sessionId: string, state: LaunchingSession['state'], resume?: boolean): LaunchingSession => ({
+    sessionId, projectName: 'p', projectPath: '/p', prompt: '', startedAtMs: NOW, state, ...(resume ? { resume } : {})
+  });
+
+  if (test('phantomRows: fresh launches always, a resume only once it failed, in input order', () => {
+    const all = [launch('a', 'launching'), launch('b', 'failed'), launch('c', 'launching', true), launch('d', 'failed', true)];
+    assert.deepStrictEqual(phantomRows(all).map(l => l.sessionId), ['a', 'b', 'd']);
+    assert.deepStrictEqual(phantomRows(undefined), []);
+  })) p++; else f++;
+
+  if (test('sessionsEmpty: loading or nothing to draw is empty; a phantom or a session is not', () => {
+    assert.strictEqual(sessionsEmpty(null, []), true);
+    assert.strictEqual(sessionsEmpty([], []), true);
+    assert.strictEqual(sessionsEmpty([], [launch('a', 'launching')]), false);
+    assert.strictEqual(sessionsEmpty([sess({})], []), false);
   })) p++; else f++;
 
   console.log('\nPassed: ' + p + '  Failed: ' + f + '\n');

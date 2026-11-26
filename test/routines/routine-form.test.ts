@@ -9,7 +9,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import {
-  FIELDS, UNREADABLE, cronFor, fmValue, formKind, frontmatterReadable, routeErrors, scheduleEdit, schedulePick, setKey, switchPreset, timeoutUnitView, timeoutWithUnit, validMinute, validTime, visibleFields
+  FIELDS, UNREADABLE, cronFor, fmValue, formKind, frontmatterReadable, reposFlip, reposPickList, reposSwitch, routeErrors, scheduleEdit, schedulePick, setKey, switchPreset, timeoutUnitView, timeoutWithUnit, validMinute, validTime, visibleFields
 } from '../../client/src/lib/routineForm.js';
 import { jobTemplate, setRepos } from '../../client/src/lib/routines.js';
 import { PERMISSION_MODES, parseJob } from '../../shared/routine-file.js';
@@ -563,6 +563,28 @@ export function run(): number {
   t('validMinute: one or two digits up to 59, surrounding spaces allowed', () => {
     for (const s of ['0', '59', ' 7 ']) assert.strictEqual(validMinute(s), true, s);
     for (const s of ['60', '-1', '1.5', '', '123']) assert.strictEqual(validMinute(s), false, s);
+  });
+
+  // --- Repos control (#581) ---
+
+  t('reposPickList: picks first in order, then every pin not among them; an unpinned pick stays first', () => {
+    assert.deepStrictEqual(reposPickList({ mode: 'pick', picks: ['b'], cwd: '' }, ['a', 'b', 'c']), ['b', 'a', 'c']);
+    assert.deepStrictEqual(reposPickList({ mode: 'pick', picks: ['z'], cwd: '' }, ['a', 'b']), ['z', 'a', 'b']);
+  });
+
+  t('reposSwitch: Pick starts from every pin or keeps its picks; other modes clear them; cwd survives; same mode is null', () => {
+    const pins = ['a', 'b', 'c'];
+    assert.deepStrictEqual(reposSwitch({ mode: 'all', picks: [], cwd: '~/x' }, 'pick', pins), { mode: 'pick', picks: pins, cwd: '~/x' });
+    assert.deepStrictEqual(reposSwitch({ mode: 'all', picks: ['b'], cwd: '~/x' }, 'pick', pins), { mode: 'pick', picks: ['b'], cwd: '~/x' });
+    assert.deepStrictEqual(reposSwitch({ mode: 'pick', picks: ['b'], cwd: '~/x' }, 'all', pins), { mode: 'all', picks: [], cwd: '~/x' });
+    assert.deepStrictEqual(reposSwitch({ mode: 'pick', picks: ['b'], cwd: '~/x' }, 'cwd', pins), { mode: 'cwd', picks: [], cwd: '~/x' });
+    assert.strictEqual(reposSwitch({ mode: 'pick', picks: ['b'], cwd: '~/x' }, 'pick', pins), null);
+  });
+
+  t('reposFlip: removes a pick that is there, appends one that is not', () => {
+    const v = { mode: 'pick' as const, picks: ['a', 'b'], cwd: '' };
+    assert.deepStrictEqual(reposFlip(v, 'a'), { mode: 'pick', picks: ['b'], cwd: '' });
+    assert.deepStrictEqual(reposFlip(v, 'c'), { mode: 'pick', picks: ['a', 'b', 'c'], cwd: '' });
   });
 
   console.log(`\n  ${p} passed, ${f} failed`);
