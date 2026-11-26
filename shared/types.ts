@@ -2267,6 +2267,13 @@ export interface LaunchingSession {
 }
 
 /** Where a launch runs: the dashboard's own headless `claude`, or the Claude desktop app opened through its `claude://` URL. */
+/**
+ * The sub-views a `?view=` deep link may name — the contract between the server's link builders (`server/lib/notify.ts` `viewUrl`, `hub-widgets.ts`) and the
+ * client's parser (`client/src/lib/deepLink.ts`). Typed on both sides, so a view renamed on one fails `tsc` on the other;
+ * `test/notify/deep-link-contract.test.ts` round-trips every link the server builds through the client's parsers.
+ */
+export type DeepLinkView = 'git' | 'routines' | 'usage';
+
 export type LaunchSurface = 'dashboard' | 'desktop';
 
 /**
