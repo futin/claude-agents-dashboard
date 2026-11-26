@@ -516,7 +516,7 @@ export function writeAccessFor(peer: ConnectionOrigin, trustTailnet: boolean, to
 
 /** `writeAccessFor` for this request. Reads the switch per call, which is what makes it live without a restart. */
 function requestWriteAccess(config: Config, req: IncomingMessage): { peer: ConnectionOrigin; access: WriteAccess } {
-  const peer = resolvePeer(req.socket?.remoteAddress, req.headers);
+  const peer = resolvePeer(req.socket?.remoteAddress, req.headers, undefined, config.allowedHosts);
   return { peer, access: writeAccessFor(peer, getSettings().trustTailnet, config.answerToken !== '') };
 }
 
@@ -565,7 +565,7 @@ export function serveHealth(config: Config, res: ServerResponse, req: IncomingMe
     idleSecs: settings.idleSecs,
     answerSecs: settings.answerSecs,
     launchSurfaceDefault: settings.launchSurfaceDefault,
-    origin: classifyOrigin(req.socket?.remoteAddress, req.headers),
+    origin: classifyOrigin(req.socket?.remoteAddress, req.headers, config.allowedHosts),
     writeAccess: access,
     tokenRequired: access === 'token',
     transcribe: probeTranscribe(config),

@@ -103,6 +103,25 @@ export async function run(): Promise<number> {
     });
   }));
 
+  check(await testAsync('ALLOWED_HOSTS=* admits a rebound name for reads but never trusts it to write; a listed name keeps loopback trust (#562)', async () => {
+    await withServer(ENV + 'ALLOWED_HOSTS=*\n', async h => {
+      const health = await h.req('/api/health', { headers: { Host: 'evil.example' } });
+      assert.equal(health.status, 200);
+      assert.equal(health.json?.origin, 'unknown');
+      assert.equal(health.json?.writeAccess, 'none');
+      const body = JSON.stringify({ dirName: 'nope', pinned: true });
+      const write = await h.req('/api/pins', { method: 'POST', body, headers: { Host: 'evil.example', 'Sec-Fetch-Site': 'same-origin' } });
+      assert.equal(write.status, 403);
+      assert.equal(write.json?.error, 'read-only from this network');
+      assert.equal((await h.req('/api/health', { headers: { Host: 'localhost:4173' } })).json?.writeAccess, 'open');
+    });
+    await withServer(ENV + 'ALLOWED_HOSTS=dash.example.com\n', async h => {
+      const health = await h.req('/api/health', { headers: { Host: 'dash.example.com' } });
+      assert.equal(health.json?.origin, 'local');
+      assert.equal(health.json?.writeAccess, 'open');
+    });
+  }));
+
   check(await testAsync('a cross-site browser POST is refused with ANSWER_TOKEN empty; same-origin and header-less still reach the route', async () => {
     await withServer(ENV, async h => {
       const body = JSON.stringify({ dirName: 'nope', pinned: true });

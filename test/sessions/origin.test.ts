@@ -3,6 +3,7 @@ import type { IncomingHttpHeaders } from 'node:http';
 
 import os from 'node:os';
 
+import { allowedHostsWarning } from '../../server/lib/config.js';
 import { classifyAddress, classifyOrigin, normalizeAddress, rebindableHost, resolvePeer } from '../../server/lib/origin.js';
 import type { ConnectionOrigin } from '../../shared/types.js';
 
@@ -212,6 +213,57 @@ export function run(): number {
     }
     assert.strictEqual(rebindableHost(undefined, own), false);
     assert.strictEqual(rebindableHost('', own), false);
+  })) p++; else f++;
+
+  if (test('ALLOWED_HOSTS=* never earns local for a dotted name only * admitted (DNS rebinding, #562)', () => {
+    const own = ['mybox'];
+    const table: [string, IncomingHttpHeaders, string[], ConnectionOrigin][] = [
+      ['127.0.0.1', { host: 'evil.example:4173' }, ['*'], 'unknown'],
+      ['127.0.0.1', { host: 'evil.example:4173' }, [' * '], 'unknown'],
+      ['127.0.0.1', { host: 'evil.example:4173' }, [], 'unknown'],
+      ['127.0.0.1', { host: 'evil.example:5174', 'x-forwarded-for': '127.0.0.1' }, ['*'], 'unknown'],
+      // A name the user listed is one they own, not one an attacker can rebind.
+      ['127.0.0.1', { host: 'dash.example.com' }, ['dash.example.com'], 'local'],
+      ['127.0.0.1', { host: 'a.ngrok.app' }, ['.ngrok.app', '*'], 'local'],
+      // Names that pass the Host guard on its built-in rules stay local beside *.
+      ['127.0.0.1', { host: 'localhost:4173' }, ['*'], 'local'],
+      ['127.0.0.1', { host: '127.0.0.1:4173' }, ['*'], 'local'],
+      ['127.0.0.1', { host: '[::1]:4173' }, ['*'], 'local'],
+      ['127.0.0.1', {}, ['*'], 'local'],
+      ['127.0.0.1', { host: 'mybox.tail1234.ts.net' }, ['*'], 'local'],
+      ['127.0.0.1', { host: 'app.localhost' }, ['*'], 'local'],
+      // * only ever removes local: a tunnel client, a tailnet hop and a LAN socket keep their verdicts.
+      ['127.0.0.1', { host: 'evil.example', 'x-forwarded-for': '8.8.8.8' }, ['*'], 'unknown'],
+      ['127.0.0.1', { host: 'evil.example', 'x-forwarded-for': '100.101.102.103' }, ['*'], 'tailnet'],
+      ['192.168.1.5', { host: 'evil.example' }, ['*'], 'lan']
+    ];
+    for (const [socket, headers, allowed, want] of table) {
+      assert.strictEqual(resolvePeer(socket, headers, own, allowed), want, `${socket} + ${JSON.stringify(headers)} + ${JSON.stringify(allowed)} → ${want}`);
+    }
+    const full = os.hostname().toLowerCase();
+    assert.strictEqual(resolvePeer('127.0.0.1', { host: `${full}:4173` }, undefined, ['*']), 'local');
+  })) p++; else f++;
+
+  if (test('classifyOrigin and resolvePeer agree under ALLOWED_HOSTS=*', () => {
+    const cases: IncomingHttpHeaders[] = [
+      { host: 'evil.example:4173' }, { host: 'localhost:4173' }, { host: '127.0.0.1:4173' }, { host: '[::1]:4173' }, {},
+      { host: 'mybox.tail1234.ts.net' }, { host: 'app.localhost' }, { host: 'evil.example', 'x-forwarded-for': '100.101.102.103' }
+    ];
+    for (const headers of cases) {
+      for (const socket of ['127.0.0.1', '192.168.1.5']) {
+        assert.strictEqual(classifyOrigin(socket, headers, ['*']), resolvePeer(socket, headers, undefined, ['*']), `${socket} + ${JSON.stringify(headers)}`);
+      }
+    }
+    assert.strictEqual(classifyOrigin('127.0.0.1', { host: 'evil.example' }, ['*']), 'unknown');
+    assert.strictEqual(classifyOrigin('127.0.0.1', { host: 'dash.example.com' }, ['dash.example.com']), 'local');
+  })) p++; else f++;
+
+  if (test('allowedHostsWarning speaks only for *', () => {
+    const warning = allowedHostsWarning(['.ngrok.app', '*']);
+    assert.ok(warning && warning.includes('ANSWER_TOKEN'), String(warning));
+    assert.ok(allowedHostsWarning(['*']));
+    assert.strictEqual(allowedHostsWarning(['.ngrok.app']), null);
+    assert.strictEqual(allowedHostsWarning([]), null);
   })) p++; else f++;
 
   if (test("this machine's own hostname, bare or short, stays local by default", () => {

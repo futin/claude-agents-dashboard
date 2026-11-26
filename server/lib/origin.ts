@@ -23,7 +23,7 @@ import type { IncomingHttpHeaders } from 'node:http';
 import os from 'node:os';
 
 import type { ConnectionOrigin } from '../../shared/types.js';
-import { hostname as hostOf } from './request-guard.js';
+import { hostAllowed, hostname as hostOf } from './request-guard.js';
 
 /** Tailscale's IPv6 ULA range is fd7a:115c:a1e0::/48 — the first three hextets. */
 const TAILSCALE_V6 = ['fd7a', '115c', 'a1e0'];
@@ -138,12 +138,14 @@ export function classifyAddress(addr: string | undefined): ConnectionOrigin {
  * An entry that is not an address, empty ones included, is `unknown` rather than
  * skipped: the gate fails closed. No header at all, or only loopback entries,
  * is `local` — unless the `Host` header is a name a LAN peer can answer for
- * ({@link rebindableHost}), which is `unknown` too.
+ * ({@link rebindableHost}), or a dotted name only `*` in `allowedHosts` let past
+ * the Host guard ({@link wildcardOnlyHost}); both are `unknown` too.
  */
 export function resolvePeer(
   remoteAddress: string | undefined,
   headers?: IncomingHttpHeaders,
-  ownNames: readonly string[] = OWN_NAMES
+  ownNames: readonly string[] = OWN_NAMES,
+  allowedHosts: readonly string[] = []
 ): ConnectionOrigin {
   const socket = classifyAddress(remoteAddress);
   if (socket !== 'local') return socket;
@@ -158,7 +160,8 @@ export function resolvePeer(
       if (kind !== 'local') return kind;
     }
   }
-  return rebindableHost(headers?.host, ownNames) ? 'unknown' : 'local';
+  const host = headers?.host;
+  return rebindableHost(host, ownNames) || wildcardOnlyHost(host, allowedHosts, ownNames) ? 'unknown' : 'local';
 }
 
 /** This machine's own name, bare and short: the OS resolves it locally (`/etc/hosts`, nss-myhostname, mDNSResponder), so no LAN peer can answer for it. */
@@ -181,10 +184,24 @@ export function rebindableHost(header: string | undefined, ownNames: readonly st
   return name.endsWith('.local') || !name.includes('.');
 }
 
+/**
+ * Whether a loopback request's `Host` passes the Host guard only because `ALLOWED_HOSTS` holds `*`: a dotted, public-looking name that neither the
+ * guard's built-in rules nor an explicit entry admits. `*` exists for public tunnels, whose clients carry `X-Forwarded-For` and never reach `local`
+ * anyway, so the only loopback request it lets through bare is a page that rebound its own name at 127.0.0.1 — which must not get token-free writes
+ * (#562). An explicitly listed name is one the user owns, so it keeps `local`.
+ */
+function wildcardOnlyHost(header: string | undefined, allowedHosts: readonly string[], ownNames: readonly string[]): boolean {
+  if (!header) return false;
+  const name = hostOf(header);
+  if (!name || name === 'localhost' || ownNames.includes(name)) return false;
+  return !hostAllowed(header, allowedHosts.filter(h => h.trim() !== '*'));
+}
+
 /** The badge's name for {@link resolvePeer}, kept so the badge and the gate can never disagree. */
 export function classifyOrigin(
   remoteAddress: string | undefined,
-  headers?: IncomingHttpHeaders
+  headers?: IncomingHttpHeaders,
+  allowedHosts: readonly string[] = []
 ): ConnectionOrigin {
-  return resolvePeer(remoteAddress, headers);
+  return resolvePeer(remoteAddress, headers, OWN_NAMES, allowedHosts);
 }
