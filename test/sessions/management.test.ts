@@ -5,6 +5,7 @@ import path from 'node:path';
 
 import * as mgmt from '../../server/lib/management.js';
 import * as paths from '../../server/lib/paths.js';
+import { resetListingCache } from '../../server/lib/transcript-listing.js';
 
 function test(name: string, fn: () => void | Promise<void>): Promise<boolean> {
   return Promise.resolve()
@@ -509,6 +510,34 @@ export async function run(): Promise<number> {
     assert.strictEqual(mgmt.resolveProject(cfg, '-scratch', opts), null);
     assert.deepStrictEqual(mgmt.listPinRows(cfg, ['-scratch'], opts).map(r => [r.path, r.listed]), [[scratch, false]]);
     assert.deepStrictEqual(mgmt.listRecentProjects(cfg, { root, now: NOW }).map(r => r.path), [scratch, repo]);
+  }));
+
+  tally(await test('pinListOptions: every key /api/pins needs — a Claude-root pin reads listed:false, an ordinary one listed:true (#447, #580)', async () => {
+    const home = makeHome();
+    const prev = process.env.HOME;
+    process.env.HOME = home;
+    try {
+      const fakeRoot = path.join(home, 'claude-root');
+      const scratch = path.join(fakeRoot, 'scratch');
+      const repo = path.join(home, 'repo');
+      const plant = (dir: string): string => {
+        fs.mkdirSync(dir, { recursive: true });
+        const dirName = mgmt.encodeProjectDir(dir);
+        put(path.join(home, '.claude', 'projects', dirName), 'a.jsonl', JSON.stringify({ cwd: dir, type: 'user', timestamp: new Date().toISOString() }) + '\n');
+        return dirName;
+      };
+      const pins = [plant(scratch), plant(repo)];
+      paths.overrideClaudeRoots([fakeRoot]);
+      resetListingCache();
+      const opts = mgmt.pinListOptions(pins);
+      assert.deepStrictEqual([...(opts.pinnedDirs ?? [])], pins);
+      assert.ok(opts.archivedIds instanceof Set, 'archivedIds is the archive set, not omitted');
+      assert.deepStrictEqual(mgmt.listPinRows({ lookbackHours: 24 }, pins, opts).map(r => [r.path, r.listed]), [[scratch, false], [repo, true]]);
+    } finally {
+      paths.overrideClaudeRoots(null);
+      resetListingCache();
+      if (prev === undefined) delete process.env.HOME; else process.env.HOME = prev;
+    }
   }));
 
   tally(await test('resolveProject: known dirName → ref; unknown → null', async () => {

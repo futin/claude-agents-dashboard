@@ -418,6 +418,17 @@ export async function run(): Promise<number> {
     assert.strictEqual(f.calls.length, 0);
   });
 
+  await it('start: a pin under a Claude root is not-pinned, the way /api/pins reads it; an ordinary pin still starts (#447, #580)', async () => {
+    const scratch = repo(path.join('claude-root', 'scratch'));
+    const plain = repo();
+    overrideClaudeRoots([path.join(home, 'claude-root')]);
+    resetListingCache();
+    const f = fake(); overrideCodegraphRunner(f.run);
+    assert.strictEqual(await startCodegraphRun({}, scratch.dirName, 'sync'), 'not-pinned');
+    assert.strictEqual(f.runs().length, 0);
+    assert.strictEqual(await startCodegraphRun({}, plain.dirName, 'sync'), 'started');
+  });
+
   await it('start: refusals: unknown dirName, no graph, pending run, rebuild, and a lock with no watcher', async () => {
     const bare = repo('bare', false);
     const a = repo(); const locked = repo(); const watched = repo(); const rebuilding = repo();

@@ -21,9 +21,11 @@ import fsp from 'node:fs/promises';
 import path from 'node:path';
 
 import { parseFrontmatter } from '../../shared/frontmatter.js';
+import { archivedSessionIds } from './archived.js';
 import { claudeHome, claudeJsonPath, defaultClaudeRoots, isClaudeOwned, isUnder } from './paths.js';
-import { listTranscripts } from './scan.js';
+import { listTranscripts, projectsRoot } from './scan.js';
 import type { TranscriptRef } from './scan.js';
+import { sharedListing } from './transcript-listing.js';
 import { readTranscript } from './transcript.js';
 import type { Config } from './config.js';
 import type {
@@ -126,7 +128,7 @@ export function redactArgs(args: string[]): string[] {
 /** Max files listed per skill dir (after sorting, so SKILL.md always survives). */
 export const SKILL_FILES_CAP = 200;
 
-interface ProjectsOptions {
+export interface ProjectsOptions {
   root?: string;
   now?: number;
   homeDir?: string;
@@ -873,6 +875,20 @@ export function isListedProjectPath(dir: string): boolean {
   if (!m) return true;
   const gitdir = path.resolve(dir, m[1]);
   return path.basename(path.dirname(gitdir)) !== 'worktrees';
+}
+
+/**
+ * The options every pin-row reader builds its rows with — `GET /api/pins`, the routine pin snapshot, the Git view and its fetch, the CodeGraph view — so a
+ * pin reads the same `path` and `listed` in all of them. The Claude roots are the #447 rule: a pin under a scratchpad or `~/.claude` is never listed. One
+ * function, because the four hand copies that preceded it each dropped `claudeRoots` and read such a pin as listed (#580).
+ */
+export function pinListOptions(pins: readonly string[]): ProjectsOptions {
+  return {
+    archivedIds: archivedSessionIds(),
+    pinnedDirs: new Set(pins),
+    claudeRoots: defaultClaudeRoots(),
+    transcripts: sharedListing(projectsRoot()),
+  };
 }
 
 /** Resolve a dirName to its recent (or pinned) ProjectRef by membership, or null. */

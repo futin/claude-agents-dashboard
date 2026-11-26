@@ -16,7 +16,11 @@ import {
   bootId, claimOwner, createProbe, deleteJob, isOwner, readJobs, releaseOwner, sweepLocks, wrapperAlive, writeJob, writePinsSnapshot, RoutineStoreError
 } from '../../server/lib/routine-store.js';
 import type { Probe } from '../../server/lib/routine-store.js';
-import { resetSettings } from '../../server/lib/settings.js';
+import { encodeProjectDir } from '../../server/lib/management.js';
+import { overrideClaudeRoots } from '../../server/lib/paths.js';
+import { resetSettings, setPinned } from '../../server/lib/settings.js';
+import { resetListingCache } from '../../server/lib/transcript-listing.js';
+import { userRecord } from '../api-harness.js';
 
 function test(name: string, fn: () => void): boolean {
   try { fn(); console.log('  ✓ ' + name); return true; }
@@ -192,6 +196,31 @@ export function run(): number {
       writePinsSnapshot(config());
       assert.deepStrictEqual(JSON.parse(fs.readFileSync(path.join(h.state, 'pins.json'), 'utf8')), []);
     } finally { process.chdir(cwd); resetSettings(); h.done(); }
+  });
+
+  t('writePinsSnapshot: a pin under a Claude root is listed:false, an ordinary pin listed:true, the way /api/pins reads them (#447, #580)', () => {
+    const h = homed();
+    const cwd = process.cwd();
+    process.chdir(tmp());
+    resetSettings();
+    const plant = (dir: string): string => {
+      fs.mkdirSync(dir, { recursive: true });
+      const dirName = encodeProjectDir(dir);
+      const proj = path.join(h.home, '.claude', 'projects', dirName);
+      fs.mkdirSync(proj, { recursive: true });
+      fs.writeFileSync(path.join(proj, 'a.jsonl'), JSON.stringify(userRecord('u1', 'hi', dir)) + '\n');
+      setPinned(dirName, true);
+      return dirName;
+    };
+    try {
+      const scratch = plant(path.join(h.home, 'claude-root', 'scratch'));
+      const repo = plant(path.join(h.home, 'repo'));
+      overrideClaudeRoots([path.join(h.home, 'claude-root')]);
+      resetListingCache();
+      writePinsSnapshot(config());
+      const rows = JSON.parse(fs.readFileSync(path.join(h.state, 'pins.json'), 'utf8')) as { dirName: string; listed: boolean }[];
+      assert.deepStrictEqual(rows.map(r => [r.dirName, r.listed]), [[scratch, false], [repo, true]]);
+    } finally { overrideClaudeRoots(null); resetListingCache(); process.chdir(cwd); resetSettings(); h.done(); }
   });
 
   t('claimOwner: no file -> owner; the file holds this pid, boot id, cwd and port', () => {
