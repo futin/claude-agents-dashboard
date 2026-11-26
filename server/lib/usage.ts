@@ -291,17 +291,22 @@ let refreshStartedAt = 0;
 let cycleSeq = 0;
 
 /**
- * Where a fetch cycle reads its token and renews an expired one. Production never changes it; a test swaps both through {@link setUsageCycleDeps}, so no
- * cycle under test reaches the real keychain (`security`) or spawns a `claude` renewal turn.
+ * Where a fetch cycle reads its token, renews an expired one, and hands each reading to the recorder. Production never changes it; a test swaps any of
+ * them through {@link setUsageCycleDeps}, so no cycle under test reaches the real keychain (`security`), spawns a `claude` renewal turn, or writes the
+ * history and ledger files — and a test can see what the recording branch fed each recorder.
  */
 export interface UsageCycleDeps {
   readToken: () => TokenState | Promise<TokenState>;
   autoRenew: (opts: AutoRenewOptions) => Promise<void>;
+  recordTick: typeof recordTick;
+  onUsageReading: typeof onUsageReading;
+  recordLedgerTick: typeof recordLedgerTick;
+  setForecastProfile: typeof setForecastProfile;
 }
-const DEFAULT_CYCLE_DEPS: UsageCycleDeps = { readToken, autoRenew };
+const DEFAULT_CYCLE_DEPS: UsageCycleDeps = { readToken, autoRenew, recordTick, onUsageReading, recordLedgerTick, setForecastProfile };
 let cycleDeps: UsageCycleDeps = DEFAULT_CYCLE_DEPS;
 
-/** Test seam: override the cycle's token source and renewer; `null` restores the real ones. */
+/** Test seam: override the cycle's token source, renewer or recorders; `null` restores the real ones. */
 export function setUsageCycleDeps(over: Partial<UsageCycleDeps> | null): void {
   cycleDeps = over ? { ...DEFAULT_CYCLE_DEPS, ...over } : DEFAULT_CYCLE_DEPS;
 }
@@ -409,7 +414,7 @@ export function refreshNow(force = false): Promise<void> {
                   resetsAt: limits.sevenDay.resetsAt
                 }
               : undefined;
-            recordTick({
+            cycleDeps.recordTick({
               t: Date.now(),
               utilization: limits.fiveHour.utilization,
               resetsAt: limits.fiveHour.resetsAt,
@@ -417,13 +422,13 @@ export function refreshNow(force = false): Promise<void> {
             });
           }
           // After the recorder, outside its `if`: a failed fetch (`limits === null`) is still a reading the detector must see as "no reading".
-          onUsageReading(limits);
+          cycleDeps.onUsageReading(limits);
           // Beside `recordTick`, not inside it: the ledger measures what this
           // machine *spent* over the same minute the sample prices, and the
           // rate fitter joins the two by time. It records even when `limits`
           // came back null — the tokens were still spent.
-          recordLedgerTick();
-          setForecastProfile(deriveProfile(profileSnapshot()));
+          cycleDeps.recordLedgerTick();
+          cycleDeps.setForecastProfile(deriveProfile(profileSnapshot()));
         } catch {
           /* recording must never break the usage fetch */
         }
@@ -433,7 +438,7 @@ export function refreshNow(force = false): Promise<void> {
         // profile in place would shape the walk with learned weights while the
         // rate had already reverted to a raw *wall* slope — the double discount,
         // inverted, and a silently under-projected week.
-        setForecastProfile(null);
+        cycleDeps.setForecastProfile(null);
       }
       // Feed the pace store one sample per window and attach burn rate +
       // projected exhaustion (null until enough history accumulates).

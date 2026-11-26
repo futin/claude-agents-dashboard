@@ -19,7 +19,8 @@ pace, do I run dry before the window resets?*
   proxy/gateway — Bedrock/Vertex/Ollama/LiteLLM — with no such route; that misroute
   returned `null` bars in practice). `CLAUDE_USAGE_BASE_URL` overrides for tests only;
   the request is protocol-aware (http vs https). `test/usage/usage-cycle.test.ts` uses it to run the whole cycle (`refreshNow` / `fetchUsage`) against a
-  local server, with `setUsageCycleDeps()` standing in for the keychain read and the renewal spawn so no test touches either.
+  local server, with `setUsageCycleDeps()` standing in for the keychain read, the renewal spawn and the four recorders the recording branch feeds, so no
+  test touches the keychain, spawns a renewal or writes a history or ledger file.
 - **Response shape:** windows are **top-level**
   (`{ five_hour:{utilization,resets_at}, seven_day:{…}, … }`), *not* wrapped in
   `rate_limits`. `mapUsage()` accepts both shapes defensively and is pure, unit-tested on
