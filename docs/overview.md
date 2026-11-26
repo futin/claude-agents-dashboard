@@ -484,7 +484,7 @@ plugin/           the installable Claude Code plugin (`/plugin install`, README 
                   plain JS skills, never imported by server/ or client/ at runtime
   .claude-plugin/plugin.json  name + version
   lib/            generated `.mjs` copies of the shared routine modules and of the server's
-                  agents / subagent-usage / usage-line modules (kaizen's), for plain-`node` use
+                  agents / subagent-usage / usage-line / transcript-record modules (kaizen's), for plain-`node` use
                   (never `bin/`: Claude Code puts that on every session's PATH)
   skills/git-sync/  repo chores across machines; engine tools/git-sync.mjs, own `node --test`
                   suite run by `pnpm test:skills` (~4 min, 2026-10-01)
