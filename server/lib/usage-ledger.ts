@@ -318,15 +318,29 @@ interface FileCursor {
 /** Most bytes the first read of a transcript first seen after the seed takes: its tail, so one huge fork cannot stall a tick. */
 export const NEW_FILE_READ_CAP = 8 * FOLD_CHUNK_BYTES;
 
+/** How far ahead of a tick a carried event may sit: past it the stamp is a skewed clock, not a record written during the walk. */
+export const PENDING_HORIZON_MS = 60 * 60_000;
+
 let cursors = new Map<string, FileCursor>();
 let prevTickMs: number | null = null;
 let bytesRead = 0;
+/**
+ * Events read past their tick's `nowMs` — written while the walk ran — carried to the next tick, because the cursor has already moved past
+ * them and no later read sees them again.
+ */
+let pending: UsageEvent[] = [];
 
 /** Test seam, and what a recording toggle does: forget every offset. */
 export function resetLedgerRecorder(): void {
   cursors = new Map();
   prevTickMs = null;
   bytesRead = 0;
+  pending = [];
+}
+
+/** Test seam: events read ahead of their tick and waiting for the next one. */
+export function ledgerPendingCount(): number {
+  return pending.length;
 }
 
 /** Test seam: transcript bytes the recorder has read since the last reset. */
@@ -511,12 +525,15 @@ export function recordLedgerTick(opts?: { dir?: string; root?: string; nowMs?: n
       prevTickMs = nowMs;
       return;
     }
-    const events = collectEvents(root);
+    const events = pending.concat(collectEvents(root));
+    const inHorizon = (e: UsageEvent): boolean => e.ts <= nowMs + PENDING_HORIZON_MS;
 
     if (nowMs <= prevTickMs) {
-      prevTickMs = nowMs; // a clock that went backwards
+      pending = events.filter(inHorizon); // a clock that went backwards: the reads wait for the next forward tick
+      prevTickMs = nowMs;
       return;
     }
+    pending = events.filter(e => e.ts > nowMs && inHorizon(e));
     const { tok, req, sur } = sumWindow(events, prevTickMs, nowMs);
     appendLedgerLine({ t: nowMs, prevT: prevTickMs, tok, req, sur }, opts?.dir);
     prevTickMs = nowMs;

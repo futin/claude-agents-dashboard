@@ -9,7 +9,9 @@ import {
   LEDGER_UNROTATED_MAX_BYTES,
   MAX_LEDGER_BYTES,
   NEW_FILE_READ_CAP,
+  PENDING_HORIZON_MS,
   ledgerCursorOffsets,
+  ledgerPendingCount,
   ledgerReadStats,
   ledgerStartMs,
   readLedgerSince,
@@ -503,6 +505,82 @@ export function run(): number {
       recordLedgerTick({ dir: fx.dir, root: fx.root, nowMs: T0 + MIN });
       assert.strictEqual(ledgerReadStats().bytes - before, Buffer.byteLength(text));
       assert.deepStrictEqual(JSON.parse(fx.ledgerLines()[0]).tok, { 'opus-5': { in: 3, out: 0, cc: 0, cr: 0 } });
+    });
+  })) p++; else f++;
+
+  if (test('a record stamped past its tick (written during the walk) is carried to the next tick, not dropped', () => {
+    withFixture(fx => {
+      recordLedgerTick({ dir: fx.dir, root: fx.root, nowMs: T0 });
+      fs.appendFileSync(fx.transcript, assistantLine(T0 + 5_000, 'opus-5', 'late', { in: 9, out: 1, cc: 0, cr: 0 }) + '\n');
+      recordLedgerTick({ dir: fx.dir, root: fx.root, nowMs: T0 + 3_000 });
+      recordLedgerTick({ dir: fx.dir, root: fx.root, nowMs: T0 + 6_000 });
+      const lines = fx.ledgerLines().map(l => JSON.parse(l));
+      assert.deepStrictEqual(lines[0].tok, {}, 'not yet due at the tick that read it');
+      assert.deepStrictEqual(lines[1].tok, { 'opus-5': { in: 9, out: 1, cc: 0, cr: 0 } }, 'counted by the tick whose window holds it');
+    });
+  })) p++; else f++;
+
+  if (test('a backwards-clock tick keeps its reads for the next forward tick', () => {
+    withFixture(fx => {
+      recordLedgerTick({ dir: fx.dir, root: fx.root, nowMs: T0 });
+      fs.appendFileSync(fx.transcript, assistantLine(T0 + 5_000, 'opus-5', 'late', { in: 9, out: 1, cc: 0, cr: 0 }) + '\n');
+      recordLedgerTick({ dir: fx.dir, root: fx.root, nowMs: T0 + 3_000 });
+      recordLedgerTick({ dir: fx.dir, root: fx.root, nowMs: T0 + 1_000 });   // clock went backwards
+      recordLedgerTick({ dir: fx.dir, root: fx.root, nowMs: T0 + 6_000 });
+      const lines = fx.ledgerLines().map(l => JSON.parse(l));
+      assert.strictEqual(lines.length, 2, 'the backwards tick writes no line');
+      assert.deepStrictEqual(lines[1].tok, { 'opus-5': { in: 9, out: 1, cc: 0, cr: 0 } }, 'counted once, at the forward tick');
+    });
+  })) p++; else f++;
+
+  if (test('a backwards-clock tick does not throw away a record it read inside the next window', () => {
+    withFixture(fx => {
+      recordLedgerTick({ dir: fx.dir, root: fx.root, nowMs: T0 + MIN });
+      fs.appendFileSync(fx.transcript, assistantLine(T0 + MIN + 10_000, 'opus-5', 'm1', { in: 4, out: 0, cc: 0, cr: 0 }) + '\n');
+      recordLedgerTick({ dir: fx.dir, root: fx.root, nowMs: T0 });            // clock went backwards
+      recordLedgerTick({ dir: fx.dir, root: fx.root, nowMs: T0 + 2 * MIN });
+      assert.deepStrictEqual(JSON.parse(fx.ledgerLines()[0]).tok, { 'opus-5': { in: 4, out: 0, cc: 0, cr: 0 } });
+    });
+  })) p++; else f++;
+
+  if (test(`a record stamped beyond PENDING_HORIZON_MS is never counted and is not carried`, () => {
+    withFixture(fx => {
+      recordLedgerTick({ dir: fx.dir, root: fx.root, nowMs: T0 });
+      fs.appendFileSync(fx.transcript, assistantLine(T0 + MIN + PENDING_HORIZON_MS + 60 * MIN, 'opus-5', 'skew', { in: 50, out: 0, cc: 0, cr: 0 }) + '\n');
+      for (let i = 1; i <= 3; i++) {
+        recordLedgerTick({ dir: fx.dir, root: fx.root, nowMs: T0 + i * MIN });
+        assert.strictEqual(ledgerPendingCount(), 0, `tick ${i} carried a far-future record`);
+      }
+      // Advance the clock past the record's stamp: a carried record would be counted here.
+      recordLedgerTick({ dir: fx.dir, root: fx.root, nowMs: T0 + MIN + PENDING_HORIZON_MS + 61 * MIN });
+      for (const l of fx.ledgerLines()) assert.deepStrictEqual(JSON.parse(l).tok, {});
+    });
+  })) p++; else f++;
+
+  if (test('resetLedgerRecorder drops carried records — a reseed does not count them', () => {
+    withFixture(fx => {
+      recordLedgerTick({ dir: fx.dir, root: fx.root, nowMs: T0 });
+      fs.appendFileSync(fx.transcript, assistantLine(T0 + 5_000, 'opus-5', 'late', { in: 9, out: 1, cc: 0, cr: 0 }) + '\n');
+      recordLedgerTick({ dir: fx.dir, root: fx.root, nowMs: T0 + 3_000 });
+      assert.strictEqual(ledgerPendingCount(), 1);
+      resetLedgerRecorder();
+      assert.strictEqual(ledgerPendingCount(), 0);
+      recordLedgerTick({ dir: fx.dir, root: fx.root, nowMs: T0 + 4_000 });   // reseed
+      recordLedgerTick({ dir: fx.dir, root: fx.root, nowMs: T0 + 6_000 });
+      const lines = fx.ledgerLines().map(l => JSON.parse(l));
+      assert.deepStrictEqual(lines[lines.length - 1].tok, {}, 'the pre-reset read is gone with the offsets it came from');
+    });
+  })) p++; else f++;
+
+  if (test('records written ahead of their ticks are each counted exactly once across three ticks', () => {
+    withFixture(fx => {
+      recordLedgerTick({ dir: fx.dir, root: fx.root, nowMs: T0 });
+      const rows: Array<[number, number]> = [[T0 + 10_000, 1], [T0 + MIN + 5_000, 2], [T0 + 2 * MIN + 30_000, 4], [T0 + 3 * MIN - 1, 8]];
+      fs.appendFileSync(fx.transcript, rows.map(([ts, n], i) => assistantLine(ts, 'opus-5', 'r' + i, { in: n, out: 0, cc: 0, cr: 0 }) + '\n').join(''));
+      for (let i = 1; i <= 3; i++) recordLedgerTick({ dir: fx.dir, root: fx.root, nowMs: T0 + i * MIN });
+      const total = fx.ledgerLines().reduce((sum, l) => sum + (JSON.parse(l).tok['opus-5']?.in ?? 0), 0);
+      assert.strictEqual(total, 15);
+      assert.strictEqual(ledgerPendingCount(), 0);
     });
   })) p++; else f++;
 

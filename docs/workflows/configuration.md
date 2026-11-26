@@ -10,6 +10,9 @@ Copy `.env.example` to `.env` and edit. Everything is optional. Precedence: real
 environment variables override `.env`, which overrides the defaults
 (`server/lib/config.ts` `DEFAULTS`).
 
+Inline comments are allowed, dotenv-style: `WEB_PORT=4173 # prod` reads `4173`. An unquoted value is cut at the first `#` with whitespace before it, so
+`KEY=abc#def` keeps its `#`; a quoted value (`KEY="a # b"`) is taken whole up to its closing quote, and anything after that quote is dropped.
+
 Config is read once, at startup, so an edited `.env` needs a restart to take effect.
 `staleEnvKeys()` compares the file against what this process loaded and the Settings
 tab names the keys that changed since — names only, never values, because some of them

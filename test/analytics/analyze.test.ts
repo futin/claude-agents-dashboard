@@ -413,6 +413,20 @@ export function run(): number {
     assert.strictEqual(a.subagentTotals.unknownTokenCount, 0);
   })) p++; else f++;
 
+  if (test('two launch rows on two distinct transcripts → tokens is their sum', () => {
+    const file = fixture([
+      taskRec('t1', 'Explore', '2026-07-01T10:00:00Z'),
+      resultRec('t1', '2026-07-01T10:00:30Z', { toolUseResult: { status: 'completed', agentId: 'aN' } }),
+      taskRec('t2', 'Explore', '2026-07-01T10:01:00Z'),
+      resultRec('t2', '2026-07-01T10:01:30Z', { toolUseResult: { status: 'completed', agentId: 'aM' } })
+    ]);
+    subagentFile(file, 'aN', [usageRec({ input_tokens: 4000 }, '2026-07-01T10:00:10Z', { id: 'msg_n' })]);
+    subagentFile(file, 'aM', [usageRec({ input_tokens: 1500 }, '2026-07-01T10:01:10Z', { id: 'msg_m' })]);
+    const a = analyzeSession(file)!;
+    assert.strictEqual(a.subagentTotals.usage.combined, 5500);
+    assert.strictEqual(a.subagentTotals.tokens, 5500);
+  })) p++; else f++;
+
   if (test('harness figure on some dispatches only → transcript wins where present, no double count', () => {
     const file = fixture([
       taskRec('t1', 'Explore', '2026-07-01T10:00:00Z'),
@@ -497,7 +511,10 @@ export function run(): number {
       taskRec('t6', 'Explore', '2026-07-01T10:07:00Z'),
       resultRec('t6', '2026-07-01T10:07:01Z', { content: 'Async agent launched successfully.\nagentId: aK6 (internal)' }),
       { timestamp: '2026-07-01T10:08:00Z', message: { role: 'assistant', content: [{ type: 'tool_use', id: 'smK6', name: 'SendMessage', input: { to: 'aK6', summary: 'again', message: 'x' } }] } },
-      resultRec('smK6', '2026-07-01T10:08:01Z', { toolUseResult: { success: true, resumedAgentId: 'aK6' } })
+      resultRec('smK6', '2026-07-01T10:08:01Z', { toolUseResult: { success: true, resumedAgentId: 'aK6' } }),
+      // A sync result naming an agentId t1 already claims: shown on its row, counted into the totals once.
+      taskRec('t7', 'Explore', '2026-07-01T10:09:00Z'),
+      resultRec('t7', '2026-07-01T10:09:30Z', { toolUseResult: { status: 'completed', agentId: 'aK1', totalTokens: 50 } })
     ]);
     subagentFile(file, 'aK4', [usageRec({ input_tokens: 9 }, '2026-07-01T10:03:10Z', { id: 'msg_k4' })]);
     subagentFile(file, 'aK5', [usageRec({ input_tokens: 11 }, '2026-07-01T10:05:10Z', { id: 'msg_k5' })]);
@@ -708,7 +725,7 @@ export function run(): number {
     assert.strictEqual(toolOf(a, 'Bash').errors, 1);
   })) p++; else f++;
 
-  if (test('two launch rows resolving to one subagent file add its transcript to usage once', () => {
+  if (test('two launch rows resolving to one subagent file add its transcript to usage and tokens once', () => {
     const tur = { toolUseResult: { agentId: 'abc123', totalTokens: 500 }, content: 'done' };
     const a = analyzeSession(withSubagent([
       toolUseRec([tu('toolu_A', 'Agent', { subagent_type: 'Explore', description: 'look' })], '2026-07-01T10:00:00Z', callUsage, 'msg_A'),
@@ -719,6 +736,8 @@ export function run(): number {
     assert.strictEqual(a.bySubagent.length, 2);
     assert.strictEqual(a.subagentTotals.count, 2);
     assert.strictEqual(a.subagentTotals.usage.combined, 3100);
+    assert.strictEqual(a.subagentTotals.tokens, 3100, 'tokens and usage.combined describe the same file');
+    assert.deepStrictEqual(a.bySubagent.map(s => s.tokens), [3100, 3100], 'each row still shows what its launch read');
   })) p++; else f++;
 
   if (test('a compact summary quoting correction words is not counted as a user correction', () => {
