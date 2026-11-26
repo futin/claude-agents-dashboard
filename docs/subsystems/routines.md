@@ -333,7 +333,7 @@ Write routes are gate-only writes ([who may write](remote-access.md#who-may-writ
 | `POST /api/routines` | `{name, text}`, as PUT | `409 exists`, `422`, `500 validate failed`, `500 write failed` |
 | `PATCH /api/routines/:name` | `{enabled: boolean}`: rewrite only the `enabled:` line, reconcile; `200 {job, reconcile}` | `422` on an unparseable file, `404` |
 | `DELETE /api/routines/:name` | remove the file, reconcile, `200 {reconcile}`; the log stays | `404`, `500 delete failed` |
-| `POST /api/routines/validate` | `{text, name?}` → `{errors, summary}`; read-only, outside the write gate | `500 validate failed` (pins unreadable) |
+| `POST /api/routines/validate` | `{text, name?}` → `{errors, summary, nextAt}`, `nextAt` the schedule's next fire on the host's clock (null when invalid or manual), which the Schedule hint shows; read-only, outside the write gate | `500 validate failed` (pins unreadable) |
 | `POST /api/routines/reconcile` | `{apply?}` → the plan; applies when `apply` | |
 | `POST /api/routines/reveal` | `{name?}`: open the folder, or reveal that job's file, with `open` / `open -R`; macOS only | `501 reveal needs macOS`, `404 no routines folder` or `no such job`, `500 open failed` |
 | `POST /api/routines/:name/run` | see above | `400 bad body`, `bad-only`; `404`; `409 already-running`, `no-plugin`, `invalid`, `not-owner`; `500 spawn-failed` |
@@ -371,6 +371,9 @@ opened with and the server answers `409 changed` when the file moved since (#510
   writes `enabled: true` and **Save, keep paused** writes `false`, a New job whose schedule is Manual has a single **Save** (`enabled: true`; nothing
   installs either way), and an edit has one **Save and reconcile**, which writes the text as it stands.
   Delete confirms inside it; a file changed on disk while it is open shows `on disk changed` and refuses Save until reloaded.
+  Under File, a claude job that runs at `acceptEdits` or `auto` shows an amber note. The mode is the runner's own pick (`routinePermission` in
+  `client/src/lib/routines.ts`): the file's `permission-mode`, else the host's `SYNC_PERMISSION_MODE`, clamped to `SPAWN_MAX_PERMISSION`, both read
+  off `/api/health`. `plan` shows nothing.
 - **Run now:** `RunNowPopover` lists the job's pins with each one's last outcome (a sheet on a phone); a step's `run again` is `/run` with `only: [repo]`.
 
 Write controls render only for the owner. They stay drawn but disabled when the network is read-only or the Answer token is missing, with the reason in

@@ -9,7 +9,7 @@ import { useBackClose } from '../../hooks/useBackClose';
 import type { RoutineWriteControl } from '../../hooks/useRoutineWrite';
 import { authHeaders } from '../../lib/answerToken';
 import { FIELDS, UNREADABLE } from '../../lib/routineForm';
-import { editsWithoutAsking, jobTemplate, launchdLabel, nameProblem, type JobKind } from '../../lib/routines';
+import { jobTemplate, launchdLabel, nameProblem, permissionNote, type JobKind } from '../../lib/routines';
 import type { RoutineCtl } from './ctl';
 import JobRows from './JobRows';
 
@@ -45,6 +45,8 @@ export default function JobDrawer({ mode, row, confirmDelete, existing, ctl, sen
   const [loaded, setLoaded] = useState<{ text: string; mtimeMs: number } | null>(null);
   const [loadFailed, setLoadFailed] = useState(false);
   const [check, setCheck] = useState<RoutineValidateResponse | null>(null);
+  // The text `check` answered, so the schedule hint never shows a next fire computed for an earlier schedule.
+  const [checkedText, setCheckedText] = useState<string | null>(null);
   const [serverErrors, setServerErrors] = useState<JobError[] | null>(null);
   const [failure, setFailure] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -85,7 +87,7 @@ export default function JobDrawer({ mode, row, confirmDelete, existing, ctl, sen
         body: JSON.stringify(fileName ? { text, name: fileName } satisfies RoutineValidateRequest : { text } satisfies RoutineValidateRequest)
       })
         .then(res => (res.ok ? res.json() as Promise<RoutineValidateResponse> : null))
-        .then(body => { if (mine === seq.current && body && Array.isArray(body.errors)) setCheck(body); })
+        .then(body => { if (mine === seq.current && body && Array.isArray(body.errors)) { setCheck(body); setCheckedText(text); } })
         .catch(() => { /* the server's own check on Save still answers */ });
     }, VALIDATE_MS);
     return () => window.clearTimeout(timer);
@@ -202,7 +204,8 @@ export default function JobDrawer({ mode, row, confirmDelete, existing, ctl, sen
             )}
             {view === 'form' ? (
               <div className="rtn-field">
-                {reading ?? <JobRows key={`${kind}:${loaded?.mtimeMs ?? ''}`} text={text} onText={edit} errors={errors} readOnly={readOnly} ctl={ctl} onFile={() => setView('file')} />}
+                {reading ?? <JobRows key={`${kind}:${loaded?.mtimeMs ?? ''}`} text={text} onText={edit} errors={errors} readOnly={readOnly} ctl={ctl} onFile={() => setView('file')}
+                  hostNext={checkedText === text ? check?.nextAt : undefined} />}
                 {errors.length === 0 && check?.summary && <span className="rtn-vmsg ok">Valid · {check.summary}</span>}
               </div>
             ) : (
@@ -217,9 +220,7 @@ export default function JobDrawer({ mode, row, confirmDelete, existing, ctl, sen
                   <span className="rtn-vmsg err">{errors.map(e => (e.line > 0 ? `line ${e.line}: ${e.message}` : e.message)).join(' · ')}</span>
                 )}
                 {errors.length === 0 && check?.summary && <span className="rtn-vmsg ok">Valid · {check.summary}</span>}
-                {editsWithoutAsking(text) && (
-                  <span className="rtn-vmsg warn">permission-mode acceptEdits: the run can edit files in each repo without asking. bypassPermissions is refused here.</span>
-                )}
+                {permissionNote(text, ctl.permission) !== null && <span className="rtn-vmsg warn">{permissionNote(text, ctl.permission)}</span>}
               </label>
             )}
             {diskChanged && (

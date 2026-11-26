@@ -6,12 +6,13 @@
  * dashboard shows the clock of the machine the job runs on, which is the browser's in the single-machine case this page is built for).
  */
 import { isManualCron } from '../../../shared/cron';
-import { frontmatterFence, frontmatterKeyIndex, scalarEnd, writeFrontmatterLine } from '../../../shared/frontmatter';
-import { LABEL_PREFIX, NAME_RE, RESERVED, inlineList, unquote } from '../../../shared/routine-file';
+import { frontmatterFence, frontmatterKeyIndex, scalarEnd, writeFrontmatterLine, type FrontmatterFence } from '../../../shared/frontmatter';
+import { LABEL_PREFIX, NAME_RE, PERMISSION_MODES, RESERVED, inlineList, unquote } from '../../../shared/routine-file';
 import type {
-  ReconcileChange, RoutineJob, RoutineJobRow, RoutineRun, RoutineRunConflict, RoutineRunsQuery, RoutineStats, RoutineStep, RoutineWriteError,
+  PermissionMode, ReconcileChange, RoutineJob, RoutineJobRow, RoutineRun, RoutineRunConflict, RoutineRunsQuery, RoutineStats, RoutineStep, RoutineWriteError,
   RoutinesResponse,
 } from '../../../shared/types';
+import { copyText } from './clipboard';
 import { READ_ONLY_TEXT, refusalKind } from './writeRefusal';
 
 /** The chip colours a pill may take; `run` is the cyan "in flight" one the mock draws, `dim` the dashed one. */
@@ -297,14 +298,58 @@ export function nameProblem(name: string, existing: readonly string[]): string |
   return null;
 }
 
-/** The file asks for `permission-mode: acceptEdits`, which is what the drawer's amber note warns about. Read off the frontmatter, so it shows mid-edit too. */
-export function editsWithoutAsking(text: string): boolean {
-  const m = /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/.exec(text);
-  if (!m) return false;
-  const line = m[1].split(/\r?\n/).find(l => /^permission-mode\s*:/.test(l));
-  if (line === undefined) return false;
-  const raw = line.replace(/^permission-mode\s*:/, '').trim();
-  return raw.slice(0, scalarEnd(raw)).replace(/^(["'])(.*)\1$/, '$2') === 'acceptEdits';
+/** A routine's permission rung, lowest first: the runner's own ladder. */
+export type RoutineMode = typeof PERMISSION_MODES[number];
+
+/** What the runner falls back to and clamps by, baked from config: `SYNC_PERMISSION_MODE` and `SPAWN_MAX_PERMISSION`, read off `/api/health`. */
+export interface PermissionDefaults { mode: PermissionMode; ceiling: PermissionMode }
+
+/** A top-level key's value, read the way the routine parser reads it (`key:` at column 0, the scalar up to a comment, one pair of quotes off); null when absent. */
+function fenceValue(fence: FrontmatterFence, key: string): string | null {
+  const at = frontmatterKeyIndex(fence, key);
+  if (at === -1) return null;
+  const rest = fence.lines[at].replace(/\r$/, '').slice(key.length + 1).trimStart();
+  return unquote(rest.slice(0, scalarEnd(rest)));
+}
+
+/** The runner's `clampPermission`: the lower of the two rungs, an unknown value ranking as `auto`. */
+function clampMode(requested: string, ceiling: string): RoutineMode {
+  const idx = (v: string): number => { const i = PERMISSION_MODES.indexOf(v as RoutineMode); return i === -1 ? PERMISSION_MODES.indexOf('auto') : i; };
+  return PERMISSION_MODES[Math.min(idx(requested), idx(ceiling))];
+}
+
+/**
+ * The mode a claude job's file runs under, as `run-routine.mjs` picks it: the file's own `permission-mode`, else the host default, clamped to the ceiling.
+ * Read off the frontmatter through the shared fence, so it follows the text mid-edit and a BOM reads as the parser reads it. Null for a shell job (it runs
+ * no claude) and for text with no closed frontmatter.
+ */
+export function routinePermission(text: string, defaults: PermissionDefaults): RoutineMode | null {
+  const fence = frontmatterFence(text);
+  if (!fence || fence.close === -1 || fenceValue(fence, 'run') !== 'claude') return null;
+  const own = fenceValue(fence, 'permission-mode');
+  return clampMode(PERMISSION_MODES.find(m => m === own) ?? defaults.mode, defaults.ceiling);
+}
+
+const REFUSED = 'bypassPermissions is refused here.';
+const LOWER = 'Set permission-mode: plan or acceptEdits to lower it.';
+
+/** The drawer's amber note for a rung that acts without asking; null for `plan`, a shell job and unreadable text. */
+export function permissionNote(text: string, defaults: PermissionDefaults): string | null {
+  const mode = routinePermission(text, defaults);
+  if (mode === 'acceptEdits') return `permission-mode acceptEdits: the run can edit files in each repo without asking. ${REFUSED}`;
+  if (mode !== 'auto') return null;
+  const fence = frontmatterFence(text)!;
+  const own = PERMISSION_MODES.some(m => m === fenceValue(fence, 'permission-mode'));
+  return own
+    ? `permission-mode auto: the run approves edits and commands on its own. ${LOWER} ${REFUSED}`
+    : `No permission-mode here, so the run takes the host default, auto: it approves edits and commands on its own. ${LOWER} ${REFUSED}`;
+}
+
+/** Copy a job's launchd label through `copyText`, which falls back to `execCommand` where `navigator.clipboard` is missing, and say either way how it went. */
+export async function copyLabel(label: string, setNote: (note: { text: string; tone: 'ok' | 'warn' }) => void): Promise<void> {
+  setNote(await copyText(label)
+    ? { text: `Copied ${label}`, tone: 'ok' }
+    : { text: `Could not copy; the label is ${label}`, tone: 'warn' });
 }
 
 /** `nextLine` as the Next cell's two stacked lines: what day, then the clock. A line with no space (`paused`, `—`) is one line. */

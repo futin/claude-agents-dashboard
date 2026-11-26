@@ -379,7 +379,8 @@ client/src/
                   key),
                   useAccount (the header chip's 30s poll, owned by App), useGitFetch (Git's Fetch all key), useGitQuick (the Sync menu's Pull and Push),
                   useCodegraph (the CodeGraph sub-view's 30s visible-only poll, 3s while a run is live), useCodegraphRun (its Sync / Reindex keys),
-                  useRoutines / useRoutineRuns (the Routines sub-view's 3s polls, one `createPollSeq` each) and useRoutineWrite (its one write helper),
+                  useRoutines / useRoutineRuns (the Routines sub-view's 3s polls, one `createPollSeq` each), useRoutineWrite (its one write helper),
+                  useSessionRow (the row a Routines `session →` link opens, re-fetched from `/api/sessions/:id/row` while its ChatDrawer is open),
                   useGitStats (the Git sub-view's 30s visible-only poll), useGitSync (its
                   Sync button: runs per device, read off the sessions payload GitView polls),
                   useDraft (an input's typed text, kept local until it is whole),
@@ -390,7 +391,7 @@ client/src/
                   auto-hide), useNarrow (the one JS read of the `md` breakpoint),
                   useStuckStrip (when the phone's aside strip pins)
   lib/            routines (the Routines page's pure helpers: pills, run folding, the Repos helper, write-failure text), routineForm (the job drawer's
-                  Form view: one read/write/summary per row over the file text), filterSort, analyticsFilterSort, chatFilter, chatRow (the Sessions drawer's session: the live poll row, else one fetched from `/api/sessions/:id/row` when the filtered poll lacks it), chatPaging (the chat drawer's byte offsets: one
+                  Form view: one read/write/summary per row over the file text), filterSort, analyticsFilterSort, chatFilter, chatRow (the Sessions drawer's session: the live poll row, else one fetched from `/api/sessions/:id/row` when the filtered poll lacks it; and `nextSessionRow`, which re-fetched row the Routines drawer keeps), chatPaging (the chat drawer's byte offsets: one
                   tail poll at a time, an epoch per re-tail, a retry after a failed tail), pollSeq (`createPollSeq`, the skip-while-in-flight rule useSessions, usePendingReply, useSessionDetail, useSessionSpend, useAccount, useRemoteAnswer and the Routines
                   polls share, and `pollFetch`, the 30s bound every guarded poll's request carries),
                   heldBody (which timeline body a pinned panel folds), markdown, configsEntries,

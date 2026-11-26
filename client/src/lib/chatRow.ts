@@ -34,7 +34,7 @@ export function chatRowAction(input: {
 
 /**
  * The drawer's session: the live poll row when the poll carries `chatId`, so status and context keep updating, else the fetched row when it is for
- * `chatId` — a snapshot, the same trade Routines makes — else none. A fetched row is never shown under another id.
+ * `chatId` — a snapshot — else none. A fetched row is never shown under another id.
  */
 export function chatDrawerSession(
   chatId: string | null,
@@ -43,4 +43,13 @@ export function chatDrawerSession(
 ): Session | null {
   if (!chatId || !data) return null;
   return data.sessions.find(s => s.id === chatId) ?? (fetched?.id === chatId ? fetched : null);
+}
+
+/**
+ * A re-fetched `GET /api/sessions/:id/row` answer for the drawer Routines opens, which no sessions poll feeds: applied only when it is a row for `openId`
+ * and the drawer still shows `openId`, so a late answer never swaps the session under it. A failed or malformed tick keeps the last row.
+ */
+export function nextSessionRow(prev: Session | null, openId: string, ok: boolean, body: unknown): Session | null {
+  if (!ok || prev?.id !== openId || body === null || typeof body !== 'object' || (body as Partial<Session>).id !== openId) return prev;
+  return body as Session;
 }

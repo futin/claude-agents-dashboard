@@ -10,7 +10,12 @@ const EVERY = [1, 2, 3, 6, 12] as const;
 /** Monday first, as the mockup's chips read; the numbers are cron's (0 = Sunday). */
 const DAYS: Array<[number, string]> = [[1, 'Mon'], [2, 'Tue'], [3, 'Wed'], [4, 'Thu'], [5, 'Fri'], [6, 'Sat'], [0, 'Sun']];
 
-function nextFire(cron: string, now: Date): string {
+/**
+ * The hint's next fire. The job fires by the host's clock, so the host's `nextAt` for this text wins; the local reading, in the browser's zone, only
+ * fills in until that answer arrives (or from an older server that sends none).
+ */
+function nextFire(cron: string, now: Date, hostNext: string | null | undefined): string {
+  if (hostNext !== undefined) return hostNext === null ? '—' : nextText(new Date(hostNext), now);
   const p = parseCron(cron);
   const at = p.ok ? nextAfter(p.cron, now) : null;
   return at ? nextText(at, now) : '—';
@@ -43,7 +48,9 @@ function HourlyFields({ value, disabled, onChange }: { value: Extract<Schedule, 
   );
 }
 
-function CustomFields({ text, now, disabled, onChange }: { text: string; now: Date; disabled: boolean; onChange(s: Schedule): void }) {
+function CustomFields({ text, now, hostNext, disabled, onChange }: {
+  text: string; now: Date; hostNext: string | null | undefined; disabled: boolean; onChange(s: Schedule): void;
+}) {
   // Every keystroke is written, parse or not: the validator's error then shows in the row, which is how a cron gets fixed (spec §Schedule presets).
   const d = useDraft<HTMLInputElement>(text, s => onChange({ preset: 'custom', text: s }));
   const p = parseCron(text);
@@ -55,7 +62,7 @@ function CustomFields({ text, now, disabled, onChange }: { text: string; now: Da
           <span className="rtn-muted">min hr day mon wkday</span>
         </span>
       </div>
-      {p.ok && <div className="rtn-f-hint"><b>{describeCron(p.cron)}</b> · next: {nextFire(text, now)}</div>}
+      {p.ok && <div className="rtn-f-hint"><b>{describeCron(p.cron)}</b> · next: {nextFire(text, now, hostNext)}</div>}
     </>
   );
 }
@@ -65,9 +72,11 @@ function CustomFields({ text, now, disabled, onChange }: { text: string; now: Da
  * `onPick` is a seg click and `onChange` an edit inside a preset; `routineForm.ts`'s `schedulePick` / `scheduleEdit` decide what reaches the file, since
  * Weekly with no day writes nothing.
  */
-export default function ScheduleControl({ value, now, disabled, onPick, onChange }: {
+export default function ScheduleControl({ value, now, hostNext, disabled, onPick, onChange }: {
   value: Schedule;
   now: Date;
+  /** `/validate`'s `nextAt` for the file as it stands; undefined until that answer arrives. */
+  hostNext?: string | null;
   disabled: boolean;
   onPick(p: Preset): void;
   onChange(s: Schedule): void;
@@ -110,9 +119,9 @@ export default function ScheduleControl({ value, now, disabled, onPick, onChange
           {value.days.length === 0 && <span className="rtn-vmsg err">Pick at least one day; nothing is written until one is.</span>}
         </>
       )}
-      {value.preset === 'custom' && <CustomFields text={value.text} now={now} disabled={disabled} onChange={onChange} />}
+      {value.preset === 'custom' && <CustomFields text={value.text} now={now} hostNext={hostNext} disabled={disabled} onChange={onChange} />}
       {cron !== null && value.preset !== 'manual' && value.preset !== 'custom' && (
-        <div className="rtn-f-hint">Next: {nextFire(cron, now)} · writes <code>cron: "{cron}"</code></div>
+        <div className="rtn-f-hint">Next: {nextFire(cron, now, hostNext)} · writes <code>cron: "{cron}"</code></div>
       )}
     </>
   );
