@@ -22,6 +22,7 @@ import { claimOwner, releaseOwner } from '../../server/lib/routine-store.js';
 import type { Probe } from '../../server/lib/routine-store.js';
 import { resetSettings, setPinned } from '../../server/lib/settings.js';
 import { setSpawner } from '../../server/lib/spawn.js';
+import { nextAfter, parseCron } from '../../shared/cron.js';
 import { parseJob } from '../../shared/routine-file.js';
 import { runsQueryString } from '../../client/src/lib/routines.js';
 import type { ReconcileChange, ReconcileReport, RoutineFile, RoutineRunsResponse, RoutinesResponse, Session } from '../../shared/types.js';
@@ -382,6 +383,20 @@ export async function run(): Promise<number> {
     await withRoutines('', false, async c => {
       const r = await send(c.h, 'POST', '/api/routines/validate', { text: job({ run: 'shell' }) }, UNTRUSTED);
       assert.match(String(r.json?.summary), / · your home folder$/);
+    });
+  }));
+
+  tally(await testAsync('/validate answers the host-computed next fire for a valid job, paused or not, and null for an invalid or manual one', async () => {
+    await withRoutines('', false, async c => {
+      const cron = parseCron('0 9 * * *');
+      assert.ok(cron.ok);
+      for (const enabled of [true, false]) {
+        const r = await send(c.h, 'POST', '/api/routines/validate', { text: job({ run: 'shell', enabled }) }, UNTRUSTED);
+        assert.strictEqual(r.json?.nextAt, nextAfter(cron.cron, new Date())?.toISOString(), r.raw);
+      }
+      const manual = ['---', 'cron: manual', 'run: shell', '---', '```bash', 'echo hi', '```', ''].join('\n');
+      assert.strictEqual((await send(c.h, 'POST', '/api/routines/validate', { text: manual }, UNTRUSTED)).json?.nextAt, null);
+      assert.strictEqual((await send(c.h, 'POST', '/api/routines/validate', { text: '---\ncron: x\n---\n' }, UNTRUSTED)).json?.nextAt, null);
     });
   }));
 

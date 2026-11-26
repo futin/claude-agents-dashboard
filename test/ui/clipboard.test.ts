@@ -1,6 +1,7 @@
 import assert from 'node:assert';
 
 import { copyText } from '../../client/src/lib/clipboard.js';
+import { copyLabel } from '../../client/src/lib/routines.js';
 
 async function test(name: string, fn: () => Promise<void>): Promise<boolean> {
   try { await fn(); console.log('  ✓ ' + name); return true; }
@@ -79,6 +80,21 @@ export async function run(): Promise<number> {
     const { body } = stub({ writeText: async () => { throw new Error('denied'); } }, () => { throw new Error('boom'); });
     assert.strictEqual(await copyText('x'), false);
     assert.strictEqual(body.length, 0);
+  }));
+
+  results.push(await test('copyLabel with navigator.clipboard undefined still copies through the fallback and says so', async () => {
+    const { calls } = stub(undefined, () => true);
+    const notes: unknown[] = [];
+    await copyLabel('com.x.routine.j', n => notes.push(n));
+    assert.deepStrictEqual(calls.execCommand, ['copy']);
+    assert.deepStrictEqual(notes, [{ text: 'Copied com.x.routine.j', tone: 'ok' }]);
+  }));
+
+  results.push(await test('copyLabel whose copy fails names the label in a warn note', async () => {
+    stub(undefined, () => false);
+    const notes: unknown[] = [];
+    await copyLabel('com.x.routine.j', n => notes.push(n));
+    assert.deepStrictEqual(notes, [{ text: 'Could not copy; the label is com.x.routine.j', tone: 'warn' }]);
   }));
 
   if (savedNav) Object.defineProperty(globalThis, 'navigator', savedNav); else delete (globalThis as any).navigator;

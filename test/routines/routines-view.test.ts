@@ -6,13 +6,14 @@ import assert from 'node:assert';
 import fs from 'node:fs';
 
 import {
-  busyAdd, busyRemove, chipClass, costDelta, createPollSeq, focusRunNote, editsWithoutAsking, foreachLine, formatStat, groupRunsByDay, isFanOut, jobTemplate, jobsSubtitle, launchdLabel, medianMs, nameProblem,
+  busyAdd, busyRemove, chipClass, costDelta, createPollSeq, focusRunNote, foreachLine, formatStat, groupRunsByDay, isFanOut, jobTemplate, jobsSubtitle, launchdLabel, medianMs, nameProblem,
   readForeach, reconcileChip, reconcilePreview, rowText, runClock, dotTone, topFailure, jobPins, pinOutcome, stepErrLine, runKicker, runPill, runsQueryString, setRepos,
-  pausedLook, splitNext, splitSteps, stepPill, successRate, topTokenShare, withLate, writeFailureText
+  pausedLook, permissionNote, routinePermission, splitNext, splitSteps, stepPill, successRate, topTokenShare, withLate, writeFailureText
 } from '../../client/src/lib/routines.js';
+import { nextSessionRow } from '../../client/src/lib/chatRow.js';
 import { READ_ONLY_TEXT } from '../../client/src/lib/writeRefusal.js';
 import { LABEL_PREFIX, parseJob } from '../../shared/routine-file.js';
-import type { RoutineJob, RoutineJobRow, RoutineRun, RoutineStats, RoutineStep } from '../../shared/types.js';
+import type { RoutineJob, RoutineJobRow, RoutineRun, RoutineStats, RoutineStep, Session } from '../../shared/types.js';
 
 function test(name: string, fn: () => void): boolean {
   try { fn(); console.log('  ✓ ' + name); return true; }
@@ -357,11 +358,86 @@ export function run(): number {
     assert.strictEqual(nameProblem('pull-pins', ['other']), null);
   });
 
-  t('editsWithoutAsking: acceptEdits in the frontmatter (quoted or commented), not plan, not a body line', () => {
-    assert.strictEqual(editsWithoutAsking(jobTemplate('skill')), true);
-    assert.strictEqual(editsWithoutAsking('---\npermission-mode: "acceptEdits"\n---\n'), true);
-    assert.strictEqual(editsWithoutAsking('---\npermission-mode: plan\n---\npermission-mode: acceptEdits\n'), false);
-    assert.strictEqual(editsWithoutAsking(jobTemplate('shell')), false);
+  const AUTO = { mode: 'auto', ceiling: 'auto' } as const;
+  const claude = (...keys: string[]): string => ['---', 'cron: "0 9 * * *"', 'run: claude', ...keys, '---', '/git-sync', ''].join('\n');
+
+  t('routinePermission: the runner’s mode, read through the shared fence, so a BOM or CRLF file reads the same', () => {
+    assert.strictEqual(routinePermission('\uFEFF' + claude('permission-mode: acceptEdits'), AUTO), 'acceptEdits');
+    assert.strictEqual(routinePermission('\uFEFF' + claude('permission-mode: acceptEdits').replace(/\n/g, '\r\n'), AUTO), 'acceptEdits');
+    assert.strictEqual(routinePermission(claude('permission-mode: auto'), AUTO), 'auto');
+    assert.strictEqual(routinePermission(claude('permission-mode: "acceptEdits"  # comment'), AUTO), 'acceptEdits');
+    assert.strictEqual(routinePermission(jobTemplate('skill'), AUTO), 'acceptEdits');
+  });
+
+  t('routinePermission: no key takes the host default; the ceiling clamps by the runner’s ladder', () => {
+    assert.strictEqual(routinePermission(claude(), AUTO), 'auto');
+    assert.strictEqual(routinePermission(claude(), { mode: 'plan', ceiling: 'auto' }), 'plan');
+    assert.strictEqual(routinePermission(claude('permission-mode: auto'), { mode: 'auto', ceiling: 'acceptEdits' }), 'acceptEdits');
+    assert.strictEqual(routinePermission(claude('permission-mode: acceptEdits'), { mode: 'auto', ceiling: 'plan' }), 'plan');
+    // An unknown default ranks as auto, as the runner's clampPermission does.
+    assert.strictEqual(routinePermission(claude(), { mode: 'bypassPermissions', ceiling: 'acceptEdits' }), 'acceptEdits');
+  });
+
+  t('routinePermission: an indented key or a space before the colon is no key, as the parser reads it', () => {
+    assert.strictEqual(routinePermission(claude(' permission-mode: plan'), AUTO), 'auto');
+    assert.strictEqual(routinePermission(claude('permission-mode : plan'), AUTO), 'auto');
+    assert.strictEqual(routinePermission(claude('permission-mode: plan').replace('/git-sync', 'permission-mode: auto'), AUTO), 'plan');
+  });
+
+  t('routinePermission: null for no frontmatter, an unclosed fence and a shell job, which runs no claude', () => {
+    assert.strictEqual(routinePermission('permission-mode: auto\n', AUTO), null);
+    assert.strictEqual(routinePermission('---\nrun: claude\npermission-mode: auto\n', AUTO), null);
+    assert.strictEqual(routinePermission(jobTemplate('shell'), AUTO), null);
+  });
+
+  t('routinePermission mirrors parseJob: every mode the parser reads off a file is the mode read here', () => {
+    const files = [
+      claude('permission-mode: acceptEdits'), '\uFEFF' + claude('permission-mode: acceptEdits'), claude('permission-mode: acceptEdits').replace(/\n/g, '\r\n'),
+      claude("permission-mode: 'acceptEdits'"), claude('permission-mode: acceptEdits # why'), claude('permission-mode: auto'), claude('permission-mode: plan')
+    ];
+    for (const text of files) {
+      const parsed = parseJob('j', text, 'wsl');
+      assert.deepStrictEqual(parsed.errors, [], JSON.stringify(text));
+      assert.strictEqual(routinePermission(text, AUTO), parsed.job!.permissionMode, JSON.stringify(text));
+    }
+  });
+
+  t('permissionNote: acceptEdits keeps today’s note, auto names how to lower it and whether it came from the host, plan says nothing', () => {
+    assert.strictEqual(permissionNote(claude('permission-mode: acceptEdits'), AUTO),
+      'permission-mode acceptEdits: the run can edit files in each repo without asking. bypassPermissions is refused here.');
+    const own = permissionNote(claude('permission-mode: auto'), AUTO) ?? '';
+    assert.match(own, /^permission-mode auto: the run approves edits and commands on its own/);
+    assert.match(own, /permission-mode: plan or acceptEdits/);
+    assert.match(own, /bypassPermissions is refused here\.$/);
+    assert.ok(!own.includes('host default'), own);
+    const host = permissionNote(claude(), AUTO) ?? '';
+    assert.match(host, /host default/);
+    assert.match(host, /bypassPermissions is refused here\.$/);
+    assert.strictEqual(permissionNote(claude('permission-mode: plan'), AUTO), null);
+    assert.strictEqual(permissionNote(jobTemplate('shell'), AUTO), null);
+    assert.strictEqual(permissionNote('\uFEFF' + claude('permission-mode: acceptEdits'), AUTO)?.startsWith('permission-mode acceptEdits:'), true);
+  });
+
+  const row = (id: string, status: Session['status']): Session => ({ id, status } as Session);
+
+  t('nextSessionRow: a later tick replaces the open row, so a status change reaches the drawer', () => {
+    const prev = row('a', 'working');
+    assert.deepStrictEqual(nextSessionRow(prev, 'a', true, row('a', 'idle')), row('a', 'idle'));
+  });
+
+  t('nextSessionRow: an answer for another id, or after the drawer moved on, is not applied', () => {
+    const prev = row('b', 'working');
+    assert.strictEqual(nextSessionRow(prev, 'a', true, row('a', 'idle')), prev);
+    assert.strictEqual(nextSessionRow(prev, 'b', true, row('a', 'idle')), prev);
+    assert.strictEqual(nextSessionRow(null, 'a', true, row('a', 'idle')), null);
+  });
+
+  t('nextSessionRow: a failed or bodiless tick keeps the last row', () => {
+    const prev = row('a', 'working');
+    assert.strictEqual(nextSessionRow(prev, 'a', false, { error: 'no such session' }), prev);
+    assert.strictEqual(nextSessionRow(prev, 'a', false, row('a', 'idle')), prev);
+    assert.strictEqual(nextSessionRow(prev, 'a', true, null), prev);
+    assert.strictEqual(nextSessionRow(prev, 'a', true, 'x'), prev);
   });
 
   t('splitNext: day then clock on the last space; a one-word line stays one line', () => {

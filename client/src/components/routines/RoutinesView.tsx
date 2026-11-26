@@ -1,7 +1,7 @@
-import { Suspense, lazy, useCallback, useMemo, useRef, useState } from 'react';
+import { Suspense, lazy, useMemo, useRef, useState } from 'react';
 
 import type {
-  RoutineJobRow, RoutinePatch, RoutineReconcileRequest, RoutineRevealRequest, RoutineRunRequest, Session,
+  RoutineJobRow, RoutinePatch, RoutineReconcileRequest, RoutineRevealRequest, RoutineRunRequest,
 } from '../../../../shared/types';
 import { useAnswerToken } from '../../hooks/useAnswerToken';
 import { useNarrow, useShellNarrow } from '../../hooks/useNarrow';
@@ -10,9 +10,10 @@ import { useRemoteAnswer } from '../../hooks/useRemoteAnswer';
 import { useRoutineRuns } from '../../hooks/useRoutineRuns';
 import { useRoutineWrite } from '../../hooks/useRoutineWrite';
 import { useRoutines } from '../../hooks/useRoutines';
+import { useSessionRow } from '../../hooks/useSessionRow';
 import { useSettings } from '../../hooks/useSettings';
 import { deepLinkRun } from '../../lib/deepLink';
-import { chipClass, jobsSubtitle, launchdLabel, reconcileChip, reconcilePreview, type ReconcilePreview } from '../../lib/routines';
+import { chipClass, copyLabel, jobsSubtitle, launchdLabel, reconcileChip, reconcilePreview, type ReconcilePreview } from '../../lib/routines';
 import type { RoutineRunFilters } from '../../lib/settings';
 import { READ_ONLY_TEXT } from '../../lib/writeRefusal';
 import { LoadBoundary } from '../LoadBoundary';
@@ -44,7 +45,7 @@ export default function RoutinesView() {
   const filters = settings.routineRunFilters;
   const setFilters = (next: Partial<RoutineRunFilters>): void => update({ routineRunFilters: { ...filters, ...next } });
   const [drawer, setDrawer] = useState<Drawer | null>(null);
-  const [chat, setChat] = useState<Session | null>(null);
+  const chat = useSessionRow();
   const [plan, setPlan] = useState<ReconcilePreview | null>(null);
   const write = useRoutineWrite(refresh);
   const remote = useRemoteAnswer();
@@ -62,19 +63,6 @@ export default function RoutinesView() {
 
   const { send, setNote } = write;
   const enc = encodeURIComponent;
-  // The failure is shown beside the link that was clicked, not in the page note: a Runs row far down the list would put that note off screen.
-  const openSession = useCallback(async (id: string): Promise<string | null> => {
-    try {
-      const res = await fetch(`/api/sessions/${enc(id)}/row`);
-      if (res.status === 404) return 'session transcript not found';
-      if (!res.ok) return 'could not open the session';
-      setChat(await res.json() as Session);
-      return null;
-    } catch {
-      return 'could not open the session';
-    }
-  }, []);
-
   const ctl: RoutineCtl = {
     now: new Date(),
     machine: data?.machine ?? 'mac',
@@ -85,18 +73,15 @@ export default function RoutinesView() {
     days,
     phone,
     pins: pins?.pinned ?? [],
+    permission: { mode: remote.state?.syncPermissionMode ?? 'auto', ceiling: remote.state?.spawnMaxPermission ?? 'auto' },
     runNow: (name, only) => { void send('Run now', `run:${name}`, 'POST', `/api/routines/${enc(name)}/run`, only !== undefined ? { only } satisfies RoutineRunRequest : {} satisfies RoutineRunRequest); },
     stop: name => { void send('Stop', `run:${name}`, 'POST', `/api/routines/${enc(name)}/stop`); },
     toggle: (name, enabled) => { void send(enabled ? 'Resume' : 'Pause', `toggle:${name}`, 'PATCH', `/api/routines/${enc(name)}`, { enabled } satisfies RoutinePatch); },
-    openSession,
+    // The failure is shown beside the link that was clicked, not in the page note: a Runs row far down the list would put that note off screen.
+    openSession: chat.open,
     edit: (name, confirmDelete = false) => setDrawer({ mode: 'edit', name, confirmDelete }),
     reveal: name => { void send('Reveal', `reveal:${name}`, 'POST', '/api/routines/reveal', { name } satisfies RoutineRevealRequest); },
-    copyLabel: name => {
-      const label = launchdLabel(name);
-      void navigator.clipboard?.writeText(label)
-        .then(() => setNote({ text: `Copied ${label}`, tone: 'ok' }))
-        .catch(() => setNote({ text: `Could not copy; the label is ${label}`, tone: 'warn' }));
-    },
+    copyLabel: name => { void copyLabel(launchdLabel(name), setNote); },
     allRuns: name => { update({ routineRunFilters: { outcome: '', runner: '', job: name }, routinesTab: 'runs' }); }
   };
 
@@ -232,10 +217,10 @@ export default function RoutinesView() {
           onClose={() => setDrawer(null)}
         />
       )}
-      {chat && (
+      {chat.row && (
         <LoadBoundary variant="float">
           <Suspense fallback={null}>
-            <ChatDrawer key={chat.id} session={chat} onClose={() => setChat(null)} spawnAvailable={remote.state?.spawnAvailable === true} desktopAvailable={remote.state?.desktopAvailable === true} />
+            <ChatDrawer key={chat.row.id} session={chat.row} onClose={chat.close} spawnAvailable={remote.state?.spawnAvailable === true} desktopAvailable={remote.state?.desktopAvailable === true} />
           </Suspense>
         </LoadBoundary>
       )}

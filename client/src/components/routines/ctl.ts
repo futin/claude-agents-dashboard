@@ -1,4 +1,5 @@
 import type { PinRow } from '../../../../shared/types';
+import type { PermissionDefaults } from '../../lib/routines';
 
 /**
  * What every Routines component reads and calls, built once by `RoutinesView`. `owner` false hides every write control (another server, or none, owns
@@ -17,6 +18,8 @@ export interface RoutineCtl {
   /** Under 640 px: the Run-now popover becomes a sheet and labels shorten. The row layouts swap in CSS, at 1024. */
   phone: boolean;
   pins: PinRow[];
+  /** The host's routine permission default and ceiling, for the drawer's note on what a claude job runs under. */
+  permission: PermissionDefaults;
   /** No `only` runs every repo; a list runs those pins. Never called with an empty list. */
   runNow(name: string, only?: string[]): void;
   stop(name: string): void;
