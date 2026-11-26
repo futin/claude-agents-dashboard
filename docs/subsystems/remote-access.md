@@ -66,7 +66,7 @@ boundary — the gate above is the boundary. `POST /api/settings` and `POST /api
 turning it back on. The push routes must keep working with remote answering off, because push notification is independent of it. Pins, pin order, open folder,
 git fetch, quick pull and push, codegraph runs and routines touch no session — a Run now starts a new headless one, never acts on one.
 
-**Resolving the peer.** `resolvePeer(remoteAddress, headers)` (`server/lib/origin.ts`) classifies the socket address. A non-loopback socket is the answer
+**Resolving the peer.** `resolvePeer(remoteAddress, headers, ownNames, allowedHosts)` (`server/lib/origin.ts`) classifies the socket address. A non-loopback socket is the answer
 outright: nothing such a client sends is consulted. A loopback socket means a process on this machine, possibly a proxy, so `X-Forwarded-For` is walked **from
 the right**: loopback entries (another local hop) are skipped, the first other entry is the peer, and an entry that is not an address is `unknown` (fail
 closed). No header, or only loopback entries, is `local`. The right-most entry is the trustworthy one because each proxy *appends* the address of the socket
@@ -74,8 +74,10 @@ it accepted (Vite's `xfwd`), so whatever a client forged sits to its left.
 
 A `local` verdict also needs a `Host` no LAN peer can answer for. A `*.local` name (mDNS) or a single-label one (LLMNR/NetBIOS, which the Windows side
 of WSL2 consults) other than `localhost` and this machine's own `os.hostname()` turns it into `unknown`: a LAN peer could re-point such a name at
-127.0.0.1, and its page would then post same-origin from your browser over loopback (`rebindableHost`, audit 2026-11-23). The `Host` can only take
-`local` away; every other verdict ignores it.
+127.0.0.1, and its page would then post same-origin from your browser over loopback (`rebindableHost`, audit 2026-11-23). A dotted name earns `local`
+only when it passes the Host guard **without** `*`: on its built-in rules, as an exact `ALLOWED_HOSTS` name, or under a `.suffix` rule. A name only `*`
+admitted is `unknown`, because the one loopback request that rides `*` with no forwarding header is a page that rebound its own name (#562). The `Host` can
+only take `local` away; every other verdict ignores it.
 
 | Path | socket | XFF at the API | peer |
 |---|---|---|---|
@@ -128,7 +130,9 @@ the LAN/tailnet trust model above is unchanged — they stop a web page in *your
 - **Host allowlist (DNS rebinding).** A page on `evil.example` can re-point its own name at `127.0.0.1` and then read every open GET route as
   same-origin; the browser still sends `Host: evil.example`. Allowed without config: a missing `Host`, IP literals, single-label names (`localhost`, a
   tailnet short name, a LAN hostname), and `*.localhost`, `*.local`, `*.ts.net`. Anything else is a 403 naming `ALLOWED_HOSTS` — comma-separated exact
-  names, `.suffix` rules (which also match the apex) or `*` to switch the check off. This is the prod twin of the Vite guard described below. The
+  names, `.suffix` rules (which also match the apex) or `*` to switch the check off. `*` opens **every read route** to a rebinding page from any site
+  the browser visits; writes stay gated, because a loopback request under a name only `*` admitted never earns `local`, and the server prints a warning at
+  startup. Prefer a `.suffix` rule (`.ngrok.app`) over `*`. This is the prod twin of the Vite guard described below. The
   `*.local` and single-label exemptions let LAN readers browse by those names; they are names a LAN peer can answer for, so on a loopback socket they
   never earn `local` (see **Resolving the peer**).
 - **Cross-site writes (CSRF).** A trusted peer writes with no token and `readJsonBody` ignores Content-Type, so a `no-cors` `text/plain` POST from any

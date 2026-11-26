@@ -129,7 +129,8 @@ export interface Config {
   spawnOwnEntrypoint: boolean;
   /**
    * Extra `Host` names the server answers to (`ALLOWED_HOSTS`, comma-separated: exact names, `.suffix` rules, or `*` for any). Loopback, IP literals,
-   * single-label names and `.localhost`/`.local`/`.ts.net` are always allowed — this is for public tunnels. See `lib/request-guard.ts`.
+   * single-label names and `.localhost`/`.local`/`.ts.net` are always allowed — this is for public tunnels. See `lib/request-guard.ts`. A name only
+   * `*` admits never earns loopback trust (`resolvePeer`, `lib/origin.ts`).
    */
   allowedHosts: string[];
   /** Routine job files (`ROUTINES_DIR`), as written — `~` is expanded by `routineDirs`, not here. `''` = unset: `routineDirs` puts them under the state root. */
@@ -321,6 +322,16 @@ export function staleEnvKeys(): string[] {
  */
 export function resetEnvBaseline(): void {
   envAtLoad = null;
+}
+
+/**
+ * The startup line for `ALLOWED_HOSTS=*`, or null when no entry is `*`. `*` switches the Host guard off, so every read route is open to a page that
+ * rebinds its own name at 127.0.0.1; writes stay gated, because a loopback request under a name only `*` admitted never resolves `local` (#562).
+ */
+export function allowedHostsWarning(hosts: readonly string[]): string | null {
+  if (!hosts.some(h => h.trim() === '*')) return null;
+  return 'ALLOWED_HOSTS=* — every read route is open to any site in this browser (DNS rebinding); loopback writes under an unlisted name need '
+    + 'ANSWER_TOKEN. Prefer a .suffix rule (e.g. .ngrok.app).';
 }
 
 /**

@@ -35,7 +35,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 
-import { loadConfig } from './lib/config.js';
+import { allowedHostsWarning, loadConfig } from './lib/config.js';
 import type { Config } from './lib/config.js';
 import {
   serveSessions, serveSessionDetail, serveSessionChat, serveSessionSpend,
@@ -526,6 +526,8 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     const url = `http://localhost:${config.port}`;
     console.log(`\n  ⚡ Claude Sessions dashboard → ${url}`);
     console.log(`     top ${config.maxSessions} · active < ${config.activeWindowMin}m · lookback ${config.lookbackHours}h`);
+    const hostsWarning = allowedHostsWarning(config.allowedHosts);
+    if (hostsWarning) console.log(`     ⚠ ${hostsWarning}`);
     if (!isProd) console.log('     (dev: API only — open the Vite dev server instead)\n');
     else console.log('');
 
