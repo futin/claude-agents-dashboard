@@ -185,3 +185,38 @@ export function headBarPct(endHead: number, startHead: number): number {
   if (!(startHead > 0)) return 0;
   return Math.min(100, Math.max(0, (endHead / startHead) * 100));
 }
+
+/**
+ * Hours as the tables print them: whole where they are whole, one decimal where
+ * the reset cuts an hour in half. A column of `13 / 24 / 24 / 8.0` reads as a
+ * mistake; `13 / 24 / 24 / 8` beside a real `7.5` does not.
+ */
+export function hrs(n: number): string {
+  const r = Math.round(n * 10) / 10;
+  return Number.isInteger(r) ? String(r) : r.toFixed(1);
+}
+
+/**
+ * A day row's Note cell. The deficit is only reported on a day that *deepened*
+ * it: a day past the crossing that spends nothing repeats the figure above it,
+ * and a column of the same number three times reads as three findings.
+ */
+export function walkRowNote(row: Pick<WalkDayRow, 'crossesAt' | 'endHead' | 'spent'>, isLast: boolean): string {
+  if (row.crossesAt !== null) return `empty at ${row.crossesAt}`;
+  if (row.endHead < 0 && row.spent >= 0.05) return `${Math.round(-row.endHead)} pts past empty`;
+  return isLast ? 'to the weekly reset' : '';
+}
+
+/**
+ * The `To the reset` row's Note cell. Keyed off `crossed`, not off the
+ * unpayable counter: a crossing inside the last slice leaves no whole hour after
+ * it, and keying off the counter made this cell say the window coasts while the
+ * Left cell beside it printed a negative. Under an hour past the crossing the row
+ * says it went empty without naming a count the rounding would print as `0 hours`.
+ */
+export function walkTotalsNote(t: Pick<WalkTotals, 'crossed' | 'unpayableHours'>): string {
+  if (!t.crossed) return 'the window coasts to its reset';
+  return Math.round(t.unpayableHours) > 0
+    ? `${hrs(t.unpayableHours)} hours past the crossing the window cannot pay for`
+    : 'the window goes empty before its reset';
+}

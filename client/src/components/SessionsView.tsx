@@ -19,7 +19,7 @@ import { useRemoteAnswer } from '../hooks/useRemoteAnswer';
 import { useSessions } from '../hooks/useSessions';
 import { useSettings } from '../hooks/useSettings';
 import { useWebNotify } from '../hooks/useWebNotify';
-import { applyView, availableProjects, clearFilters, describeEmpty, drawableLayout, pruneProjects, DEFAULT_LAYOUT, DEFAULT_VIEW, type Layout, type View } from '../lib/filterSort';
+import { applyView, availableProjects, clearFilters, describeEmpty, drawableLayout, phantomRows, pruneProjects, sessionsEmpty, DEFAULT_LAYOUT, DEFAULT_VIEW, type Layout, type View } from '../lib/filterSort';
 import { DESKTOP_LAUNCHED_TEXT } from '../lib/launchSurface';
 import { resolveLayout } from '../lib/settings';
 import type { Session, SessionsResponse } from '../../../shared/types';
@@ -134,12 +134,7 @@ export function SessionsView({ onLink }: {
     };
   }, [data, view]);
 
-  // A resume's id already names a real row — its `launching` phantom would be
-  // a duplicate, so only its FAILURE is worth a row of its own.
-  const phantoms = useMemo(
-    () => (data?.launching ?? []).filter(l => !l.resume || l.state === 'failed'),
-    [data]
-  );
+  const phantoms = useMemo(() => phantomRows(data?.launching), [data]);
 
   function toggle(id: string) {
     setExpanded(cur => {
@@ -178,7 +173,8 @@ export function SessionsView({ onLink }: {
   const chatSession = chatDrawerSession(chatId, data, fetchedChat);
 
   let body: React.ReactNode;
-  if (shown === null || (!shown.length && !phantoms.length)) {
+  // `shown === null` again only so TypeScript narrows the else branch; `sessionsEmpty` already counts loading as empty.
+  if (shown === null || sessionsEmpty(shown, phantoms)) {
     body = <EmptyState loading={shown === null} empty={empty} onClearFilters={() => setView(clearFilters(view))} />;
   } else {
     const common = { sessions: shown, launching: phantoms, expanded, onToggle: toggle, onOpenChat: setChatId };

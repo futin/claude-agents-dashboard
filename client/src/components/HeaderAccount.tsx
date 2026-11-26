@@ -1,9 +1,10 @@
 import { useCallback, useRef, useState } from 'react';
 
-import type { AccountResponse, RateLimit, UsageLimits, UsageStatus } from '../../../shared/types';
+import type { AccountResponse, RateLimit } from '../../../shared/types';
 import { formatResetTime } from '../lib/format';
-import { paceView, FIVE_HOUR_MS, SEVEN_DAY_MS } from '../lib/pace';
+import { paceView } from '../lib/pace';
 import type { Section } from '../lib/sections';
+import { clampPct, gaugeLevel, outState, usageBars, type OutState } from '../lib/usageGauge';
 import { useDismiss } from './Popover';
 import Chevron from './Chevron';
 
@@ -78,7 +79,7 @@ export function HeaderAccount({ account, onGo }: {
                   return (
                     <span key={b.label} className="m">
                       <span className="mtop"><span>{b.short}</span><b>{pct}%</b></span>
-                      <span className="mini"><i className={level(pct)} style={{ width: `${pct}%` }} /></span>
+                      <span className="mini"><i className={gaugeLevel(pct)} style={{ width: `${pct}%` }} /></span>
                     </span>
                   );
                 })}
@@ -152,45 +153,6 @@ function SignedOut({ out }: { out: OutState }) {
   );
 }
 
-interface OutState {
-  /** What the chip says beside the ring. */
-  chip: string;
-  title: string;
-  body: string;
-  /** The one command that fixes it, or null when there is nothing to run. */
-  command: string | null;
-  note: string;
-}
-
-/**
- * The two statuses the reader can act on. `ok` and `unavailable` return null —
- * the first has gauges to draw, and the second has nothing worth saying.
- */
-function outState(status: UsageStatus | undefined): OutState | null {
-  if (status === 'signed-out') {
-    return {
-      chip: 'Signed out',
-      title: 'Not signed in',
-      body: 'The stored credential is there but blank, so the account usage endpoint has '
-        + 'nothing to answer with: no name, no rate windows, no forecast. Sign in from a '
-        + 'terminal — this board cannot do it for you.',
-      command: 'claude auth login',
-      note: 'The dashboard is read-only here: it can name the command, not run it.'
-    };
-  }
-  if (status === 'token-expired') {
-    return {
-      chip: 'Token expired',
-      title: 'Token expired',
-      body: 'The stored OAuth token is past its expiry, so the usage endpoint refuses it. '
-        + 'Nothing to do — it renews itself on one of the next polls and the gauges come back.',
-      command: null,
-      note: 'If it stays expired, the refresh token is gone too: sign in again from a terminal.'
-    };
-  }
-  return null;
-}
-
 /** The avatar letter: the name's, else the email's, else nothing to letter. */
 function initial(profile: AccountResponse['profile']): string {
   const source = profile?.name || profile?.email || '';
@@ -218,27 +180,9 @@ function Caret() {
   );
 }
 
-/**
- * The rate-limit bars worth drawing — those with a utilization reading.
- * `short` is the chip's label, which has 52px for it; `label` is the popover's.
- */
-export function usageBars(usage: UsageLimits | null | undefined) {
-  if (!usage) return [];
-  return [
-    { label: '5h', short: '5H', rl: usage.fiveHour, windowMs: FIVE_HOUR_MS },
-    { label: 'Week', short: 'WK', rl: usage.sevenDay, windowMs: SEVEN_DAY_MS }
-  ].filter((b) => b.rl.utilization != null);
-}
-
-/** '' · mid · high — the ramp the fill, the figure and the strip all colour by. */
-export type Level = '' | 'mid' | 'high';
-
-const clampPct = (u: number): number => Math.max(0, Math.min(100, Math.round(u)));
-const level = (pct: number): Level => (pct >= 90 ? 'high' : pct >= 60 ? 'mid' : '');
-
 function UsageBar({ label, rl, windowMs }: { label: string; rl: RateLimit; windowMs: number }) {
   const pct = clampPct(rl.utilization as number);
-  const lvl = level(pct);
+  const lvl = gaugeLevel(pct);
   const view = paceView(rl, windowMs);
   return (
     <div className="u">

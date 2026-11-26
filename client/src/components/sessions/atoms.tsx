@@ -1,5 +1,6 @@
 import type { LaunchingSession, Session } from '../../../../shared/types';
 import { apiErrorLabel } from '../../lib/apiError';
+import { ctxWarn } from '../../lib/contextWarn';
 import { fmtTok, fmtWindow, formatAgo } from '../../lib/format';
 import { STATUS_LABEL } from '../../lib/filterSort';
 import { modelLabel } from '../../lib/modelLabel';
@@ -25,11 +26,6 @@ export function keyActivate(fn: () => void) {
     if (e.target !== e.currentTarget) return;   // a button inside handles its own keys
     if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fn(); }
   };
-}
-
-/** Context ≥ 70% turns the figure and the bar amber — one threshold, one place. */
-export function ctxWarn(s: Session): boolean {
-  return (s.contextPct || 0) >= 70;
 }
 
 export function Dot({ status }: { status: Session['status'] | 'launching' | 'failed' }) {

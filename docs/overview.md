@@ -389,7 +389,7 @@ client/src/
                   (the one hover/pin explanation panel, shared by both Usage tabs),
                   useTranscribeAvailable, useWebNotify (browser banners for headless
                   sessions), useBackClose, useHideOnScroll (the phone top bar's
-                  auto-hide), useNarrow (the one JS read of the `md` breakpoint),
+                  auto-hide; its rules are lib/hideOnScroll), useNarrow (the one JS read of the `md` breakpoint),
                   useStuckStrip (when the phone's aside strip pins)
   lib/            routines (the Routines page's pure helpers: pills, run folding, the Repos helper, write-failure text), routineForm (the job drawer's
                   Form view: one read/write/summary per row over the file text), filterSort, analyticsFilterSort, chatFilter, chatRow (the Sessions drawer's session: the live poll row, else one fetched from `/api/sessions/:id/row` when the filtered poll lacks it; and `nextSessionRow`, which re-fetched row the Routines drawer keeps), chatPaging (the chat drawer's byte offsets: one
@@ -399,7 +399,8 @@ client/src/
                   format, settings, persistedReset (Settings › Reset's reach into mounted usePersistedState holders), persistedValue (usePersistedState's storage half: parse, write, follow other tabs),
                   sections, deepLink, dictation, openFolder (the Open folder key's status → note), spawnOptions, textCaps (the composers' length caps and the chat drawer's truncation caps behind Settings' Chat messages hint, each the server's; pinned by `test/guards/client-server-caps.test.ts`), settingsBounds (Settings › Shared's number-field bounds, the server's, pinned by the same guard), spawnResponse (`parseSpawnResponse`, the `POST /api/spawn` 200 body → its `SpawnResponse` branch; `spawnOutcome`, what `useSpawn` applies for a result), launchSurface (which launch surfaces the form offers, its initial pick, and the desktop copy), pins, resume, pace, usageProfile,
                   usageRatesFormat, usageHistory (the History tab's step path, ticks and figures), panelCollapse, surface, walkChart (the headroom
-                  chart's geometry), walkRows (the same walk as day rows), holds,
+                  chart's geometry), walkRows (the same walk as day rows, and its Note column), holds, hideOnScroll (useHideOnScroll's step and inset rules),
+                  usageGauge (the account chip's bars, gauge levels and signed-out copy), contextWarn (the one 70% context threshold),
                   composer (that keyboard's pure rules and the session's latest `wrap_up` suggestion), modelLabel (`claude-opus-5-5` → `Opus 5.5`),
                   notifyRows (Settings' push-event rows), pushTest (the line Settings' test push leaves, from its `postWrite` result), writeRefusal (a 403's token vs read-only-network kind, and the flags each kind sets), postWrite (every write hook's POST and its one read of the reply), pinWrite (what a pin write's reply means to `usePins`),
                   pendingReply (the reply panels' phase machine), writeStatus (Settings › Local ›

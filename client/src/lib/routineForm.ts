@@ -41,6 +41,25 @@ export type Schedule =
   | { preset: 'weekly'; days: number[]; hour: number; minute: number }
   | { preset: 'custom'; text: string };
 export type Repos = { mode: ForeachMode; picks: string[]; cwd: string };
+
+/** The Pick chips in the order they draw: the job's own picks first, then every pin not already among them. A pick no longer pinned keeps its place. */
+export function reposPickList(v: Repos, pinNames: string[]): string[] {
+  return [...v.picks, ...pinNames.filter(n => !v.picks.includes(n))];
+}
+
+/**
+ * The Repos value after the segmented control picks `mode`, or `null` when it is already the mode. Pick starts from every pin, so switching from All pinned
+ * changes nothing that runs until a chip is turned off; a job that already has picks keeps them. Any other mode clears the picks. `cwd` is carried over.
+ */
+export function reposSwitch(v: Repos, mode: Repos['mode'], pinNames: string[]): Repos | null {
+  if (mode === v.mode) return null;
+  return mode === 'pick' ? { mode, picks: v.picks.length > 0 ? v.picks : pinNames, cwd: v.cwd } : { mode, picks: [], cwd: v.cwd };
+}
+
+/** One Pick chip toggled: removed from the picks when it is in them, appended otherwise. */
+export function reposFlip(v: Repos, name: string): Repos {
+  return { ...v, picks: v.picks.includes(name) ? v.picks.filter(x => x !== name) : [...v.picks, name] };
+}
 export type Script = string;
 export type Prompt = string;
 export type ModelEffort = { model: string | null; effort: string | null };

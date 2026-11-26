@@ -1,6 +1,6 @@
 import assert from 'node:assert';
 
-import { headBarPct, walkRows, weightSource } from '../../client/src/lib/walkRows.js';
+import { headBarPct, hrs, walkRowNote, walkRows, walkTotalsNote, weightSource } from '../../client/src/lib/walkRows.js';
 import type { ForecastStep } from '../../shared/types.js';
 
 function test(name: string, fn: () => void): boolean {
@@ -185,6 +185,38 @@ export function run(): number {
     const west = walkRows(w, { resetsAt: new Date(start + 6 * H).toISOString(), startHead: 40, offsetMinutes: -300 });
     assert.deepStrictEqual(west.rows.map(r => [r.label, r.hours]), [['Mon', 6]]);
     assert.strictEqual(west.rows[0].crossesAt, 'Mon 17:00');
+  })) p++; else f++;
+
+  // The Note column (#581): the crossing wins over everything, a deficit is reported only on a day that deepened it.
+  if (test('walkRowNote: the crossing names its hour, on the last row too', () => {
+    assert.strictEqual(walkRowNote({ crossesAt: '14:00', endHead: -3, spent: 1 }, false), 'empty at 14:00');
+    assert.strictEqual(walkRowNote({ crossesAt: '14:00', endHead: -3, spent: 1 }, true), 'empty at 14:00');
+  })) p++; else f++;
+
+  if (test('walkRowNote: past empty only on a day that spent at least 0.05', () => {
+    assert.strictEqual(walkRowNote({ crossesAt: null, endHead: -12.4, spent: 0.05 }, false), '12 pts past empty');
+    assert.strictEqual(walkRowNote({ crossesAt: null, endHead: -12, spent: 0.049 }, false), '');
+    assert.strictEqual(walkRowNote({ crossesAt: null, endHead: -12, spent: 0.049 }, true), 'to the weekly reset');
+  })) p++; else f++;
+
+  if (test('walkRowNote: zero headroom is not past empty; the last row names the reset', () => {
+    assert.strictEqual(walkRowNote({ crossesAt: null, endHead: 0, spent: 3 }, false), '');
+    assert.strictEqual(walkRowNote({ crossesAt: null, endHead: 5, spent: 3 }, true), 'to the weekly reset');
+  })) p++; else f++;
+
+  if (test('walkTotalsNote: keyed off crossed, never off the unpayable counter', () => {
+    assert.strictEqual(walkTotalsNote({ crossed: false, unpayableHours: 0 }), 'the window coasts to its reset');
+    assert.strictEqual(walkTotalsNote({ crossed: true, unpayableHours: 0 }), 'the window goes empty before its reset');
+    assert.strictEqual(walkTotalsNote({ crossed: true, unpayableHours: 0.4 }), 'the window goes empty before its reset');
+    assert.strictEqual(walkTotalsNote({ crossed: true, unpayableHours: 7.5 }), '7.5 hours past the crossing the window cannot pay for');
+    assert.strictEqual(walkTotalsNote({ crossed: true, unpayableHours: 24 }), '24 hours past the crossing the window cannot pay for');
+  })) p++; else f++;
+
+  if (test('hrs: whole where whole, one decimal otherwise', () => {
+    assert.strictEqual(hrs(8), '8');
+    assert.strictEqual(hrs(7.5), '7.5');
+    assert.strictEqual(hrs(7.96), '8');
+    assert.strictEqual(hrs(7.94), '7.9');
   })) p++; else f++;
 
   console.log('\n  ' + p + ' passed, ' + f + ' failed');

@@ -29,6 +29,7 @@ import { heldBodyUuid } from '../lib/heldBody';
 import { latestSuggestion } from '../lib/composer';
 import { formatInterval } from '../lib/settings';
 import { surfacePill } from '../lib/surface';
+import { ctxWarn } from '../lib/contextWarn';
 import { copyText } from '../lib/clipboard';
 import type { ChatMessage, Session } from '../../../shared/types';
 
@@ -178,7 +179,7 @@ export default function ChatDrawer({ session, onClose, spawnAvailable, desktopAv
   const surfaceInfo = surfacePill(session);
   // same 70% threshold the row uses — one context reading, two places.
   const ctxPct = session.contextPct || 0;
-  const ctxWarn = ctxPct >= 70;
+  const warn = ctxWarn(session);
 
   const bodyRef = useRef<HTMLDivElement>(null);
   const pinnedRef = useRef<HTMLDivElement>(null);
@@ -303,7 +304,7 @@ export default function ChatDrawer({ session, onClose, spawnAvailable, desktopAv
             <div className="kv">
               <div className="k">Context</div>
               <div className="v">
-                <span className={`metric${ctxWarn ? ' warn' : ''}`}>{ctxPct}%</span>
+                <span className={`metric${warn ? ' warn' : ''}`}>{ctxPct}%</span>
                 <span className="u">
                   <span className="tok" title={`${session.tokens.toLocaleString()} of ${session.contextWindow.toLocaleString()} context tokens`}>
                     {fmtTok(session.tokens)} / {fmtWindow(session.contextWindow)}
@@ -311,7 +312,7 @@ export default function ChatDrawer({ session, onClose, spawnAvailable, desktopAv
                 </span>
               </div>
               <div className="track">
-                <div className={`fill${ctxWarn ? ' warn' : ''}`} style={{ width: `${Math.min(ctxPct, 100)}%` }} />
+                <div className={`fill${warn ? ' warn' : ''}`} style={{ width: `${Math.min(ctxPct, 100)}%` }} />
               </div>
             </div>
 

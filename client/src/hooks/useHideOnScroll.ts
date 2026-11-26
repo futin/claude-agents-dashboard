@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 
+import { hideStep, scrollFloor } from '../lib/hideOnScroll';
+
 /**
  * True while the reader is scrolling *down* the page — what the phone's top bar
  * reads as "get out of the way". Back to false on the first upward move. It
@@ -39,21 +41,12 @@ export function useHideOnScroll(frozen: boolean): boolean {
     // outside that zoom — the correction `useFloatingTip` makes, multiplying
     // rather than dividing because this goes the other way.
     const root = getComputedStyle(document.documentElement);
-    const z = parseFloat(root.getPropertyValue('--font-scale')) || 1;
-    const floor = (parseFloat(root.getPropertyValue('--body-pad')) || 0) * z;
+    const floor = scrollFloor(root.getPropertyValue('--body-pad'), root.getPropertyValue('--font-scale'));
     const onScroll = (): void => {
-      // iOS rubber-banding reports a negative scrollY past the top; clamped, so
-      // the release upward isn't read as a downward move.
-      const y = Math.max(0, window.scrollY);
-      const dy = y - last.current;
-      // A dead band of a few pixels, not a raw sign test: a one-pixel jitter
-      // (or the layout shift of a row that just came in from the poll) must not
-      // toggle it. Small enough that a real flick reads as one straight away.
-      if (Math.abs(dy) < 3) return;
-      last.current = y;
-      // Hiding starts with the gesture, once the page's top inset has actually
-      // passed under the bar (see the note above).
-      setHidden(dy > 0 && y > floor);
+      const step = hideStep(last.current, window.scrollY, floor);
+      if (!step) return;
+      last.current = step.last;
+      setHidden(step.hidden);
     };
     window.addEventListener('scroll', onScroll, { passive: true });
     return () => window.removeEventListener('scroll', onScroll);

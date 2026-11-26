@@ -234,7 +234,7 @@ Three properties keep them from complicating the rest of this document:
   `adoptLaunched` skips those entries deliberately, or the first poll would delete them and
   swallow a failure before it could be rendered. They leave the store by TTL, `stopSession`,
   or a failure instead, and `SessionsView` drops a `launching` resume phantom (the real row
-  *is* the progress indicator) while still rendering a `failed` one.
+  *is* the progress indicator) while still rendering a `failed` one — `phantomRows` in `client/src/lib/filterSort.ts`.
 - **They can outnumber the real rows only briefly.** A `launching` entry that nothing
   adopts is dropped after 60s; a `failed` one after 5 minutes. Both live in RAM only (the
   store in `server/lib/spawn.ts`), so a server restart clears them.
@@ -739,6 +739,8 @@ Measured at the same scroll position in all three configurations: default `24 / 
     - client/src/lib/stickyStrip.ts
     - client/src/hooks/useStuckStrip.ts
     - client/src/hooks/useHideOnScroll.ts
+    - client/src/lib/hideOnScroll.ts
+    - client/src/lib/contextWarn.ts
     - client/src/components/sessions/atoms.tsx
     - client/src/components/sessions/BoardView.tsx
     - client/src/components/sessions/TriageView.tsx

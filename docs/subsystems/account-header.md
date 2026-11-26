@@ -138,6 +138,7 @@ both deliberate:
     - server/index.ts
     - client/src/App.tsx
     - client/src/components/HeaderAccount.tsx
+    - client/src/lib/usageGauge.ts
     - client/src/components/SideRail.tsx
     - client/src/hooks/useAccount.ts
     - client/src/hooks/useNarrow.ts
