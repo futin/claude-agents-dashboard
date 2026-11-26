@@ -146,7 +146,7 @@ export interface ProjectsOptions {
   pinnedDirs?: ReadonlySet<string> | null;
   /**
    * Roots whose cwds are never offered for pinning — see {@link defaultClaudeRoots}. {@link listOlderProjects}: omitted ⇒ that default.
-   * {@link listRecentProjects}: omitted ⇒ no filter, given ⇒ a cwd under one is dropped even when pinned; the API passes the default (`pinOptions`), so
+   * {@link listRecentProjects}: omitted ⇒ no filter, given ⇒ a cwd under one is dropped even when pinned; the API passes the default (`pinListOptions`), so
    * a scratchpad or scratch workspace is never listed, spawnable or pinnable. A test seam as much as an option: every fixture cwd lives under `os.tmpdir()`.
    */
   claudeRoots?: readonly string[];

@@ -1534,7 +1534,7 @@ function readPinRows(config: Config): ReturnType<typeof listPinRows> {
 }
 
 /**
- * A project Claude made for itself (a scratch workspace, a dir under `~/.claude`) is on no list at all (`pinOptions`). A pin stored there before that
+ * A project Claude made for itself (a scratch workspace, a dir under `~/.claude`) is on no list at all (`pinListOptions`). A pin stored there before that
  * rule still shows under `pinned`, unlisted — that is where it can be removed.
  */
 function pinsPayload(config: Config): PinsResponse {
