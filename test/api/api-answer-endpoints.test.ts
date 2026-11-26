@@ -223,6 +223,30 @@ export async function run(): Promise<number> {
     }));
   }
 
+  /* ------------------------------------------- every option plus "Other" */
+
+  check(await testAsync('answer: a 4-option multi-select takes all four options plus Other → 200, not 400', async () => {
+    await withServer(ENV, async h => {
+      h.plant(ID);
+      const input = {
+        questions: [{
+          header: 'Pick', question: 'Which ones?', multiSelect: true,
+          options: [{ label: 'a' }, { label: 'b' }, { label: 'c' }, { label: 'd' }]
+        }]
+      };
+      const open = h.open('/api/questions/wait', { body: JSON.stringify({ sessionId: ID, toolInput: input, timeoutMs: 600_000 }) });
+      await until(() => pendingSessionIds().has(ID), 'the question wait registers');
+      const pending = (await h.req(`/api/sessions/${ID}/question`)).json?.pending as { questionId: string };
+      const reply = await h.req(`/api/sessions/${ID}/answer`, {
+        method: 'POST',
+        body: JSON.stringify({ questionId: pending.questionId, answers: [{ index: 0, selected: ['a', 'b', 'c', 'd', 'something else'] }] })
+      });
+      assert.equal(reply.status, 200, `the panel's Other is a legal fifth pick (got ${JSON.stringify(reply.json)})`);
+      assert.equal(pendingSessionIds().has(ID), false, 'answering must clear the store entry');
+      open.abort();
+    });
+  }));
+
   /* ------------------------------------------------------ the toggle nuance */
 
   check(await testAsync('the answer routes gate on the env flag, not the runtime toggle', async () => {

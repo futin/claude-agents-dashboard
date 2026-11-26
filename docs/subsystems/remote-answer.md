@@ -196,7 +196,8 @@ already decide this?" versus "is the user back?".
   answer 500), malformed parts dropped, empty result → 400 → terminal dialog. The "Other…" box's `maxLength` is `QUESTION_OTHER_CAP`
   (`client/src/lib/textCaps.ts`), pinned to `SELECTED_CAP` by `test/guards/client-server-caps.test.ts`, so it never takes an answer the server refuses. Selected
   values are deliberately **not** matched against option labels — that is what makes the
-  free-text "Other…" work, mirroring the terminal dialog's always-present Other.
+  free-text "Other…" work, mirroring the terminal dialog's always-present Other. So a question takes at most its own option count **+ 1** values (the `+ 1`
+  is Other): a 4-option multi-select answered with every option and Other is legal, and an option-less question takes exactly its one Other answer.
 - **⚠️ Route order:** the detail regex `/^\/api\/sessions\/([^/?]+)/` in `index.ts`
   swallows `/api/sessions/:id/<anything>` — the `question` and `answer` matches **must**
   stay above it (same trap as the chat route). They are `$`-anchored on `u.pathname` so
