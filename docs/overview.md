@@ -126,7 +126,7 @@ remote-answer switch on, a **gate-only write** needs the gate alone ([who may wr
 | `GET /api/routines/runs` | folded runs of the run log, newest first, with stats for `days` (7/30/90) and the window before it; `?job=&outcome=&runner=` filter, 400 `bad outcome` |
 | `GET /api/routines/:name` | one job's raw file text and parsed shape, for the editor |
 | `POST /api/routines`, `PUT`, `PATCH`, `DELETE /api/routines/:name` | create / replace / toggle `enabled` / delete a job file, then reconcile; 422 with `errors`, 409 `exists`, 409 `changed` when a PUT's `mtimeMs` no longer matches the file; all gate-only writes, 409 `not-owner` off the owning server |
-| `POST /api/routines/validate` | `{text, name?}` → `{errors, summary}`; read-only, outside the write gate |
+| `POST /api/routines/validate` | `{text, name?}` → `{errors, summary, nextAt}`, `nextAt` the next fire on the host's clock (null when invalid or manual); read-only, outside the write gate |
 | `POST /api/routines/reconcile` | `{apply?}`: the plan of installs, updates and removes against launchd / crontab, applied when `apply` (gate-only write) |
 | `POST /api/routines/reveal` | open the routines folder, or one job's file, in Finder with `open` / `open -R`; 501 off macOS (gate-only write) |
 | `POST /api/routines/:name/run` | start the wrapper now (`{only?: [pins]}`), 202 with the run id read back from the log; 409 `already-running` (gate-only write) |
@@ -380,7 +380,8 @@ client/src/
                   key),
                   useAccount (the header chip's 30s poll, owned by App), useGitFetch (Git's Fetch all key), useGitQuick (the Sync menu's Pull and Push),
                   useCodegraph (the CodeGraph sub-view's 30s visible-only poll, 3s while a run is live), useCodegraphRun (its Sync / Reindex keys),
-                  useRoutines / useRoutineRuns (the Routines sub-view's 3s polls, one `createPollSeq` each) and useRoutineWrite (its one write helper),
+                  useRoutines / useRoutineRuns (the Routines sub-view's 3s polls, one `createPollSeq` each), useRoutineWrite (its one write helper),
+                  useSessionRow (the row a Routines `session →` link opens, re-fetched from `/api/sessions/:id/row` while its ChatDrawer is open),
                   useGitStats (the Git sub-view's 30s visible-only poll), useGitSync (its
                   Sync button: runs per device, read off the sessions payload GitView polls),
                   useDraft (an input's typed text, kept local until it is whole),
@@ -391,7 +392,7 @@ client/src/
                   auto-hide), useNarrow (the one JS read of the `md` breakpoint),
                   useStuckStrip (when the phone's aside strip pins)
   lib/            routines (the Routines page's pure helpers: pills, run folding, the Repos helper, write-failure text), routineForm (the job drawer's
-                  Form view: one read/write/summary per row over the file text), filterSort, analyticsFilterSort, chatFilter, chatRow (the Sessions drawer's session: the live poll row, else one fetched from `/api/sessions/:id/row` when the filtered poll lacks it), chatPaging (the chat drawer's byte offsets: one
+                  Form view: one read/write/summary per row over the file text), filterSort, analyticsFilterSort, chatFilter, chatRow (the Sessions drawer's session: the live poll row, else one fetched from `/api/sessions/:id/row` when the filtered poll lacks it; and `nextSessionRow`, which re-fetched row the Routines drawer keeps), chatPaging (the chat drawer's byte offsets: one
                   tail poll at a time, an epoch per re-tail, a retry after a failed tail), pollSeq (`createPollSeq`, the skip-while-in-flight rule useSessions, usePendingReply, useSessionDetail, useSessionSpend, useAccount, useRemoteAnswer and the Routines
                   polls share, and `pollFetch`, the 30s bound every guarded poll's request carries),
                   heldBody (which timeline body a pinned panel folds), markdown, configsEntries,

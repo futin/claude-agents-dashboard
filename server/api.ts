@@ -2088,7 +2088,7 @@ export async function serveRoutineValidate(config: Config, req: IncomingMessage,
   const checked = validateOr500(config, name, body.text, res);
   if (!checked) return;
   const { job, errors } = checked;
-  sendJson(res, 200, { errors, summary: job ? routineSummary(job) : null } satisfies RoutineValidateResponse);
+  sendJson(res, 200, { errors, summary: job ? routineSummary(job) : null, nextAt: job ? nextFire(job, new Date()) : null } satisfies RoutineValidateResponse);
 }
 
 /**

@@ -2598,4 +2598,9 @@ export interface RoutineErrorsResponse {
 export interface RoutineValidateResponse {
   errors: JobError[];
   summary: string | null;
+  /**
+   * The schedule's next fire (ISO), computed on the host, whose clock the job fires by; null for an invalid file or a manual cron. Paused or not, since
+   * the editor's hint is about the schedule. Absent from an older server.
+   */
+  nextAt?: string | null;
 }

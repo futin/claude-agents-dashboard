@@ -215,13 +215,15 @@ function ToolsControl({ v, disabled, put }: { v: Tools; disabled: boolean; put(v
  * edit is `FIELDS[id].write(text, v)` handed to `onText`, and each closed row reads its value back out of the text on every render. Errors from
  * `/validate` are routed to the row that owns their line; the rest show under the rows.
  */
-export default function JobRows({ text, onText, errors, readOnly, ctl, onFile }: {
+export default function JobRows({ text, onText, errors, readOnly, ctl, onFile, hostNext }: {
   text: string;
   onText(next: string): void;
   errors: JobError[];
   readOnly: boolean;
   ctl: RoutineCtl;
   onFile(): void;
+  /** `/validate`'s `nextAt` for this very text; undefined while no answer for it has come back. */
+  hostNext?: string | null;
 }) {
   const [open, setOpen] = useState<FieldId | null>(null);
   // The Schedule row's own view while it is open: Weekly before a day is picked has no cron to write, and Custom stays Custom while its text is typed
@@ -245,7 +247,7 @@ export default function JobRows({ text, onText, errors, readOnly, ctl, onFile }:
     switch (id) {
       case 'schedule': {
         const v = schedView ?? (value as Schedule);
-        return <ScheduleControl value={v} now={ctl.now} disabled={disabled} onPick={p => apply(schedulePick(text, v, p))}
+        return <ScheduleControl value={v} now={ctl.now} hostNext={hostNext} disabled={disabled} onPick={p => apply(schedulePick(text, v, p))}
           onChange={s => apply(scheduleEdit(s))} />;
       }
       case 'repos': return <ReposControl v={value as Repos} ctl={ctl} disabled={disabled} put={v => put('repos', v)} />;
