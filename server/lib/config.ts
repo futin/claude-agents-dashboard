@@ -176,7 +176,11 @@ export const DEFAULTS = {
   ROUTINES_STATE_ROOT: ''
 } as const;
 
-/** Parse a .env file body into a flat key/value object. Tolerant, minimal. */
+/**
+ * Parse a .env file body into a flat key/value object. Tolerant, minimal. Inline comments follow dotenv: a quoted value is taken
+ * whole up to its closing quote and anything after it dropped; an unquoted one is cut at the first `#` with whitespace before it,
+ * so `KEY=abc#def` keeps its `#` (generated tokens, URL fragments).
+ */
 export function parseEnv(text: string): Record<string, string> {
   const out: Record<string, string> = {};
   if (typeof text !== 'string') return out;
@@ -186,11 +190,16 @@ export function parseEnv(text: string): Record<string, string> {
     const eq = line.indexOf('=');
     if (eq <= 0) continue;
     const key = line.slice(0, eq).trim();
-    let val = line.slice(eq + 1).trim();
-    if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) {
-      val = val.slice(1, -1);
+    const raw = line.slice(eq + 1);
+    const val = raw.trim();
+    const quote = val[0];
+    const close = quote === '"' || quote === "'" ? val.indexOf(quote, 1) : -1;
+    if (close > 0) {
+      out[key] = val.slice(1, close);
+    } else {
+      const hash = raw.search(/\s#/);
+      out[key] = (hash === -1 ? raw : raw.slice(0, hash)).trim();
     }
-    out[key] = val;
   }
   return out;
 }

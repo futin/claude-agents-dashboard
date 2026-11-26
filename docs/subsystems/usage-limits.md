@@ -762,7 +762,7 @@ Each tick reads only the bytes appended to each transcript since the last one
 per model, and appends `{t, prevT, tok, req, sur}` — `tok` weighed in tokens, `req`
 counted in requests, `sur` the same tokens split by the session surface that spent them.
 
-Eleven things are deliberate:
+Twelve things are deliberate:
 
 - **`prevT` is carried explicitly.** It is what makes a recording gap visible;
   a bare `t` could never show that two lines do not abut, and the fitter would
@@ -800,6 +800,11 @@ Eleven things are deliberate:
   listed every project dir twice and every agent dir on every tick.
 - **A transcript gone from the listing loses its cursor** on the same tick: `collectEvents` already holds the listing, so the prune costs no walk, and
   the cursor map no longer grows with every session the server has ever seen.
+- **A record stamped after its tick is carried, not dropped.** `nowMs` is taken before the walk, so a record Claude Code appends while the walk runs
+  is read with a timestamp past the tick, and the cursor has already moved past it. `pending` holds those events for the next tick, whose window
+  covers them; a clock-backwards tick, which writes no line, keeps all its reads there too. Anything more than `PENDING_HORIZON_MS` (1 h) past the
+  tick is a skewed clock rather than a late write, and is dropped so it cannot ride forever. Stamping `nowMs` after the walk would not fix it: a
+  record written between the walk and the stamp is lost the same way.
 - **`req` is a parallel map, and absent is not zero.** One assistant message is
   one request, so the count is free — it is what `sumWindow` already discards
   after summing. It lives beside `tok` rather than as a fifth key inside it

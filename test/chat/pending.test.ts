@@ -155,6 +155,21 @@ export async function run(): Promise<number> {
     assert.strictEqual(validateAnswer([AUTH], [{ index: 0, selected: ['mTLS, actually'] }]), 'ok');
   })) p++; else f++;
 
+  if (test('caps a question at its own options plus one "Other" value', () => {
+    const FOUR: PendingQuestionItem = {
+      header: 'Four', question: 'Which of four?', multiSelect: true,
+      options: [{ label: 'a' }, { label: 'b' }, { label: 'c' }, { label: 'd' }]
+    };
+    const FREE: PendingQuestionItem = { header: '', question: 'Anything else?', multiSelect: true, options: [] };
+    const answer = (selected: string[]) => [{ index: 0, selected }];
+    assert.strictEqual(validateAnswer([FOUR], answer(['a', 'b', 'c', 'd', 'my own'])), 'ok', 'every option plus Other');
+    assert.strictEqual(validateAnswer([FOUR], answer(['a', 'b', 'c', 'd', 'e', 'f'])), 'malformed', 'six values on four options');
+    assert.strictEqual(validateAnswer([LANGS], answer(['TypeScript', 'Python', 'Go'])), 'ok', 'two options plus Other');
+    assert.strictEqual(validateAnswer([LANGS], answer(['TypeScript', 'Python', 'Go', 'Rust'])), 'malformed', 'two options, four values');
+    assert.strictEqual(validateAnswer([FREE], answer(['just this'])), 'ok', 'an option-less question takes its Other answer');
+    assert.strictEqual(validateAnswer([FREE], answer(['one', 'two'])), 'malformed', 'an option-less question takes only one');
+  })) p++; else f++;
+
   if (test('rejects malformed answer shapes', () => {
     const cases: Array<[string, unknown]> = [
       ['not an array', { index: 0, selected: ['OAuth'] }],

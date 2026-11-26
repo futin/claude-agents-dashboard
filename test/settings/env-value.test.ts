@@ -90,6 +90,31 @@ export function run(): number {
       assert.strictEqual(r.stdout, parseEnv(body).ANSWER_TOKEN, 'must match parseEnv');
     })) p++; else f++;
 
+    if (test('an inline comment after an unquoted value is dropped, as the server does', () => {
+      const body = 'ANSWER_TOKEN=abc # note\n';
+      const r = envValue('ANSWER_TOKEN', write('inline.env', body));
+      assert.strictEqual(r.status, 0);
+      assert.strictEqual(r.stdout, 'abc');
+      assert.strictEqual(r.stdout, parseEnv(body).ANSWER_TOKEN, 'must match parseEnv');
+    })) p++; else f++;
+
+    if (test('parseEnv: inline comments follow dotenv — cut only an unquoted value, only at a # with space before it', () => {
+      const cases: Array<[string, string]> = [
+        ['WEB_PORT=4173 # prod', '4173'],
+        ['A=x#y', 'x#y'],
+        ['A="x # y"', 'x # y'],
+        ['A="x" # c', 'x'],
+        ["A='x # y'", 'x # y'],
+        ['A= # only comment', ''],
+        ['A=x\t# tab', 'x']
+      ];
+      for (const [line, want] of cases) {
+        const got = parseEnv(line + '\n');
+        assert.strictEqual(Object.values(got)[0], want, line);
+      }
+      assert.deepStrictEqual(parseEnv('# A=1\n'), {}, 'a whole-line comment is still skipped');
+    })) p++; else f++;
+
     // Each of these asserts the *reported* unset, not merely exit 1 — a crashed
     // interpreter also exits nonzero with an empty stdout, and a check that
     // cannot tell the two apart would go green on a reader that never ran.
