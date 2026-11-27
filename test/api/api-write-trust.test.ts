@@ -14,6 +14,7 @@ import { loadConfig } from '../../server/lib/config.js';
 import { resetSettings } from '../../server/lib/settings.js';
 import type { ConnectionOrigin, WriteAccess } from '../../shared/types.js';
 import { testAsync, withServer } from '../api-harness.js';
+import { GATE_ONLY_WRITES, SESSION_WRITE_PATHS } from '../guards/write-paths.test.js';
 import type { Harness, Reply } from '../api-harness.js';
 
 const ENV = 'SHOW_USAGE=false\nSKIP_PROC_SCAN=true\n';
@@ -23,6 +24,44 @@ const LAN = { 'X-Forwarded-For': '192.168.1.5' };
 const TAILNET = { 'X-Forwarded-For': '100.101.102.103' };
 
 const READ_ONLY = 'read-only from this network';
+const TUNNEL = { 'X-Forwarded-For': '203.0.113.7' };
+
+const SID = '11111111-1111-4111-8111-111111111111';
+/**
+ * How the router reaches every handler that runs the write gate, keyed by the names `write-paths.test.ts` lists — so a handler that joins either list
+ * fails the key check below until it gets a row here, and with it a test that it refuses an untrusted caller (#592).
+ */
+const GATED_ROUTES: Record<string, [method: string, path: string]> = {
+  serveCodegraphRun: ['POST', '/api/codegraph/run'],
+  serveGitFetch: ['POST', '/api/git-fetch'],
+  serveGitQuick: ['POST', '/api/git-quick'],
+  serveMessageWait: ['POST', '/api/messages/wait'],
+  serveNotifyEvent: ['POST', '/api/notify/event'],
+  serveNotifyTest: ['POST', '/api/notify/test'],
+  serveOpenFolder: ['POST', '/api/open-folder'],
+  servePermissionNotify: ['POST', '/api/permissions/notify'],
+  servePinsOrder: ['POST', '/api/pins/order'],
+  servePinsWrite: ['POST', '/api/pins'],
+  servePlanWait: ['POST', '/api/plans/wait'],
+  serveQuestionWait: ['POST', '/api/questions/wait'],
+  serveRemoteAnswerToggle: ['POST', '/api/remote-answer'],
+  serveRoutineCreate: ['POST', '/api/routines'],
+  serveRoutineDelete: ['DELETE', '/api/routines/nightly'],
+  serveRoutinePatch: ['PATCH', '/api/routines/nightly'],
+  serveRoutineReconcile: ['POST', '/api/routines/reconcile'],
+  serveRoutineReveal: ['POST', '/api/routines/reveal'],
+  serveRoutineRun: ['POST', '/api/routines/nightly/run'],
+  serveRoutineStop: ['POST', '/api/routines/nightly/stop'],
+  serveRoutineWrite: ['PUT', '/api/routines/nightly'],
+  serveSessionAnswer: ['POST', `/api/sessions/${SID}/answer`],
+  serveSessionMessageAnswer: ['POST', `/api/sessions/${SID}/message-answer`],
+  serveSessionPlanAnswer: ['POST', `/api/sessions/${SID}/plan-answer`],
+  serveSessionStop: ['POST', `/api/sessions/${SID}/stop`],
+  serveSettingsWrite: ['POST', '/api/settings'],
+  serveSpawn: ['POST', '/api/spawn'],
+  serveSpawnStop: ['POST', `/api/spawn/${SID}/stop`],
+  serveTranscribe: ['POST', '/api/transcribe'],
+};
 
 function write(h: Harness, headers: Record<string, string> = {}): Promise<Reply> {
   return h.req('/api/remote-answer', { method: 'POST', body: JSON.stringify({ enabled: true }), headers });
@@ -148,6 +187,29 @@ export async function run(): Promise<number> {
     ];
     for (const [peer, trust, tokenSet, want] of rows) {
       assert.equal(writeAccessFor(peer, trust, tokenSet), want, `${peer} trust=${trust} token=${tokenSet}`);
+    }
+  }));
+
+  check(await testAsync('every gated handler has a route row here: the keys are exactly write-paths.test.ts\'s two lists', async () => {
+    assert.deepStrictEqual(Object.keys(GATED_ROUTES).sort(), [...SESSION_WRITE_PATHS, ...GATE_ONLY_WRITES].sort());
+  }));
+
+  // A wrong answer here names the route, so a gate that went missing from one handler reads as that handler, not as "the suite".
+  check(await testAsync('every gated route refuses a lan peer (read-only) and a tunnel caller with a bad token (bad token)', async () => {
+    const callers: Array<[string, string, Record<string, string>, string]> = [
+      ['lan peer', ENV, LAN, READ_ONLY],
+      ['tunnel caller, bad token', WITH_TOKEN, { ...TUNNEL, Authorization: 'Bearer wrong' }, 'bad token'],
+    ];
+    for (const [who, env, headers, error] of callers) {
+      await serve(env, async h => {
+        for (const [name, [method, pathname]] of Object.entries(GATED_ROUTES)) {
+          // Bodiless: the gate answers before any body is read, and a DELETE whose body the server never drains leaves the harness's kept-alive
+          // socket unusable, so the next request on it hangs up.
+          const reply = await h.req(pathname, { method, headers });
+          assert.equal(reply.status, 403, `${name} (${method} ${pathname}) from a ${who} answered ${reply.status} ${reply.raw}`);
+          assert.equal(reply.json?.error, error, `${name} from a ${who}`);
+        }
+      });
     }
   }));
 

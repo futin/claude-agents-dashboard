@@ -414,6 +414,51 @@ export async function run(): Promise<number> {
     });
   }));
 
+  // #592: the two routes above are only ever exercised as a trusted loopback peer. Each body here is one the route would take and push for, so a 403
+  // with nothing registered and nothing sent can only be the write gate.
+  const UNTRUSTED: Array<{ who: string; env: string; headers: Record<string, string>; error: string }> = [
+    { who: 'a LAN peer', env: '', headers: { 'X-Forwarded-For': '192.168.1.5' }, error: 'read-only from this network' },
+    {
+      who: 'a tunnel caller with a bad token', env: 'ANSWER_TOKEN=the-real-token\n',
+      headers: { 'X-Forwarded-For': '203.0.113.7', Authorization: 'Bearer wrong-token' }, error: 'bad token'
+    }
+  ];
+  for (const u of UNTRUSTED) {
+    check(await testAsync(`POST /api/permissions/notify and /api/notify/event from ${u.who}: 403, nothing registered, no push`, async () => {
+      await withServer(`${ENV}${u.env}NTFY_TOPIC=tgate\n`, async h => {
+        h.plant(ID);
+        const sent: NotifyPayload[] = [];
+        setSender(payload => { sent.push(payload); });
+        setLabelResolver(() => 'proj');
+        setIdleSource(() => null);
+        try {
+          setSettings({
+            notify: { enabled: true, events: { stop: true, permission: true }, requireRemoteAnswer: false, requireAfk: false, requireAutoMode: false }
+          });
+          const perm = await h.req('/api/permissions/notify', { method: 'POST', body: JSON.stringify({ sessionId: ID }), headers: u.headers });
+          assert.equal(perm.status, 403);
+          assert.equal(perm.json?.error, u.error);
+          assert.equal(permissionWaits().size, 0, 'a refused permission notice must not light up the row');
+
+          const ev = await h.req('/api/notify/event', { method: 'POST', body: JSON.stringify({ sessionId: ID, event: 'stop' }), headers: u.headers });
+          assert.equal(ev.status, 403);
+          assert.equal(ev.json?.error, u.error);
+          assert.equal(sent.length, 0, 'a refused request must never push');
+
+          // The mirror: the same two bodies from loopback register and push both times, so the zeros above are the gate and not a dead policy.
+          assert.equal((await h.req('/api/permissions/notify', { method: 'POST', body: JSON.stringify({ sessionId: ID }) })).status, 200);
+          assert.equal((await h.req('/api/notify/event', { method: 'POST', body: JSON.stringify({ sessionId: ID, event: 'stop' }) })).status, 200);
+          assert.ok(permissionWaits().has(ID));
+          assert.equal(sent.length, 2, 'one permission push, one stop push');
+        } finally {
+          resetPermissions();
+          resetNotify();
+          resetSettings();
+        }
+      });
+    }));
+  }
+
   console.log(`\n  ${ok}/${total} passed`);
   return total - ok;
 }

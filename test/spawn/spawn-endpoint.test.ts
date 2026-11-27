@@ -1001,6 +1001,46 @@ export async function run(): Promise<number> {
     });
   }));
 
+  /* ------------------------------------------------ the write gate (#592) */
+
+  // Two untrusted callers, the way a local proxy delivers each: a LAN peer with no token configured, and a public tunnel caller presenting a wrong
+  // bearer while a token is set. Each refusal must leave the launch store exactly as it was — the gate is only worth anything if nothing behind it ran.
+  const UNTRUSTED: Array<{ who: string; env: string; headers: Record<string, string>; error: string }> = [
+    { who: 'a LAN peer', env: 'CLAUDE_BIN=/bin/echo\n', headers: { 'X-Forwarded-For': '192.168.1.5' }, error: 'read-only from this network' },
+    {
+      who: 'a tunnel caller with a bad token', env: 'CLAUDE_BIN=/bin/echo\nANSWER_TOKEN=the-real-token\n',
+      headers: { 'X-Forwarded-For': '203.0.113.7', Authorization: 'Bearer wrong-token' }, error: 'bad token'
+    }
+  ];
+
+  for (const u of UNTRUSTED) {
+    check(await testAsync(`POST /api/spawn from ${u.who} is 403 and spawns nothing`, async () => {
+      await withResumeHome(u.env, async cfg => {
+        const children: FakeChild[] = [];
+        setSpawner(fakeSpawner(children));
+        // A body that launches when nothing refuses it: `-fake-proj` is planted, so only the gate stands between this request and the spawner.
+        const body = JSON.stringify({ project: '-fake-proj', prompt: 'x' });
+        const reply = await post((req, res) => void serveSpawn(cfg, req, res), body, u.headers);
+        assert.equal(reply.status, 403);
+        assert.equal(reply.json?.error, u.error);
+        assert.equal(children.length, 0, 'a refused request must never reach the spawner');
+        assert.equal(listLaunching().length, 0, 'a refused request must write no launch record');
+      });
+    }));
+
+    check(await testAsync(`POST /api/spawn/:id/stop from ${u.who} is 403 and the launch keeps running`, async () => {
+      await withEnv(u.env, async cfg => {
+        setSpawner(fakeSpawner());
+        const id = launch(cfg, REF, { prompt: 'hold a slot', permissionMode: 'auto' });
+        const reply = await post((req, res) => serveSpawnStop(cfg, id, req, res), '', u.headers);
+        assert.equal(reply.status, 403);
+        assert.equal(reply.json?.error, u.error);
+        // The mirror of the 200 {stopped:true} case above, which empties the store: here the record must survive untouched.
+        assert.deepEqual(listLaunching().map(e => [e.sessionId, e.state]), [[id, 'launching']], 'a refused stop must not remove or fail the launch');
+      });
+    }));
+  }
+
   /* ------------------------------------- POST /api/sessions/:id/stop (task-19) */
 
   /** Launch a fake session and adopt it, so the store holds a `running` entry with a live handle. */
