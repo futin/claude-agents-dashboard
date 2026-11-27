@@ -1018,7 +1018,7 @@ export interface AgentJob {
    */
   lastTool?: string | null;
   /**
-   * How the run ended; null while it runs. `completed` for a sync result; a terminal notification's own `<status>`; `killed` for the "didn't finish before
+   * How the run ended; null while it runs. `completed` for a sync result, `failed` for one marked `is_error`; a terminal notification's own `<status>`; `killed` for the "didn't finish before
    * the previous session ended" notification (#588 D2); `stopped` for a run a resume closed with no notification (#588 D5). Emitted on every path.
    */
   endStatus?: 'completed' | 'failed' | 'killed' | 'stopped' | null;

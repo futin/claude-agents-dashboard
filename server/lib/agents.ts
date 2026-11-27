@@ -132,7 +132,7 @@ export type AgentEvent =
   | { kind: 'launch'; id: string; type: string; description: string; ts: string | null }
   | { kind: 'send'; id: string; summary: string; ts: string | null }
   | { kind: 'result'; toolUseId: string; ts: string | null;
-      isAsyncAck: boolean; agentId: string | null; resumedAgentId: string | null; resolvedModel: string | null;
+      isAsyncAck: boolean; isError: boolean; agentId: string | null; resumedAgentId: string | null; resolvedModel: string | null;
       tokens: number | null; toolUses: number | null; exactDurationMs: number | null }
   | { kind: 'notify'; agentId: string; terminal: boolean; status: string; dnf: boolean; ts: string | null;
       tokens: number | null; toolUses: number | null; exactDurationMs: number | null };
@@ -223,6 +223,8 @@ export function parseRecordEvents(rec: any): AgentEvent[] {
         toolUseId: b.tool_use_id,
         ts,
         isAsyncAck: !!isAsyncAck,
+        // A sync run that died (API error, a rejected launch, an unknown agent type) still closes its row, but did not complete.
+        isError: b.is_error === true,
         agentId,
         resumedAgentId,
         // Structured only: the text is the subagent's own report and may name any model (#588 D4).
@@ -319,7 +321,7 @@ export function applyEvent(state: ScanState, ev: AgentEvent): void {
       if (ev.agentId && !state.byAgentId.has(ev.agentId)) state.byAgentId.set(ev.agentId, l);
     } else {
       l.endedAt = ev.ts;
-      l.endStatus = 'completed';
+      l.endStatus = ev.isError ? 'failed' : 'completed';
       l.tokens = ev.tokens;
       l.toolUses = ev.toolUses;
       l.exactDurationMs = ev.exactDurationMs;

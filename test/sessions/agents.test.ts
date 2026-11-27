@@ -727,6 +727,19 @@ export function run(): number {
     assert.strictEqual(a.model, null);
   })) p++; else f++;
 
+  if (test('#588 9: a sync result marked is_error closes the row as failed; the mirror without the flag stays completed', () => {
+    const errored = (id: string, isError: boolean) => ({
+      timestamp: '2026-07-01T10:01:00Z',
+      toolUseResult: 'Error: Agent terminated early due to an API error: API Error: 529 Overloaded',
+      message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: id, ...(isError ? { is_error: true } : {}),
+        content: 'Error: Agent terminated early due to an API error: API Error: 529 Overloaded' }] }
+    });
+    const [a] = readAgents(fixture([taskRec('toolu_e', 'Explore', 'look', '2026-07-01T10:00:00Z'), errored('toolu_e', true)]))!;
+    assert.deepStrictEqual(pick(a), { status: 'done', background: false, endStatus: 'failed', model: null });
+    const [b] = readAgents(fixture([taskRec('toolu_e', 'Explore', 'look', '2026-07-01T10:00:00Z'), errored('toolu_e', false)]))!;
+    assert.strictEqual(b.endStatus, 'completed');
+  })) p++; else f++;
+
   console.log('\nPassed: ' + p + '  Failed: ' + f + '\n');
   return f;
 }

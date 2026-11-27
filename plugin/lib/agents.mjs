@@ -211,6 +211,8 @@ export function parseRecordEvents(rec) {
                 toolUseId: b.tool_use_id,
                 ts,
                 isAsyncAck: !!isAsyncAck,
+                // A sync run that died (API error, a rejected launch, an unknown agent type) still closes its row, but did not complete.
+                isError: b.is_error === true,
                 agentId,
                 resumedAgentId,
                 // Structured only: the text is the subagent's own report and may name any model (#588 D4).
@@ -275,7 +277,7 @@ export function applyEvent(state, ev) {
         }
         else {
             l.endedAt = ev.ts;
-            l.endStatus = 'completed';
+            l.endStatus = ev.isError ? 'failed' : 'completed';
             l.tokens = ev.tokens;
             l.toolUses = ev.toolUses;
             l.exactDurationMs = ev.exactDurationMs;
