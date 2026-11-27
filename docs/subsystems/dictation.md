@@ -213,6 +213,14 @@ own `inFlight` check is still the one that counts — CPU amplification stays fu
 either way, since only one whisper process ever runs — so the early check is an
 optimisation for the sequential case, not a memory bound on a simultaneous burst.
 
+**A caller that goes away gives the slot back at once.** `serveTranscribe` aborts an
+`AbortSignal` when its response closes before it was written — a closed tab, a navigation —
+and `transcribe()` SIGKILLs whichever of `ffmpeg` and `whisper-cli` is running, skips the
+other and releases `inFlight`, answering nothing since nobody is left to read it. Without it
+every other dictation read 429 until both spawns ran out their 30s timeouts. The signal hangs
+off `res`, not `req`: a request's own `close` fires once its body has been read, so it would
+abort every transcription.
+
 The guard is cheap, and the app is single-user, so this is all it needs; see [accepted
 limits](#accepted-limits) for where it can wedge.
 

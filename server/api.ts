@@ -440,7 +440,13 @@ export async function serveTranscribe(
   }
   if (body.bytes.length === 0) return sendJson(res, 400, { error: 'empty body' });
 
-  const out = await transcribe(config, body.bytes, ext);
+  // `res`, not `req`: a request's own 'close' fires once its body has been read, which is every request by now. The response closing before it was
+  // written is the client gone — a closed tab or a navigation — and nobody is left to read the text.
+  const gone = new AbortController();
+  res.on('close', () => { if (!res.writableEnded) gone.abort(); });
+  if (req.socket.destroyed) gone.abort();
+  const out = await transcribe(config, body.bytes, ext, gone.signal);
+  if (!out.ok && out.reason === 'aborted') return;
   if (out.ok) return sendJson(res, 200, { text: out.text } satisfies TranscribeResponse);
   const code = out.reason === 'busy' ? 429 : out.reason === 'timeout' ? 504 : 500;
   return sendJson(res, code, { error: out.reason });

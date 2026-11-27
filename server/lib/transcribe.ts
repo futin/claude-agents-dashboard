@@ -108,15 +108,15 @@ export function setSpawnTimeoutMs(ms: number | null): void {
   spawnTimeoutMs = ms ?? SPAWN_TIMEOUT_MS;
 }
 
-export type TranscribeFail = 'transcode' | 'engine' | 'timeout' | 'busy';
+export type TranscribeFail = 'transcode' | 'engine' | 'timeout' | 'busy' | 'aborted';
 export type TranscribeOutcome =
   | { ok: true; text: string }
   | { ok: false; reason: TranscribeFail };
 
 interface SpawnOutcome { code: number | null; stdout: string; timedOut: boolean }
 
-/** Run a binary to completion, capturing stdout. Never rejects. */
-function run(bin: string, args: string[]): Promise<SpawnOutcome> {
+/** Run a binary to completion, capturing stdout; `signal` SIGKILLs it, like the timeout does. Never rejects. */
+function run(bin: string, args: string[], signal?: AbortSignal): Promise<SpawnOutcome> {
   return new Promise(resolve => {
     let stdout = '';
     let timedOut = false;
@@ -126,10 +126,13 @@ function run(bin: string, args: string[]): Promise<SpawnOutcome> {
     } catch {
       return resolve({ code: null, stdout: '', timedOut: false });
     }
-    const timer = setTimeout(() => { timedOut = true; child.kill('SIGKILL'); }, spawnTimeoutMs);
+    const kill = (): void => { child.kill('SIGKILL'); };
+    const timer = setTimeout(() => { timedOut = true; kill(); }, spawnTimeoutMs);
+    signal?.addEventListener('abort', kill, { once: true });
+    const done = (out: SpawnOutcome): void => { clearTimeout(timer); signal?.removeEventListener('abort', kill); resolve(out); };
     child.stdout.on('data', (c: Buffer) => { stdout += c.toString('utf8'); });
-    child.on('error', () => { clearTimeout(timer); resolve({ code: null, stdout: '', timedOut }); });
-    child.on('close', code => { clearTimeout(timer); resolve({ code, stdout, timedOut }); });
+    child.on('error', () => { done({ code: null, stdout: '', timedOut }); });
+    child.on('close', code => { done({ code, stdout, timedOut }); });
   });
 }
 
@@ -156,12 +159,14 @@ export function isTranscribing(): boolean {
 /**
  * Browser audio → text. Writes the clip to a private temp directory, normalises
  * it with ffmpeg, transcribes the WAV, and removes the directory on every path.
- * Failures are typed, never raw stderr: that would leak absolute paths.
+ * Failures are typed, never raw stderr: that would leak absolute paths. `signal` is the caller going away: it kills whichever engine is running and frees
+ * the slot at once, rather than holding every other dictation at `busy` until both spawns run out their timeouts.
  */
 export async function transcribe(
-  config: Config, bytes: Buffer, ext: string
+  config: Config, bytes: Buffer, ext: string, signal?: AbortSignal
 ): Promise<TranscribeOutcome> {
   if (inFlight) return { ok: false, reason: 'busy' };
+  if (signal?.aborted) return { ok: false, reason: 'aborted' };
   inFlight = true;
   let dir = '';
   try {
@@ -170,11 +175,13 @@ export async function transcribe(
     const wavPath = path.join(dir, 'clip.wav');
     fs.writeFileSync(inPath, bytes);
 
-    const ff = await run(config.ffmpegBin, buildFfmpegArgs(inPath, wavPath));
+    const ff = await run(config.ffmpegBin, buildFfmpegArgs(inPath, wavPath), signal);
+    if (signal?.aborted) return { ok: false, reason: 'aborted' };
     if (ff.timedOut) return { ok: false, reason: 'timeout' };
     if (ff.code !== 0) return { ok: false, reason: 'transcode' };
 
-    const wh = await run(config.whisperBin, buildWhisperArgs(config.whisperModel, wavPath));
+    const wh = await run(config.whisperBin, buildWhisperArgs(config.whisperModel, wavPath), signal);
+    if (signal?.aborted) return { ok: false, reason: 'aborted' };
     if (wh.timedOut) return { ok: false, reason: 'timeout' };
     if (wh.code !== 0) return { ok: false, reason: 'engine' };
 
