@@ -36,6 +36,7 @@ function parseArgs(argv: string[]): Args {
     else die(`unknown argument ${k}\nusage: tsx scripts/tool-output-replay.ts [--days N] [--project substr] [--thresholds 4,8,16] [--max-file-mb N] [--json]`);
   }
   if (!Number.isFinite(a.days) || a.days <= 0) die('--days must be a positive number');
+  if (!Number.isFinite(a.maxFileMb) || a.maxFileMb <= 0) die('--max-file-mb must be a positive number');
   if (a.thresholds.some(n => !Number.isFinite(n) || n <= 0)) die('--thresholds must be positive KB values, comma-separated');
   a.thresholds.sort((x, y) => x - y);
   return a;

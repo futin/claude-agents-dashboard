@@ -1,4 +1,9 @@
 import assert from 'node:assert';
+import { spawnSync } from 'node:child_process';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import {
   DENY_MESSAGE_BYTES, TRIM_POINTER_BYTES, bashKind, extractResults, simulate, trimmedSize, type ResultRow
@@ -226,6 +231,25 @@ export function run(): number {
       { kind: 'tests', calls: 1, bytes: 1_000, byteTurns: 1_000, trimSavedByteTurns: { 4096: 0, 16384: 0 } }
     ]);
   })) p++; else f++;
+
+  // The CLI's numeric flags: a value Number() cannot read is refused with exit 1, never carried on as NaN — `st.size > NaN * MB` is always false, so a
+  // NaN --max-file-mb would silently switch the size skip off. A valid value still runs (an empty --root, so it finishes at once).
+  const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
+  const empty = fs.mkdtempSync(path.join(os.tmpdir(), 'tor-cli-'));
+  const cli = (...args: string[]) =>
+    spawnSync(process.execPath, ['--import', 'tsx', 'scripts/tool-output-replay.ts', '--root', empty, ...args], { cwd: ROOT, encoding: 'utf8' });
+  for (const [flag, value] of [['--max-file-mb', 'abc'], ['--max-file-mb', '0'], ['--max-file-mb', '-5'], ['--days', 'abc']] as const) {
+    if (test(`CLI: ${flag} ${value} exits 1 naming the flag`, () => {
+      const r = cli(flag, value);
+      assert.strictEqual(r.status, 1, r.stdout + r.stderr);
+      assert.match(r.stderr, new RegExp(`${flag} must be a positive number`));
+    })) p++; else f++;
+  }
+  if (test('CLI: a valid --max-file-mb runs to the end', () => {
+    const r = cli('--max-file-mb', '64', '--json');
+    assert.strictEqual(r.status, 0, r.stderr);
+  })) p++; else f++;
+  fs.rmSync(empty, { recursive: true, force: true });
 
   console.log('\nPassed: ' + p + '  Failed: ' + f + '\n');
   return f;

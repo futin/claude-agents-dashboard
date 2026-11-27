@@ -1,6 +1,7 @@
 /**
  * The Lookout hub routes mounted in the real route table (hub-widgets spec §4): catalog and data served by `lookout-widgets`, the POST action paths
- * answering 404 whatever the body (no actions are declared), and every path the hub declines falling through to the table unchanged.
+ * answering 404 whatever the body under the cap (no actions are declared), an over-cap POST body answered 400 with the connection closed before the hub
+ * is asked, and every path the hub declines falling through to the table unchanged.
  */
 
 import assert from 'node:assert';
@@ -53,7 +54,7 @@ export async function run(): Promise<number> {
     });
   }));
 
-  for (const [name, body] of [['a non-JSON body', 'not json'], ['an empty body', ''], ['a body over the cap', 'x'.repeat(64 * 1024 + 1)]] as const) {
+  for (const [name, body] of [['a non-JSON body', 'not json'], ['an empty body', '']] as const) {
     check(await testAsync(`POST to an action path with ${name} is 404 and the server keeps answering`, async () => {
       await withServer(ENV, async h => {
         const reply = await h.req('/api/hub/widgets/sessions/actions/x', { method: 'POST', body });
@@ -62,6 +63,16 @@ export async function run(): Promise<number> {
       });
     }));
   }
+
+  check(await testAsync('POST with a body over the cap is 400 and closes the connection, like every other bad-body route, and the server keeps answering', async () => {
+    await withServer(ENV, async h => {
+      for (const p of ['/api/hub/widgets/sessions/actions/x', '/api/hub/other']) {
+        const reply = await h.req(p, { method: 'POST', body: 'x'.repeat(64 * 1024 + 1) });
+        assert.deepStrictEqual([reply.status, reply.headers.connection], [400, 'close'], p);
+      }
+      assert.equal((await h.req('/api/sessions')).status, 200);
+    });
+  }));
 
   check(await testAsync('paths the hub declines reach the old table: /api/sessions, and /api/hub/other answers as /api/nonexistent does', async () => {
     await withServer(ENV, async h => {
