@@ -573,6 +573,11 @@ export async function run(): Promise<number> {
       assert.deepStrictEqual(opened, [['open', c.routines], ['open', '-R', file]]);
       assert.deepStrictEqual([(await send(c.h, 'POST', '/api/routines/reveal', { name: 'ghost' })).status, opened.length], [404, 2]);
       assert.deepStrictEqual([(await send(c.h, 'POST', '/api/routines/reveal', { name: 7 })).status, opened.length], [400, 2]);
+      // A body that is not a JSON object — malformed, empty, an array, over the cap — is a 400 that closes the connection, never "no name" (the folder).
+      for (const bad of ['not json', '', '[]', 'null', JSON.stringify({ pad: 'x'.repeat(70 * 1024) })]) {
+        const r = await send(c.h, 'POST', '/api/routines/reveal', bad);
+        assert.deepStrictEqual([r.status, r.headers.connection, opened.length], [400, 'close', 2], `body ${bad.slice(0, 20)}: ${r.raw}`);
+      }
       fs.rmSync(c.routines, { recursive: true });
       assert.strictEqual((await send(c.h, 'POST', '/api/routines/reveal', {})).status, 404);
       assert.strictEqual(opened.length, 2);
