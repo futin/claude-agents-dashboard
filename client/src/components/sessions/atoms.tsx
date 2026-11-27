@@ -1,5 +1,6 @@
 import type { LaunchingSession, Session } from '../../../../shared/types';
 import { apiErrorLabel } from '../../lib/apiError';
+import { isAgentTool } from '../../lib/agentTool';
 import { ctxWarn } from '../../lib/contextWarn';
 import { fmtTok, fmtWindow, formatAgo } from '../../lib/format';
 import { STATUS_LABEL } from '../../lib/filterSort';
@@ -97,7 +98,7 @@ export function Act({ s }: { s: Session }) {
   if (!s.activity) return <span className="act none">no tool activity</span>;
   return (
     <span className="act">
-      <span className={`tool${s.activity.tool === 'Task' ? ' task' : ''}`}>{s.activity.tool}</span>
+      <span className={`tool${isAgentTool(s.activity.tool) ? ' task' : ''}`}>{s.activity.tool}</span>
       {s.activity.detail ? ' ' + s.activity.detail : ''}
     </span>
   );
@@ -113,7 +114,7 @@ export function ToolChip({ s }: { s: Session }) {
   if (!s.activity) return <span className="act none">no tool activity</span>;
   return (
     <span className="act">
-      <span className={`tool${s.activity.tool === 'Task' ? ' task' : ''}`}>{s.activity.tool}</span>
+      <span className={`tool${isAgentTool(s.activity.tool) ? ' task' : ''}`}>{s.activity.tool}</span>
     </span>
   );
 }
@@ -123,7 +124,7 @@ export function ActFull({ s }: { s: Session }) {
   if (!s.activity) return <div className="act-full none">no tool activity</div>;
   return (
     <div className="act-full">
-      <span className={`tool${s.activity.tool === 'Task' ? ' task' : ''}`}>{s.activity.tool}</span>
+      <span className={`tool${isAgentTool(s.activity.tool) ? ' task' : ''}`}>{s.activity.tool}</span>
       {s.activity.detail && <span className="arg">{s.activity.detail}</span>}
     </div>
   );
