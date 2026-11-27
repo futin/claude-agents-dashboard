@@ -30,6 +30,7 @@ import { latestSuggestion } from '../lib/composer';
 import { formatInterval } from '../lib/settings';
 import { surfacePill } from '../lib/surface';
 import { ctxWarn } from '../lib/contextWarn';
+import { isAgentTool } from '../lib/agentTool';
 import { copyText } from '../lib/clipboard';
 import type { ChatMessage, Session } from '../../../shared/types';
 
@@ -80,7 +81,7 @@ function Message({ m, folded }: { m: ChatMessage; folded?: string }) {
           </details>
         ) : (
           <div className="cmsg-tool" key={i}>
-            <span className={`tool${t.name === 'Task' ? ' task' : ''}`}>{t.name}</span>
+            <span className={`tool${isAgentTool(t.name) ? ' task' : ''}`}>{t.name}</span>
             {t.detail ? ' ' + t.detail : ''}
           </div>
         )
