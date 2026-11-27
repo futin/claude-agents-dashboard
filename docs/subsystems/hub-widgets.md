@@ -15,10 +15,11 @@ Code: `server/lib/hub-widgets.ts` (declarations), `serveHub` in `server/api.ts` 
 |---|---|
 | `GET /api/hub/widgets` | the catalog: `app.name` "Claude Agents Dashboard", no icon, and the widgets below |
 | `GET /api/hub/widgets/:id` | one widget's data; 404 `{ error: 'unknown widget <id>' }` for an id not in the catalog |
-| `POST /api/hub/widgets/...` | action paths — always 404, since no widget declares an action |
+| `POST /api/hub/widgets/...` | action paths — always 404, since no widget declares an action; a body over the 64 KB cap is a 400 that closes the connection, like every other bad-body route |
 
 A path under `/api/hub/` that the package does not own (`/api/hub/other`, a `PUT`) falls through to the ordinary route table exactly as before: the listener
-re-enters itself once with the request marked. A POST body that is not JSON, empty, or over the 64 KiB cap reaches the package as `undefined`.
+re-enters itself once with the request marked. A POST body that is not JSON, or empty, reaches the package as `undefined`. A POST body over the 64 KiB
+cap (or one the client aborted), anywhere under `/api/hub/`, is answered 400 with the connection closed before the package or the fall-through is reached.
 
 ## The widgets
 

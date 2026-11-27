@@ -1450,10 +1450,16 @@ export async function serveSessionStop(
 
 /**
  * One request to the Lookout hub routes. Resolves `false` when the hub does not own the path, so the caller falls through to its own table. A POST body
- * that is not JSON (or empty, or over the cap) reaches the hub as `undefined`; no action is declared, so every POST path answers 404 regardless.
+ * that is not JSON (or empty) reaches the hub as `undefined`; no action is declared, so every POST path answers 404 regardless. A body over the cap, or
+ * one the client aborted, is the 400 that closes the connection, like every other bad-body route, before the hub is asked.
  */
 export async function serveHub(hub: HubHandler, u: URL, req: IncomingMessage, res: ServerResponse): Promise<boolean> {
-  const body = req.method === 'POST' ? ((await readJsonBody(req)) ?? undefined) : undefined;
+  let body: unknown;
+  if (req.method === 'POST') {
+    const read = await readBody(req, BODY_CAP);
+    if (!read.ok) { sendBadBody(res, { error: read.reason === 'overflow' ? 'body too large' : 'body aborted' }); return true; }
+    try { body = JSON.parse(read.bytes.toString('utf8')) ?? undefined; } catch { body = undefined; }
+  }
   const reply = await hub.handle({ method: req.method ?? 'GET', path: u.pathname, query: u.searchParams, body });
   if (reply === null) return false;
   sendJson(res, reply.status, reply.json);
@@ -2083,7 +2089,9 @@ export async function serveRoutineStop(config: Config, name: string, req: Incomi
 export async function serveRoutineReveal(config: Config, req: IncomingMessage, res: ServerResponse): Promise<void> {
   if (refuseWrite(config, req, res)) return;
   const body = await readJsonBody(req) as Unvalidated<RoutineRevealRequest> | null;
-  const name = body && typeof body === 'object' ? body.name : undefined;
+  // A body that is not a JSON object is a bad body, not "no name": read as `{}` it would open the folder for a malformed or over-cap request.
+  if (!body || typeof body !== 'object' || Array.isArray(body)) return sendBadBody(res, { error: 'expected {name?: string}' });
+  const name = body.name;
   if (name !== undefined && typeof name !== 'string') return sendBadBody(res, { error: 'expected {name?: string}' });
   if (refuseRoutineWrite(res, name)) return;
   if (openFolderPlatform() !== 'darwin') return sendJson(res, 501, { error: 'reveal needs macOS' });

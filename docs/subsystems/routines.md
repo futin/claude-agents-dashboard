@@ -337,7 +337,7 @@ Write routes are gate-only writes ([who may write](remote-access.md#who-may-writ
 | `DELETE /api/routines/:name` | remove the file, reconcile, `200 {reconcile}`; the log stays | `404`, `500 delete failed` |
 | `POST /api/routines/validate` | `{text, name?}` → `{errors, summary, nextAt}`, `nextAt` the schedule's next fire on the host's clock (null when invalid or manual), which the Schedule hint shows; read-only, outside the write gate | `500 validate failed` (pins unreadable) |
 | `POST /api/routines/reconcile` | `{apply?}` → the plan; applies when `apply` | |
-| `POST /api/routines/reveal` | `{name?}`: open the folder, or reveal that job's file, with `open` / `open -R`; macOS only | `501 reveal needs macOS`, `404 no routines folder` or `no such job`, `500 open failed` |
+| `POST /api/routines/reveal` | `{name?}`: open the folder, or reveal that job's file, with `open` / `open -R`; macOS only | `400 expected {name?: string}` for a body that is not a JSON object (malformed, empty, over the cap — the connection closes), `501 reveal needs macOS`, `404 no routines folder` or `no such job`, `500 open failed` |
 | `POST /api/routines/:name/run` | see above | `400 bad body`, `bad-only`; `404`; `409 already-running`, `no-plugin`, `invalid`, `not-owner`; `500 spawn-failed` |
 | `POST /api/routines/:name/stop` | `204` | `409 not-running` |
 | `GET /api/sessions/:id/row` | one `Session` row for any id a transcript resolves, no lookback, so a run older than the Sessions window opens in the ChatDrawer | `400 bad id`, `404 no such session`, `500 transcript unreadable` |
