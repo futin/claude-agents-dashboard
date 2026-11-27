@@ -488,6 +488,8 @@ export interface ProcProbe {
   liveCwds: Set<string> | null;
   /** Session ids named in a live `claude` argv, from `ps -Ao pid=,args=` ({@link parsePsSessionIds}). */
   liveSessionIds: Set<string> | null;
+  /** Pids of those `claude` processes ({@link parsePsClaudePids} over the same `comm` read); matched against Claude Code's session registry (#588 D3). */
+  claudePids: Set<string> | null;
 }
 
 /** Per-child kill timer for the probe. */
@@ -557,7 +559,8 @@ export async function probeProcesses(opts: { exec?: ProbeExec; timeoutMs?: numbe
   return {
     runningClaudeProcs: countClaudeProcs(comm),
     liveCwds: composeLiveCwds(comm, lsofOut),
-    liveSessionIds: args === null ? null : parsePsSessionIds(args)
+    liveSessionIds: args === null ? null : parsePsSessionIds(args),
+    claudePids: comm === null ? null : new Set(pids)
   };
 }
 

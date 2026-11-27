@@ -37,7 +37,9 @@ export async function run(): Promise<number> {
   check(await testAsync('probe composes count, cwds and ids the way the sync probes did', async () => {
     const s = stub({ comm: () => ok(COMM), lsof: () => ok('p12\nn/a/lv\n'), args: () => ok(ARGS) });
     const probe = await probeProcesses({ exec: s.exec });
-    assert.deepStrictEqual(probe, { runningClaudeProcs: 2, liveCwds: new Set(['/a/lv']), liveSessionIds: new Set(['abc-1']) });
+    assert.deepStrictEqual(probe, {
+      runningClaudeProcs: 2, liveCwds: new Set(['/a/lv']), liveSessionIds: new Set(['abc-1']), claudePids: new Set(['12', '34'])
+    });
     assert.deepStrictEqual(s.calls, { comm: 1, args: 1, lsof: 1 });
   }));
 
@@ -47,6 +49,7 @@ export async function run(): Promise<number> {
       const probe = await probeProcesses({ exec: s.exec });
       assert.strictEqual(probe.runningClaudeProcs, null);
       assert.strictEqual(probe.liveCwds, null);
+      assert.strictEqual(probe.claudePids, null, 'a failed comm read cannot say which claude pids live');
       assert.strictEqual(s.calls.lsof, 0);
       assert.deepStrictEqual(probe.liveSessionIds, new Set(['abc-1']));
     }
@@ -56,6 +59,7 @@ export async function run(): Promise<number> {
     const s = stub({ comm: () => ok('78 node\n'), args: () => ok('') });
     const probe = await probeProcesses({ exec: s.exec });
     assert.strictEqual(probe.runningClaudeProcs, 0);
+    assert.deepStrictEqual(probe.claudePids, new Set(), 'an answered read with no claude pid is an empty set, not null');
     assert.strictEqual(probe.liveCwds, null);
     assert.strictEqual(s.calls.lsof, 0);
   }));

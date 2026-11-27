@@ -82,7 +82,7 @@ remote-answer switch on, a **gate-only write** needs the gate alone ([who may wr
 | Route | Purpose |
 |---|---|
 | `GET /api/sessions` | the poll snapshot: sessions + totals + usage bars (`?limit=&lookback=&active=` override the scan, repeatable `?project=` filters it before the limit) + every project in the lookback |
-| `GET /api/sessions/:id` | one session's subagent timeline |
+| `GET /api/sessions/:id` | one session's subagent timeline, each row with its liveness facts (`background`, `model`, `lastWriteAt`, `lastTool`, `endStatus`, `blockedReason`), plus `parentLive` |
 | `GET /api/sessions/:id/spend` | tokens spent so far, main agent plus subagents; compaction never lowers it ([chat](subsystems/chat.md)) |
 | `GET /api/sessions/:id/chat` | paged chat history (byte-offset cursors) |
 | `GET /api/sessions/:id/question` | pending remote question, if any |
@@ -215,6 +215,10 @@ server/
   lib/agents.ts   whole-file subagent parser → AgentJob[]
   lib/agents-cache.ts  incremental byte-offset cache over agents.ts; the same pass folds the main transcript's spend tally (`readSessionFold`, sync for scan.ts;
                   `readSessionFoldAsync` for the drawer routes: sliced, yielding between slices, single-flight per entry)
+  lib/session-detail.ts  GET /api/sessions/:id: agents-cache.ts rows overlaid with subagent-facts.ts, plus `parentLive` from session-registry.ts (#588)
+  lib/subagent-facts.ts  one subagent's own-file facts for the detail route: meta `background`/`model`, transcript mtime, newest tool, `blockedReason`;
+                  memoized on both files' size and mtime
+  lib/session-registry.ts  reads Claude Code's `~/.claude/sessions/<pid>.json` registry; `parentLiveOf` joins it with the process probe's pids
   lib/tasks.ts    whole-file fold of the plan signals and TaskCreate/TaskUpdate → Session.tasks / taskPlan (plan wins), incremental by byte offset (the creates sit below the 256 KB tail)
   lib/pr-detect.ts    the newest PR a session created: Claude Code's `gitOperation.pr` create (URL must be `https://<host>/<owner>/<repo>/pull/<n>`), else a `gh pr create` result's last PR URL; never `pr-link`; incremental by byte offset
   lib/pr-status.ts    a PR's live state for the chat PR card: launches `gh pr view --json`, folds checks/review/merge, caches per URL (20s busy or failed, 60s settled, forever once ended)
@@ -271,7 +275,7 @@ server/
   lib/hub-widgets.ts  the Lookout hub tiles (usage gauge, sessions list, Git pending list), declared through lookout-widgets
   lib/scan-snapshot.ts  `scanSnapshot`: one session scan with every RAM-store injection and the held-wait terminal sweep — what /api/sessions
                   and the hub's sessions tile both serve; it publishes its walk to transcript-listing.ts, and `sharedProcProbe` is the one async
-                  `ps`/`lsof` probe those readers share (joined while in flight, reused for `PROBE_TTL_MS`)
+                  `ps`/`lsof` probe those readers and GET /api/sessions/:id share (joined while in flight, reused for `PROBE_TTL_MS`)
   lib/transcript-listing.ts  the one held transcript listing (≤ 3 s old) every request path but the poll reads: `sharedListing`,
                   `publishListing`, `resolveTranscript` for id lookups
   lib/dir-cache.ts  `cachedEntries`: a directory's entries, re-read only when its mtime or inode moved (and never within `RACY_MS` of the mtime) —
