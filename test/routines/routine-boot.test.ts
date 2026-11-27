@@ -49,6 +49,7 @@ function fakeDeps(claim: 'owner' | { ownedBy: string } = 'owner'): Fake {
     sweepLocks: () => { calls.push('sweepLocks'); return []; },
     writePinsSnapshot: rec('writePinsSnapshot'),
     rotateIfLarge: () => { calls.push('rotateIfLarge'); return []; },
+    pruneArchives: () => { calls.push('pruneArchives'); return []; },
     applyReconcile: async () => { calls.push('applyReconcile'); return { state: 'in-sync', changes: [], unchanged: 0, error: null, at: '' }; },
     startReconcileWatchers: rec('startReconcileWatchers'),
     stopReconcileWatchers: rec('stopReconcileWatchers'),
@@ -127,13 +128,15 @@ export async function run(): Promise<number> {
       const fake = fakeDeps();
       startRoutines(config, fake.deps);
       assert.deepStrictEqual(fake.calls, [
-        'migrateLegacyState', 'claimOwner', 'importSharedJobs', 'sweepLocks', 'writePinsSnapshot', 'rotateIfLarge', 'applyReconcile', 'startReconcileWatchers',
+        'migrateLegacyState', 'claimOwner', 'importSharedJobs', 'sweepLocks', 'writePinsSnapshot', 'rotateIfLarge', 'pruneArchives', 'applyReconcile',
+        'startReconcileWatchers',
         'createLogReader', 'seedRoutineNotify', 'notifyRoutineRuns', 'foldTickCaps', 'watch'
       ]);
       assert.deepStrictEqual(fake.sent, ['r1']);
       fake.setRuns([runOf('r1'), runOf('r2')]);
       fake.fire();
-      assert.deepStrictEqual(fake.calls.slice(-2), ['notifyRoutineRuns', 'foldTickCaps'], 'a write to runs/ folds again');
+      assert.deepStrictEqual(fake.calls.slice(-4), ['rotateIfLarge', 'pruneArchives', 'notifyRoutineRuns', 'foldTickCaps'],
+        'a write to runs/ rotates and prunes the log, then folds again');
       assert.deepStrictEqual(fake.sent, ['r1', 'r1', 'r2']);
     });
   }));

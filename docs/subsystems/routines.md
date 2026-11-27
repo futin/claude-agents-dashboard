@@ -65,7 +65,7 @@ wrapper against the old folder.
 | `~/.claude/routines/` (the *state root*) | everything below, machine-local, never under git | |
 | `jobs/` | the default job folder | see above |
 | `jobs-imported.json` | `{at, from, count}`, the marker that the one-time import ran | the owner (`importSharedJobs`) |
-| `runs/<machine>.jsonl` | the append-only run log; rotated to `<machine>.<yyyymmdd>.jsonl` at 20 MB | the wrapper (appends), the owner (rotates) |
+| `runs/<machine>.jsonl` | the append-only run log; rotated to `<machine>.<yyyymmdd>.jsonl` at 20 MB, an archive deleted once past retention | the wrapper (appends), the owner (rotates, prunes) |
 | `locks/<job>.lock` | the job lock: pid and boot id | the wrapper; the owner sweeps dead ones on start |
 | `launchd/` | the plists' stdout and stderr files (mac) | reconcile creates it, launchd writes the files in it |
 | `pins.json` | `[{dirName, name, path, listed}]` in pin order, what `foreach:` resolves against | the owner, on start and when pins change |
@@ -152,8 +152,9 @@ dead or from another boot. A second opted-in server that finds a live owner runs
 
 A non-owner serves jobs, runs and stats, the client hides every write control, and it never writes under the state root. The owner releases `owner.json`
 on clean exit and on SIGINT or SIGTERM (`stopRoutines`); a crash leaves a dead pid the next start takes over. `startRoutines` (`routine-boot.ts`) does,
-in order and each step failing on its own without taking `listen` down: job import, lock sweep, pins snapshot, log rotation, first reconcile, reconcile watchers, then
-the runs watcher that seeds and folds the log for pushes.
+in order and each step failing on its own without taking `listen` down: job import, lock sweep, pins snapshot, log rotation (rotate, then prune archives), first reconcile, reconcile watchers, then
+the runs watcher that seeds and folds the log for pushes. The wrapper never rotates, so on every write to `runs/` the watcher runs log rotation again before it
+folds: a server that stays up does not let the live file grow past 20 MB until its next restart.
 
 ## Reconcile: files in, OS jobs out
 
@@ -279,7 +280,8 @@ fold from 0, and a torn last line stays unread until its newline arrives.
 The fold is bounded (spec `2026-11-14-poll-path-probes-design.md` A4, A6, A7). The liveness answer is memoised per run: `false` for good, `true` and
 `null` for 10 s (`LIVENESS_TTL_MS`), so a poll does not fork a `ps` per unfinished run; the `ps` itself has a 2 s timeout. Retention is 181 days
 (`RUN_RETAIN_DAYS`, twice the 90-day window for `prev`, plus one): a rotated archive stamped before the cutoff is not read unless the reader already
-tracks it, and nothing is deleted. After each read, runs that started before the cutoff are dropped from the fold, except each job's newest run that is
+tracks it, and the owner deletes it (`pruneArchives`, with each log rotation). A tracked archive that vanishes past the cutoff is dropped without the
+rebuild a vanished file otherwise costs, since every run in it is one the fold forgets anyway. After each read, runs that started before the cutoff are dropped from the fold, except each job's newest run that is
 not running, of any state, which is its `last` row. A finished run is built once and reused until a record for it arrives. Stats are over 7, 30 or 90 whole local days (`ROUTINE_WINDOWS`), built from
 calendar arithmetic so a DST change cannot shift a run across a day, with the previous window of the same length beside it; refusals are not runs.
 

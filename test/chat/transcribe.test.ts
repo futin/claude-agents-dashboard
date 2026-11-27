@@ -334,6 +334,101 @@ export async function run(): Promise<number> {
     } finally { fs.rmSync(dir, { recursive: true, force: true }); }
   }));
 
+  // `exec`, so the SIGKILL lands on the sleep itself (see HANGING_WHISPER below).
+  const HANGING_ENGINE = '#!/bin/bash\n[ "$1" = "-h" ] && exit 0\nexec sleep 30\n';
+
+  check(await testAsync('aborting mid-transcription kills the engine, answers aborted and frees the slot before the spawn timeout', async () => {
+    resetProbe();
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cad-run-abort-'));
+    let err: unknown;
+    try {
+      const model = path.join(dir, 'ggml.bin');
+      fs.writeFileSync(model, 'x');
+      const ff = stubBin(dir, 'ff-stub', '#!/bin/bash\nout="${@: -1}"\n: > "$out"\n');
+      const wh = stubBin(dir, 'wh-hang', HANGING_ENGINE);
+      await new Promise<void>(done => {
+        withEnvFile(`WHISPER_MODEL=${model}\nWHISPER_BIN=${wh}\nFFMPEG_BIN=${ff}\n`, cfg => {
+          const ac = new AbortController();
+          const started = Date.now();
+          const out = transcribe(cfg, Buffer.from('fake'), 'm4a', ac.signal);
+          setTimeout(() => ac.abort(), 300);
+          out
+            .then(r => {
+              assert.deepEqual(r, { ok: false, reason: 'aborted' });
+              assert.equal(isTranscribing(), false);
+              assert.ok(Date.now() - started < 5_000, 'freed by the abort, not by the 30s ceiling');
+            })
+            .catch(e => { err = e; })
+            .finally(done);
+        });
+      });
+      if (err) throw err;
+    } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+  }));
+
+  check(await testAsync('a signal already aborted spawns nothing and answers aborted', async () => {
+    resetProbe();
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cad-run-preabort-'));
+    let err: unknown;
+    try {
+      const model = path.join(dir, 'ggml.bin');
+      fs.writeFileSync(model, 'x');
+      const ran = path.join(dir, 'ran');
+      const ff = stubBin(dir, 'ff-mark', `#!/bin/bash\n: > "${ran}"\nout="\${@: -1}"\n: > "$out"\n`);
+      const wh = stubBin(dir, 'wh-stub', '#!/bin/bash\necho "text"\n');
+      await new Promise<void>(done => {
+        withEnvFile(`WHISPER_MODEL=${model}\nWHISPER_BIN=${wh}\nFFMPEG_BIN=${ff}\n`, cfg => {
+          transcribe(cfg, Buffer.from('fake'), 'm4a', AbortSignal.abort())
+            .then(r => {
+              assert.deepEqual(r, { ok: false, reason: 'aborted' });
+              assert.equal(fs.existsSync(ran), false, 'ffmpeg never ran');
+              assert.equal(isTranscribing(), false);
+            })
+            .catch(e => { err = e; })
+            .finally(done);
+        });
+      });
+      if (err) throw err;
+    } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+  }));
+
+  check(await testAsync('a client that hangs up mid-transcription frees the slot without waiting for the engine', async () => {
+    resetProbe();
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cad-ep-hangup-'));
+    let err: unknown;
+    try {
+      const model = path.join(dir, 'ggml.bin');
+      fs.writeFileSync(model, 'x');
+      const ff = stubBin(dir, 'ff-stub', '#!/bin/bash\nout="${@: -1}"\n: > "$out"\n');
+      const wh = stubBin(dir, 'wh-hang', HANGING_ENGINE);
+      await inTmpCwd(async () => {
+        await new Promise<void>(done => {
+          withEnvFile(`WHISPER_MODEL=${model}\nWHISPER_BIN=${wh}\nFFMPEG_BIN=${ff}\n`, cfg => {
+            const srv = http.createServer((req, res) => void serveTranscribe(cfg, req, res));
+            const finish = (e?: unknown): void => { if (e) err = e; srv.closeAllConnections(); srv.close(); done(); };
+            srv.listen(0, () => {
+              const port = (srv.address() as { port: number }).port;
+              const req = http.request({ port, method: 'POST', path: '/api/transcribe', headers: { 'Content-Type': 'audio/mp4' } });
+              req.on('error', () => { /* this side hangs up on purpose */ });
+              req.end(Buffer.from('fake-audio'));
+              const poll = async (want: boolean, ms: number): Promise<void> => {
+                const deadline = Date.now() + ms;
+                while (isTranscribing() !== want) {
+                  if (Date.now() > deadline) throw new Error(`isTranscribing() never became ${want} within ${ms}ms`);
+                  await new Promise(r => setTimeout(r, 10));
+                }
+              };
+              poll(true, 3000)
+                .then(() => { req.destroy(); return poll(false, 3000); })
+                .then(() => finish(), finish);
+            });
+          });
+        });
+      });
+      if (err) throw err;
+    } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+  }));
+
   check(await testAsync('the temp directory is removed afterwards', async () => {
     resetProbe();
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cad-run4-'));

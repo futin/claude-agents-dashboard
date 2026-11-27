@@ -268,7 +268,7 @@ server/
   lib/routine-store.ts   job files (read, atomic write, delete), the owner claim, `pins.json`, lock sweep and the pid-liveness `Probe`
   lib/routine-reconcile.ts  the pure plan of installs, updates and removes against launchd / crontab, its apply, the serialised trigger and the watchers
   lib/routine-run.ts     `POST /run` and `/stop`: spawn the wrapper through `spawn.ts`'s `spawnProcess`, read the run id back from the log
-  lib/routine-log.ts     the incremental run-log reader, the lost rule, 20 MB rotation and the window stats
+  lib/routine-log.ts     the incremental run-log reader, the lost rule, 20 MB rotation, archive pruning and the window stats
   lib/routine-notify.ts  the `routine-failed` fold over runs: one push per run, `notified.json`, the first-start seed
   lib/routine-import.ts  the one-time import of the old shared job folder into `jobs/`, every file disabled, behind a marker
   lib/routine-boot.ts    what the owning server does on listen and on exit, and the shared log reader
