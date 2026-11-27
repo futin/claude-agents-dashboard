@@ -1,13 +1,13 @@
 /**
- * transcript-listing.ts — one held listing of the transcript tree, shared by every request path that is not the sessions poll.
+ * transcript-listing.ts — one held listing of the transcript tree, shared by every request path, the sessions poll included.
  *
- * The `/api/sessions` poll walks and stats the whole tree every 3 s on purpose (`docs/subsystems/sessions.md`); it hands its listing here with
- * {@link publishListing}. Session lookups, the pin and management lists and the routine pin checks then read that listing instead of each walking the
- * tree again — a pin toggle used to list it four times (43–55 ms warm here, 2026-11-15, 656 transcripts; 7.5–14 ms with one listing). With no poll
- * running, the first caller past {@link LISTING_MAX_AGE_MS} takes one fresh walk and the rest share it.
+ * The `/api/sessions` poll reads it with a 1 s max age (`POLL_LISTING_MAX_AGE_MS`), so each tab's poll still lists fresh while a second tab and the hub
+ * tile inside the same second share one walk (`docs/subsystems/sessions.md`). Session lookups, the pin and management lists and the routine pin checks
+ * read it with the default {@link LISTING_MAX_AGE_MS} instead of each walking the tree again — a pin toggle used to list it four times (43–55 ms warm
+ * here, 2026-11-15, 656 transcripts; 7.5–14 ms with one listing). The first caller past its max age takes one fresh walk and the rest share it.
  *
- * `listTranscripts` in `scan.ts` stays the fresh walk the poll, analytics and the usage ledger need: its readdirs are gated by directory mtime
- * (`dir-cache.ts`), but it stats every file on every call, so no listing it returns is ever stale.
+ * `listTranscripts` in `scan.ts` stays the fresh walk behind every held listing, and the one analytics and the usage ledger take directly: its readdirs
+ * are gated by directory mtime (`dir-cache.ts`), but it stats every file on every call, so no listing it returns is ever stale.
  */
 
 import { findTranscript, listTranscripts, restatRef } from './scan.js';
@@ -19,18 +19,18 @@ export const LISTING_MAX_AGE_MS = 3000;
 /** One root only: the server lists nothing but `projectsRoot()`, so a call for another root replaces it. */
 let held: { root: string; refs: readonly TranscriptRef[]; atMs: number } | null = null;
 
-/** The held listing of `root` when it is at most {@link LISTING_MAX_AGE_MS} old, else a fresh walk, held and returned. */
-export function sharedListing(root: string, nowMs: number = Date.now()): readonly TranscriptRef[] {
+/** The held listing of `root` when it is at most `maxAgeMs` old, else a fresh walk, held and returned. */
+export function sharedListing(root: string, nowMs: number = Date.now(), maxAgeMs: number = LISTING_MAX_AGE_MS): readonly TranscriptRef[] {
   if (held && held.root === root) {
     const age = nowMs - held.atMs;
-    if (age >= 0 && age <= LISTING_MAX_AGE_MS) return held.refs;
+    if (age >= 0 && age <= maxAgeMs) return held.refs;
   }
   const refs = listTranscripts(root);
   held = { root, refs, atMs: nowMs };
   return refs;
 }
 
-/** Hold a listing the caller already took — `scanSnapshot` publishes the poll's walk here. */
+/** Hold a listing the caller already took. */
 export function publishListing(root: string, refs: readonly TranscriptRef[], atMs: number = Date.now()): void {
   held = { root, refs, atMs };
 }

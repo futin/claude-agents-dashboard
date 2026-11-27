@@ -2,8 +2,8 @@
  * Pins which `server/` files may walk the whole transcript tree: a `listTranscripts(` call, a `listUsageTranscripts(` call (which walks it and every
  * session's subagents dir besides), or a `findTranscript(` with no refs argument (which falls back to its own walk of every project dir).
  *
- * The `/api/sessions` poll walks it every 3 s on purpose and publishes the result (`server/lib/transcript-listing.ts`); every other request path reads
- * that shared listing. A new direct call elsewhere quietly brings back a per-request walk — a pin toggle cost four of them before #472.
+ * Every request path, the `/api/sessions` poll included, reads the shared listing in `server/lib/transcript-listing.ts`, which walks afresh once it is
+ * past its max age (1 s for the poll). A new direct call elsewhere quietly brings back a per-request walk — a pin toggle cost four of them before #472.
  */
 import assert from 'node:assert';
 import fs from 'node:fs';
@@ -21,7 +21,6 @@ function test(name: string, fn: () => void): boolean {
 const ALLOWED = new Set([
   'server/lib/scan.ts', // defines them; `listUsageTranscripts` builds on `listTranscripts`
   'server/lib/transcript-listing.ts', // the shared listing's fallback walk
-  'server/lib/scan-snapshot.ts', // the sessions poll: the one fresh walk, which it publishes
   'server/lib/analytics.ts', // the Analytics report, not a poll path
   'server/lib/management.ts', // `transcriptsOf`, for a caller that passes no listing
   'server/lib/usage-ledger.ts', // the usage ledger's own tick, which needs subagent transcripts the shared listing leaves out

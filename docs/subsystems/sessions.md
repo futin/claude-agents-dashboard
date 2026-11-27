@@ -260,7 +260,7 @@ never pays a full-window parse on every poll.
 **It sinks below the tail window.** `readTranscript` reads only the last 256KB; on a busy
 session the record ends up far below that (observed 764KB below EOF on a 1.2MB
 transcript), where no scan order helps. Widening the window is not the fix — transcripts
-here run to several megabytes and the scan re-reads every session on every poll. So
+here run to several megabytes and the scan re-reads every session that changed on every poll. So
 `title-cache.ts` searches the tail first (free — those bytes are already decoded) and only
 on a miss hunts backward through the rest of the file a chunk at a time, newest hit wins.
 The search and its memory live in `record-cache.ts` (`createRecordCache(marker, extract)`),
@@ -390,8 +390,8 @@ that set is forced to `idle`, no matter the transcript. That one `ps` stdout als
 `runningClaudeProcs` (the count of matching pids; `null` when `ps` failed, `0` when it ran and
 matched nothing), so a probe forks one `ps -Ao pid=,comm=`, not a second one for the count
 (`countClaudeProcs`). The same probe runs `ps -Ao pid=,args=` for `processLive` ([spawn](spawn.md#processlive-the-live-process-this-server-cannot-signal)).
-`scanSnapshot` likewise lists the transcript tree once per request and
-hands that listing to both the held-wait sweep and the scan (`ScanOptions.transcripts`).
+`scanSnapshot` likewise takes one listing of the transcript tree per request (`sharedListing`, at most 1 s old — below) and
+hands it to both the held-wait sweep and the scan (`ScanOptions.transcripts`).
 
 **The probe is async and shared, and `scanSessions` spawns nothing** (#481). The children run through async `execFile` — both `ps` reads in parallel, `lsof`
 after them only when `ps` named a claude pid — each under its own 2 s kill timer (`runProbeChild`; `execFile`'s own `timeout` can report success with empty
@@ -559,9 +559,22 @@ After, on the same machine (2026-11-24, macOS, 367 project dirs, 3,480 top-level
 its `mtimeMs` and `size` and re-parses only a file that changed (entries leave once the file passes `SUBAGENT_STALL_MS`), and launch adoption's
 `launchRowIds` takes the poll's own listing (`sharedListing`, required by its type) instead of walking the tree per launching id.
 
-**Every other request path reads the poll's listing** (`server/lib/transcript-listing.ts`, #472). `scanSnapshot` walks fresh and hands its listing to
-`publishListing`; the module holds the newest listing of one root and the time it was taken. `sharedListing(root)` serves it while it is at most
-`LISTING_MAX_AGE_MS` (3 s, the default poll interval) old, otherwise walks once and holds that. Its readers: the `api.ts` id lookups through
+**The tail scans are memoised by size and mtime** (`readTranscript` in `server/lib/transcript.ts`, #587). After #541 the walk was no longer the cost: the
+poll's `readTranscript` over the pool (`maxSessions * 2`, 100 at the default 50) re-read 26.2 MB of 256 KB tails and re-parsed them every 3 s, 158.0 ms warm
+against 13.8 ms for the walk (2026-11-27, macOS, 3,481 top-level transcripts), though almost none had changed since the previous poll. `readTranscript` now
+stats the file first and reuses the held tail scan when `size` and `mtimeMs` both match; otherwise it reads and replaces it. The entries are kept in
+least-recently-used order and capped at `TRANSCRIPT_MEMO_MAX` (1024) — room for the pool, `management.ts`'s per-project-dir parse and the id lookups. Only
+the scan is held: the context window and percent are recomputed on every call, because `resolveWindow` reads the env overrides and `frozenCompactWindow`
+its own cache, and each call gets a new result object whose nested `activity` and `apiError` are frozen, so no caller can change what the next poll is
+served. A call with a non-default `tailBytes` bypasses the memo. The accepted blind spot is a rewrite to the same byte length that also restores the old
+mtime; transcripts are append-only, so it does not happen in practice. After, on the same machine (2026-11-27, macOS, 3,483 top-level transcripts): the
+same 100 reads 0.6 ms warm with nothing appended — every changed file still costs its full tail read.
+
+**Every request path reads one held listing** (`server/lib/transcript-listing.ts`, #472). The module holds the newest listing of one root and the time it
+was taken. `sharedListing(root, nowMs, maxAgeMs)` serves it while it is at most `maxAgeMs` old, otherwise walks once and holds that. `scanSnapshot` passes
+`POLL_LISTING_MAX_AGE_MS` (1 s, #587) and reads the age off the probe's clock: under the 3 s poll, so one tab still lists fresh on every poll, while a
+second tab and the hub's sessions tile polling inside the same second share one walk, as they share the process probe. Every other reader takes the
+default `LISTING_MAX_AGE_MS` (3 s, the default poll interval). Its readers: the `api.ts` id lookups through
 `resolveTranscript` (session detail, spend, chat, `sessionExists`, PR, the routine-run resolve, the row endpoint), and every pin and project list —
 `pinListOptions` (`management.ts`) carries the listing, so a pin toggle's membership check, `pins.json` snapshot and reply share one walk, and
 `git-stats.ts`, `git-fetch.ts`, `codegraph-store.ts` and `routine-store.ts` build their `listPinRows` options through it too — one option set, Claude

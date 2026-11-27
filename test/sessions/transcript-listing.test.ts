@@ -56,6 +56,16 @@ export function run(): number {
     });
   })) p++; else f++;
 
+  if (test('maxAgeMs narrows the window: the default serves a 1.5 s-old listing, a 1 s max walks again', () => {
+    withRoot((root, write) => {
+      const refs: TranscriptRef[] = [];
+      publishListing(root, refs, T);
+      write('-p', 'late');
+      assert.strictEqual(sharedListing(root, T + 1500), refs, 'the default max age serves the held array');
+      assert.deepStrictEqual(sharedListing(root, T + 1500, 1000).map(r => r.id), ['late'], 'a 1 s max age walks and sees the new file');
+    });
+  })) p++; else f++;
+
   if (test('a published listing is served as is, with no disk read', () => {
     const root = path.join(os.tmpdir(), 'cad-listing-does-not-exist-' + process.pid);
     const refs: TranscriptRef[] = [{ file: path.join(root, '-p', 'x.jsonl'), dirName: '-p', id: 'x', mtimeMs: T, size: 1 }];
