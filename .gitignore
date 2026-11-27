@@ -13,6 +13,8 @@ client/dist/
 .usage-history.jsonl
 .usage-ledger.jsonl
 .usage-profile.json
+# per-session plugin-trim settings files for trimmed headless spawns (docs/subsystems/spawn.md §Plugin trim)
+.plugin-trim/
 test-results/
 playwright-report/
 .playwright-mcp/

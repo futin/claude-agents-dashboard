@@ -2314,6 +2314,18 @@ export interface SpawnRequest {
    * never a silent fresh launch. With `surface: 'desktop'` it is the hand-over to the desktop app, and `prompt` is ignored (the link carries none).
    */
   resume?: string;
+  /**
+   * A plugin-trimmed headless launch: the child gets `--settings <file>` switching off every enabled plugin not on backlog-manager's headless allowlist
+   * (`~/.backlog-manager/settings/headless.json`) or in `keepPlugins`. Anything but literal `true` means off. Ignored with `surface: 'desktop'` and on a
+   * resume, which keeps whatever plugin set the session was launched with (docs/subsystems/spawn.md §Plugin trim, decisions 2 and 3). The dashboard's own
+   * launch form never sends it.
+   */
+  trimPlugins?: boolean;
+  /**
+   * Plugin names kept on top of the allowlist when `trimPlugins` is on — a bare name or a full `<name>@<marketplace>` id, at most 32. A present but
+   * malformed value turns the trim off for that launch, never a 400 (§Plugin trim, decision 2).
+   */
+  keepPlugins?: string[];
 }
 
 /**

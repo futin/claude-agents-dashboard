@@ -124,6 +124,66 @@ The Git Sync button sends it on every launch (`syncRequest`); the launch form's 
 most likely to want a follow-up. Only the Stop hold is skipped — `AskUserQuestion` and permission prompts still reach the phone, which git-sync's own decision
 round relies on.
 
+## Plugin trim (`trimPlugins`)
+
+A `POST /api/spawn` caller can ask for a **plugin-trimmed** headless session with `trimPlugins: true` (#586). `server/lib/plugin-trim.ts` writes a
+settings file that switches off every enabled plugin not on backlog-manager's headless allowlist, plus the request's `keepPlugins`, and the child gets
+`--settings <file>` as the last argv pair. A launch that does not ask is today's argv byte for byte. That covers every launch from the dashboard's own form
+and every desktop launch, because `SpawnPanel` never sends the field. The callers meant to ask are backlog-manager's unattended dispatches. Sending the field
+from them is backlog-manager's side of the work.
+
+Why: every turn replays the plugin set's skill and agent descriptions. A probe on 2026-11-26 measured the per-turn preamble at ~50.1k input tokens
+untrimmed against ~41.9k with only `backlog-manager`, `superpowers` and the `@builtin` plugins. On this machine on 2026-11-27, one `claude -p "reply ok"
+--model haiku` turn in this repo read 54,384 tokens with 12 plugins and 102 skills untrimmed, and 51,561 tokens with 5 plugins and 68 skills trimmed.
+
+**The file** is `<stateDir>/.plugin-trim/<sessionId>.json` (`stateDir` from `server/lib/paths.ts`, beside `.dashboard-settings.json`; gitignored). It holds
+`{ "enabledPlugins": { "<id>": false, … } }` and nothing else. Only `false` entries are written, so an allowlisted plugin keeps whatever the other settings
+sources say. It is **not merged with `settings.local.json`**: a dashboard spawn runs with `cwd = ref.path`, so the project's own local settings load
+natively and flag settings layer on top. backlog-manager's orchestrator sessions run in a worktree and need that merge, and these do not. `--settings`
+flags do not stack (only the last applies, futin/backlog-manager#625 probe 1), so argv carries exactly one. `buildSpawnArgs` takes the path as
+`SpawnInput.settingsFile`, which only `serveSpawn` sets. `parseSpawnRequest` never carries a client-sent one.
+
+**The deny map** (`denyMap`) switches off every inventory entry with `enabled: true` unless one of these holds:
+
+- its id ends in `@builtin`. The match is by suffix, never by scope, so the desktop app's security and privacy plugins are never switched off;
+- its bare name (before `@`) is `backlog-manager`, where the session's own skills live;
+- an allowlist entry equals its full id or its bare name.
+
+The allowlist is `headless.json`'s `plugins` plus the request's `keepPlugins`. An empty map writes no file and adds no flag.
+
+**The inventory** is `claude plugin list --json` (`id`, `scope`, `enabled` per entry; 9 entries on this machine 2026-11-27, ~1 s). It is launched with
+`config.claudeBin`, the project's path as cwd and `spawnEnv` — the env the child itself gets, whose `CLAUDE_CODE_PLUGIN_DIRS` decides the `@inline` entries.
+The timeout is 5 s. The result is cached per project path for 10 minutes. The cache holds the promise, so two launches racing on a cold entry share one
+child. A failure is not cached. A non-zero exit, a timeout, or output that is not a JSON array means no trim and one `console.warn`. The test seam is
+`setPluginLister`.
+
+Four decisions, settled at groom time and kept by the implementation:
+
+1. **The allowlist comes from `headless.json`, read directly, read-only.** The default path is `~/.backlog-manager/settings/headless.json`, and
+   `$BM_HEADLESS_FILE` overrides it, read per call, the same override backlog-manager honours. The dashboard does not call backlog-manager's
+   `GET /api/settings/headless`. That would be a new kind of outbound call, and a trim must not depend on backlog-manager being up. A copy of the list
+   would drift, so there is none. backlog-manager stays the file's one writer. An absent file is `{ enabled: true, plugins: ["backlog-manager",
+   "superpowers"] }`, #625's own default. The validation rule is #625's: `enabled` a boolean, and `plugins` an array of at most 32 names matching
+   `^[A-Za-z0-9._-]+(@[A-Za-z0-9._-]+)?$`, duplicates dropped. Anything else means no trim and one warn naming the file. `enabled: false` means no trim,
+   whatever the request asked.
+2. **Only callers that ask are trimmed, and only headless dashboard launches.** `trimPlugins` is on only for literal `true` (the `remoteControl` rule).
+   `keepPlugins` follows the same list rule. A Jira run needs `timify-jira`, which the default list would switch off. A present but malformed
+   `keepPlugins` turns the trim **off** for that launch and warns. It never 400s. A trim missing a needed plugin breaks the session, while a skipped trim
+   only costs tokens. `surface: 'desktop'` ignores both fields, for the fresh launch and the hand-over: the person continues in the desktop app with its
+   own plugin set.
+3. **A resume never changes a session's plugin set.** A resume whose session has a trim file passes it again, whatever the request says, and refreshes its
+   mtime (`existingTrimFile`). A resume without one is not trimmed, even if the request asks. Changing the plugin set mid-session changes the system
+   prompt: the cached prefix is lost, and skills earlier turns used vanish. Each write prunes trim files older than 30 days. A resume that late runs on a
+   cold cache anyway, and simply goes untrimmed.
+4. **No shared generator with backlog-manager.** backlog-manager's generator is a plain-JS `orchestrate.mjs` verb, and this server is zero-dep TypeScript
+   that imports nothing from it. If #625's file shape changes, the validator rejects it and the dashboard stops trimming with a warn. That is the safe
+   failure.
+
+**Ordering in `serveSpawn`.** The inventory is the one await past parse. It runs after `probeSpawn` and **before the `MAX_LAUNCHING` check**, so the
+check and `launch()` stay one synchronous step. Two concurrent trimmed POSTs therefore cannot both pass the rail while one waits on the inventory. The
+trim file is named by the session id, so a trimmed fresh launch mints the id in `serveSpawn` and hands it to `launch()` as `freshId`. A resume's id is
+untouched. The file is written after the cap passes, so a refused launch leaves none behind.
+
 ## Two writers on one transcript (2.1.259)
 
 Everything the resume guard above does rests on one measured fact: **the CLI has no lock of
@@ -667,6 +727,8 @@ one seam for it, and nothing about `launch`'s own contract changes. Three differ
 | Piece | What it does |
 |---|---|
 | `server/lib/spawn.ts` | pure `buildSpawnArgs`/`clampPermission`/`parseSpawnRequest`, plus the impure `probeSpawn`/`launch`/`listLaunching`/`adoptLaunched`/`stopSession`/`forceStopSession`/`escalateStop`/`stopStates`/`hasLiveChild` and the RAM-only store |
+| `server/lib/plugin-trim.ts` | the [plugin trim](#plugin-trim-trimplugins): `readHeadlessConfig`/`parsePluginList` (the allowlist and its rule), `denyMap`, `trimMap` (the cached `claude plugin list --json` inventory, `setPluginLister` seam), `writeTrimFile` (write plus 30-day prune), `resolveTrimFile`, and `existingTrimFile` for a resume |
+| `spawnEnv` (`server/lib/spawn.ts`) | the env a launched child runs with, shared with the plugin-trim inventory so it sees the child's `@inline` plugins |
 | `spawnProcess` (`server/lib/spawn.ts`) | the `Spawner` seam as a function, exported for `routine-run.ts`'s wrapper launch; see [Routine runs](#routine-runs-the-other-detached-launch) |
 | `POST /api/spawn` | `serveSpawn` — validates, then on `surface` absent or `dashboard` resolves the project, launches and returns `{surface:'dashboard', sessionId}` immediately; on `desktop` hands off to `spawnDesktop` ([§Launching in the desktop app](#launching-in-the-desktop-app)), which returns `{surface:'desktop', sessionId}` for a fresh launch (`launchForDesktop`) and `{surface:'desktop'}` for a hand-over |
 | `server/lib/handover.ts` | the fresh desktop launch's watch: `watchHandOver` (an unref'd 3 s timer per id), `stepHandOver` (one poll: settle, rail slot and mark, `open claude://resume…`, or give up), the failed set behind `Session.handOverFailed` (`markHandOverFailed`, `clearHandOverFailed`, `handOverFailedIds`), `resetHandOvers` / `watchedHandOvers` test seams |
@@ -696,7 +758,7 @@ one seam for it, and nothing about `launch`'s own contract changes. Three differ
 
 | Method | Path | Codes |
 |---|---|---|
-| `POST` | `/api/spawn` | Body is `SpawnRequest` (`project`, `prompt`, optional `name`/`model`/`effort`/`permissionMode`/`remoteControl`/`oneShot`/`resume`/`surface`). 200 `{surface:'dashboard', sessionId}`, `{surface:'desktop', sessionId}` (fresh) or `{surface:'desktop'}` (hand-over) (`SpawnResponse`); 400 malformed body / `bad surface` / unknown project / empty or oversized prompt / bad or unknown `resume` id / non-dashboard resume target / resume target with no recorded cwd (headless resume only); 403 refused by the write gate (`bad token`, or `read-only from this network`); 404 remote answers off *or* (headless, or a fresh desktop launch) feature off; 409 resume of a still-running, already-resuming or desktop-held session (`session is still running`, `already resuming`, `session is open in the desktop app`); 429 `MAX_LAUNCHING` launches already in flight (headless, or a fresh desktop launch) or the desktop rail full (hand-over); 500 spawn threw, or (desktop) `open failed`; 501 `desktop app unavailable` |
+| `POST` | `/api/spawn` | Body is `SpawnRequest` (`project`, `prompt`, optional `name`/`model`/`effort`/`permissionMode`/`remoteControl`/`oneShot`/`resume`/`surface`/`trimPlugins`/`keepPlugins`; a malformed `trimPlugins` or `keepPlugins` turns the trim off, never a 400). 200 `{surface:'dashboard', sessionId}`, `{surface:'desktop', sessionId}` (fresh) or `{surface:'desktop'}` (hand-over) (`SpawnResponse`); 400 malformed body / `bad surface` / unknown project / empty or oversized prompt / bad or unknown `resume` id / non-dashboard resume target / resume target with no recorded cwd (headless resume only); 403 refused by the write gate (`bad token`, or `read-only from this network`); 404 remote answers off *or* (headless, or a fresh desktop launch) feature off; 409 resume of a still-running, already-resuming or desktop-held session (`session is still running`, `already resuming`, `session is open in the desktop app`); 429 `MAX_LAUNCHING` launches already in flight (headless, or a fresh desktop launch) or the desktop rail full (hand-over); 500 spawn threw, or (desktop) `open failed`; 501 `desktop app unavailable` |
 | `POST` | `/api/spawn/:id/stop` | 200 `{stopped: true}` for a still-`launching` entry, or `{stopping: true}` if that id has since become a running session (it delegates to `stopSession`); 400 bad id shape; 403 refused by the write gate (`bad token`, or `read-only from this network`); 404 remote answers off *or* no live launch for that id |
 | `POST` | `/api/sessions/:id/stop` | 200 `{stopping: true}` (graceful) or `{stopped: true}` (`{"force": true}`); 400 bad id shape, bad path encoding, *or* a present-but-unparseable body — an absent/empty body is normal; 403 refused by the write gate (`bad token`, or `read-only from this network`); 404 remote answers off *or* no live session for that id; 405 + `Allow: POST` for any other method |
 
@@ -705,7 +767,7 @@ uses — this machine and a trusted tailnet pass with no token, anyone else need
 `ANSWER_TOKEN` (read-only when none is set) — and behind the same remote-answer toggle (below).
 
 **The concurrency cap.** `MAX_LAUNCHING` (4, in `server/lib/spawn.ts` beside the other
-caps) is the headless rail, checked once the request is parsed and before any project or transcript work (it used to run before the body was read; the
+caps) is the headless rail, checked once the request is parsed and before any project or transcript work — a trimmed fresh launch alone resolves its project and plugin inventory first ([§Plugin trim](#plugin-trim-trimplugins)) — (it used to run before the body was read; the
 `surface` in the body now decides which rail applies, so the body comes first). The desktop surface has its own rail,
 [below](#launching-in-the-desktop-app). It is **not** a security boundary — a
 caller with launch rights can simply prompt one session into spawning more — it is the
@@ -729,7 +791,8 @@ What it counts is narrow on both axes, and both are deliberate:
 `serveSpawn`'s check order: is the switch on (`getState`) → who's asking (`refuseWrite`) → read the body → is the request usable (`parseSpawnRequest`,
 pure — it decides fresh-vs-resume *and* headless-vs-desktop) → then, per surface:
 
-- **Headless:** is the feature configured (`probeSpawn`, 404 `spawn unavailable`) → is anything already in flight (`MAX_LAUNCHING`, 429) → the filesystem
+- **Headless:** is the feature configured (`probeSpawn`, 404 `spawn unavailable`) → for a trimmed fresh launch only, resolve the project and await the
+  plugin inventory ([§Plugin trim](#plugin-trim-trimplugins)) → is anything already in flight (`MAX_LAUNCHING`, 429) → the filesystem
   step for the chosen shape: `resolveSpawnProject` (`resolveProject`) for a fresh launch, `resumeTarget` (the transcript hunt plus liveness checks) for a
   resume.
 - **Desktop:** `spawnDesktop` — `desktopAvailable` (501) → for a fresh launch, the headless order above (`launchForDesktop`) and `watchHandOver`; for a
@@ -829,6 +892,9 @@ rest of the app already takes, aimed at a bigger target:
   a LAN client needs `ANSWER_TOKEN`, and is read-only with none set. The tailnet remains the
   intended perimeter — if you share it, turn tailnet trust off and use the token, and treat
   the token as the minimum behind a public tunnel. See [remote-access](remote-access.md).
+
+The [plugin trim](#plugin-trim-trimplugins) adds no reach. A request can only name plugins to keep, as charset-checked names, so a trim can only switch
+plugins off. The `--settings` path is chosen by the server under its own state dir, and `parseSpawnRequest` drops a client-sent `settingsFile`.
 
 ## Accepted limits (deferred on purpose)
 

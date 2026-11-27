@@ -52,6 +52,7 @@ import { randomUUID } from 'node:crypto';
 
 import type { Config } from './config.js';
 import { DASHBOARD_ENTRYPOINT } from './entrypoint.js';
+import { parsePluginList } from './plugin-trim.js';
 import type { LaunchSurface, LaunchingSession, PermissionMode, ProjectRef, SpawnRequest, StopState } from '../../shared/types.js';
 
 /** The permission ladder, lowest to highest. Array index order IS the ordering. */
@@ -143,6 +144,11 @@ export interface SpawnInput {
    * instruction to stop early.
    */
   kickoff?: boolean;
+  /**
+   * A plugin-trimmed launch: argv ends `--settings <file>`, the file `server/lib/plugin-trim.ts` wrote. Set by `serveSpawn` only, never from the request
+   * body — a client-sent path is dropped by {@link parseSpawnRequest} (docs/subsystems/spawn.md §Plugin trim).
+   */
+  settingsFile?: string;
 }
 
 /**
@@ -154,7 +160,7 @@ const RESUME_ID_RE = /^[A-Za-z0-9._-]+$/;
 
 /** Result of validating an untrusted POST body against {@link SpawnInput}. */
 export type ParseResult =
-  | { ok: true; input: Omit<SpawnInput, 'sessionId'>; resumeId?: string; surface: LaunchSurface }
+  | { ok: true; input: Omit<SpawnInput, 'sessionId'>; resumeId?: string; surface: LaunchSurface; trim?: { keep: string[] } }
   | { ok: false; error: string };
 
 /**
@@ -242,7 +248,24 @@ export function parseSpawnRequest(body: unknown, ceiling: PermissionMode): Parse
     };
   }
 
-  return { ok: true, input: { prompt, permissionMode, name, model, effort, remoteControl, oneShot }, surface };
+  const trim = surface === 'dashboard' ? parseTrim(b.trimPlugins, b.keepPlugins) : undefined;
+  return { ok: true, input: { prompt, permissionMode, name, model, effort, remoteControl, oneShot }, surface, ...(trim ? { trim } : {}) };
+}
+
+/**
+ * A fresh headless launch's trim request: on only for literal `trimPlugins: true` (the `remoteControl` rule), with `keepPlugins` under the plugin-list
+ * rule. A present-but-malformed `keepPlugins` turns the trim off and warns rather than 400ing — never trim on a misread, because a trim missing a needed
+ * plugin breaks the session while a skipped one only costs tokens. A resume never reaches this: its plugin set is fixed by its first launch.
+ */
+function parseTrim(trimPlugins: unknown, keepPlugins: unknown): { keep: string[] } | undefined {
+  if (trimPlugins !== true) return undefined;
+  if (keepPlugins === undefined) return { keep: [] };
+  const keep = parsePluginList(keepPlugins);
+  if (!keep) {
+    console.warn('[dashboard] plugin trim off for this launch: keepPlugins is not an array of at most 32 plugin names');
+    return undefined;
+  }
+  return { keep };
 }
 
 /**
@@ -272,6 +295,8 @@ export function buildSpawnArgs(input: SpawnInput): string[] {
     if (input.name) args.push(input.name);
   }
   if (input.kickoff) args.push('--append-system-prompt', DESKTOP_KICKOFF_PROMPT, '--system-prompt-snapshot', 'off');
+  // Exactly one `--settings`: the flags do not stack, only the last one applies (futin/backlog-manager#625, probe 1).
+  if (input.settingsFile) args.push('--settings', input.settingsFile);
   return args;
 }
 
@@ -623,8 +648,35 @@ function fail(sessionId: string, exitCode: number | undefined, error: string, ch
 }
 
 /**
+ * The env a launched child runs with. `serveSpawn` lists a trimmed launch's plugins under it too, so the inventory sees the `@inline` plugins
+ * `CLAUDE_CODE_PLUGIN_DIRS` gives the child.
+ *
+ * The child inherits this server's environment — minus CLAUDE_CODE_ENTRYPOINT.
+ * A server started from inside another Claude Code context (a desktop-app
+ * terminal, a Claude-driven shell) carries that marker, and a child that
+ * inherits it stamps it into the transcript instead of `sdk-cli` — losing the
+ * `dashboard` pill and the right to be resumed (`sessionSurface`, scan.ts).
+ * Measured both ways on CLI 2.1.233: with the variable the transcript says
+ * `claude-desktop`; without it a `-p` run says `sdk-cli`. `delete`, not an
+ * `undefined` assignment: this Node build happens to omit undefined-valued
+ * keys (measured), but that is filtering behaviour to not lean on — an
+ * absent key needs no guarantee at all. CLAUDE_DASHBOARD_ONESHOT is deleted
+ * for the same reason: a server started inside a one-shot session's shell
+ * would otherwise turn the reply hold off for every child it spawns. The one
+ * value set back is this tool's own label, under SPAWN_OWN_ENTRYPOINT.
+ */
+export function spawnEnv(config: Config, oneShot: boolean): NodeJS.ProcessEnv {
+  const env = { ...process.env };
+  delete env.CLAUDE_CODE_ENTRYPOINT;
+  if (config.spawnOwnEntrypoint) env.CLAUDE_CODE_ENTRYPOINT = DASHBOARD_ENTRYPOINT;
+  delete env.CLAUDE_DASHBOARD_ONESHOT;
+  if (oneShot) env.CLAUDE_DASHBOARD_ONESHOT = '1';
+  return env;
+}
+
+/**
  * Start a new headless `claude -p` session in `ref`'s directory. Mints the
- * session id, registers the store entry *before* spawning (so a spawner that
+ * session id (unless the caller passed `freshId`), registers the store entry *before* spawning (so a spawner that
  * throws synchronously still has somewhere to record the failure), spawns
  * detached with the prompt piped to stdin, and returns the id immediately —
  * the caller never waits on the child.
@@ -642,11 +694,13 @@ function fail(sessionId: string, exitCode: number | undefined, error: string, ch
  * it cannot simply replace `'exit'`.
  */
 export function launch(
-  config: Config, ref: ProjectRef, input: Omit<SpawnInput, 'sessionId'>, resumeId?: string
+  config: Config, ref: ProjectRef, input: Omit<SpawnInput, 'sessionId'>, resumeId?: string, freshId?: string
 ): string {
   // A resume reuses the transcript's own id — minting one would tell the CLI
   // to fork, and the handler needs the same id back to keep the row stable.
-  const sessionId = resumeId ?? randomUUID();
+  // `freshId` is a fresh launch's id minted by the caller, which names its
+  // plugin-trim file before the child exists; it is never a resume.
+  const sessionId = resumeId ?? freshId ?? randomUUID();
   const entry: Entry = {
     sessionId,
     projectName: ref.name,
@@ -670,24 +724,7 @@ export function launch(
   const args = buildSpawnArgs({ ...input, sessionId, resume: resumeId !== undefined });
   const doSpawn = spawner ?? nodeSpawn;
 
-  // The child inherits this server's environment — minus CLAUDE_CODE_ENTRYPOINT.
-  // A server started from inside another Claude Code context (a desktop-app
-  // terminal, a Claude-driven shell) carries that marker, and a child that
-  // inherits it stamps it into the transcript instead of `sdk-cli` — losing the
-  // `dashboard` pill and the right to be resumed (`sessionSurface`, scan.ts).
-  // Measured both ways on CLI 2.1.233: with the variable the transcript says
-  // `claude-desktop`; without it a `-p` run says `sdk-cli`. `delete`, not an
-  // `undefined` assignment: this Node build happens to omit undefined-valued
-  // keys (measured), but that is filtering behaviour to not lean on — an
-  // absent key needs no guarantee at all. CLAUDE_DASHBOARD_ONESHOT is deleted
-  // for the same reason: a server started inside a one-shot session's shell
-  // would otherwise turn the reply hold off for every child it spawns. The one
-  // value set back is this tool's own label, under SPAWN_OWN_ENTRYPOINT.
-  const env = { ...process.env };
-  delete env.CLAUDE_CODE_ENTRYPOINT;
-  if (config.spawnOwnEntrypoint) env.CLAUDE_CODE_ENTRYPOINT = DASHBOARD_ENTRYPOINT;
-  delete env.CLAUDE_DASHBOARD_ONESHOT;
-  if (input.oneShot) env.CLAUDE_DASHBOARD_ONESHOT = '1';
+  const env = spawnEnv(config, input.oneShot === true);
 
   let child: ChildProcess;
   try {
