@@ -6,7 +6,8 @@
 import assert from 'node:assert';
 
 import { testAsync, userRecord, withServer } from '../api-harness.js';
-import { resetProcProbeCache, scanSnapshot } from '../../server/lib/scan-snapshot.js';
+import { POLL_LISTING_MAX_AGE_MS, resetProcProbeCache, scanSnapshot } from '../../server/lib/scan-snapshot.js';
+import { resetListingCache } from '../../server/lib/transcript-listing.js';
 import { setProbeExec, type ProbeExec } from '../../server/lib/scan.js';
 import { markHandOverFailed, resetHandOvers } from '../../server/lib/handover.js';
 import { pendingSessionIds, register as registerQuestion } from '../../server/lib/pending.js';
@@ -86,6 +87,22 @@ export async function run(): Promise<number> {
         assert.equal(r.remoteQuestion, false, r.id);
         assert.equal(r.remotePlan, false, r.id);
       }
+    });
+  }));
+
+  check(await testAsync('snapshots inside POLL_LISTING_MAX_AGE_MS share one walk; the first past it walks again', async () => {
+    await withServer(ENV, async h => {
+      let clock = Date.now();
+      resetProcProbeCache(() => clock);
+      resetListingCache();
+      try {
+        h.plant('walk-1');
+        assert.deepStrictEqual((await scanSnapshot(h.cfg)).sessions.map(s => s.id), ['walk-1']);
+        h.plant('walk-2');
+        assert.deepStrictEqual((await scanSnapshot(h.cfg)).sessions.map(s => s.id), ['walk-1'], 'same instant: the held listing is served');
+        clock += POLL_LISTING_MAX_AGE_MS + 1;
+        assert.deepStrictEqual((await scanSnapshot(h.cfg)).sessions.map(s => s.id).sort(), ['walk-1', 'walk-2'], 'past the max age: a fresh walk');
+      } finally { resetProcProbeCache(); resetListingCache(); }
     });
   }));
 

@@ -763,7 +763,7 @@ Each tick reads only the bytes appended to each transcript since the last one
 per model, and appends `{t, prevT, tok, req, sur}` — `tok` weighed in tokens, `req`
 counted in requests, `sur` the same tokens split by the session surface that spent them.
 
-Twelve things are deliberate:
+Thirteen things are deliberate:
 
 - **`prevT` is carried explicitly.** It is what makes a recording gap visible;
   a bare `t` could never show that two lines do not abut, and the fitter would
@@ -799,6 +799,10 @@ Twelve things are deliberate:
   lists give both the top-level files and the session dirs, and lists each `<session>/subagents/` the same way; every file is still stat-ed. Warm median on
   this machine 170 ms → 44 ms (2026-11-24, macOS: 367 project dirs, 3,480 top-level transcripts, 464 `subagents/` dirs, 4,588 subagent files) — the old walk
   listed every project dir twice and every agent dir on every tick.
+- **Every transcript is still stat-ed once a minute, and that stays.** The tick runs from the usage timer (`startUsageRecording`), never from a request,
+  and its stat walk over every top-level and subagent transcript is its one corpus-sized cost: 39.1 ms warm for 8,198 files (2026-11-27, macOS). The stats
+  cannot be skipped for the directory-mtime reason in [sessions.md](sessions.md) ("The poll stats every transcript, on purpose": an append never moves a
+  dir's mtime, and any old transcript can be resumed), and async stats would spread the same work across event-loop ticks rather than cut it (#587).
 - **A transcript gone from the listing loses its cursor** on the same tick: `collectEvents` already holds the listing, so the prune costs no walk, and
   the cursor map no longer grows with every session the server has ever seen.
 - **A record stamped after its tick is carried, not dropped.** `nowMs` is taken before the walk, so a record Claude Code appends while the walk runs

@@ -392,14 +392,81 @@ function apiErrorOf(rec: any): ApiErrorState {
   };
 }
 
-/** Read a transcript and return usage, metadata, and current activity. */
+/**
+ * Everything {@link readTranscript} learns from the tail bytes: every returned field but the window and the percent, which are recomputed per call
+ * from `identityModel`, `compactedAt` and `size` because they read env overrides and the compact-window cache (`docs/subsystems/sessions.md`).
+ */
+type TailScan = Omit<ParsedTranscript, 'contextWindow' | 'contextPct'> & { identityModel: string | null; compactedAt: number | null; size: number };
+
+/** Tail scans memoised per path, keyed by the stat that preceded them; a `Map` in least-recently-used order. */
+export const TRANSCRIPT_MEMO_MAX = 1024;
+let memoMax = TRANSCRIPT_MEMO_MAX;
+const memo = new Map<string, { size: number; mtimeMs: number; scan: TailScan }>();
+let memoScans = 0;
+let memoHits = 0;
+
+/** Test seam: forget every memoised tail scan and zero the counters. */
+export function resetTranscriptMemo(): void {
+  memo.clear();
+  memoScans = 0;
+  memoHits = 0;
+}
+
+/** Test seam: tail scans actually performed, memo hits, and entries held. */
+export function transcriptMemoStats(): { scans: number; hits: number; entries: number } {
+  return { scans: memoScans, hits: memoHits, entries: memo.size };
+}
+
+/** Test seam: change the memo's entry cap; null restores {@link TRANSCRIPT_MEMO_MAX}. */
+export function setTranscriptMemoMax(n: number | null): void {
+  memoMax = n === null ? TRANSCRIPT_MEMO_MAX : n;
+  while (memo.size > memoMax) memo.delete(memo.keys().next().value as string);
+}
+
+/**
+ * Read a transcript and return usage, metadata, and current activity. An unchanged file (same size and mtime as the last default-tail read) is served
+ * from the memo without reading a byte; the window and percent are still computed on every call.
+ */
 export function readTranscript(
   filePath: string,
   options: { tailBytes?: number } = {}
 ): ParsedTranscript | null {
-  const tailBytes = Number.isInteger(options.tailBytes) && (options.tailBytes as number) > 0
-    ? (options.tailBytes as number)
-    : DEFAULT_TAIL_BYTES;
+  const custom = Number.isInteger(options.tailBytes) && (options.tailBytes as number) > 0 && options.tailBytes !== DEFAULT_TAIL_BYTES;
+  let st: fs.Stats;
+  try { st = fs.statSync(filePath); } catch { memo.delete(filePath); return null; }
+  if (!st.isFile()) { memo.delete(filePath); return null; }
+
+  let scan: TailScan | null;
+  const prev = custom ? undefined : memo.get(filePath);
+  if (prev && prev.size === st.size && prev.mtimeMs === st.mtimeMs) {
+    memoHits++;
+    memo.delete(filePath);
+    memo.set(filePath, prev);
+    scan = prev.scan;
+  } else {
+    scan = scanTail(filePath, custom ? options.tailBytes as number : DEFAULT_TAIL_BYTES);
+    if (!custom) {
+      memo.delete(filePath);
+      // Keyed by the stat taken before the read: an append in between stores a scan newer than its key, so the next call misses and reads once more.
+      if (scan) {
+        memo.set(filePath, { size: st.size, mtimeMs: st.mtimeMs, scan });
+        if (memo.size > memoMax) memo.delete(memo.keys().next().value as string);
+      }
+    }
+  }
+  if (!scan) return null;
+
+  const { identityModel, compactedAt, size, ...fields } = scan;
+  const win = resolveWindow(
+    fields.tokens, fields.model, undefined, identityModel, frozenCompactWindow(filePath, size, fields.originCwd, identityModel || fields.model), compactedAt
+  );
+  const contextPct = win > 0 ? Math.min(100, Math.round((fields.tokens / win) * 1000) / 10) : 0;
+  return { ...fields, contextWindow: win, contextPct };
+}
+
+/** The expensive half of {@link readTranscript}: read the tail and run the newest-first scan. Nested objects are frozen, since the memo shares them. */
+function scanTail(filePath: string, tailBytes: number): TailScan | null {
+  memoScans++;
   const tail = readTail(filePath, tailBytes);
   if (!tail) return null;
 
@@ -496,17 +563,13 @@ export function readTranscript(
 
   const originCwd = resolveOriginCwd(filePath, tail, lines, first);
 
-  const win = resolveWindow(
-    tokens, model, undefined, identityModel, frozenCompactWindow(filePath, tail.size, originCwd, identityModel || model), compactedAt
-  );
-  const contextPct = win > 0 ? Math.min(100, Math.round((tokens / win) * 1000) / 10) : 0;
-
   return {
+    identityModel,
+    compactedAt,
+    size: tail.size,
     tokens,
     model,
-    contextWindow: win,
-    contextPct,
-    activity,
+    activity: activity && Object.freeze(activity),
     cwd,
     originCwd,
     gitBranch,
@@ -520,7 +583,7 @@ export function readTranscript(
     commandOnly: newestIsPlumbing && tokens === 0,
     turnComplete,
     waitingOnQuestion,
-    apiError
+    apiError: apiError && Object.freeze(apiError)
   };
 }
 

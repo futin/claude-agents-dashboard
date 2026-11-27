@@ -11,10 +11,10 @@ import { messageSessionIds } from './messages.js';
 import { pendingSessionIds, sweepDecided as sweepDecidedPending } from './pending.js';
 import { permissionWaits } from './permissions.js';
 import { planSessionIds, sweepDecided as sweepDecidedPlans } from './plans.js';
-import { lastMessageMs, listTranscripts, probeProcesses, projectsRoot, scanSessions } from './scan.js';
+import { lastMessageMs, probeProcesses, projectsRoot, scanSessions } from './scan.js';
 import type { ProcProbe, TranscriptRef } from './scan.js';
 import { stopStates } from './spawn.js';
-import { publishListing } from './transcript-listing.js';
+import { sharedListing } from './transcript-listing.js';
 import type { SessionsResponse } from '../../shared/types.js';
 
 /**
@@ -46,11 +46,17 @@ function sweepTerminalDecisions(root: string, transcripts: readonly TranscriptRe
  */
 export const PROBE_TTL_MS = 1000;
 
+/**
+ * How old a held transcript listing the poll may read, for the same reason as {@link PROBE_TTL_MS}: under the 3 s poll, so one tab still lists fresh on
+ * every poll, while a second tab and the hub tile inside the same second share one walk.
+ */
+export const POLL_LISTING_MAX_AGE_MS = 1000;
+
 let probeInFlight: Promise<ProcProbe> | null = null;
 let lastProbe: { probe: ProcProbe; doneAt: number } | null = null;
 let probeClock: () => number = Date.now;
 
-/** Test seam: forget the cached and in-flight probe, and optionally swap the clock the TTL reads. */
+/** Test seam: forget the cached and in-flight probe, and optionally swap the clock the TTL and the poll's listing age read. */
 export function resetProcProbeCache(clock: () => number = Date.now): void {
   probeInFlight = null;
   lastProbe = null;
@@ -75,11 +81,10 @@ export function sharedProcProbe(config: Config): Promise<ProcProbe | null> {
 /** One scan of the session rows with every RAM-store injection applied — what `/api/sessions` serves before launches and usage are attached. */
 export async function scanSnapshot(config: Config, projects?: ReadonlySet<string> | null): Promise<SessionsResponse> {
   const proc = await sharedProcProbe(config);
-  // One listing per request, shared by the sweep and the scan, taken after the probe so the transcripts are as fresh as it is.
   const root = projectsRoot();
-  const transcripts = listTranscripts(root);
-  // The other request paths read this walk instead of taking their own (`transcript-listing.ts`).
-  publishListing(root, transcripts);
+  // One listing shared by the sweep and the scan: the held listing every request path reads (`transcript-listing.ts`), walked afresh once it is over
+  // POLL_LISTING_MAX_AGE_MS old. A held one may predate this request's probe by up to that age; the poll accepts that lag, as it does the probe's TTL.
+  const transcripts = sharedListing(root, probeClock(), POLL_LISTING_MAX_AGE_MS);
   // Before the scan, not after: a wait the terminal already decided must not
   // colour this tick's row blue either.
   sweepTerminalDecisions(root, transcripts);

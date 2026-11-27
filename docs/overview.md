@@ -192,7 +192,8 @@ server/
   lib/config.ts   .env loader — process.env > .env > defaults
   lib/entrypoint.ts  the transcript `entrypoint` labels read or stamped: `sdk-cli`, and `claude-agents-dashboard` under SPAWN_OWN_ENTRYPOINT
   lib/request-guard.ts  pure pre-route checks: `hostAllowed` (DNS rebinding) and `crossSiteWrite` (CSRF)
-  lib/transcript.ts  tail-reads a transcript → tokens/model/window/activity
+  lib/transcript.ts  tail-reads a transcript → tokens/model/window/activity; the tail scan is memoised per file by size and mtime (LRU, 1024),
+                  the window and percent recomputed per call
   lib/transcript-record.ts  `isConversationRecord`, the api-request-blob filter; a zero-import leaf transcript.ts re-exports, generated for /kaizen
   lib/title-cache.ts  remembers a custom title once it sinks below the tail window
   lib/model-identity.ts  the session's model attachment id — its family/version (or `[1m]`) sizes the window, same tail-then-hunt
@@ -274,9 +275,10 @@ server/
   lib/tick-caps.ts       the `tick-capped` push: reads each backlog tick's `last-decide.json`, one push per capped episode, `tick-capped.json`
   lib/hub-widgets.ts  the Lookout hub tiles (usage gauge, sessions list, Git pending list), declared through lookout-widgets
   lib/scan-snapshot.ts  `scanSnapshot`: one session scan with every RAM-store injection and the held-wait terminal sweep — what /api/sessions
-                  and the hub's sessions tile both serve; it publishes its walk to transcript-listing.ts, and `sharedProcProbe` is the one async
+                  and the hub's sessions tile both serve; it reads transcript-listing.ts's listing at most `POLL_LISTING_MAX_AGE_MS` (1 s) old,
+                  and `sharedProcProbe` is the one async
                   `ps`/`lsof` probe those readers and GET /api/sessions/:id share (joined while in flight, reused for `PROBE_TTL_MS`)
-  lib/transcript-listing.ts  the one held transcript listing (≤ 3 s old) every request path but the poll reads: `sharedListing`,
+  lib/transcript-listing.ts  the one held transcript listing every request path reads (≤ 1 s old for the poll, ≤ 3 s for the rest): `sharedListing`,
                   `publishListing`, `resolveTranscript` for id lookups
   lib/dir-cache.ts  `cachedEntries`: a directory's entries, re-read only when its mtime or inode moved (and never within `RACY_MS` of the mtime) —
                   every transcript walk in scan.ts lists dirs through it, while still stat-ing every file
