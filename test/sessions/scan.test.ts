@@ -1318,7 +1318,7 @@ export function run(): number {
       { dirName: '-a-headless', id: 'headless', mtimeMs: now - 60 * 1000, records: [metaRec('/a/headless', 'main'), entryRec('sdk-cli')] }
     ]);
     const cfg = { maxSessions: 5, activeWindowMin: 5, lookbackHours: 24 };
-    const proc = { runningClaudeProcs: 2, liveCwds: new Set(['/a/lv']), liveSessionIds: new Set(['headless']) };
+    const proc = { runningClaudeProcs: 2, liveCwds: new Set(['/a/lv']), liveSessionIds: new Set(['headless']), claudePids: null };
     const out = scan.scanSessions(cfg, { root, now, lessons: null, proc });
     const row = (o: typeof out, id: string) => o.sessions.find(s => s.id === id)!;
     assert.strictEqual(out.runningClaudeProcs, 2);

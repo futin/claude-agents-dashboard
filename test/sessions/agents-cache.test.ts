@@ -312,6 +312,31 @@ export async function run(): Promise<number> {
     assert.strictEqual(k.endedAt, '2026-07-01T10:03:00Z');
   })) p++; else f++;
 
+  if (test('#588 endStatus facts: D2 "didn\'t finish" and D5 resume-close, split mid-file across two appends, match the oracle', () => {
+    const dnf = `<task-notification>\n<task-id>bgD</task-id>\n<status>stopped</status>\n<summary>Background agent "x" didn\u2019t finish before the previous session ended</summary>\n</task-notification>`;
+    const recs = [
+      taskRec('d', 'Explore', 'async', '2026-07-01T10:00:00Z'),
+      { ...ackRec('d', 'bgD', '2026-07-01T10:00:00.030Z'), toolUseResult: { isAsync: true, status: 'async_launched', agentId: 'bgD', resolvedModel: 'm1' } },
+      { type: 'queue-operation', operation: 'enqueue', timestamp: '2026-07-01T10:30:00Z', sessionId: 's1', content: dnf },
+      taskRec('r', 'Explore', 'async', '2026-07-01T10:31:00Z'),
+      ackRec('r', 'bgR', '2026-07-01T10:31:00.030Z'),
+      { timestamp: '2026-07-01T10:40:00Z', message: { role: 'assistant', content: [{ type: 'tool_use', id: 'sm', name: 'SendMessage', input: { to: 'bgR', message: 'again' } }] } },
+      { timestamp: '2026-07-01T10:40:01Z', toolUseResult: { success: true, resumedAgentId: 'bgR' },
+        message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'sm', content: 'Resuming' }] } }
+    ];
+    const text = recs.map(r => JSON.stringify(r)).join('\n') + '\n';
+    const file = tmpFile();
+    const cut = Math.floor(text.length / 2);
+    fs.writeFileSync(file, text.slice(0, cut));
+    readAgentsCached(file);
+    fs.appendFileSync(file, text.slice(cut));
+    assertMatchesOracle(file);
+    const byId = new Map(readAgentsCached(file)!.map(j => [j.id, j]));
+    assert.deepStrictEqual([byId.get('d')!.endStatus, byId.get('d')!.model], ['killed', 'm1']);
+    assert.strictEqual(byId.get('r')!.endStatus, 'stopped');
+    assert.deepStrictEqual([byId.get('sm')!.status, byId.get('sm')!.background], ['running', true]);
+  })) p++; else f++;
+
   /* --------------------------------------------- the async, sliced fold (#563) */
 
   const SAMPLE = [

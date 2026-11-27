@@ -4,7 +4,7 @@
  * fall back to a safe empty payload if the scan throws.
  */
 
-import { createHash, timingSafeEqual } from 'node:crypto';
+import { createHash, randomUUID, timingSafeEqual } from 'node:crypto';
 import fs from 'node:fs';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import nodePath from 'node:path';
@@ -12,12 +12,13 @@ import nodePath from 'node:path';
 import type { HubHandler } from 'lookout-widgets';
 
 import { launchRowIds, liveSessionIds, projectsRoot, sessionFromRef, sessionSurface } from './lib/scan.js';
-import { scanSnapshot } from './lib/scan-snapshot.js';
+import { scanSnapshot, sharedProcProbe } from './lib/scan-snapshot.js';
 import { resolveTranscript, sharedListing } from './lib/transcript-listing.js';
 import { readSessionAnalyticsLog } from './lib/sessionAnalyticsLog.js';
 import { desktopLiveSessionIds } from './lib/archived.js';
 import { lastSessionEffort, readTranscript } from './lib/transcript.js';
-import { readAgentsCachedAsync } from './lib/agents-cache.js';
+import { buildSessionDetail } from './lib/session-detail.js';
+import { readSessionRegistry } from './lib/session-registry.js';
 import { readSessionSpendAsync } from './lib/session-spend.js';
 import { getCachedUsageState } from './lib/usage.js';
 import { isRefreshSession } from './lib/token-refresh.js';
@@ -69,8 +70,9 @@ import { releasesPayload } from './lib/releases.js';
 import { extForMime, isTranscribing, probeTranscribe, transcribe } from './lib/transcribe.js';
 import {
   EFFORTS, MAX_LAUNCHING, adoptLaunched, clampPermission, forceStopSession, hasLiveChild, launch, listLaunching, parseSpawnRequest,
-  probeSpawn, stopSession, type ParseResult
+  probeSpawn, spawnEnv, stopSession, type ParseResult
 } from './lib/spawn.js';
+import { existingTrimFile, trimMap, writeTrimFile } from './lib/plugin-trim.js';
 import { staleEnvKeys, toPosInt, type Config } from './lib/config.js';
 import { describeCron, isManualCron, nextAfter, parseCron } from '../shared/cron.js';
 import { NAME_RE, checkPins, parseJob, serializeEnabled } from '../shared/routine-file.js';
@@ -183,11 +185,12 @@ export async function serveSessions(baseConfig: Config, res: ServerResponse, par
  * agents-cache.ts). The list poll touches the same cache only through scan.ts
  * `subagentRunning`, and only for a session with a fresh, unfinished subagent.
  * The id is resolved against the enumerated transcript list, never joined into a
- * path directly, so a hostile id can't escape the projects root.
+ * path directly, so a hostile id can't escape the projects root. Each row also carries its subagent's own file facts and the body `parentLive`
+ * (`session-detail.ts`, #588); the process probe is the one `/api/sessions` shares, null under `skipProcScan`.
  */
-export async function serveSessionDetail(id: string, res: ServerResponse): Promise<void> {
+export async function serveSessionDetail(config: Config, id: string, res: ServerResponse): Promise<void> {
   const fail = (code: number): void => {
-    const body: SessionDetail = { id, agents: [], running: 0, finished: 0, error: true };
+    const body: SessionDetail = { id, agents: [], running: 0, finished: 0, parentLive: null, error: true };
     res.writeHead(code, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
     res.end(JSON.stringify(body));
   };
@@ -198,14 +201,10 @@ export async function serveSessionDetail(id: string, res: ServerResponse): Promi
   try {
     const ref = resolveTranscript(projectsRoot(), id);
     if (!ref) return fail(404);
-    const agents = await readAgentsCachedAsync(ref.file);
-    if (!agents) return fail(404);
-    detail = {
-      id,
-      agents,
-      running: agents.filter(a => a.status === 'running').length,
-      finished: agents.filter(a => a.status === 'done').length
-    };
+    const probe = await sharedProcProbe(config);
+    const built = await buildSessionDetail(id, ref.file, { probe, registry: readSessionRegistry() });
+    if (!built) return fail(404);
+    detail = built;
   } catch (e) {
     console.error('[dashboard] session detail failed:', (e as Error).message);
     return fail(500);
@@ -1176,6 +1175,19 @@ export async function serveSpawn(config: Config, req: IncomingMessage, res: Serv
   if (parsed.surface === 'desktop') return spawnDesktop(config, body, parsed, res);
 
   if (!probeSpawn(config)) return sendJson(res, 404, { error: 'spawn unavailable' });
+  // A trimmed fresh launch lists the project's plugins, the one await past parse. It runs here, before the cap is counted, so the count and `launch()`
+  // below stay one synchronous step: two concurrent POSTs can never both pass the rail while one waits on the inventory (§Plugin trim).
+  let fresh: ProjectRef | { refuse: string } | undefined;
+  let trim: Record<string, false> | null = null;
+  if (!parsed.resumeId && parsed.trim) {
+    try {
+      fresh = resolveSpawnProject(config, body);
+      if (!('refuse' in fresh)) trim = await trimMap(config, fresh, parsed.trim.keep, spawnEnv(config, false));
+    } catch (e) {
+      console.error('[dashboard] spawn failed:', (e as Error).message);
+      return sendJson(res, 500, { error: 'spawn failed' });
+    }
+  }
   // The accident rail (see MAX_LAUNCHING in server/lib/spawn.ts): N POSTs would
   // otherwise be N live `claude` processes on the account's real quota.
   // `listLaunching()` is also what expires stale entries, so a burst that has
@@ -1206,12 +1218,17 @@ export async function serveSpawn(config: Config, req: IncomingMessage, res: Serv
       // request named one.
       const recorded = parsed.input.effort ? null : lastSessionEffort(t.file);
       const effort = recorded && (EFFORTS as readonly string[]).includes(recorded) ? recorded : parsed.input.effort;
-      sessionId = launch(config, ref, { ...parsed.input, effort }, rid);
+      // A resume keeps the plugin set its first launch had, whatever this request asks: the trim file that launch wrote, or none.
+      const settingsFile = existingTrimFile(rid) ?? undefined;
+      sessionId = launch(config, ref, { ...parsed.input, effort, ...(settingsFile ? { settingsFile } : {}) }, rid);
       clearHandOverFailed(rid);
     } else {
-      const ref = resolveSpawnProject(config, body);
+      const ref = fresh ?? resolveSpawnProject(config, body);
       if ('refuse' in ref) return sendJson(res, 400, { error: ref.refuse });
-      sessionId = launch(config, ref, parsed.input);
+      // The trim file is named by the session id, so a trimmed launch mints the id itself.
+      const id = randomUUID();
+      const settingsFile = trim ? writeTrimFile(id, trim) : null;
+      sessionId = settingsFile ? launch(config, ref, { ...parsed.input, settingsFile }, undefined, id) : launch(config, ref, parsed.input);
     }
   } catch (e) {
     console.error('[dashboard] spawn failed:', (e as Error).message);
