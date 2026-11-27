@@ -81,9 +81,9 @@ export function sharedProcProbe(config: Config): Promise<ProcProbe | null> {
 /** One scan of the session rows with every RAM-store injection applied — what `/api/sessions` serves before launches and usage are attached. */
 export async function scanSnapshot(config: Config, projects?: ReadonlySet<string> | null): Promise<SessionsResponse> {
   const proc = await sharedProcProbe(config);
-  // One listing per request, shared by the sweep and the scan, taken after the probe so the transcripts are as fresh as it is.
   const root = projectsRoot();
-  // The held listing every request path shares, walked afresh when it is over a second old (`transcript-listing.ts`).
+  // One listing shared by the sweep and the scan: the held listing every request path reads (`transcript-listing.ts`), walked afresh once it is over
+  // POLL_LISTING_MAX_AGE_MS old. A held one may predate this request's probe by up to that age; the poll accepts that lag, as it does the probe's TTL.
   const transcripts = sharedListing(root, probeClock(), POLL_LISTING_MAX_AGE_MS);
   // Before the scan, not after: a wait the terminal already decided must not
   // colour this tick's row blue either.
