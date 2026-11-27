@@ -4,7 +4,7 @@
  * fall back to a safe empty payload if the scan throws.
  */
 
-import { createHash, timingSafeEqual } from 'node:crypto';
+import { createHash, randomUUID, timingSafeEqual } from 'node:crypto';
 import fs from 'node:fs';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import nodePath from 'node:path';
@@ -69,8 +69,9 @@ import { releasesPayload } from './lib/releases.js';
 import { extForMime, isTranscribing, probeTranscribe, transcribe } from './lib/transcribe.js';
 import {
   EFFORTS, MAX_LAUNCHING, adoptLaunched, clampPermission, forceStopSession, hasLiveChild, launch, listLaunching, parseSpawnRequest,
-  probeSpawn, stopSession, type ParseResult
+  probeSpawn, spawnEnv, stopSession, type ParseResult
 } from './lib/spawn.js';
+import { existingTrimFile, trimMap, writeTrimFile } from './lib/plugin-trim.js';
 import { staleEnvKeys, toPosInt, type Config } from './lib/config.js';
 import { describeCron, isManualCron, nextAfter, parseCron } from '../shared/cron.js';
 import { NAME_RE, checkPins, parseJob, serializeEnabled } from '../shared/routine-file.js';
@@ -1176,6 +1177,19 @@ export async function serveSpawn(config: Config, req: IncomingMessage, res: Serv
   if (parsed.surface === 'desktop') return spawnDesktop(config, body, parsed, res);
 
   if (!probeSpawn(config)) return sendJson(res, 404, { error: 'spawn unavailable' });
+  // A trimmed fresh launch lists the project's plugins, the one await past parse. It runs here, before the cap is counted, so the count and `launch()`
+  // below stay one synchronous step: two concurrent POSTs can never both pass the rail while one waits on the inventory (§Plugin trim).
+  let fresh: ProjectRef | { refuse: string } | undefined;
+  let trim: Record<string, false> | null = null;
+  if (!parsed.resumeId && parsed.trim) {
+    try {
+      fresh = resolveSpawnProject(config, body);
+      if (!('refuse' in fresh)) trim = await trimMap(config, fresh, parsed.trim.keep, spawnEnv(config, false));
+    } catch (e) {
+      console.error('[dashboard] spawn failed:', (e as Error).message);
+      return sendJson(res, 500, { error: 'spawn failed' });
+    }
+  }
   // The accident rail (see MAX_LAUNCHING in server/lib/spawn.ts): N POSTs would
   // otherwise be N live `claude` processes on the account's real quota.
   // `listLaunching()` is also what expires stale entries, so a burst that has
@@ -1206,12 +1220,17 @@ export async function serveSpawn(config: Config, req: IncomingMessage, res: Serv
       // request named one.
       const recorded = parsed.input.effort ? null : lastSessionEffort(t.file);
       const effort = recorded && (EFFORTS as readonly string[]).includes(recorded) ? recorded : parsed.input.effort;
-      sessionId = launch(config, ref, { ...parsed.input, effort }, rid);
+      // A resume keeps the plugin set its first launch had, whatever this request asks: the trim file that launch wrote, or none.
+      const settingsFile = existingTrimFile(rid) ?? undefined;
+      sessionId = launch(config, ref, { ...parsed.input, effort, ...(settingsFile ? { settingsFile } : {}) }, rid);
       clearHandOverFailed(rid);
     } else {
-      const ref = resolveSpawnProject(config, body);
+      const ref = fresh ?? resolveSpawnProject(config, body);
       if ('refuse' in ref) return sendJson(res, 400, { error: ref.refuse });
-      sessionId = launch(config, ref, parsed.input);
+      // The trim file is named by the session id, so a trimmed launch mints the id itself.
+      const id = randomUUID();
+      const settingsFile = trim ? writeTrimFile(id, trim) : null;
+      sessionId = settingsFile ? launch(config, ref, { ...parsed.input, settingsFile }, undefined, id) : launch(config, ref, parsed.input);
     }
   } catch (e) {
     console.error('[dashboard] spawn failed:', (e as Error).message);

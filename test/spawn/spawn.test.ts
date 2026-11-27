@@ -430,6 +430,67 @@ export function run(): number {
     assert.ok(r.ok && !('kickoff' in r.input));
   })) p++; else f++;
 
+  if (test('settingsFile appends exactly one --settings pair, last — after the kickoff pair', () => {
+    const base = { sessionId: UUID, prompt: 'hi', permissionMode: 'auto' as const, model: 'opus', name: 'n', remoteControl: true };
+    const args = buildSpawnArgs({ ...base, settingsFile: '/s/.plugin-trim/x.json' });
+    assert.deepStrictEqual(args, [...buildSpawnArgs(base), '--settings', '/s/.plugin-trim/x.json']);
+    assert.strictEqual(args.filter(a => a === '--settings').length, 1);
+    const withKickoff = buildSpawnArgs({ ...base, kickoff: true, settingsFile: '/s/x.json' });
+    assert.deepStrictEqual(withKickoff, [...buildSpawnArgs({ ...base, kickoff: true }), '--settings', '/s/x.json']);
+    const resumed = buildSpawnArgs({ ...base, resume: true, settingsFile: '/s/x.json' });
+    assert.deepStrictEqual(resumed.slice(-2), ['--settings', '/s/x.json']);
+  })) p++; else f++;
+
+  if (test('no settingsFile: argv carries no --settings, for every flag combination', () => {
+    const shapes = [{}, { model: 'opus' }, { effort: 'high', name: 'n' }, { remoteControl: true }, { kickoff: true }, { resume: true }, { settingsFile: '' }];
+    for (const extra of shapes) {
+      assert.ok(!buildSpawnArgs({ sessionId: UUID, prompt: 'hi', permissionMode: 'auto', ...extra }).includes('--settings'), JSON.stringify(extra));
+    }
+  })) p++; else f++;
+
+  if (test('parseSpawnRequest carries trimPlugins: true and a valid keepPlugins as trim', () => {
+    const r = parseSpawnRequest({ prompt: 'x', trimPlugins: true, keepPlugins: ['timify-jira', 'timify-jira'] }, 'auto');
+    assert.ok(r.ok);
+    if (r.ok) assert.deepStrictEqual(r.trim, { keep: ['timify-jira'] });
+    const bare = parseSpawnRequest({ prompt: 'x', trimPlugins: true }, 'auto');
+    assert.ok(bare.ok && bare.trim && bare.trim.keep.length === 0, 'no keepPlugins is an empty keep list');
+  })) p++; else f++;
+
+  if (test('parseSpawnRequest: trimPlugins other than literal true is off', () => {
+    for (const trimPlugins of ['true', 1, false, undefined]) {
+      const r = parseSpawnRequest({ prompt: 'x', trimPlugins, keepPlugins: ['a'] }, 'auto');
+      assert.ok(r.ok && !('trim' in r), JSON.stringify(trimPlugins));
+    }
+  })) p++; else f++;
+
+  if (test('parseSpawnRequest: a malformed keepPlugins turns the trim off and warns, the request still ok', () => {
+    const prevWarn = console.warn;
+    const warns: string[] = [];
+    console.warn = (...a: unknown[]) => { warns.push(a.map(String).join(' ')); };
+    try {
+      for (const keepPlugins of ['x', Array.from({ length: 33 }, (_, i) => `p${i}`), ['a b']]) {
+        warns.length = 0;
+        const r = parseSpawnRequest({ prompt: 'x', trimPlugins: true, keepPlugins }, 'auto');
+        assert.ok(r.ok, 'never a 400');
+        assert.ok(!('trim' in r), `trim off for ${JSON.stringify(keepPlugins).slice(0, 40)}`);
+        assert.strictEqual(warns.length, 1, 'one warn');
+      }
+    } finally {
+      console.warn = prevWarn;
+    }
+  })) p++; else f++;
+
+  if (test('parseSpawnRequest: desktop and resume carry no trim; a client-sent settingsFile is dropped', () => {
+    const desk = parseSpawnRequest({ prompt: 'x', surface: 'desktop', trimPlugins: true, keepPlugins: ['a'] }, 'auto');
+    assert.ok(desk.ok && !('trim' in desk));
+    const over = parseSpawnRequest({ resume: UUID, surface: 'desktop', trimPlugins: true }, 'auto');
+    assert.ok(over.ok && !('trim' in over));
+    const resumed = parseSpawnRequest({ prompt: 'x', resume: UUID, trimPlugins: true }, 'auto');
+    assert.ok(resumed.ok && !('trim' in resumed), 'a resume keeps its first launch’s plugin set');
+    const smuggled = parseSpawnRequest({ prompt: 'x', settingsFile: '/etc/evil.json' }, 'auto');
+    assert.ok(smuggled.ok && !('settingsFile' in smuggled.input));
+  })) p++; else f++;
+
   if (test('oneShot adds nothing to argv — it travels as an env var, not a CLI flag', () => {
     const base = { sessionId: UUID, prompt: 'hi', permissionMode: 'auto' as const, model: 'opus', name: 'n' };
     assert.deepStrictEqual(buildSpawnArgs({ ...base, oneShot: true }), buildSpawnArgs(base));

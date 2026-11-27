@@ -37,6 +37,7 @@ import { resetArchivedCache } from '../../server/lib/archived.js';
 import { DESKTOP_RAIL_MAX, handOverInFlight, overrideDesktop, reserveDesktopLaunch, resetDesktopProbe, resetDesktopRail } from '../../server/lib/desktop.js';
 import { handOverFailedIds, markHandOverFailed, resetHandOvers, watchedHandOvers } from '../../server/lib/handover.js';
 import { overrideClaudeRoots } from '../../server/lib/paths.js';
+import { setPluginLister, trimDir, writeTrimFile } from '../../server/lib/plugin-trim.js';
 import { withServer } from '../api-harness.js';
 import type { Spawner } from '../../server/lib/spawn.js';
 import type { ChildProcess } from 'node:child_process';
@@ -853,6 +854,120 @@ export async function run(): Promise<number> {
       assert.equal(unknown.status, 400);
       assert.equal(unknown.json?.error, 'unknown session');
       assert.equal(d.calls.length, 0);
+    });
+  }));
+
+  /* ----------------------------------------------------------- plugin trim */
+
+  /** An inventory with one plugin the default allowlist keeps and one it switches off. */
+  const TRIM_INVENTORY = JSON.stringify([
+    { id: 'superpowers@official', scope: 'user', enabled: true }, { id: 'caveman@caveman', scope: 'user', enabled: true }
+  ]);
+
+  /**
+   * `withResumeHome` plus a stubbed lister (counted) and every launch's argv recorded. The state dir and the headless file sit in the fixture home,
+   * so neither the developer's real trim files nor their `headless.json` decide a case.
+   */
+  async function withTrim(
+    fn: (cfg: ReturnType<typeof loadConfig>, t: { calls: string[][]; listed: () => number; gate: (p: Promise<void>) => void }) => Promise<void>
+  ): Promise<void> {
+    await withResumeHome('CLAUDE_BIN=/bin/echo\n', async cfg => {
+      const prev = { state: process.env.DASHBOARD_STATE_DIR, headless: process.env.BM_HEADLESS_FILE };
+      process.env.DASHBOARD_STATE_DIR = process.cwd();
+      process.env.BM_HEADLESS_FILE = path.join(process.cwd(), 'no-headless.json');
+      let listed = 0;
+      let wait: Promise<void> = Promise.resolve();
+      setPluginLister(async () => { listed++; await wait; return TRIM_INVENTORY; });
+      const calls: string[][] = [];
+      setSpawner(((_command: string, args: string[]) => {
+        calls.push(args.slice());
+        return new FakeChild() as unknown as ChildProcess;
+      }) as Spawner);
+      try {
+        await fn(cfg, { calls, listed: () => listed, gate: p => { wait = p; } });
+      } finally {
+        setPluginLister(null);
+        if (prev.state === undefined) delete process.env.DASHBOARD_STATE_DIR; else process.env.DASHBOARD_STATE_DIR = prev.state;
+        if (prev.headless === undefined) delete process.env.BM_HEADLESS_FILE; else process.env.BM_HEADLESS_FILE = prev.headless;
+      }
+    });
+  }
+  const settingsOf = (args: string[]): string | undefined => {
+    const i = args.indexOf('--settings');
+    return i === -1 ? undefined : args[i + 1];
+  };
+
+  check(await testAsync('a trimmed fresh launch passes --settings naming the returned session id, and that file exists', async () => {
+    await withTrim(async (cfg, t) => {
+      const reply = await spawnReq(cfg, { project: '-fake-proj', prompt: 'x', trimPlugins: true });
+      assert.equal(reply.status, 200);
+      const id = (reply.json as { sessionId?: string } | null)?.sessionId;
+      const file = path.join(trimDir(), `${id}.json`);
+      assert.equal(settingsOf(t.calls[0]), file);
+      assert.deepEqual(t.calls[0].slice(0, 3), ['-p', '--session-id', id], 'the child runs under the id the file is named by');
+      assert.deepEqual(JSON.parse(fs.readFileSync(file, 'utf8')), { enabledPlugins: { 'caveman@caveman': false } });
+    });
+  }));
+
+  check(await testAsync('a fresh launch without trimPlugins carries no --settings and never lists plugins', async () => {
+    await withTrim(async (cfg, t) => {
+      const reply = await spawnReq(cfg, { project: '-fake-proj', prompt: 'x', keepPlugins: ['caveman'] });
+      assert.equal(reply.status, 200);
+      assert.ok(!t.calls[0].includes('--settings'));
+      assert.equal(t.listed(), 0);
+    });
+  }));
+
+  check(await testAsync('a resume keeps its trim file whatever the request says, and never gains one', async () => {
+    await withTrim(async (cfg, t) => {
+      const file = writeTrimFile(RES_ID, { 'caveman@caveman': false }) as string;
+      const kept = await spawnReq(cfg, { prompt: 'go on', resume: RES_ID });
+      assert.equal(kept.status, 200);
+      assert.equal(settingsOf(t.calls[0]), file, 'no trimPlugins on the resume, the file is passed again');
+      resetLaunches();
+      fs.rmSync(file);
+      const asked = await spawnReq(cfg, { prompt: 'go on', resume: RES_ID, trimPlugins: true });
+      assert.equal(asked.status, 200);
+      assert.ok(!t.calls[1].includes('--settings'), 'a session launched untrimmed stays untrimmed');
+      assert.ok(!fs.existsSync(file), 'and no file is created for it');
+      assert.equal(t.listed(), 0);
+    });
+  }));
+
+  check(await testAsync('a desktop launch with trimPlugins carries no --settings and never lists plugins', async () => {
+    await withDesktop('CLAUDE_BIN=/bin/echo\n', 'darwin', async cfg => {
+      let listed = 0;
+      setPluginLister(async () => { listed++; return TRIM_INVENTORY; });
+      const calls: string[][] = [];
+      setSpawner(((_command: string, args: string[]) => {
+        calls.push(args.slice());
+        return new FakeChild() as unknown as ChildProcess;
+      }) as Spawner);
+      try {
+        const reply = await spawnReq(cfg, { project: '-fake-proj', prompt: 'x', surface: 'desktop', trimPlugins: true });
+        assert.equal(reply.status, 200);
+        assert.ok(!calls[0].includes('--settings'));
+        assert.equal(listed, 0);
+      } finally {
+        setPluginLister(null);
+      }
+    });
+  }));
+
+  check(await testAsync('two trimmed POSTs racing on the last slot while the inventory is pending: exactly one 200 and one 429', async () => {
+    await withTrim(async (cfg, t) => {
+      for (let i = 0; i < MAX_LAUNCHING - 1; i++) launch(cfg, REF, { prompt: `slot ${i}`, permissionMode: 'auto' });
+      let release!: () => void;
+      t.gate(new Promise<void>(r => { release = r; }));
+      const body = { project: '-fake-proj', prompt: 'x', trimPlugins: true };
+      const both = Promise.all([spawnReq(cfg, body), spawnReq(cfg, body)]);
+      const t0 = Date.now();
+      while (t.listed() === 0 && Date.now() - t0 < 2000) await new Promise(r => setTimeout(r, 10));
+      await new Promise(r => setTimeout(r, 150)); // the second POST reaches the same pending inventory
+      release();
+      const statuses = (await both).map(r => r.status).sort();
+      assert.deepEqual(statuses, [200, 429]);
+      assert.equal(t.listed(), 1, 'the two shared one plugin list');
     });
   }));
 

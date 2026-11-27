@@ -324,6 +324,9 @@ server/
                   one — the fourth session write path, and the first the dashboard initiates;
                   also owns stopping one (graceful SIGTERM, grace window, escalation)
                   (see docs/subsystems/spawn.md)
+  lib/plugin-trim.ts  the `--settings` file behind a plugin-trimmed spawn (`trimPlugins`):
+                  headless.json allowlist, `claude plugin list --json` inventory, deny map
+                  (see docs/subsystems/spawn.md §Plugin trim)
   lib/desktop.ts  moves work to the Claude desktop app: `open claude://resume?session=…`
                   (execFile, no shell); the memoised macOS-and-app probe, the 4-per-5s
                   link rail and the per-session hand-over mark
