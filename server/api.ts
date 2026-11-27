@@ -12,12 +12,13 @@ import nodePath from 'node:path';
 import type { HubHandler } from 'lookout-widgets';
 
 import { launchRowIds, liveSessionIds, projectsRoot, sessionFromRef, sessionSurface } from './lib/scan.js';
-import { scanSnapshot } from './lib/scan-snapshot.js';
+import { scanSnapshot, sharedProcProbe } from './lib/scan-snapshot.js';
 import { resolveTranscript, sharedListing } from './lib/transcript-listing.js';
 import { readSessionAnalyticsLog } from './lib/sessionAnalyticsLog.js';
 import { desktopLiveSessionIds } from './lib/archived.js';
 import { lastSessionEffort, readTranscript } from './lib/transcript.js';
-import { readAgentsCachedAsync } from './lib/agents-cache.js';
+import { buildSessionDetail } from './lib/session-detail.js';
+import { readSessionRegistry } from './lib/session-registry.js';
 import { readSessionSpendAsync } from './lib/session-spend.js';
 import { getCachedUsageState } from './lib/usage.js';
 import { isRefreshSession } from './lib/token-refresh.js';
@@ -184,11 +185,12 @@ export async function serveSessions(baseConfig: Config, res: ServerResponse, par
  * agents-cache.ts). The list poll touches the same cache only through scan.ts
  * `subagentRunning`, and only for a session with a fresh, unfinished subagent.
  * The id is resolved against the enumerated transcript list, never joined into a
- * path directly, so a hostile id can't escape the projects root.
+ * path directly, so a hostile id can't escape the projects root. Each row also carries its subagent's own file facts and the body `parentLive`
+ * (`session-detail.ts`, #588); the process probe is the one `/api/sessions` shares, null under `skipProcScan`.
  */
-export async function serveSessionDetail(id: string, res: ServerResponse): Promise<void> {
+export async function serveSessionDetail(config: Config, id: string, res: ServerResponse): Promise<void> {
   const fail = (code: number): void => {
-    const body: SessionDetail = { id, agents: [], running: 0, finished: 0, error: true };
+    const body: SessionDetail = { id, agents: [], running: 0, finished: 0, parentLive: null, error: true };
     res.writeHead(code, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
     res.end(JSON.stringify(body));
   };
@@ -199,14 +201,10 @@ export async function serveSessionDetail(id: string, res: ServerResponse): Promi
   try {
     const ref = resolveTranscript(projectsRoot(), id);
     if (!ref) return fail(404);
-    const agents = await readAgentsCachedAsync(ref.file);
-    if (!agents) return fail(404);
-    detail = {
-      id,
-      agents,
-      running: agents.filter(a => a.status === 'running').length,
-      finished: agents.filter(a => a.status === 'done').length
-    };
+    const probe = await sharedProcProbe(config);
+    const built = await buildSessionDetail(id, ref.file, { probe, registry: readSessionRegistry() });
+    if (!built) return fail(404);
+    detail = built;
   } catch (e) {
     console.error('[dashboard] session detail failed:', (e as Error).message);
     return fail(500);

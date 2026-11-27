@@ -359,7 +359,7 @@ export function run(): number {
     assert.deepStrictEqual(resume, {
       id: 'toolu_sm1', type: 'general-purpose', description: 'Task 7 fix round 1', status: 'running',
       startedAt: '2026-07-01T10:25:00Z', endedAt: null, durationMs: null, tokens: null, toolUses: null,
-      agentId: 'a6d6', resumed: true
+      agentId: 'a6d6', resumed: true, background: true, endStatus: null, model: null
     });
     assert.strictEqual(orig.id, 'toolu_impl');
     assert.strictEqual(orig.status, 'done');
@@ -627,6 +627,117 @@ export function run(): number {
     ]))!;
     assert.strictEqual(a.endedAt, '2026-07-01T10:02:00Z');
     assert.strictEqual(a.tokens, 77);
+  })) p++; else f++;
+
+  // ── Liveness facts the reducer derives for backlog-manager (#588): background, endStatus, model ──
+
+  const DNF = (q: string) => `Background agent "x" didn${q}t finish before the previous session ended`;
+  /** A notification with a <summary>, as a user message or as a mid-turn queue-operation. */
+  const summaryNotify = (agentId: string, status: string, iso: string, summary: string, asQueueOp = false) => {
+    const body = `<task-notification>\n<task-id>${agentId}</task-id>\n<status>${status}</status>\n<summary>${summary}</summary>\n</task-notification>`;
+    return asQueueOp
+      ? { type: 'queue-operation', operation: 'enqueue', timestamp: iso, sessionId: 's1', content: body }
+      : { timestamp: iso, message: { role: 'user', content: [{ type: 'text', text: body }] } };
+  };
+  const asyncAck = (toolUseId: string, agentId: string, iso: string, resolvedModel?: string) => ({
+    timestamp: iso,
+    toolUseResult: { isAsync: true, status: 'async_launched', agentId, ...(resolvedModel ? { resolvedModel } : {}) },
+    message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: toolUseId, content: 'Async agent launched' }] }
+  });
+  const pick = (j: { background?: boolean; endStatus?: unknown; model?: unknown; status: string }) =>
+    ({ status: j.status, background: j.background, endStatus: j.endStatus, model: j.model });
+
+  if (test('#588 1: sync launch + result → background false, endStatus completed, model from resolvedModel', () => {
+    const [a] = readAgents(fixture([
+      taskRec('toolu_s', 'Explore', 'look', '2026-07-01T10:00:00Z'),
+      resultRec('toolu_s', '2026-07-01T10:01:00Z', { agentId: 'a1', resolvedModel: 'claude-opus-5', totalTokens: 10 })
+    ]))!;
+    assert.deepStrictEqual(pick(a), { status: 'done', background: false, endStatus: 'completed', model: 'claude-opus-5' });
+  })) p++; else f++;
+
+  if (test('#588 2: async ack, no notification → running, background true, endStatus null, model from the ack', () => {
+    const [a] = readAgents(fixture([
+      taskRec('toolu_a', 'Explore', 'look', '2026-07-01T10:00:00Z', 'Agent'),
+      asyncAck('toolu_a', 'a2', '2026-07-01T10:00:01Z', 'claude-sonnet-5')
+    ]))!;
+    assert.deepStrictEqual(pick(a), { status: 'running', background: true, endStatus: null, model: 'claude-sonnet-5' });
+  })) p++; else f++;
+
+  if (test('#588 3: a terminal notification sets endStatus to its own status', () => {
+    for (const [status, summary, want] of [['failed', 'x', 'failed'], ['killed', 'x', 'killed'], ['stopped', 'Agent stopped', 'stopped']] as const) {
+      const [a] = readAgents(fixture([
+        taskRec('toolu_a', 'Explore', 'look', '2026-07-01T10:00:00Z', 'Agent'),
+        asyncAck('toolu_a', 'a2', '2026-07-01T10:00:01Z', 'claude-sonnet-5'),
+        summaryNotify('a2', status, '2026-07-01T10:05:00Z', summary)
+      ]))!;
+      assert.strictEqual(a.endStatus, want, status);
+      assert.strictEqual(a.status, 'done');
+    }
+  })) p++; else f++;
+
+  if (test('#588 4 (D2): "didn\'t finish before the previous session ended" closes the row as killed — message, queue-op, curly apostrophe', () => {
+    for (const [q, asQueueOp] of [["'", false], ["'", true], ['\u2019', false]] as const) {
+      const [a] = readAgents(fixture([
+        taskRec('toolu_a', 'Explore', 'look', '2026-07-01T10:00:00Z', 'Agent'),
+        asyncAck('toolu_a', 'a2', '2026-07-01T10:00:01Z'),
+        summaryNotify('a2', 'stopped', '2026-07-01T11:00:00Z', DNF(q), asQueueOp)
+      ]))!;
+      assert.deepStrictEqual([a.status, a.endedAt, a.endStatus], ['done', '2026-07-01T11:00:00Z', 'killed'], `${q} queueOp=${asQueueOp}`);
+    }
+  })) p++; else f++;
+
+  if (test('#588 5 (D2): first notify wins — a later "didn\'t finish" leaves completed and the first endedAt', () => {
+    const [a] = readAgents(fixture([
+      taskRec('toolu_a', 'Explore', 'look', '2026-07-01T10:00:00Z', 'Agent'),
+      asyncAck('toolu_a', 'a2', '2026-07-01T10:00:01Z'),
+      summaryNotify('a2', 'completed', '2026-07-01T10:05:00Z', 'done'),
+      summaryNotify('a2', 'stopped', '2026-07-01T11:00:00Z', DNF("'"))
+    ]))!;
+    assert.deepStrictEqual([a.endStatus, a.endedAt], ['completed', '2026-07-01T10:05:00Z']);
+  })) p++; else f++;
+
+  if (test('#588 6: a resumed row is background with endStatus null; the original keeps completed', () => {
+    const [resume, orig] = readAgents(fixture([
+      taskRec('toolu_s', 'Explore', 'look', '2026-07-01T10:00:00Z'),
+      resultRec('toolu_s', '2026-07-01T10:01:00Z', { agentId: 'a3', resolvedModel: 'claude-opus-5' }),
+      sendRec('toolu_sm', 'a3', '2026-07-01T10:10:00Z'),
+      resumeRec('toolu_sm', 'a3', '2026-07-01T10:10:01Z')
+    ]))!;
+    assert.deepStrictEqual(pick(resume), { status: 'running', background: true, endStatus: null, model: 'claude-opus-5' });
+    assert.strictEqual(orig.endStatus, 'completed');
+    assert.strictEqual(orig.background, false);
+  })) p++; else f++;
+
+  if (test('#588 7 (D5): a resume closing an open run marks it stopped', () => {
+    const [resume, orig] = readAgents(fixture([
+      taskRec('toolu_a', 'Explore', 'look', '2026-07-01T10:00:00Z', 'Agent'),
+      asyncAck('toolu_a', 'a4', '2026-07-01T10:00:01Z'),
+      sendRec('toolu_sm', 'a4', '2026-07-01T10:10:00Z'),
+      resumeRec('toolu_sm', 'a4', '2026-07-01T10:10:01Z')
+    ]))!;
+    assert.deepStrictEqual([orig.status, orig.endStatus], ['done', 'stopped']);
+    assert.deepStrictEqual([resume.status, resume.background, resume.endStatus], ['running', true, null]);
+  })) p++; else f++;
+
+  if (test('#588 8: a result without resolvedModel gives model null', () => {
+    const [a] = readAgents(fixture([
+      taskRec('toolu_s', 'Explore', 'look', '2026-07-01T10:00:00Z'),
+      resultRec('toolu_s', '2026-07-01T10:01:00Z', { agentId: 'a5', totalTokens: 1 })
+    ]))!;
+    assert.strictEqual(a.model, null);
+  })) p++; else f++;
+
+  if (test('#588 9: a sync result marked is_error closes the row as failed; the mirror without the flag stays completed', () => {
+    const errored = (id: string, isError: boolean) => ({
+      timestamp: '2026-07-01T10:01:00Z',
+      toolUseResult: 'Error: Agent terminated early due to an API error: API Error: 529 Overloaded',
+      message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: id, ...(isError ? { is_error: true } : {}),
+        content: 'Error: Agent terminated early due to an API error: API Error: 529 Overloaded' }] }
+    });
+    const [a] = readAgents(fixture([taskRec('toolu_e', 'Explore', 'look', '2026-07-01T10:00:00Z'), errored('toolu_e', true)]))!;
+    assert.deepStrictEqual(pick(a), { status: 'done', background: false, endStatus: 'failed', model: null });
+    const [b] = readAgents(fixture([taskRec('toolu_e', 'Explore', 'look', '2026-07-01T10:00:00Z'), errored('toolu_e', false)]))!;
+    assert.strictEqual(b.endStatus, 'completed');
   })) p++; else f++;
 
   console.log('\nPassed: ' + p + '  Failed: ' + f + '\n');

@@ -507,7 +507,7 @@ export function createRequestListener(config: Config): http.RequestListener {
     if (detail) {
       const id = decodePath(detail[1]);
       if (id === null) return badRequest(res);
-      return void serveSessionDetail(id, res);
+      return void serveSessionDetail(config, id, res);
     }
     if (req.url && req.url.startsWith('/api/sessions')) {
       // Query params carry the Settings page's per-device scan knobs (limit /

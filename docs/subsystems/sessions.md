@@ -397,7 +397,7 @@ hands that listing to both the held-wait sweep and the scan (`ScanOptions.transc
 after them only when `ps` named a claude pid — each under its own 2 s kill timer (`runProbeChild`; `execFile`'s own `timeout` can report success with empty
 stdout on a stalled loop, #168), so a hung `lsof` costs the requests waiting on that probe its timer, never the whole server's event loop. `scanSnapshot`
 awaits `sharedProcProbe` (`scan-snapshot.ts`): a call while a probe runs joins it, and one within `PROBE_TTL_MS` (1 s) of its completion reuses its answer,
-so two tabs and the hub tile polling in the same second fork one set of children. The TTL sits under the 3 s client poll, so a single tab still gets a fresh
+so two tabs and the hub tile polling in the same second fork one set of children. The detail route awaits it too, for `parentLive`. The TTL sits under the 3 s client poll, so a single tab still gets a fresh
 probe on every poll; serving the last probe while refreshing behind it was rejected, because a just-launched session would read `idle` for a whole poll. The
 result reaches the scan as `ScanOptions.proc`, and `scanSessions` itself never forks. The one synchronous probe left is `liveSessionIds()`, the resume
 guard's ([spawn](spawn.md)): it runs on a rare POST and must see a session launched a moment ago, which a cached probe could miss.
@@ -613,6 +613,16 @@ own figures — closing it at the `SendMessage`'s timestamp when no terminal not
 could ever close it.
 Without it the launch row reads `done`, so a parent parked on round 2 fell through `subagentRunning` to `incomplete`. Every run writes the same
 `agent-<id>.jsonl`, so the Analytics spend skips `resumed` rows — the launch row already claims that whole file.
+
+**Liveness facts for backlog-manager (#588).** Each row also carries `background`, `model`, `lastWriteAt`, `lastTool`, `endStatus` and `blockedReason`, and the
+body carries `parentLive`; the drawer draws none of them yet — backlog-manager's subagent list is the consumer, since it cannot mount `~/.claude`. The reducer
+derives `background` (async ack, or any resumed row), `endStatus` and `model` (`toolUseResult.resolvedModel`) from the parent transcript; `session-detail.ts`
+overlays the rest from the subagent's own files (`subagent-facts.ts`: the meta file's `requestShape` and `model`/`pickedEffortModel` win, then the
+transcript's mtime and its last 64 KiB, memoized on size and mtime). `blockedReason: 'rate-limit'` needs an API-error record (`isApiErrorMessage`) whose
+`error` is `rate_limit` or whose text names 429 / rate limit / usage limit — an ordinary reply that mentions a rate limit never matches. The "didn't finish
+before the previous session ended" notification already closes its row, as `stopped`; only its `endStatus` reads `killed`. `parentLive` is `true` when a live
+`claude` argv names the session, or when Claude Code's registry (`~/.claude/sessions/<pid>.json`) maps it to a live `claude` pid — the only proof for a plain
+terminal `claude` — `false` only when the probe and the registry both answered, and `null` otherwise (Docker's skipped probe included).
 
 `useSessionDetail` keeps polling that endpoint **every 3s for as long as the row stays
 open** — not once on expand — because the panel is watching live work. It clears its state

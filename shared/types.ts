@@ -995,6 +995,40 @@ export interface AgentJob {
    * `agentId` — and so one transcript — with the launch row it resumed.
    */
   resumed?: true;
+  /*
+   * The liveness facts below exist for backlog-manager's subagent list, which reads `GET /api/sessions/:id` because it cannot mount `~/.claude`; this
+   * dashboard's own drawer draws none of them yet. Every one is optional (#588 D6): `SessionAnalysis.bySubagent` and kaizen's generated copy reuse this type
+   * and never read subagent files, so only the detail route fills the disk-derived ones. An absent field means an older dashboard.
+   */
+  /**
+   * Launched in the background: an async launch ack, or the subagent's meta file's `requestShape: 'background'`, which wins over the ack when present.
+   * Always `true` on a `resumed` row — a resume runs like a background launch and completes by notification. `false` for a sync launch. Emitted on every path.
+   */
+  background?: boolean;
+  /**
+   * The subagent's model: its meta file's `model`, else its `pickedEffortModel`, else the launch result's `toolUseResult.resolvedModel` (async ack or sync
+   * result), else null (#588 D4). Without the detail route only the last source is read.
+   */
+  model?: string | null;
+  /** ISO mtime of the subagent's own transcript (`<session>/subagents/agent-<agentId>.jsonl`). null with no `agentId` or no readable file; detail route only. */
+  lastWriteAt?: string | null;
+  /**
+   * The newest `tool_use` in the last 64 KiB of the subagent's transcript, as `Name(label)` with the label on one line and cut to 80 characters (`…` marks the cut), or bare
+   * `Name` when the tool has no label. null when the tail holds none, or there is no `agentId` or file; detail route only.
+   */
+  lastTool?: string | null;
+  /**
+   * How the run ended; null while it runs. `completed` for a sync result, `failed` for one marked `is_error`; a terminal notification's own `<status>`; `killed` for the "didn't finish before
+   * the previous session ended" notification (#588 D2); `stopped` for a run a resume closed with no notification (#588 D5). Emitted on every path.
+   */
+  endStatus?: 'completed' | 'failed' | 'killed' | 'stopped' | null;
+  /**
+   * Why a RUNNING subagent is not moving, read from the last `user`/`assistant` record of its transcript tail (other record types are skipped): `rate-limit`
+   * for an API-error record (`isApiErrorMessage`) whose `error` is `rate_limit` or whose text names 429 / rate limit / usage limit — the text test never
+   * applies to an ordinary reply (#588 D1); `rejected` for a rejected tool use; `interrupted` for `[Request interrupted …`. null for anything else, and always
+   * null for a finished run. A pending permission prompt is not here: that wait is per session (#588 D7). Detail route only.
+   */
+  blockedReason?: 'rate-limit' | 'rejected' | 'interrupted' | null;
 }
 
 /** Payload of `GET /api/sessions/:id` — a session's subagent activity. */
@@ -1004,6 +1038,14 @@ export interface SessionDetail {
   agents: AgentJob[];
   running: number;
   finished: number;
+  /**
+   * Whether the session's own (parent) process is alive, for backlog-manager's subagent list to tell a waiting parent from an orphaning one (#588 D3).
+   * `true`: a live `claude` argv names this id, or Claude Code's session registry (`~/.claude/sessions/<pid>.json`) maps it to a live `claude` pid — the
+   * registry is what proves a plain terminal `claude`, whose argv carries no id. `false`: the process probe, its pid read and the registry all answered and
+   * none matched. `null`: any of them could not answer (the probe is skipped in Docker), so absence cannot be proven. This server always sends it; absent
+   * means an older dashboard.
+   */
+  parentLive?: boolean | null;
   /** Set only when the scan failed or the id is unknown. */
   error?: boolean;
 }

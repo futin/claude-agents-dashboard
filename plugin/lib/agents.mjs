@@ -90,6 +90,11 @@ const SUBAGENT_TOKENS_RE = /<subagent_tokens>\s*(\d+)\s*<\/subagent_tokens>/;
 const TOOL_USES_RE = /<tool_uses>\s*(\d+)\s*<\/tool_uses>/;
 const DURATION_MS_RE = /<duration_ms>\s*(\d+)\s*<\/duration_ms>/;
 /**
+ * The summary Claude Code writes when a background agent's parent session ended under it: `<status>stopped</status>`, but the run was cut off, so it reads
+ * as `endStatus: 'killed'` (#588 D2). Either apostrophe. The same phrase on a background shell task carries a non-agent task id and so pairs with no row.
+ */
+const DNF_RE = /didn['’]t finish before the previous session ended/;
+/**
  * Every place a `<task-notification>` payload can sit, joined for one scan.
  *
  * Delivered while the parent is idle it is an ordinary user message. Delivered
@@ -145,10 +150,13 @@ export function parseRecordEvents(rec) {
         const idM = flat.match(TASK_ID_RE);
         const stM = flat.match(STATUS_RE);
         if (idM && stM) {
+            const status = stM[1].toLowerCase();
             events.push({
                 kind: 'notify',
                 agentId: idM[1],
-                terminal: TERMINAL_STATUSES.has(stM[1].toLowerCase()),
+                terminal: TERMINAL_STATUSES.has(status),
+                status,
+                dnf: DNF_RE.test(flat),
                 ts,
                 tokens: intFromMatch(flat, SUBAGENT_TOKENS_RE),
                 toolUses: intFromMatch(flat, TOOL_USES_RE),
@@ -203,8 +211,12 @@ export function parseRecordEvents(rec) {
                 toolUseId: b.tool_use_id,
                 ts,
                 isAsyncAck: !!isAsyncAck,
+                // A sync run that died (API error, a rejected launch, an unknown agent type) still closes its row, but did not complete.
+                isError: b.is_error === true,
                 agentId,
                 resumedAgentId,
+                // Structured only: the text is the subagent's own report and may name any model (#588 D4).
+                resolvedModel: t && typeof t.resolvedModel === 'string' ? t.resolvedModel : null,
                 tokens: isAsyncAck ? null : finiteOrNull(t?.totalTokens),
                 toolUses: isAsyncAck ? null : finiteOrNull(t?.totalToolUseCount),
                 exactDurationMs: isAsyncAck ? null : finiteOrNull(t?.totalDurationMs)
@@ -229,7 +241,8 @@ export function applyEvent(state, ev) {
     if (ev.kind === 'launch') {
         const l = {
             id: ev.id, type: ev.type, description: ev.description,
-            startedAt: ev.ts, endedAt: null, exactDurationMs: null, tokens: null, toolUses: null, agentId: null, resumed: false
+            startedAt: ev.ts, endedAt: null, exactDurationMs: null, tokens: null, toolUses: null, agentId: null, resumed: false,
+            background: false, endStatus: null, model: null
         };
         state.launches.push(l);
         if (!state.byToolUseId.has(ev.id))
@@ -254,7 +267,9 @@ export function applyEvent(state, ev) {
         }
         state.byToolUseId.delete(ev.toolUseId);
         l.agentId = ev.agentId;
+        l.model = ev.resolvedModel;
         if (ev.isAsyncAck) {
+            l.background = true;
             // Launch ack, not completion; completion (if any) is a later
             // task-notification keyed by agentId. Unparsable id → stays running.
             if (ev.agentId && !state.byAgentId.has(ev.agentId))
@@ -262,6 +277,7 @@ export function applyEvent(state, ev) {
         }
         else {
             l.endedAt = ev.ts;
+            l.endStatus = ev.isError ? 'failed' : 'completed';
             l.tokens = ev.tokens;
             l.toolUses = ev.toolUses;
             l.exactDurationMs = ev.exactDurationMs;
@@ -276,6 +292,7 @@ export function applyEvent(state, ev) {
         return;
     state.byAgentId.delete(ev.agentId);
     l.endedAt = ev.ts;
+    l.endStatus = ev.dnf ? 'killed' : ev.status;
     l.tokens = ev.tokens;
     l.toolUses = ev.toolUses;
     l.exactDurationMs = ev.exactDurationMs;
@@ -291,12 +308,17 @@ export function applyEvent(state, ev) {
  */
 function applyResume(state, id, agentId, send, resultTs) {
     const prev = state.byAgentId.get(agentId);
-    if (prev && prev.endedAt === null)
+    // The resume proves that run stopped, with no notification to say how (#588 D5).
+    if (prev && prev.endedAt === null) {
         prev.endedAt = send.ts ?? resultTs;
+        prev.endStatus = 'stopped';
+    }
     const origin = state.launches.find(x => x.agentId === agentId && !x.resumed);
+    // Same subagent, same transcript: the model is the launch's.
     const l = {
         id, type: origin ? origin.type : '', description: send.summary || (origin ? origin.description : ''),
-        startedAt: send.ts, endedAt: null, exactDurationMs: null, tokens: null, toolUses: null, agentId, resumed: true
+        startedAt: send.ts, endedAt: null, exactDurationMs: null, tokens: null, toolUses: null, agentId, resumed: true,
+        background: true, endStatus: null, model: origin ? origin.model : null
     };
     state.launches.push(l);
     state.byAgentId.set(agentId, l);
@@ -318,6 +340,9 @@ export function toAgentJobs(state) {
             tokens: l.tokens,
             toolUses: l.toolUses,
             agentId: l.agentId,
+            background: l.background,
+            endStatus: l.endedAt ? l.endStatus : null,
+            model: l.model,
             ...(l.resumed ? { resumed: true } : {})
         };
     });
