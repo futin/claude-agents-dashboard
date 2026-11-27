@@ -8,7 +8,7 @@ import os from 'node:os';
 import path from 'node:path';
 
 import type { RoutineRun, RoutineStep } from '../../shared/types.js';
-import { LIVENESS_TTL_MS, RUN_RETAIN_DAYS, computeStats, createLogReader, pushableEvents, rotateIfLarge } from '../../server/lib/routine-log.js';
+import { LIVENESS_TTL_MS, RUN_RETAIN_DAYS, computeStats, createLogReader, pruneArchives, pushableEvents, rotateIfLarge } from '../../server/lib/routine-log.js';
 
 function test(name: string, fn: () => void): boolean {
   try { fn(); console.log('  ✓ ' + name); return true; }
@@ -421,6 +421,43 @@ export function run(): number {
     assert.strictEqual(runs.length, 1);
     assert.strictEqual(runs[0].state, 'ok');
     assert.strictEqual(runs[0].steps.length, 2);
+  });
+
+  const ymdOf = (d: Date): string => `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`;
+  const daysFrom = (ms: number, days: number): Date => { const d = new Date(ms); return new Date(d.getFullYear(), d.getMonth(), d.getDate() + days); };
+
+  t('pruneArchives deletes archives stamped before the retention cutoff and leaves the cutoff day, newer archives and live logs alone', () => {
+    const dir = tmp();
+    const cutoff = ymdOf(daysFrom(T0, -RUN_RETAIN_DAYS));
+    const before = ymdOf(daysFrom(T0, -RUN_RETAIN_DAYS - 1));
+    const names = [`mac.${before}.jsonl`, `mac.${before}.2.jsonl`, `wsl.${cutoff}.jsonl`, `mac.${ymdOf(daysFrom(T0, -3))}.jsonl`, 'mac.jsonl', 'notes.txt'];
+    for (const n of names) fs.writeFileSync(path.join(dir, n), 'x\n');
+    assert.deepStrictEqual(pruneArchives(dir, at0).sort(), [`mac.${before}.2.jsonl`, `mac.${before}.jsonl`]);
+    assert.deepStrictEqual(fs.readdirSync(dir).sort(), names.slice(2).sort());
+    assert.deepStrictEqual(pruneArchives(path.join(dir, 'nope'), at0), []);
+  });
+
+  t('a tracked archive pruned past retention is dropped without a rebuild: the job keeps its last run', () => {
+    const dir = tmp();
+    fs.writeFileSync(path.join(dir, `mac.${ymdOf(new Date(T0))}.jsonl`), complete('r1'));
+    fs.writeFileSync(path.join(dir, 'mac.jsonl'), '');
+    let clock = T0;
+    const reader = createLogReader(dir, never, hour, () => clock);
+    assert.deepStrictEqual(reader.read().map((r) => r.id), ['r1']);
+    clock = T0 + (RUN_RETAIN_DAYS + 2) * 24 * 60 * MIN;
+    assert.strictEqual(pruneArchives(dir, () => clock).length, 1);
+    assert.deepStrictEqual(reader.read().map((r) => r.id), ['r1'], 'a rebuild would have re-read only mac.jsonl and lost r1');
+  });
+
+  t('a tracked archive inside retention that vanishes still rebuilds, so the runs it held are gone', () => {
+    const dir = tmp();
+    const archive = path.join(dir, `mac.${ymdOf(new Date(T0))}.jsonl`);
+    fs.writeFileSync(archive, complete('r1'));
+    fs.writeFileSync(path.join(dir, 'mac.jsonl'), '');
+    const reader = createLogReader(dir, never, hour, later);
+    assert.deepStrictEqual(reader.read().map((r) => r.id), ['r1']);
+    fs.unlinkSync(archive);
+    assert.deepStrictEqual(reader.read(), []);
   });
 
   t('a file truncated in place is re-read from 0 and the runs it dropped are gone', () => {

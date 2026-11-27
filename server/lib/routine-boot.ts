@@ -9,7 +9,7 @@ import type { RoutineRun } from '../../shared/types.js';
 import type { Config } from './config.js';
 import { OLD_SHARED_DIRS, migrateLegacyState, machineName, routineDirs } from './routine-config.js';
 import { importSharedJobs } from './routine-import.js';
-import { createLogReader, rotateIfLarge } from './routine-log.js';
+import { createLogReader, pruneArchives, rotateIfLarge } from './routine-log.js';
 import { sendRoutineEvent } from './notify.js';
 import { notifyRoutineRuns, seedRoutineNotify } from './routine-notify.js';
 import { applyReconcile, installedWrapper, startReconcileWatchers, stopReconcileWatchers } from './routine-reconcile.js';
@@ -24,6 +24,7 @@ export interface RoutineDeps {
   sweepLocks: typeof sweepLocks;
   writePinsSnapshot: typeof writePinsSnapshot;
   rotateIfLarge: typeof rotateIfLarge;
+  pruneArchives: typeof pruneArchives;
   applyReconcile: typeof applyReconcile;
   startReconcileWatchers: typeof startReconcileWatchers;
   stopReconcileWatchers: typeof stopReconcileWatchers;
@@ -39,8 +40,8 @@ export const defaultDeps: RoutineDeps = {
   // Only once the installed plugin has `run-routine.mjs`: until then the old wrapper still fires and writes to `~/.claude/schedules`, so moving that
   // folder would split the run log in two. Both sides read the old folder while it is the only one, so waiting costs nothing.
   migrateLegacyState: (config) => installedWrapper() !== null && migrateLegacyState(config),
-  claimOwner, importSharedJobs, sweepLocks, writePinsSnapshot, rotateIfLarge, applyReconcile, startReconcileWatchers, stopReconcileWatchers, createLogReader,
-  seedRoutineNotify, notifyRoutineRuns, sendRoutineEvent, foldTickCaps, releaseOwner
+  claimOwner, importSharedJobs, sweepLocks, writePinsSnapshot, rotateIfLarge, pruneArchives, applyReconcile, startReconcileWatchers, stopReconcileWatchers,
+  createLogReader, seedRoutineNotify, notifyRoutineRuns, sendRoutineEvent, foldTickCaps, releaseOwner
 };
 
 const TIMEOUTS_TTL_MS = 2000;
@@ -110,8 +111,8 @@ export function foldForPush(config: Config, runs: RoutineRun[], deps: RoutineDep
 
 /**
  * On listen. Without `ROUTINES_OWNER` nothing is called at all; with it, a lost claim stops right there. The owner sweeps dead wrappers' locks, writes
- * `pins.json` before the first reconcile (a fan-out job firing straight after reads it), rotates an oversized log, reconciles, watches, and folds the
- * log once now and again on every write to `runs/`.
+ * `pins.json` before the first reconcile (a fan-out job firing straight after reads it), rotates an oversized log and prunes archives past retention,
+ * reconciles, watches, and folds the log once now; on every write to `runs/` it rotates, prunes and folds again.
  */
 export function startRoutines(config: Config, deps: RoutineDeps = defaultDeps): void {
   if (!config.routinesOwner) return;
@@ -145,7 +146,12 @@ export function startRoutines(config: Config, deps: RoutineDeps = defaultDeps): 
   });
   step('lock sweep', () => { deps.sweepLocks(config); });
   step('pins snapshot', () => { deps.writePinsSnapshot(config); });
-  step('log rotation', () => { deps.rotateIfLarge(routineDirs(config).runs); });
+  const rotate = (): void => {
+    const dir = routineDirs(config).runs;
+    deps.rotateIfLarge(dir);
+    deps.pruneArchives(dir);
+  };
+  step('log rotation', rotate);
   step('reconcile', () => {
     void deps.applyReconcile(config).catch((e: unknown) => { console.error('[dashboard] routines reconcile failed:', (e as Error).message); });
   });
@@ -155,7 +161,10 @@ export function startRoutines(config: Config, deps: RoutineDeps = defaultDeps): 
     const runs = r.read();
     deps.seedRoutineNotify(config, runs);
     foldForPush(config, runs, deps);
+    // The wrapper appends and never rotates, so the owner rotates on every append it sees: a long-running server would otherwise let the live file grow past
+    // the limit until its next restart.
     const unwatch = r.watch(() => {
+      step('log rotation', rotate);
       try { foldForPush(config, r.read(), deps); } catch (e) { console.error('[dashboard] routine log read failed:', (e as Error).message); }
     });
     if (started) started.unwatch = unwatch;

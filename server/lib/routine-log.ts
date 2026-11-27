@@ -23,7 +23,7 @@ export const LIVENESS_TTL_MS = 10_000;
 
 /**
  * How many days of runs the reader keeps: twice the widest stats window, since `computeStats`'s `prev` reads the window before it, plus one
- * (spec 2026-11-14-poll-path-probes A6). A rotated archive stamped before it is not read; nothing is deleted.
+ * (spec 2026-11-14-poll-path-probes A6). A rotated archive stamped before it is not read, and the owner deletes it (`pruneArchives`).
  */
 export const RUN_RETAIN_DAYS = 181;
 
@@ -179,6 +179,8 @@ export function createLogReader(
 
     // A file whose inode shows up under another name was renamed (rotation) and keeps its offset; one that is gone, or shrank in place, may have
     // taken records with it, and the only honest fold is a rebuild.
+    // An archive past retention that is gone was pruned: every record in it predates the cutoff, which `prune` already forgets, so it is simply dropped.
+    const oldest = ymd(retainCutoff(now()));
     let rebuild = false;
     const next = new Map<string, FileState>();
     for (const [n, state] of files) {
@@ -190,6 +192,7 @@ export function createLogReader(
       }
       const moved = byIno.get(state.ino);
       if (moved !== undefined && !next.has(moved)) next.set(moved, state);
+      else if (!st && pastRetention(n, oldest)) continue;
       else rebuild = true;
     }
     if (rebuild) {
@@ -200,10 +203,8 @@ export function createLogReader(
       next.clear();
     }
     // An archive whose stamp is past retention is not read — unless it is tracked already: dropping a tracked file would read as "vanished" and rebuild.
-    const oldest = ymd(retainCutoff(now()));
     for (const [n, st] of current) {
-      const stamp = ARCHIVE.exec(n)?.[1];
-      if (stamp !== undefined && stamp < oldest && !next.has(n)) continue;
+      if (pastRetention(n, oldest) && !next.has(n)) continue;
       const state = next.get(n) ?? { ino: st.ino, offset: 0 };
       if (state.ino !== st.ino) { state.ino = st.ino; state.offset = 0; }
       try { state.offset = readFrom(n, state.offset, st.size); } catch { /* unreadable this poll; retried the next */ }
@@ -330,6 +331,12 @@ export function createLogReader(
   };
 }
 
+/** A rotated archive stamped before `oldest` (a `ymd`): rotation renames a live file, so every record in it predates its stamp. */
+function pastRetention(file: string, oldest: string): boolean {
+  const stamp = ARCHIVE.exec(file)?.[1];
+  return stamp !== undefined && stamp < oldest;
+}
+
 function ymd(d: Date): string {
   const p = (n: number): string => String(n).padStart(2, '0');
   return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}`;
@@ -353,6 +360,22 @@ export function rotateIfLarge(dir: string, limitBytes = 20 * 1024 * 1024): strin
     } catch { /* raced with another rotation or a deletion; the next pass looks again */ }
   }
   return moved;
+}
+
+/** Delete every rotated archive stamped before the retention cutoff, which the reader no longer reads. Owner only. Returns the names deleted. */
+export function pruneArchives(dir: string, now: () => number = Date.now): string[] {
+  let names: string[];
+  try { names = fs.readdirSync(dir); } catch { return []; }
+  const oldest = ymd(retainCutoff(now()));
+  const gone: string[] = [];
+  for (const n of names) {
+    if (!pastRetention(n, oldest)) continue;
+    try {
+      fs.unlinkSync(path.join(dir, n));
+      gone.push(n);
+    } catch { /* raced with another prune; the next pass looks again */ }
+  }
+  return gone;
 }
 
 function localDay(d: Date): string {
