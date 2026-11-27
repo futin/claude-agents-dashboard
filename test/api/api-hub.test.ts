@@ -1,6 +1,7 @@
 /**
  * The Lookout hub routes mounted in the real route table (hub-widgets spec §4): catalog and data served by `lookout-widgets`, the POST action paths
- * answering 404 whatever the body (no actions are declared), and every path the hub declines falling through to the table unchanged.
+ * answering 404 whatever the body under the cap (no actions are declared), an over-cap POST body answered 400 with the connection closed before the hub
+ * is asked, and every path the hub declines falling through to the table unchanged.
  */
 
 import assert from 'node:assert';
