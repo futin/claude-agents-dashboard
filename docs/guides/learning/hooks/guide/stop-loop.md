@@ -188,7 +188,7 @@ the module's header names it: every transcript already on disk carries the old w
 ask the same question to decide it:
 
 ```ts
-// server/lib/idle.ts:89-97
+// server/lib/idle.ts:97-105
 export async function backAtDesk(): Promise<boolean> {
   const thresholdSecs = getSettings().idleSecs;
   // Checked before the read, not inside `atDesk`: the reading costs an `ioreg`
@@ -265,7 +265,7 @@ Note the fail direction. It is the *same* as the hook's, never act on a guess. H
 the terminal:
 
 ```ts
-// server/lib/idle.ts:79-84
+// server/lib/idle.ts:87-92
  * Fail directions, both deliberately "stay held":
  *  - unreadable idle (Docker, non-macOS) → false. Never end a wait on a guess;
  *    the deadline timer is the reaper of last resort. Same direction

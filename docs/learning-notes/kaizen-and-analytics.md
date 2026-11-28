@@ -31,10 +31,11 @@ forbids the model from inventing them (`plugin/skills/kaizen/SKILL.md`, intro: "
 model only does what math can't — judge whether the work was any good.
 
 The `.mjs` is deliberately zero-dep pure Node (not `tsx`, no repo) so the *global*
-skill runs in **any** project. Only part of it is hand-written now. The subagent parse (`readAgents`), the subagent totals helpers and the usage-line
-parse are **generated** from `server/lib/{agents,subagent-usage,usage-line}.ts` into `plugin/lib/*.mjs` by `pnpm plugin:gen`, and `kaizen.mjs` imports
-them; `test/guards/plugin-manifest.test.ts` fails on a stale copy. The analysis (`analyze.ts`) and the transcript enumeration (`scan.ts`) are still a
-hand-port, kept in sync by the parity cases in `test/analytics/analyze.test.ts` (`plugin/skills/kaizen/kaizen.mjs`, the header's `PROVENANCE` line).
+skill runs in **any** project. Only part of it is hand-written now. The subagent parse (`readAgents`), the subagent totals helpers, the usage-line parse and the
+record filter (`isConversationRecord`) are **generated** from `server/lib/{agents,subagent-usage,usage-line,transcript-record}.ts` into `plugin/lib/*.mjs` by
+`pnpm plugin:gen`, and `kaizen.mjs` imports them; `test/guards/plugin-manifest.test.ts` fails on a stale copy. The analysis (`analyze.ts`) and the transcript
+enumeration (`scan.ts`) are still a hand-port, kept in sync by the parity cases in `test/analytics/analyze.test.ts` (`plugin/skills/kaizen/kaizen.mjs`, the
+header's `PROVENANCE` line).
 
 - **Bad alternative:** `import`-ing the repo's TypeScript directly. Con: the skill
   would only work inside this repo, with `tsx` installed. **Chosen:** duplicate the
@@ -311,7 +312,7 @@ derived from the transcript (held in memory only, never written), so the dashboa
 
 - `plugin/skills/kaizen/SKILL.md` — the LLM instructions: 7-step loop, token-honesty rules, promotion policy, the status/review/capture modes.
 - `plugin/skills/kaizen/kaizen.mjs` — the zero-dep deterministic analyzer (`analyzeSession`); hand-port of `analyze.ts` and `scan.ts`, importing the
-  generated `plugin/lib/{agents,subagent-usage,usage-line}.mjs` (`readAgents` lives in `agents.mjs`).
+  generated `plugin/lib/{agents,subagent-usage,usage-line,transcript-record}.mjs` (`readAgents` lives in `agents.mjs`).
 - `~/.claude/session-analytics-log.md` — the single append-only wire between producer and consumer (global; lesson, status, verdict and review lines).
 - `server/lib/sessionAnalyticsLog.ts` — parses the log (the four line regexes, `parseLogEvents`, `recentLessons`, `statusForSession`); fail-open.
 - `server/lib/analytics.ts` — `listReports`: prefix-resolve transcript, analyze through the `cachedAnalysis` memo, build `AnalyticsReport`;

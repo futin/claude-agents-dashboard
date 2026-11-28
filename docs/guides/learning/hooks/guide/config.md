@@ -212,7 +212,7 @@ works this run, and says so) means a read-only container doesn't lose the featur
 
 **Stack 2 — should *this* one wait?** The idle check, in the hook, per invocation. The server never makes this call, because the server can't
 see your keyboard from inside a container. It does read the same idle value for a different job: once a hold is open,
-[`idle.ts`](../../../../../server/lib/idle.ts)'s `backAtDesk()` (`idle.ts:89-97`) asks whether you came back, so the stores' shared 5s reaper can release the hold
+[`idle.ts`](../../../../../server/lib/idle.ts)'s `backAtDesk()` (`idle.ts:97-105`) asks whether you came back, so the stores' shared 5s reaper can release the hold
 early. An unreadable reading there means "stay held", never "release" — see [Fail-open §6](./fail-open.md).
 
 **Stack 3 — should it push?** ([`notify.ts`](../../../../../server/lib/notify.ts)) Orthogonal to the
