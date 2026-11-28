@@ -1,6 +1,6 @@
 /**
  * `scripts/kill-guard-hook.sh` — the PreToolUse/Bash guard that refuses
- * `pkill` and `killall`.
+ * `pkill`, `killall` and a `pgrep` feeding `kill`.
  *
  * The bug it exists for is a specific command, so the specific command is the
  * first case here verbatim: an unattended session tore down its own preview
@@ -155,7 +155,19 @@ const DENIED: string[] = [
   // `env -S` splits its value into the command it runs.
   "env -S 'pkill -f vite'",
   "env --split-string='pkill -f vite'",
-  "env -S'pkill -f vite'"
+  "env -S'pkill -f vite'",
+  // A sibling dir that shares the cwd as a string prefix is not under it: `app-other` starts with `app` (#599).
+  `pkill -f "${CWD}-other/vite"`,
+  // pgrep's pids handed to kill are the same machine-wide match with one step in between (#599): a substitution, backticks, a pipe into
+  // `xargs kill`, a loop over the pids.
+  'kill $(pgrep -f vite)',
+  'kill -9 $(pgrep node)',
+  'kill `pgrep -f vite`',
+  'pgrep -f vite | xargs kill',
+  'pgrep -f vite | xargs -r kill -9',
+  'for p in $(pgrep -f vite); do kill $p; done',
+  "sh -c 'kill $(pgrep -f vite)'",
+  `kill $(pgrep -f "${CWD}-other/vite")`
 ];
 
 const ALLOWED: string[] = [
@@ -210,7 +222,13 @@ const ALLOWED: string[] = [
   '/usr/bin/pkill -f "$PWD/node_modules/.bin/vite"',
   'timeout 5 pkill -f "$PWD/node_modules/.bin/vite"',
   // Prose naming the tool by its path, in inline code, with no operand.
-  'echo "never run `/usr/bin/pkill` here"'
+  'echo "never run `/usr/bin/pkill` here"',
+  // pgrep that feeds no kill only lists pids.
+  'pgrep -f vite',
+  'pgrep -fl node | head',
+  // A pgrep feeding kill passes on the same anchor rule as pkill.
+  'kill $(pgrep -f "$PWD/node_modules/.bin/vite")',
+  `pgrep -f "${CWD}/node_modules/.bin/vite" | xargs kill`
 ];
 
 function ok(name: string, fn: () => void): boolean {
@@ -219,7 +237,7 @@ function ok(name: string, fn: () => void): boolean {
 }
 
 export function run(): number {
-  console.log('\n=== kill-guard-hook.sh: broad pkill/killall is refused ===\n');
+  console.log('\n=== kill-guard-hook.sh: broad pkill/killall, and pgrep feeding kill, is refused ===\n');
   let p = 0, f = 0;
 
   if (spawnSync('jq', ['--version']).status !== 0) {
@@ -249,6 +267,11 @@ export function run(): number {
     assert.ok(/kill "\$MYPID"/.test(reason), `no pid idiom in reason:\n${reason}`);
     assert.ok(/pkill -f "\$PWD\//.test(reason), `no anchored form in reason:\n${reason}`);
     assert.ok(reason.includes('pkill -f vite'), `reason does not quote the command:\n${reason}`);
+  })) p++; else f++;
+
+  if (ok('a pgrep-fed kill is refused under its own name', () => {
+    const { reason } = decide('pgrep -f vite | xargs kill');
+    assert.ok(reason.startsWith('Blocked `pgrep` feeding `kill`'), `wrong verb in reason:\n${reason}`);
   })) p++; else f++;
 
   // A `$PWD` pattern refused only because of an earlier `cd` has to say so, or

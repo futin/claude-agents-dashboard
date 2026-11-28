@@ -333,6 +333,30 @@ export function run(): number {
     assert.strictEqual(links(s).length, LINK_NAMES.length);
   }))) p++; else f++;
 
+  // settings.json often holds tokens in its `env` block, so a file the user locked down must stay locked down after the rewrite (#599).
+  if (test('a 0600 settings.json is still 0600 after install and --uninstall, and a 0644 one keeps 0644', fresh(s => {
+    const mode = () => fs.statSync(s.settings).mode & 0o777;
+    write(s, FOREIGN);
+    fs.chmodSync(s.settings, 0o600);
+    const r = install(s);
+    assert.strictEqual(r.status, 0, r.out);
+    assert.strictEqual(ourRows(s, read(s)).length, ENTRY_ROWS.length, 'the install did write');
+    assert.strictEqual(mode().toString(8), '600');
+    const un = install(s, '--uninstall');
+    assert.strictEqual(un.status, 0, un.out);
+    assert.strictEqual(mode().toString(8), '600');
+
+    fs.chmodSync(s.settings, 0o644);
+    assert.strictEqual(install(s).status, 0);
+    assert.strictEqual(mode().toString(8), '644', 'the original mode is copied, not forced to 0600');
+  }))) p++; else f++;
+
+  if (test('a settings.json the installer creates is born 0600', fresh(s => {
+    const r = install(s);
+    assert.strictEqual(r.status, 0, r.out);
+    assert.strictEqual((fs.statSync(s.settings).mode & 0o777).toString(8), '600');
+  }))) p++; else f++;
+
   if (test('under the default ~/.claude the commands carry a literal $HOME, and a re-run recognises them', fresh(s => {
     const home = path.join(s.repo, '..');
     const r = installAtHome(s, home);

@@ -262,6 +262,10 @@ write_settings() {
   if [ "$DRY" = "true" ]; then return 0; fi
   if [ -s "$SETTINGS" ]; then cp "$SETTINGS" "$SETTINGS.bak.$(date +%Y%m%d%H%M%S)"; fi
   tmp="$SETTINGS.tmp.$$"
+  # settings.json often carries tokens in its `env` block, so the rename must not loosen a 0600 file to the umask's 0644 (#599). The temp file starts as a
+  # `cp -p` of the original, so the truncating write below keeps the original's mode; with no original it is born under umask 077, 0600.
+  if [ -e "$SETTINGS" ]; then cp -p "$SETTINGS" "$tmp" || refuse "could not copy $SETTINGS to $tmp, so it was not written."
+  else (umask 077; : > "$tmp") || refuse "could not create $tmp, so $SETTINGS was not written."; fi
   printf '%s\n' "$new" > "$tmp" && mv "$tmp" "$SETTINGS"
 }
 

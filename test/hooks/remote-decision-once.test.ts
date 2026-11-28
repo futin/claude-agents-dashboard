@@ -98,6 +98,14 @@ export async function run(): Promise<number> {
     assert.ok(isBanner(other), `expected the full banner for a new session, got:\n${other}`);
   })) p++; else f++;
 
+  // `dontAsk` is the third word of the default list and the one no case used to send (#599); `test/guards/auto-modes.test.ts` pins the list itself.
+  for (const mode of ['auto', 'bypassPermissions', 'dontAsk']) {
+    if (await ok(`a first prompt in ${mode} mode prints the full banner`, async r => {
+      const out = await r.hook(prompt('s1', mode));
+      assert.ok(isBanner(out), `expected the full banner in ${mode}, got:\n${out}`);
+    })) p++; else f++;
+  }
+
   if (await ok('a switch between two auto-ish modes is not a flip: the banner does not repeat', async r => {
     await r.hook(prompt('s1', 'auto'));
     assert.strictEqual(await r.hook(prompt('s1', 'bypassPermissions')), '');

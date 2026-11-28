@@ -15,7 +15,7 @@ opt-in features that need one ([remote answers](subsystems/remote-answer.md),
 finished-turn [push](subsystems/push-notify.md) and
 [remote messages](subsystems/remote-message.md)). One hook ships alongside them but feeds
 nothing here: `kill-guard.sh`, a `PreToolUse`/`Bash` guard that refuses unanchored
-`pkill`/`killall` — see [hooks-setup](workflows/hooks-setup.md).
+`pkill`/`killall` and a `pgrep` feeding `kill` — see [hooks-setup](workflows/hooks-setup.md).
 
 ## Data flow
 
@@ -448,7 +448,7 @@ scripts/          install-hooks.sh (`pnpm hooks:install`), ask-remote-hook.sh,
                   remote-decision-hook.sh, stop-notify-hook.sh (all five source
                   hook-common.sh beside their real path: DASH, TOKEN_FILE, dash_curl,
                   autopilot_running; never linked itself),
-                  kill-guard-hook.sh (refuses broad pkill/killall — see
+                  kill-guard-hook.sh (refuses broad pkill/killall/pgrep-fed kill — see
                   workflows/hooks-setup.md), host-credentials.sh,
                   lan-ip.sh, env-value.ts (the one .env reader the installer and
                   the server share — never a second grep),

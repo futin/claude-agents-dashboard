@@ -203,7 +203,7 @@ removes the hook gate too — at the cost of the terminal dialog, which then nev
 
 `AUTO_MODES` is `auto`, `bypassPermissions`, `dontAsk` — deliberately duplicated from
 `MODES` in `scripts/remote-decision-hook.sh` rather than shared: one is TypeScript and the
-other is bash. Change one, change the other.
+other is bash. Change one, change the other: `test/guards/auto-modes.test.ts` fails until the two lists match.
 
 ### Fail directions
 
