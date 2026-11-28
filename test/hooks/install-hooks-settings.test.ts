@@ -351,6 +351,18 @@ export function run(): number {
     assert.strictEqual(mode().toString(8), '644', 'the original mode is copied, not forced to 0600');
   }))) p++; else f++;
 
+  // A file locked read-only against edits is still merged into, stays read-only, and leaves no temp file behind — copying the mode onto the temp file
+  // first made its write fail while the installer printed "written" and exited 0 (#599 review).
+  if (test('a 0444 settings.json is installed into and stays 0444, with no temp file left', fresh(s => {
+    write(s, FOREIGN);
+    fs.chmodSync(s.settings, 0o444);
+    const r = install(s);
+    assert.strictEqual(r.status, 0, r.out);
+    assert.strictEqual(ourRows(s, read(s)).length, ENTRY_ROWS.length, 'the install did write');
+    assert.strictEqual((fs.statSync(s.settings).mode & 0o777).toString(8), '444');
+    assert.deepStrictEqual(fs.readdirSync(s.claude).filter(n => n.startsWith('settings.json.tmp.')), []);
+  }))) p++; else f++;
+
   if (test('a settings.json the installer creates is born 0600', fresh(s => {
     const r = install(s);
     assert.strictEqual(r.status, 0, r.out);
