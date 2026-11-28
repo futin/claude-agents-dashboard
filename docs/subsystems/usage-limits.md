@@ -1437,7 +1437,9 @@ one-term joint fit, richest evidence first, plus `externalSharePct`, a
 `coverage` object and an always-present `boost` object (see the off-peak boost
 detector below). Read-only, unpolled — it reads two files and does
 arithmetic, and the numbers move on a scale of days — and it fails open to an
-honest empty body exactly like `serveUsageProfile`. A model with **neither**
+honest empty body exactly like `serveUsageProfile` — both mark that fail-open body `error: true` (`blankUsageProfile(offset, true)`,
+`emptyRates(now, false, true)`), and the client gates on it first (`client/src/lib/usageBody.ts`), so a failed read shows "could not be read" rather than
+"Usage recording is off". A model with **neither**
 still gets no row: a row of nulls reads as a broken fit rather than as an
 absence of evidence.
 

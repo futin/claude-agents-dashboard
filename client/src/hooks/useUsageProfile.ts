@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 
+import { usableProfile } from '../lib/usageBody';
 import type { UsageProfileResponse } from '../../../shared/types';
 
 /**
@@ -29,10 +30,10 @@ export function useUsageProfile(): UsageProfileState {
     fetch('/api/usage/profile')
       .then(res => res.json() as Promise<UsageProfileResponse>)
       .then(profile => {
-        // A short cell array would render a torn grid, so treat it as an error
-        // rather than drawing part of a week.
-        const ok = Array.isArray(profile?.cells) && profile.cells.length === 168;
-        if (alive) setState({ profile: ok ? profile : null, loading: false, error: !ok });
+        // A short cell array would render a torn grid, and an `error: true` body is the route's fail-open catch: both read as an error rather than
+        // as part of a week or as recording being off.
+        const ok = usableProfile(profile);
+        if (alive) setState({ profile: ok, loading: false, error: ok === null });
       })
       .catch(() => {
         if (alive) setState(prev => ({ profile: prev.profile, loading: false, error: true }));

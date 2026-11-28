@@ -660,7 +660,7 @@ export function serveUsageProfile(res: ServerResponse): void {
       offsetMinutes: localOffsetMinutes(now)
     }));
   } catch {
-    sendJson(res, 200, blankUsageProfile(localOffsetMinutes(Date.now())));
+    sendJson(res, 200, blankUsageProfile(localOffsetMinutes(Date.now()), true));
   }
 }
 

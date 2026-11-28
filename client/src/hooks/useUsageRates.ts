@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 
+import { usableRates } from '../lib/usageBody';
 import type { UsageRatesResponse } from '../../../shared/types';
 
 /**
@@ -29,8 +30,9 @@ export function useUsageRates(): UsageRatesState {
     fetch('/api/usage/rates')
       .then(res => res.json() as Promise<UsageRatesResponse>)
       .then(rates => {
-        const ok = rates != null && Array.isArray(rates.models);
-        if (alive) setState({ rates: ok ? rates : null, loading: false, error: !ok });
+        // An `error: true` body is the route's fail-open catch, not "recording off" — it reads as could-not-be-read, like a thrown fetch.
+        const ok = usableRates(rates);
+        if (alive) setState({ rates: ok, loading: false, error: ok === null });
       })
       .catch(() => {
         if (alive) setState(prev => ({ rates: prev.rates, loading: false, error: true }));

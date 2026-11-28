@@ -317,6 +317,8 @@ export interface UsageProfileResponse {
    * final slice is short by however much the reset is not on the hour.
    */
   dutyCycle: number | null;
+  /** Set only on the fail-open body when the read itself threw; a recording-off profile is not an error. */
+  error?: true;
 }
 
 /**
