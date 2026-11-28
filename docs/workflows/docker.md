@@ -46,11 +46,11 @@ Two things a container can't reach on its own:
   [session status](../subsystems/sessions.md#the-status-machine-the-left-dot).
 - The dev compose bind-mounts the source but keeps the container's own Linux
   `node_modules` (an anonymous volume shadows the host's).
-- **State lives on the `dashboard-state` volume, mounted at `/data`.** `~/.claude` is mounted read-only, and `/app` is the container's own writable layer,
-  which a recreate (`docker compose up --build`) throws away. So the runtime stage sets `DASHBOARD_STATE_DIR=/data` and the production compose file mounts
-  a named volume there; the five state files live on it — `.dashboard-settings.json`, `.remote-answer.json`, `.usage-ledger.jsonl`,
-  `.usage-history.jsonl` and `.usage-profile.json` — and survive a rebuild. `docker compose down -v` deletes the volume and them with it. The dev compose
-  needs none of this: it bind-mounts the repo, so those files already sit in your checkout.
+- **State lives on the `dashboard-state` volume, mounted at `/data`.** `~/.claude` is mounted read-only, and `/app` is the container's own writable layer, which
+  a recreate (`docker compose up --build`) throws away. So the runtime stage sets `DASHBOARD_STATE_DIR=/data` and the production compose file mounts a named
+  volume there; the five state files live on it — `.dashboard-settings.json`, `.remote-answer.json`, `.usage-ledger.jsonl`, `.usage-history.jsonl` and
+  `.usage-profile.json` — and survive a rebuild, beside the `.plugin-trim/` directory of trimmed-spawn settings files. `docker compose down -v` deletes the
+  volume and them with it. The dev compose needs none of this: it bind-mounts the repo, so those files already sit in your checkout.
 - **Usage alerts lose their dedupe claim.** One more state file is not on the volume: the usage-alert claim, `~/.claude/dashboard/usage-alerts.json`
   (`server/lib/usage-alerts.ts`), sits under the home dir on purpose so a prod and a dev dashboard on one machine find each other's claim. In these images
   that path is inside the read-only `~/.claude` mount, so the claim write fails and the claim lives only in the server's memory. The alert still sends, but a

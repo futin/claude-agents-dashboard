@@ -390,7 +390,7 @@ export function composeReason(questions: PendingQuestionItem[], answers: Questio
         stroke="var(--line)" stroke-width="1.5" marker-end="url(#ar-held)"/><text x="484" y="378" fill="var(--muted)" font-size="11" text-anchor="start">settle → clear, delete, resolve</text><line x1="440" y1="409" x2="88" y2="409" stroke="var(--accent)"
     stroke-width="1.5" marker-end="url(#ar-held)"/><text x="264" y="403" fill="var(--muted)" font-size="11" text-anchor="middle">resolve fires → curl returns</text></svg></div><p class="caption">The handler’s job is to NOT answer. The socket stays open until the store settles the entry.</p>
 <p>The whole mechanism is six lines:</p>
-<pre><code>// server/api.ts:821-827
+<pre><code>// server/api.ts:828-834
 let questionId = '';
 res.on('close', () =&gt; { if (questionId) cancelPending(sessionId, questionId); });
 questionId = register(sessionId, questions, clampTimeout(body.timeoutMs), (result: WaitResult) =&gt; {
@@ -399,7 +399,7 @@ questionId = register(sessionId, questions, clampTimeout(body.timeoutMs), (resul
 });
 if (res.destroyed) cancelPending(sessionId, questionId);</code></pre>
 <p><strong>Why the push comes last:</strong></p>
-<pre><code>// server/api.ts:829-830
+<pre><code>// server/api.ts:836-837
 // Last, so a refused registration never pushes. Returns immediately — the
 // response above stays held either way.</code></pre>
 <p>Every gate that can reject the registration runs before <code>maybeSend</code>, so you never get a "question waiting" buzz for a question that was rejected as malformed.</p>
@@ -446,7 +446,7 @@ if (res.destroyed) cancelPending(sessionId, questionId);</code></pre>
        font-family="ui-monospace, SFMono-Regular, Menlo, monospace"><text x="310" y="306">Cancelled</text></g><text x="414" y="306" fill="var(--muted)" font-size="11" text-anchor="start">no resolve — nobody left</text><line x1="358" y1="54" x2="300" y2="280" stroke="var(--line)"
     stroke-width="1.5" marker-end="url(#ar-race)"/><text x="208" y="306" fill="var(--muted)" font-size="11" text-anchor="end">socket closes</text></svg></div><p class="caption">Only Cancelled skips resolve — a closed socket means there is nobody left to answer to.</p>
 <p><code>Cancelled</code> is the one that needed care. The hook dying — Ctrl-C, CLI hook timeout, session interrupted — shows up only as a closed socket:</p>
-<pre><code>// server/api.ts:817-820
+<pre><code>// server/api.ts:824-827
 // The hook's socket closing IS the signal that nobody is waiting any more
 // (session interrupted, hook killed, CLI hook timeout). Listen before
 // registering, and re-check after, so a socket that dies during the body read
@@ -616,7 +616,7 @@ const MATCHER = new RegExp(
 <p>They chose the <em>model's</em> reading experience over the parser's. The first version paid for that with two hand-kept copies of the prose — the wrapper in <code>messages.ts</code> and a hand-written <code>REMOTE_MESSAGE_RE</code> regex in <code>chat.ts</code> — and a test pinning them together. That copy is gone: both directions now derive from <a href="../../../../server/lib/remote-message-prose.ts"><code>remote-message-prose.ts</code></a>, so they cannot drift apart. One constraint survives the refactor, and the module's header names it: every transcript already on disk carries the old wording, so changing the constants would stop past follow-ups unwrapping.</p>
 <h3 id="stop-loop--6-three-stores-one-reaper-policy">6. Three stores, one reaper policy</h3>
 <p><code>pending.ts</code> and <code>plans.ts</code> wait for you to <em>answer something</em>. <code>messages.ts</code> waits for you to <em>maybe say something</em>. All three release a hold when you walk back to your desk, and all three ask the same question to decide it:</p>
-<pre><code>// server/lib/idle.ts:89-97
+<pre><code>// server/lib/idle.ts:97-105
 export async function backAtDesk(): Promise&lt;boolean&gt; {
   const thresholdSecs = getSettings().idleSecs;
   // Checked before the read, not inside `atDesk`: the reading costs an `ioreg`
@@ -656,7 +656,7 @@ function ensureReaper(): void {
 <div class="tablewrap"><table><thead><tr><th></th><th>on-demand reaper (chosen)</th><th>always-on interval</th></tr></thead><tbody><tr><td>Work when idle</td><td>None — no timer runs</td><td>17,280 ticks/day to find every store empty</td></tr><tr><td>Holds the process open</td><td>No — <code>unref()</code></td><td>Needs <code>unref()</code> anyway</td></tr><tr><td>Complexity</td><td><code>ensureReaper</code> + <code>stopReaperIfEmpty</code></td><td>One line at boot</td></tr></tbody></table></div>
 <p>The stores are empty the overwhelming majority of the time, so an always-on timer would have nothing to do for most of its life. The <code>ioreg</code> cost is a separate guard: <code>reapIdle</code> calls <code>backAtDesk()</code> only with something to release, so an idle server and a headless-only hold never spawn it.</p>
 <p>Note the fail direction. It is the <em>same</em> as the hook's, never act on a guess. Here that keeps the hold open, where the hook's guess keeps the dialog in the terminal:</p>
-<pre><code>// server/lib/idle.ts:79-84
+<pre><code>// server/lib/idle.ts:87-92
  * Fail directions, both deliberately "stay held":
  *  - unreadable idle (Docker, non-macOS) → false. Never end a wait on a guess;
  *    the deadline timer is the reaper of last resort. Same direction
@@ -943,7 +943,7 @@ export function getState(config: Config): RemoteAnswerState {
  * open: an unwritable path keeps the in-memory value and reports `persisted: false`
  * so the UI can say so.</code></pre>
 <p>An earlier version of this comment also called the toggle "the only thing this app writes to disk". That was never true — the server writes settings, routines and other state files too — and the comment no longer claims it. A dev-loop detail drove a persistence decision, and the fail-open path (unwritable disk still works this run, and says so) means a read-only container doesn't lose the feature.</p>
-<p><strong>Stack 2 — should <em>this</em> one wait?</strong> The idle check, in the hook, per invocation. The server never makes this call, because the server can't see your keyboard from inside a container. It does read the same idle value for a different job: once a hold is open, <a href="../../../../server/lib/idle.ts"><code>idle.ts</code></a>'s <code>backAtDesk()</code> (<code>idle.ts:89-97</code>) asks whether you came back, so the stores' shared 5s reaper can release the hold early. An unreadable reading there means "stay held", never "release" — see <a href="#fail-open">Fail-open §6</a>.</p>
+<p><strong>Stack 2 — should <em>this</em> one wait?</strong> The idle check, in the hook, per invocation. The server never makes this call, because the server can't see your keyboard from inside a container. It does read the same idle value for a different job: once a hold is open, <a href="../../../../server/lib/idle.ts"><code>idle.ts</code></a>'s <code>backAtDesk()</code> (<code>idle.ts:97-105</code>) asks whether you came back, so the stores' shared 5s reaper can release the hold early. An unreadable reading there means "stay held", never "release" — see <a href="#fail-open">Fail-open §6</a>.</p>
 <p><strong>Stack 3 — should it push?</strong> (<a href="../../../../server/lib/notify.ts"><code>notify.ts</code></a>) Orthogonal to the other two — it governs <em>notifications</em>, not waits:</p>
 <pre><code>// server/lib/notify.ts:76-86
 export function notifyGateOpen(

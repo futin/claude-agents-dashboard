@@ -468,7 +468,7 @@ const WINDOWS = {
     <code>shouldRefresh</code> lets a new cycle replace one stalled past
     <code>REFRESH_STALL_MS</code> rather than latch forever. Reads go through a synchronous
     accessor that never blocks the 3-second session poll:</p>
-    <pre>// usage.ts:472-475
+    <pre>// usage.ts:514-517
 export function getCachedUsageState(): UsageState {
   if (shouldRefresh(gateState(), Date.now())) void refreshNow();
   return { usage: cached, status: cachedStatus };
@@ -479,7 +479,7 @@ export function getCachedUsageState(): UsageState {
     round-trip on the critical path of a request that fires every three seconds.</p>
     <p>Then a subtlety worth the whole card. The recorder's own timer also wants a sample
     every 60s, and it must <em>not</em> go through this accessor:</p>
-    <pre>// usage.ts:443-450
+    <pre>// usage.ts:485-492
  * The recorder's timer needs this rather than `getCachedUsageState`: that call
  * only refreshes when the cache is older than `CACHE_TTL_MS`, and with the timer
  * running at the same 60s the two alternate — measured, the recorder sampled
@@ -876,7 +876,7 @@ let activeTimeSource: ((sinceMs: number, untilMs: number) =&gt; number | null) |
     <p>The pre-forecast projection was one division: remaining percent over rate. The walk
     replaces it with a march over local-hour slices, each contributing the rate scaled by
     that hour's weight.</p>
-    <pre>// usage-forecast.ts:171-197 (compacted here)
+    <pre>// usage-forecast.ts:173-200 (compacted here)
   while (t &lt; resetsAtMs) {
     const sliceEnd = Math.min(nextLocalHour(t, offsetMinutes), resetsAtMs);
     const sliceMs = sliceEnd - t;
@@ -888,7 +888,8 @@ let activeTimeSource: ((sinceMs: number, untilMs: number) =&gt; number | null) |
       gain,
       cum: utilization + accumulated + gain,
       weight,
-      learned: isLearnedAt(profile, hw)
+      learned: isLearnedAt(profile, hw),
+      hw
     });
     // A zero-weight or zero-rate slice adds nothing, so it can never cross —
     // and the guard is what keeps the interpolation from dividing by zero.
@@ -901,7 +902,7 @@ let activeTimeSource: ((sinceMs: number, untilMs: number) =&gt; number | null) |
     <p>Slices are cut on <em>local</em> hour boundaries, which is why the first and last are
     partial and why a 168-hour span can produce 169 entries. The crossing is interpolated
     <em>within</em> the slice that breaches 100%, not rounded to the hour.</p>
-    <p>The walk keeps going past the crossing on purpose (<code>usage-forecast.ts:149-152</code>):
+    <p>The walk keeps going past the crossing on purpose (<code>usage-forecast.ts:151-154</code>):
     the client renders <code>dutyCycle</code> over the whole window, and the profile inspector
     draws every slice — because the weekend gap is the feature explaining itself. The
     trade-off is up to 169 objects allocated per fetch where a division allocated none.</p>
@@ -1009,7 +1010,7 @@ function tickPct(iso: string | null | undefined, start: number, end: number, win
     <p class="eyebrow">Section 5 · Two ticks and a band</p>
     <h2>Drawing doubt only while it exists</h2>
     <p>Both ticks always render. The <em>band</em> between them is conditional:</p>
-    <pre>// HeaderAccount.tsx:285-295
+    <pre>// HeaderAccount.tsx:229-239
           {view.wallPct != null &amp;&amp; view.wallPctPessimistic != null &amp;&amp; view.confidence !== 'ok' &amp;&amp; (
             &lt;div
               className="u-band"
@@ -1040,7 +1041,7 @@ function tickPct(iso: string | null | undefined, start: number, end: number, win
     <p class="fig-cap">Elapsed fill to the <code>now</code> tick; the band spans the two
     projections.</p>
     <p>Once the profile is trustworthy the two ticks converge in meaning, and a band would
-    imply doubt that is no longer there (<code>HeaderAccount.tsx:272-277</code>). Suppressing it is
+    imply doubt that is no longer there (<code>HeaderAccount.tsx:218-220</code>). Suppressing it is
     honesty in the other direction — the bad alternative, always shading, would make a mature
     forecast look as tentative as a first-week one.</p>
     <p>One arithmetic trap closes the loop. <code>ratePerHour</code> is per <em>active</em>

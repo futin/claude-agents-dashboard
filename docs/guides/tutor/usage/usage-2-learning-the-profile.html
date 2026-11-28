@@ -169,7 +169,7 @@
     from the two that teach. (A <code>reset</code> is not always a total loss: section 2
     shows <code>accumulate</code> salvaging the stretch of it during which no window was
     open.)</p>
-<pre>// usage-history.ts:187-193
+<pre>// usage-history.ts:188-194
   if (!sameWindow(a.resetsAt, b.resetsAt)) return 'reset';
   const delta = b.utilization - a.utilization;
   if (delta &lt; -MOVE_EPSILON) return 'reset';
@@ -236,7 +236,7 @@
     string is treated as a real change, since a scoped and an unscoped window are not the
     same thing, and an unparseable stamp falls back to strict equality rather than
     pretending to a numeric answer.</p>
-<pre>// usage-history.ts:97-104
+<pre>// usage-history.ts:98-105
 export function sameWindow(a: string | null, b: string | null): boolean {
   if (a === b) return true;
   if (a === null || b === null) return false; // scoped ⇄ unscoped is a real change
@@ -276,7 +276,7 @@ export function sameWindow(a: string | null, b: string | null): boolean {
     unambiguous thing about all six. Invert this — make long flats ambiguous and long rises
     idle — and every hour learns as idle, which is the shape of a profile that looks
     plausible and is wrong everywhere.</p>
-<pre>// usage-history.ts:71-77
+<pre>// usage-history.ts:72-78
 /**
  * Longest rising interval whose activity can still be pinned to it. Comfortably
  * above the one-minute sampling cadence, well below any real gap. A rise across
@@ -393,7 +393,7 @@ export const MAX_ATTRIBUTABLE_MS = 300_000;</pre>
     accessors. That keeps one arithmetic path for every zone. The cost is the one lesson 1
     already flagged for the walk — a single offset held for a whole window, so a DST
     transition inside it is off by an hour.</p>
-<pre>// usage-forecast.ts:100-109
+<pre>// usage-forecast.ts:102-111
  * Sunday-first matches `Date.prototype.getUTCDay()`'s numbering, which is what
  * makes this a three-line function instead of a wrap-around puzzle: shift the
  * timestamp into local time and read the UTC day and hour off it. (ISO weeks
@@ -423,7 +423,7 @@ export function hourOfWeek(ms: number, offsetMinutes: number): number {
     reconciles them, and nothing needs to — an index and a grouping key are different
     questions about the same timestamp. Conflating them is the trap, and the excerpt above
     from <code>usage-forecast.ts</code> exists to flag it from the other side.</p>
-<pre>// usage-history.ts:260-266
+<pre>// usage-history.ts:261-267
 export function isoWeekKey(ms: number, offsetMinutes: number): string {
   const d = new Date(ms + offsetMinutes * 60_000);
   // Move to the Thursday of this ISO week; its calendar year is the ISO year.
@@ -457,7 +457,7 @@ export function isoWeekKey(ms: number, offsetMinutes: number): string {
     earlier states, so in-place mutation would rewrite history under them. The cost is an
     168-element copy per sample, once a minute — irrelevant next to the class of bug it
     removes.</p>
-<pre>// usage-history.ts:342-355
+<pre>// usage-history.ts:343-356
   let t = fromMs;
   while (t &lt; toMs) {
     const shift = offsetMinutes * 60_000;
@@ -584,7 +584,7 @@ export function isoWeekKey(ms: number, offsetMinutes: number): string {
     <p>Two guards on the way in. A bucket whose stamp is <code>null</code> has never been
     touched, so there is nothing to fold; and a bucket with no pending minutes folds
     nothing and — the part that matters for the next card — <em>decays</em> nothing.</p>
-<pre>// usage-history.ts:292-303
+<pre>// usage-history.ts:293-304
 function foldBucket(bucket: Bucket, weekKey: string, observedWeeks: string[]): void {
   if (bucket.weekStamp === null || bucket.weekStamp === weekKey) return;
   if (bucket.observedMin &lt;= 0) return; // nothing pending: nothing folds, nothing decays
@@ -617,7 +617,7 @@ function foldBucket(bucket: Bucket, weekKey: string, observedWeeks: string[]): v
     while the process was down, and gives a bucket two places it can change. Folding lazily
     on first touch keeps every mutation of a bucket in one function, at the cost of this
     ordering subtlety — which is why the docstring above the function spells it out.</p>
-<pre>// usage-history.ts:276-280
+<pre>// usage-history.ts:277-281
 function skippedWeeks(observedWeeks: string[], from: string, to: string): number {
   let n = 0;
   for (const wk of observedWeeks) if (wk &gt; from &amp;&amp; wk &lt; to) n++;
@@ -642,7 +642,7 @@ function skippedWeeks(observedWeeks: string[], from: string, to: string): number
     comparison is a string range: ISO keys are <code>YYYY-Www</code>, zero-padded precisely
     so that lexical order is chronological order. The pruning bounds the file and the loop;
     26 weeks of decay already drives any weight to a rounding error.</p>
-<pre>// usage-history.ts:356-362
+<pre>// usage-history.ts:357-363
 
     if (!observedWeeks.includes(weekKey)) {
       observedWeeks.push(weekKey);
@@ -795,7 +795,7 @@ function skippedWeeks(observedWeeks: string[], from: string, to: string): number
     <p>Notice which counter is which: <code>observedMin</code> is cleared on every fold,
     <code>lifetimeObservedMin</code> never is. That is the only reason the floor can be
     stated as a lifetime quantity at all.</p>
-<pre>// usage-history.ts:68-69
+<pre>// usage-history.ts:69-70
 /** Lifetime observed minutes before a bucket's weight is used at all. */
 export const TRUST_FLOOR_MIN = 60;</pre>
   </div>
@@ -817,7 +817,7 @@ export const TRUST_FLOOR_MIN = 60;</pre>
     <p><code>trustedCount</code> travels alongside as the confidence input: the walk reports
     <code>none</code>, <code>thin</code> or <code>ok</code> from it, so the UI can say how
     much of the projection rests on measurement.</p>
-<pre>// usage-history.ts:377-387
+<pre>// usage-history.ts:378-388
 export function deriveProfile(state: ProfileState): DutyProfile {
   const weights: (number | null)[] = state.buckets.map((b) =&gt;
     b.lifetimeObservedMin &gt;= TRUST_FLOOR_MIN ? b.weight : null
@@ -904,7 +904,7 @@ export function deriveProfile(state: ProfileState): DutyProfile {
     <p>The cost of two files is that they can disagree, and the design accepts it: the log
     is allowed to be lossy, and rotation throws its oldest half away without the forecast
     noticing — which is the same fact from the other side.</p>
-<pre>// usage-history.ts:396-406
+<pre>// usage-history.ts:397-407
 /** Append-only raw samples. Replayable, rotated, never authoritative. */
 export const HISTORY_FILE = '.usage-history.jsonl';
 /** The learned profile — derived state, written atomically, authoritative. */
@@ -947,7 +947,7 @@ export const TAIL_BYTES = 262_144;</pre>
     same distinction <code>observedWeeks</code> makes for decay.</p>
     <p>The trade-off is that the log's timestamps are irregular, so anything charting it has
     to handle uneven spacing rather than assuming a fixed cadence.</p>
-<pre>// usage-history.ts:482-492
+<pre>// usage-history.ts:483-493
 export function shouldWrite(
   prev: UsageSample | null,
   next: UsageSample,
@@ -978,7 +978,7 @@ export function shouldWrite(
     the same rule the repo's guide tooling follows — walk up for a marker, never a fixed
     <code>../..</code> hop count, because a fixed count silently repoints the moment a file
     moves.</p>
-<pre>// usage-history.ts:427-439
+<pre>// usage-history.ts:428-440
 export function repoRoot(startDir: string = import.meta.dirname): string {
   let dir = startDir;
   for (;;) {
@@ -1054,7 +1054,7 @@ export function repoRoot(startDir: string = import.meta.dirname): string {
     the usage refresh, so with no browser open nothing would be sampled and the recorded
     history would describe when the dashboard was <em>watched</em> rather than when work
     happened.</p>
-<pre>// usage-history.ts:848-857
+<pre>// usage-history.ts:876-885
     stopUsageRecording();
     timer = setInterval(() =&gt; {
       // Re-read on every tick: flipping the toggle in Settings takes effect
