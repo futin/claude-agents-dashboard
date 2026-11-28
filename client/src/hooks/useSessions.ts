@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 
 import { useSettings } from './useSettings';
 import { createPollSeq, pollFetch } from '../lib/pollSeq';
+import { acceptSessions } from '../lib/sessionsPoll';
 import { scanQuery } from '../lib/settings';
 import type { SessionsResponse } from '../../../shared/types';
 
@@ -9,6 +10,11 @@ export interface SessionsState {
   data: SessionsResponse | null;
   /** false once a poll has failed or outlasted `POLL_TIMEOUT_MS` (server stopped?). */
   connected: boolean;
+  /**
+   * true after an answer carrying `error` (the server is up but its scan threw), false after a good one. Not folded into `connected`: the server
+   * answered, so "disconnected" would be wrong. A thrown fetch leaves it as it was.
+   */
+  scanFailed: boolean;
 }
 
 /**
@@ -20,7 +26,7 @@ export interface SessionsState {
  * `server/api.ts` `scanOverrides`.
  */
 export function useSessions(opts: { enabled?: boolean; limit?: number; projects?: readonly string[] } = {}): SessionsState {
-  const [state, setState] = useState<SessionsState>({ data: null, connected: true });
+  const [state, setState] = useState<SessionsState>({ data: null, connected: true, scanFailed: false });
   const timer = useRef<ReturnType<typeof setInterval>>();
   const { settings } = useSettings();
   const query = scanQuery(settings, opts.limit, opts.projects);
@@ -30,7 +36,7 @@ export function useSessions(opts: { enabled?: boolean; limit?: number; projects?
 
   useEffect(() => {
     if (!enabled) {
-      setState({ data: null, connected: true });
+      setState({ data: null, connected: true, scanFailed: false });
       return;
     }
     let alive = true;
@@ -43,9 +49,10 @@ export function useSessions(opts: { enabled?: boolean; limit?: number; projects?
       try {
         const res = await pollFetch(`/api/sessions${query}`);
         const data: SessionsResponse = await res.json();
-        if (seq.settle(n) && alive) setState({ data, connected: true });
+        // A failed scan keeps the last good rows (`acceptSessions`), so the board never redraws as empty while the link still reads live.
+        if (seq.settle(n) && alive) setState(prev => ({ data: acceptSessions(prev.data, data), connected: true, scanFailed: !!data.error }));
       } catch {
-        if (seq.settle(n) && alive) setState(prev => ({ data: prev.data, connected: false }));
+        if (seq.settle(n) && alive) setState(prev => ({ ...prev, connected: false }));
       }
     }
 

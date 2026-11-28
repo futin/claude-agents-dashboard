@@ -7,6 +7,9 @@ params, so a changed row count or window takes effect on the next tick. A tick t
 skipped (`createPollSeq`, `client/src/lib/pollSeq.ts`), so a slow scan can never land after a newer one and step the board backwards. Only a request settling frees
 that skip, so each one carries a 30s bound (`pollFetch`, the same file): a hung scan fails there, the rail's foot turns to `disconnected — server stopped?`, and the next
 tick's success turns it back. The Routines polls, the PR card and the chat drawer use it as well.
+A scan that throws on the server answers 200 with `error: true` and no rows; `useSessions` keeps the last good rows instead (`acceptSessions`,
+`client/src/lib/sessionsPoll.ts`), takes only `launching`, `usage` and `usageStatus` from the new body, and the rail's foot reads `scan failed — showing the last
+good snapshot`. With no good snapshot yet the board says the scan failed instead of "Loading…", and GitView's Sync tracking never sees the empty list.
 
 ## The page
 

@@ -285,6 +285,11 @@ export function run(): number {
     assert.strictEqual(r.recording, false);
   })) p++; else f++;
 
+  if (test('blankUsageProfile: only the fail-open body asked for one carries the error marker', () => {
+    assert.strictEqual(blankUsageProfile(60, true).error, true);
+    assert.strictEqual('error' in blankUsageProfile(60), false);
+  })) p++; else f++;
+
   console.log('\n  ' + p + ' passed, ' + f + ' failed');
   return f;
 }

@@ -25,12 +25,16 @@ export function blankCells(): UsageProfileCell[] {
   }));
 }
 
-/** The fail-open `GET /api/usage/profile` body: an empty grid and no walk, still dated with the host's offset. */
-export function blankUsageProfile(offsetMinutes: number): UsageProfileResponse {
+/**
+ * The fail-open `GET /api/usage/profile` body: an empty grid and no walk, still dated with the host's offset. `error` marks the route's catch, so the
+ * client can tell a failed read from recording being off — both are otherwise this same blank body.
+ */
+export function blankUsageProfile(offsetMinutes: number, error?: true): UsageProfileResponse {
   return {
     cells: blankCells(), offsetMinutes, globalMean: 1, confidence: 'none',
     recording: false, walk: [], exhaustAt: null, walkAbsent: 'recording-off',
-    utilizationPct: null, resetsAt: null, dutyCycle: null
+    utilizationPct: null, resetsAt: null, dutyCycle: null,
+    ...(error ? { error: true } : {})
   };
 }
 

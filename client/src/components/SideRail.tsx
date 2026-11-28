@@ -25,9 +25,10 @@ interface Props {
    * The sessions poll's state, for the "live · refreshing every 3s" line at the
    * foot of the rail (the mock's `.live`, under its side card). Null outside
    * Sessions, which owns that poll: nothing is refreshing there, so no line.
-   * `working` drives the wordmark's cursor (see `Brand`).
+   * `working` drives the wordmark's cursor (see `Brand`). `scanFailed` means the server answered but its scan threw: the board is showing the last good
+   * snapshot (or none yet), and the line says so instead of "live". `connected: false` wins over it.
    */
-  live?: { connected: boolean; working: boolean; refreshMs: number } | null;
+  live?: { connected: boolean; working: boolean; scanFailed?: boolean; refreshMs: number } | null;
   /**
    * The version chip under the live line, on every section: the checkout's version, a dot for a release not opened yet, and the What's new drawer behind
    * it. Null when the checkout has no version, and then there is no chip. `App` owns the data and the drawer (docs/subsystems/releases.md).
@@ -323,11 +324,13 @@ export function SideRail({ section, onChange, accountSlot, live, version }: Prop
         ))}
         {/* `role="status"` so a dropped link is announced, not only tinted. */}
         {live && (
-          <div className={live.connected ? 'foot' : 'foot off'} role="status">
+          <div className={live.connected && !live.scanFailed ? 'foot' : 'foot off'} role="status">
             <i aria-hidden="true" />
-            {live.connected
-              ? `live · refreshing every ${formatInterval(live.refreshMs)}`
-              : 'disconnected — server stopped?'}
+            {!live.connected
+              ? 'disconnected — server stopped?'
+              : live.scanFailed
+                ? 'scan failed — showing the last good snapshot'
+                : `live · refreshing every ${formatInterval(live.refreshMs)}`}
           </div>
         )}
         {version && (

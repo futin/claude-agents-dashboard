@@ -84,7 +84,7 @@ function AppShell() {
   // that view owns the poll and unmounting it stops it — so elsewhere the rail
   // draws no line rather than claim a refresh that is not happening. `working`
   // rides along for the wordmark's cursor, which blinks while a session is.
-  const [link, setLink] = useState({ connected: true, working: false });
+  const [link, setLink] = useState({ connected: true, working: false, scanFailed: false });
 
   // The version chip and its drawer, shell furniture like the account chip: ui-kit's hook owns the read, the unseen dot and the open state, under the
   // storage key this app has always used.

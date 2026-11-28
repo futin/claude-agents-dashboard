@@ -19,13 +19,20 @@ function joinLabels(keys: FilterKey[]): string {
  * given an exit; anything else is the server's lookback, which is the only
  * case the original wording was ever true for (see view-persistence.md).
  */
-export function EmptyState({ loading, empty, onClearFilters }: {
+export function EmptyState({ loading, failed, empty, onClearFilters }: {
   loading: boolean;
+  /** The server answered with a failed scan and there is no good snapshot to show yet — said instead of "Loading…". */
+  failed?: boolean;
   empty: Empty | null;
   onClearFilters: () => void;
 }) {
   if (loading) {
-    return <div className="s-card empty"><div className="e">◌</div>Loading…</div>;
+    return (
+      <div className="s-card empty">
+        <div className="e">◌</div>
+        {failed ? 'The session scan failed on the server — retrying every refresh.' : 'Loading…'}
+      </div>
+    );
   }
   const hidden = empty && !empty.payloadEmpty && empty.culprits.length > 0;
   return (

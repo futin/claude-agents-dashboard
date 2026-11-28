@@ -51,17 +51,17 @@ export function SessionsView({ onLink }: {
    * "live · refreshing every 3s" line at the foot of the rail (`SideRail`)
    * instead of under the board. Reported on every change, mount included.
    * `working` is whether any session is mid-turn — the wordmark's cursor
-   * blinks on it.
+   * blinks on it. `scanFailed` is the server answering with a failed scan — the rail says the rows are the last good snapshot.
    */
-  onLink?: (link: { connected: boolean; working: boolean }) => void;
+  onLink?: (link: { connected: boolean; working: boolean; scanFailed: boolean }) => void;
 } = {}) {
   const { settings } = useSettings();
   const [view, setView] = usePersistedState<View>('dashboard.view', DEFAULT_VIEW);
   // The project facet is filtered by the server, before its row limit, so a project with no session among the newest N still fills the list;
   // `applyView` re-applies it harmlessly, and covers the one poll still in flight from before the pick.
-  const { data, connected } = useSessions({ projects: view.projects });
+  const { data, connected, scanFailed } = useSessions({ projects: view.projects });
   const working = data?.sessions.some(s => s.status === 'working') ?? false;
-  useEffect(() => { onLink?.({ connected, working }); }, [connected, working, onLink]);
+  useEffect(() => { onLink?.({ connected, working, scanFailed }); }, [connected, working, scanFailed, onLink]);
   // The shape gets its own key rather than riding in `view`: it is not a
   // filter. The switcher always writes it, and `defaultLayout` decides whether
   // a load reads it back (`last`) or pins a shape and ignores it. Writing it
@@ -175,7 +175,7 @@ export function SessionsView({ onLink }: {
   let body: React.ReactNode;
   // `shown === null` again only so TypeScript narrows the else branch; `sessionsEmpty` already counts loading as empty.
   if (shown === null || sessionsEmpty(shown, phantoms)) {
-    body = <EmptyState loading={shown === null} empty={empty} onClearFilters={() => setView(clearFilters(view))} />;
+    body = <EmptyState loading={shown === null} failed={scanFailed} empty={empty} onClearFilters={() => setView(clearFilters(view))} />;
   } else {
     const common = { sessions: shown, launching: phantoms, expanded, onToggle: toggle, onOpenChat: setChatId };
     body = drawn === 'list' ? <ListView {...common} />
