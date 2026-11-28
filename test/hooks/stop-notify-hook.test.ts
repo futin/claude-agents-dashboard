@@ -70,12 +70,16 @@ async function runHook(
   return { code, stdout };
 }
 
-/** A directory holding a `ps` that prints `tty` and an `ioreg` that reports `idleSecs` of keyboard idle, in `ioreg`'s nanoseconds. */
-function fakeBin(root: string, name: string, tty: string, idleSecs: number): string {
+/**
+ * A directory holding a `ps` that prints `tty` and an `ioreg` that reports `idleSecs` of keyboard idle, in `ioreg`'s nanoseconds — or, given a string,
+ * an `ioreg` whose whole script body is that string.
+ */
+function fakeBin(root: string, name: string, tty: string, idleSecs: number | string): string {
   const dir = path.join(root, name);
   fs.mkdirSync(dir);
   fs.writeFileSync(path.join(dir, 'ps'), `#!/bin/sh\nprintf '%s\\n' '${tty}'\n`, { mode: 0o755 });
-  fs.writeFileSync(path.join(dir, 'ioreg'), `#!/bin/sh\nprintf '%s\\n' '    |   |   "HIDIdleTime" = ${idleSecs}000000000'\n`, { mode: 0o755 });
+  const ioreg = typeof idleSecs === 'string' ? idleSecs : `printf '%s\\n' '    |   |   "HIDIdleTime" = ${idleSecs}000000000'`;
+  fs.writeFileSync(path.join(dir, 'ioreg'), `#!/bin/sh\n${ioreg}\n`, { mode: 0o755 });
   return dir;
 }
 
@@ -317,6 +321,25 @@ export async function run(): Promise<number> {
           } finally { await dash.close(); }
         }
       })) p++; else f++;
+
+      // #599 — the fail-safe at the idle read: an idle time the hook cannot read counts as at the desk, so the turn is pushed once and never parked.
+      const unreadable: [string, string][] = [
+        ['ioreg fails with no output', 'exit 1'],
+        ['ioreg prints no HIDIdleTime line', "printf '%s\\n' 'IOHIDSystem <class IOHIDSystem>'"],
+        ['ioreg prints a non-number', `printf '%s\\n' '    |   |   "HIDIdleTime" = <garbage>'`],
+      ];
+      for (const [i, [label, script]] of unreadable.entries()) {
+        if (await ok(`terminal TTY, ${label}: one push, no hold`, async () => {
+          const dash = await fakeDashboard(true);
+          try {
+            const r = await runHook(dash.url, home, undefined, false, classified(fakeBin(bins, `unreadable-${i}`, 'ttys003', script)));
+            assert.strictEqual(r.code, 0);
+            assert.strictEqual(r.stdout, '');
+            assert.strictEqual(count(dash.posts, '/api/messages/wait'), 0, 'an unreadable idle time must never open the reply hold');
+            assert.strictEqual(count(dash.posts, '/api/notify/event'), 1);
+          } finally { await dash.close(); }
+        })) p++; else f++;
+      }
     } finally {
       fs.rmSync(bins, { recursive: true, force: true });
     }

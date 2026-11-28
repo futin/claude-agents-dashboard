@@ -260,9 +260,23 @@ write_settings() {
   new="$1"
   printf '%s' "$new" | jq -s -e "$ONE_OBJECT" > /dev/null 2>&1 || refuse "the merged result is not one JSON object, so it was not written."
   if [ "$DRY" = "true" ]; then return 0; fi
-  if [ -s "$SETTINGS" ]; then cp "$SETTINGS" "$SETTINGS.bak.$(date +%Y%m%d%H%M%S)"; fi
   tmp="$SETTINGS.tmp.$$"
-  printf '%s\n' "$new" > "$tmp" && mv "$tmp" "$SETTINGS"
+  # settings.json often carries tokens in its `env` block, so the rename must not loosen a 0600 file to the umask's 0644 (#599). The temp file starts as a
+  # `cp -p` of the original, so the truncating write below keeps the original's mode; with no original it is born under umask 077, 0600. A read-only
+  # original (0444, locked against edits) gets u+w for the write and loses it again before the rename, so the lock survives too.
+  readonly_orig=false
+  if [ -e "$SETTINGS" ]; then
+    [ -w "$SETTINGS" ] || readonly_orig=true
+    { cp -p "$SETTINGS" "$tmp" && chmod u+w "$tmp"; } || { rm -f "$tmp"; refuse "could not copy $SETTINGS to $tmp, so it was not written."; }
+  else
+    (umask 077; : > "$tmp") || { rm -f "$tmp"; refuse "could not create $tmp, so $SETTINGS was not written."; }
+  fi
+  if [ -s "$SETTINGS" ]; then cp "$SETTINGS" "$SETTINGS.bak.$(date +%Y%m%d%H%M%S)"; fi
+  if ! { printf '%s\n' "$new" > "$tmp" && { [ "$readonly_orig" = false ] || chmod u-w "$tmp"; } && mv "$tmp" "$SETTINGS"; }; then
+    rm -f "$tmp"
+    echo "FAILED   $SETTINGS — the merged file could not be written or renamed into place; settings.json is as it was." >&2
+    exit 1
+  fi
 }
 
 # ----------------------------------------------------------------------- main

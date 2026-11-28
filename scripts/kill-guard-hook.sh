@@ -1,6 +1,7 @@
 #!/bin/bash
-# kill-guard-hook.sh — PreToolUse/Bash hook: refuse `pkill` and `killall` unless
-# the pattern is anchored inside the session's own directory.
+# kill-guard-hook.sh — PreToolUse/Bash hook: refuse `pkill`, `killall` and a
+# `pgrep` feeding `kill` unless the pattern is anchored inside the session's own
+# directory.
 #
 # Why this exists, precisely. On 2026-09-06 at 00:51:58 an unattended
 # backlog-execute session, tearing down two preview servers it had itself
@@ -40,6 +41,13 @@
 #     `zsh`, `dash`, `ksh` with any flag carrying `c`
 #   xargs pkill -f …      — with or without an operand, anchored or not: xargs
 #                           appends stdin as further patterns, which pkill ORs
+#   pgrep … in a command that also runs `kill` — `kill $(pgrep -f vite)`,
+#                           `pgrep -f vite | xargs kill`, a `for` loop over
+#                           `$(pgrep …)`: the same machine-wide match with the
+#                           kill one step removed (#599). Judged by pkill's
+#                           rules, so an anchored pgrep still passes. Spotted
+#                           per command, not per pipe: a pgrep beside a `kill`
+#                           it does not feed is refused too — the safe side
 # What is allowed:
 #   kill <pid>            — never matched here; killing a pid you hold is right
 #   pkill -f "$PWD/…"     — a pattern anchored to an absolute path under the
@@ -100,8 +108,8 @@ CMD=$(printf '%s' "$INPUT" | jq -r '.tool_input.command // empty' 2>/dev/null)
 [ -n "$CMD" ] || exit 0
 
 # Cheap reject: no mention at all, nothing to parse. Everything below this line
-# runs only on the small minority of commands that name one of the two.
-printf '%s' "$CMD" | grep -qE '(pkill|killall)' || exit 0
+# runs only on the small minority of commands that name one of the three.
+printf '%s' "$CMD" | grep -qE '(pkill|killall|pgrep)' || exit 0
 
 CWD=$(printf '%s' "$INPUT" | jq -r '.cwd // empty' 2>/dev/null)
 
@@ -291,6 +299,24 @@ deny() {
   exit 0
 }
 
+# A `pgrep` is a pattern kill only when its pids reach a `kill`. Which pipe or
+# substitution carries them is a shell parser's question, so any `kill` command
+# word in the same command counts: `kill $(pgrep …)` splits into a `kill $`
+# segment and a `pgrep …` one, and `pgrep … | xargs kill` into `pgrep …` and an
+# `xargs kill` whose wrapper strips to `kill`.
+FEEDS_KILL=
+case "$CMD" in
+  *pgrep*)
+    while IFS= read -r segment; do
+      strip_wrappers "$segment"
+      norm "$(printf '%s' "$STRIPPED" | awk '{print $1}')"
+      [ "$NORM" = "kill" ] && { FEEDS_KILL=1; break; }
+    done <<EOF
+$SEGMENTS
+EOF
+    ;;
+esac
+
 MOVED=
 while IFS= read -r segment; do
   [ -n "$segment" ] || continue
@@ -301,6 +327,7 @@ while IFS= read -r segment; do
   verb=$NORM
   case "$verb" in
     pkill|killall) ;;
+    pgrep) [ -n "$FEEDS_KILL" ] || continue ;;
     cd|pushd|popd) MOVED=1; continue ;;
     *) continue ;;
   esac
@@ -318,11 +345,13 @@ while IFS= read -r segment; do
 
   # Never behind `xargs`: it appends stdin to the patterns written, and pkill
   # ORs them, so `… | xargs pkill -f "$PWD/x"` is `pkill -f <cwd>/x vite`.
-  if [ "$verb" = "pkill" ] && [ -z "$VIA_XARGS" ] && [ -n "$OPERANDS" ] && anchored_to_cwd "$OPERANDS"; then
+  if [ "$verb" != "killall" ] && [ -z "$VIA_XARGS" ] && [ -n "$OPERANDS" ] && anchored_to_cwd "$OPERANDS"; then
     continue
   fi
 
-  deny "Blocked \`$verb\` — it matches processes machine-wide, not just the ones this session started.
+  label="\`$verb\`"
+  [ "$verb" = "pgrep" ] && label="\`pgrep\` feeding \`kill\`"
+  deny "Blocked $label — it matches processes machine-wide, not just the ones this session started.
 
 The command was: $(printf '%s' "$segment" | sed -E 's/^[[:space:]]+//')
 

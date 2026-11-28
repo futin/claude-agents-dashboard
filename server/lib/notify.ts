@@ -48,7 +48,7 @@ import type { UsageAlertKind } from './usage-alerts.js';
  * Deliberately duplicated from `MODES` in `scripts/remote-decision-hook.sh`
  * rather than shared: one is TypeScript and the other is bash, and three words
  * of rule is not worth coupling a shell script to a module. Change one, change
- * the other.
+ * the other — `test/guards/auto-modes.test.ts` fails until both match.
  */
 export const AUTO_MODES: ReadonlySet<string> = new Set(['auto', 'bypassPermissions', 'dontAsk']);
 

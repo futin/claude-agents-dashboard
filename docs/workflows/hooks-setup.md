@@ -72,7 +72,8 @@ same command (a literal path under it is allowed either way), and a pattern with
 `"$PWD/x|vite"` matches every vite on the machine. The name is judged as the shell resolves it — `/usr/bin/pkill`, `\pkill` and `'pkill'` are all `pkill` —
 and behind any wrapper that runs it, the wrapper's own options included (`sudo -u root`, `timeout -s KILL 5`, `nice -n 5`, `env -i`, `xargs -r`, `sh -c '…'`
 and the rest the script's header lists); `… | xargs pkill -f` is refused with or without a pattern written, anchored or not, since `xargs` appends its
-own. What still gets through by design — a command held in a variable, a script file, `find … -exec`, a wrapper option it does not list — is in that
+own. A `pgrep` in a command that also runs `kill` — `kill $(pgrep -f vite)`, `pgrep -f vite | xargs kill` — is the same match one step removed, so it is
+judged by `pkill`'s rules: refused unless anchored. The check is per command, not per pipe, so a `pgrep` beside a `kill` it does not feed is refused too. What still gets through by design — a command held in a variable, a script file, `find … -exec`, a wrapper option it does not list — is in that
 header's *Known limits*.
 
 It is in this installer because of 2026-09-06. An unattended session in a sibling repo
@@ -113,7 +114,8 @@ Stop event*; that belongs behind a command someone chose to run, not behind `git
   is keyed on the command string, and a match is left exactly as it is.
 - **Anything else in `settings.json`.** Other people's hooks, your `permissions`, your
   `model`. The previous file is copied to `settings.json.bak.<stamp>` before any write, and
-  the new one must be exactly one JSON object before it replaces anything.
+  the new one must be exactly one JSON object before it replaces anything. The rewrite keeps the file's mode, so a `settings.json` you locked to 0600
+  stays 0600, and one the installer creates starts at 0600.
 - **A `settings.json` it cannot merge into.** A file that is not exactly one JSON object — a trailing comma from a hand edit, a snippet pasted after the
   original, a whitespace-only file — or a `hooks` block jq cannot walk (`"Stop": "oops"`, a string where a hook object belongs) is refused with a
   `REFUSED` line and exit 1, in every mode (`--dry-run` and `--uninstall` included). The check runs before any link is made or removed, so a refused run
